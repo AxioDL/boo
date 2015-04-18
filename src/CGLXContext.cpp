@@ -2,8 +2,26 @@
 #include <iostream>
 
 CGLXContext::CGLXContext()
+    : m_majVersion(3),
+      m_minVersion(3),
+      m_display(nullptr)
 {
     std::cout << "Hello from GLX" << std::endl;
+}
+
+bool CGLXContext::create()
+{
+    return true;
+}
+
+void CGLXContext::setMinVersion(const int& min)
+{
+    m_minVersion = min;
+}
+
+void CGLXContext::setMajorVersion(const int& maj)
+{
+    m_majVersion = maj;
 }
 
 const std::string CGLXContext::version() const
