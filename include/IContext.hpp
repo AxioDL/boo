@@ -7,7 +7,7 @@ class IContext
 {
 public:
     virtual ~IContext() {}
-
+    
     virtual void setMinVersion  (const int& min)=0;
     virtual void setMajorVersion(const int& maj)=0;
     virtual void create();
