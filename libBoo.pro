@@ -1,5 +1,2 @@
-HEADERS += \
-    IContext.hpp
-
-SOURCES += \
-    IContext.cpp
+include(libBoo.pri)
+include(test/test.pri)
