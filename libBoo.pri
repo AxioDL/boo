@@ -7,8 +7,10 @@ HEADERS += \
 unix:HEADERS += \
     $$PWD/include/CGLXContext.hpp \
 
+mac:HEADERS -= \
+    $$PWD/include/CGLXContext.hpp
 mac:HEADERS += \
-    $$PWD/include/CCGLContext.hpp \
+    $$PWD/include/CCGLContext.hpp
 
 win32:HEADERS += \
     $$PWD/include/CWGLContext.hpp \
@@ -22,6 +24,8 @@ SOURCES += \
 unix:SOURCES += \
     $$PWD/src/CGLXContext.cpp \
 
+mac:SOURCES -= \
+    $$PWD/src/CGLXContext.cpp
 mac:OBJECTIVE_SOURCES += \
     $$PWD/src/CCGLCocoaView.mm
 

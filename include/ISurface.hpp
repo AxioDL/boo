@@ -3,6 +3,7 @@
 
 class ISurface
 {
+public:
     
 };
 

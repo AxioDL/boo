@@ -6,7 +6,19 @@
 
 class CCGLContext final : public IContext
 {
+public:
+    CCGLContext();
+    virtual ~CCGLContext() {}
     
+    const std::string version() const override;
+    const std::string name() const override;
+    int depthSize() const override;
+    int redDepth() const override;
+    int greenDepth() const override;
+    int blueDepth() const override;
+private:
+    int m_minVersion;
+    int m_majVersion;
 };
 
 #endif // CCGLCONTEXT_HPP
