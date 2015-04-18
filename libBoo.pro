@@ -1,5 +1,9 @@
+CONFIG -= Qt
+CONFIG += app c++11
+
 HEADERS += \
-    IContext.hpp
+    include/IContext.hpp \
+    include/CGLXContext.hpp
 
 SOURCES += \
-    IContext.cpp
+    src/CGLXContext.cpp
