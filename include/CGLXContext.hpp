@@ -11,6 +11,9 @@ public:
     CGLXContext();
     virtual ~CGLXContext() {}
 
+    bool create();
+    void setMajorVersion(const int& maj) override;
+    void setMinVersion(const int& min) override;
     const std::string version() const override;
     const std::string name() const override;
     int depthSize() const override;
@@ -18,8 +21,10 @@ public:
     int greenDepth() const override;
     int blueDepth() const override;
 private:
-    int m_minVersion;
     int m_majVersion;
+    int m_minVersion;
+
+    Display* m_display;
 };
 
 
