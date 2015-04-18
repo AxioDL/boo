@@ -2,8 +2,30 @@
 #include <iostream>
 
 CCGLContext::CCGLContext()
+    : m_majVersion(3),
+      m_minVersion(3)
 {
     std::cout << "Hello from CGL" << std::endl;
+}
+
+CCGLContext::~CCGLContext()
+{
+    
+}
+
+bool CCGLContext::create()
+{
+    return true;
+}
+
+void CCGLContext::setMinVersion(const int& min)
+{
+    m_minVersion = min;
+}
+
+void CCGLContext::setMajorVersion(const int& maj)
+{
+    m_majVersion = maj;
 }
 
 const std::string CCGLContext::version() const

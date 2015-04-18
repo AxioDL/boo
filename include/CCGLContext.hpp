@@ -8,8 +8,11 @@ class CCGLContext final : public IContext
 {
 public:
     CCGLContext();
-    virtual ~CCGLContext() {}
+    virtual ~CCGLContext();
     
+    bool create();
+    void setMinVersion  (const int& min) override;
+    void setMajorVersion(const int& maj) override;
     const std::string version() const override;
     const std::string name() const override;
     int depthSize() const override;
