@@ -1,3 +1,5 @@
+!contains(CONFIG,c++11):CONFIG += C++11
+
 HEADERS += \
     $$PWD/include/boo.hpp \
     $$PWD/include/IContext.hpp \
@@ -12,12 +14,6 @@ mac:HEADERS += \
 
 win32:HEADERS += \
     $$PWD/include/CWGLContext.hpp \
-
-
-SOURCES += \
-    $$PWD/src/CSurface.cpp \
-    $$PWD/src/CCGLContext.cpp \
-    $$PWD/src/CRetraceWaiter.cpp
 
 unix:SOURCES += \
     $$PWD/src/CGLXContext.cpp \
