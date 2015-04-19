@@ -15,7 +15,10 @@ HEADERS += \
     $$PWD/include/inputdev/CDualshockPad.hpp \
     $$PWD/include/inputdev/CGenericPad.hpp \
     $$PWD/include/inputdev/CDeviceFinder.hpp \
-    $$PWD/src/inputdev/IHIDDevice.hpp
+    $$PWD/include/inputdev/CDeviceToken.hpp \
+    $$PWD/include/inputdev/CDeviceBase.hpp \
+    $$PWD/src/inputdev/IHIDDevice.hpp \
+    $$PWD/src/inputdev/IHIDListener.hpp
 
 unix:!macx:HEADERS += \
     $$PWD/include/x11/CGLXContext.hpp
@@ -36,21 +39,25 @@ SOURCES += \
     $$PWD/src/inputdev/CCafeProPad.cpp \
     $$PWD/src/inputdev/CDualshockPad.cpp \
     $$PWD/src/inputdev/CGenericPad.cpp \
-    $$PWD/src/inputdev/CDeviceFinder.cpp
+    $$PWD/src/inputdev/CDeviceFinder.cpp \
+    $$PWD/src/inputdev/CDeviceBase.cpp
 
 unix:!macx:SOURCES += \
     $$PWD/src/x11/CGLXContext.cpp \
-    $$PWD/src/inputdev/CHIDDeviceUdev.cpp
+    $$PWD/src/inputdev/CHIDDeviceUdev.cpp \
+    $$PWD/src/inputdev/CHIDListenerUdev.cpp
 
 macx:SOURCES += \
     $$PWD/src/mac/CCGLContext.cpp
 
 macx:OBJECTIVE_SOURCES += \
     $$PWD/src/mac/CCGLCocoaView.mm \
-    $$PWD/src/inputdev/CHIDDeviceIOKit.mm
+    $$PWD/src/inputdev/CHIDDeviceIOKit.mm \
+    $$PWD/src/inputdev/CHIDListenerIOKit.mm
 
 win32:SOURCES += \
     $$PWD/src/win/CWGLContext.cpp \
-    $$PWD/src/inputdev/CHIDDeviceWin32.cpp
+    $$PWD/src/inputdev/CHIDDeviceWin32.cpp \
+    $$PWD/src/inputdev/CHIDListenerWin32.cpp
 
 INCLUDEPATH += $$PWD/include

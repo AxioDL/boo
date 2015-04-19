@@ -1,1 +1,1 @@
-#include "IHIDDevice.hpp"
+#include "inputdev/CRevolutionPad.hpp"
