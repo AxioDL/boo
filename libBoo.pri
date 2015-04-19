@@ -29,6 +29,6 @@ macx:OBJECTIVE_SOURCES += \
     $$PWD/src/mac/CCGLCocoaView.mm
 
 win32:SOURCES += \
-    $$PWD/src/CWGLContext.cpp
+    $$PWD/src/win/CWGLContext.cpp
 
 INCLUDEPATH += $$PWD/include
