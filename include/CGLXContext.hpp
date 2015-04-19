@@ -3,9 +3,9 @@
 
 #include <GL/glx.h>
 
-#include <IContext.hpp>
+#include <IGraphicsContext.hpp>
 
-class CGLXContext final : public IContext
+class CGLXContext final : public IGraphicsContext
 {
 public:
     CGLXContext();
