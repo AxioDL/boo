@@ -7,24 +7,26 @@ HEADERS += \
     $$PWD/include/IRetraceWaiter.hpp
 
 unix:!macx:HEADERS += \
-    $$PWD/include/CGLXContext.hpp
+    $$PWD/include/x11/CGLXContext.hpp
 
-mac:HEADERS += \
-    $$PWD/include/CCGLContext.hpp
+macx:HEADERS += \
+    $$PWD/include/mac/CCGLContext.hpp
 
 win32:HEADERS += \
-    $$PWD/include/CWGLContext.hpp
+    $$PWD/include/win/CWGLContext.hpp
 
 SOURCES += \
     $$PWD/src/CSurface.cpp \
-    $$PWD/src/CCGLContext.cpp \
     $$PWD/src/CRetraceWaiter.cpp
 
 unix:!macx:SOURCES += \
     $$PWD/src/CGLXContext.cpp
 
-mac:OBJECTIVE_SOURCES += \
-    $$PWD/src/CCGLCocoaView.mm
+macx:SOURCES += \
+    $$PWD/src/mac/CCGLContext.cpp
+
+macx:OBJECTIVE_SOURCES += \
+    $$PWD/src/mac/CCGLCocoaView.mm
 
 win32:SOURCES += \
     $$PWD/src/CWGLContext.cpp
