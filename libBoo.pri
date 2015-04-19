@@ -14,7 +14,8 @@ HEADERS += \
     $$PWD/include/inputdev/CCafeProPad.hpp \
     $$PWD/include/inputdev/CDualshockPad.hpp \
     $$PWD/include/inputdev/CGenericPad.hpp \
-    $$PWD/include/inputdev/CDeviceFinder.hpp
+    $$PWD/include/inputdev/CDeviceFinder.hpp \
+    $$PWD/src/inputdev/IHIDDevice.hpp
 
 unix:!macx:HEADERS += \
     $$PWD/include/x11/CGLXContext.hpp
