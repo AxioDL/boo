@@ -1,6 +1,7 @@
 #ifndef CGLXCONTEXT_HPP
 #define CGLXCONTEXT_HPP
 
+#if !defined(__APPLE__) && (defined(__linux__) || defined(BSD))
 #include <GL/glx.h>
 
 #include <IGraphicsContext.hpp>
@@ -28,5 +29,5 @@ private:
 };
 
 
-
+#endif // !defined(__APPLE__) && (defined(__linux__) || defined(BSD))
 #endif // CGLXCONTEXT_HPP

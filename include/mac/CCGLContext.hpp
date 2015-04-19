@@ -1,6 +1,7 @@
 #ifndef CCGLCONTEXT_HPP
 #define CCGLCONTEXT_HPP
 
+#ifdef __APPLE__
 #include "IGraphicsContext.hpp"
 #include <OpenGL/OpenGL.h>
 
@@ -24,4 +25,5 @@ private:
     int m_majVersion;
 };
 
+#endif // __APPLE__
 #endif // CCGLCONTEXT_HPP

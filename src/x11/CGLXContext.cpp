@@ -1,4 +1,5 @@
-#include "CGLXContext.hpp"
+#if !defined(__APPLE__) && (defined(__linux__) || defined(BSD))
+#include "x11/CGLXContext.hpp"
 #include <iostream>
 
 CGLXContext::CGLXContext()
@@ -53,3 +54,5 @@ int CGLXContext::blueDepth() const
 {
     return -1;
 }
+
+#endif // !defined(__APPLE__) && (defined(__linux__) || defined(BSD))

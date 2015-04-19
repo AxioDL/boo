@@ -1,3 +1,4 @@
+#ifdef __APPLE__
 #include "CCGLContext.hpp"
 #include <iostream>
 

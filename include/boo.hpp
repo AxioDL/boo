@@ -6,10 +6,10 @@
 #if defined(_WIN32)
 #error "No support for WGL"
 #elif defined(__APPLE__)
-#include "CCGLContext.hpp"
+#include "mac/CCGLContext.hpp"
 typedef CCGLContext CGraphicsContext;
-#elif __linux__
-#include "CGLXContext.hpp"
+#elif defined(__GNUC__) || defined(__clang__)
+#include "x11/CGLXContext.hpp"
 typedef CGLXContext CGraphicsContext;
 #endif
 
