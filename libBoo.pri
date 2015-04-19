@@ -20,7 +20,7 @@ SOURCES += \
     $$PWD/src/CRetraceWaiter.cpp
 
 unix:!macx:SOURCES += \
-    $$PWD/src/CGLXContext.cpp
+    $$PWD/src/x11/CGLXContext.cpp
 
 macx:SOURCES += \
     $$PWD/src/mac/CCGLContext.cpp
