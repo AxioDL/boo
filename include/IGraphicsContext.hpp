@@ -1,12 +1,12 @@
-#ifndef ICONTEXT_HPP
-#define ICONTEXT_HPP
+#ifndef IGRAPHICSCONTEXT_HPP
+#define IGRAPHICSCONTEXT_HPP
 
 #include <string>
 
-class IContext
+class IGraphicsContext
 {
 public:
-    virtual ~IContext() {}
+    virtual ~IGraphicsContext() {}
 
     virtual void setMinVersion  (const int& min)=0;
     virtual void setMajorVersion(const int& maj)=0;
@@ -19,4 +19,4 @@ public:
     virtual int blueDepth() const=0;
 };
 
-#endif // ICONTEXT_HPP
+#endif // IGRAPHICSCONTEXT_HPP

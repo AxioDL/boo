@@ -4,7 +4,7 @@
 
 int main(int argc, char** argv)
 {
-    IContext* ctx = new CContext;
+    IGraphicsContext* ctx = new CGraphicsContext;
 
     if (ctx->create())
     {

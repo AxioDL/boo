@@ -2,7 +2,7 @@
 
 HEADERS += \
     $$PWD/include/boo.hpp \
-    $$PWD/include/IContext.hpp \
+    $$PWD/include/IGraphicsContext.hpp \
     $$PWD/include/ISurface.hpp \
     $$PWD/include/IRetraceWaiter.hpp
 
