@@ -3,8 +3,8 @@
 #include <iostream>
 
 CCGLContext::CCGLContext()
-    : m_majVersion(3),
-      m_minVersion(3)
+    : m_minVersion(3),
+      m_majVersion(3)
 {
     std::cout << "Hello from CGL" << std::endl;
 }
@@ -58,3 +58,4 @@ int CCGLContext::blueDepth() const
 {
     return -1;
 }
+#endif

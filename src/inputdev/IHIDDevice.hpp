@@ -1,0 +1,5 @@
+#ifndef IHIDDEVICE_HPP
+#define IHIDDEVICE_HPP
+
+
+#endif // IHIDDEVICE_HPP

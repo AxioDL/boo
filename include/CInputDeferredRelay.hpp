@@ -1,0 +1,6 @@
+#ifndef CINPUTDEFERREDRELAY_HPP
+#define CINPUTDEFERREDRELAY_HPP
+
+#include "IInputWaiter.hpp"
+
+#endif // CINPUTDEFERREDRELAY_HPP
