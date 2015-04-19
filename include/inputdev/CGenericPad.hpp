@@ -1,0 +1,5 @@
+#ifndef CGENERICPAD_HPP
+#define CGENERICPAD_HPP
+
+
+#endif // CGENERICPAD_HPP
