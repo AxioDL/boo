@@ -17,6 +17,7 @@ HEADERS += \
     $$PWD/include/inputdev/CDeviceFinder.hpp \
     $$PWD/include/inputdev/CDeviceToken.hpp \
     $$PWD/include/inputdev/CDeviceBase.hpp \
+    $$PWD/include/inputdev/DeviceClasses.hpp \
     $$PWD/src/inputdev/IHIDDevice.hpp \
     $$PWD/src/inputdev/IHIDListener.hpp
 
@@ -39,8 +40,8 @@ SOURCES += \
     $$PWD/src/inputdev/CCafeProPad.cpp \
     $$PWD/src/inputdev/CDualshockPad.cpp \
     $$PWD/src/inputdev/CGenericPad.cpp \
-    $$PWD/src/inputdev/CDeviceFinder.cpp \
-    $$PWD/src/inputdev/CDeviceBase.cpp
+    $$PWD/src/inputdev/CDeviceBase.cpp \
+    $$PWD/src/inputdev/DeviceClasses.cpp
 
 unix:!macx:SOURCES += \
     $$PWD/src/x11/CGLXContext.cpp \
