@@ -5,6 +5,7 @@
 #include <mutex>
 #include "CDeviceToken.hpp"
 typedef std::map<TDeviceHandle, CDeviceToken> TDeviceTokens;
+typedef std::pair<TDeviceTokens::iterator, bool> TInsertedDeviceToken;
 class CDeviceFinder;
 
 class IHIDListener

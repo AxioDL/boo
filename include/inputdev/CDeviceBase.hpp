@@ -8,10 +8,12 @@ class CDeviceBase
 {
     CDeviceToken* m_token;
     IHIDDevice* m_hidDev;
+    friend CDeviceToken;
+    void _deviceDisconnected();
 public:
     inline CDeviceBase(CDeviceToken* token, IHIDDevice* hidDev)
     : m_token(token), m_hidDev(hidDev) {}
-    void _deviceDisconnected();
+    void closeDevice();
     virtual void deviceDisconnected()=0;
 };
 

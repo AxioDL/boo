@@ -44,8 +44,9 @@ private:
     {
         if (BooDeviceMatchToken(token, m_types)) {
             m_tokensLock.lock();
-            m_tokens.insert(std::make_pair(token.getDeviceHandle(), token));
+            TInsertedDeviceToken inseredTok = m_tokens.insert(std::make_pair(token.getDeviceHandle(), std::move(token)));
             m_tokensLock.unlock();
+            deviceConnected(inseredTok.first->second);
         }
     }
     inline void _removeToken(TDeviceHandle handle)
@@ -55,6 +56,7 @@ private:
         {
             CDeviceToken& tok = preCheck->second;
             tok._deviceClose();
+            deviceDisconnected(tok);
             m_tokensLock.lock();
             m_tokens.erase(preCheck);
             m_tokensLock.unlock();
@@ -75,14 +77,12 @@ public:
     };
     
     /* Application must specify its interested device-types */
-    CDeviceFinder(EDeviceMask types, bool autoScan=true)
+    CDeviceFinder(EDeviceMask types)
     : m_types(types), m_listener(NULL)
     {
         if (skDevFinder)
             throw std::runtime_error("only one instance of CDeviceFinder may be constructed");
         skDevFinder = this;
-        if (autoScan)
-            startScanning();
     }
     ~CDeviceFinder()
     {
@@ -125,6 +125,9 @@ public:
             return m_listener->scanNow();
         return false;
     }
+    
+    virtual void deviceConnected(CDeviceToken&) {}
+    virtual void deviceDisconnected(CDeviceToken&) {}
     
 };
 

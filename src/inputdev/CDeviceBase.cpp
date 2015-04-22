@@ -5,11 +5,18 @@
 
 void CDeviceBase::_deviceDisconnected()
 {
-    m_token->m_connectedDev = NULL;
+    deviceDisconnected();
     m_token = NULL;
-    m_hidDev->deviceDisconnected();
+    m_hidDev->_deviceDisconnected();
     m_hidDev = NULL;
 }
 
+
+
+void CDeviceBase::closeDevice()
+{
+    if (m_token)
+        m_token->_deviceClose();
+}
 
 

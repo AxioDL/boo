@@ -12,8 +12,6 @@ typedef IOHIDDeviceRef TDeviceHandle;
 #elif __linux__
 #endif
 
-class CDeviceBase;
-
 class CDeviceToken
 {
     unsigned m_vendorId;
@@ -22,10 +20,21 @@ class CDeviceToken
     std::string m_productName;
     TDeviceHandle m_devHandle;
     
-    friend CDeviceBase;
+    friend class CDeviceBase;
     CDeviceBase* m_connectedDev;
+    
+    friend class CDeviceFinder;
+    inline void _deviceClose()
+    {
+        printf("CLOSE %p\n", this);
+        if (m_connectedDev)
+            m_connectedDev->_deviceDisconnected();
+        m_connectedDev = NULL;
+    }
 
 public:
+    CDeviceToken(const CDeviceToken&) = delete;
+    CDeviceToken(CDeviceToken&&) = default;
     inline CDeviceToken(unsigned vid, unsigned pid, const char* vname, const char* pname, TDeviceHandle handle)
     : m_vendorId(vid), m_productId(pid), m_devHandle(handle), m_connectedDev(NULL)
     {
@@ -43,20 +52,12 @@ public:
     inline bool isDeviceOpen() const {return m_connectedDev;}
     inline CDeviceBase* openAndGetDevice()
     {
+        printf("OPEN %p\n", this);
         if (!m_connectedDev)
             m_connectedDev = BooDeviceNew(this);
         return m_connectedDev;
     }
     
-    inline void _deviceClose()
-    {
-        if (m_connectedDev)
-            m_connectedDev->deviceDisconnected();
-        m_connectedDev = NULL;
-    }
-    
-    inline CDeviceToken operator =(const CDeviceToken& other)
-    {return CDeviceToken(other);}
     inline bool operator ==(const CDeviceToken& rhs) const
     {return m_devHandle == rhs.m_devHandle;}
     inline bool operator <(const CDeviceToken& rhs) const

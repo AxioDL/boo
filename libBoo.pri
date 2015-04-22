@@ -49,12 +49,13 @@ unix:!macx:SOURCES += \
     $$PWD/src/inputdev/CHIDListenerUdev.cpp
 
 macx:SOURCES += \
-    $$PWD/src/mac/CCGLContext.cpp
+    $$PWD/src/mac/CCGLContext.cpp \
+    $$PWD/src/inputdev/CHIDDeviceIOKit.cpp \
+    $$PWD/src/inputdev/CHIDListenerIOKit.cpp
 
 macx:OBJECTIVE_SOURCES += \
     $$PWD/src/mac/CCGLCocoaView.mm \
-    $$PWD/src/inputdev/CHIDDeviceIOKit.mm \
-    $$PWD/src/inputdev/CHIDListenerIOKit.mm
+
 
 win32:SOURCES += \
     $$PWD/src/win/CWGLContext.cpp \

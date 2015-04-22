@@ -34,23 +34,23 @@ class CHIDListenerIOKit final : public IHIDListener
                                    IOReturn,
                                    void*,
                                    IOHIDDeviceRef device)
-    {listener->m_finder._removeToken(device);}
+    {
+        listener->m_finder._removeToken(device);
+    }
     
     static void applyDevice(IOHIDDeviceRef device, CHIDListenerIOKit* listener)
     {
-        auto preCheck = listener->m_finder.m_tokens.find(device);
-        if (preCheck != listener->m_finder.m_tokens.end())
+        if (listener->m_finder._hasToken(device))
             return;
         CFIndex vid, pid;
         CFNumberGetValue((CFNumberRef)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey)), kCFNumberCFIndexType, &vid);
         CFNumberGetValue((CFNumberRef)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey)), kCFNumberCFIndexType, &pid);
         CFStringRef manuf = (CFStringRef)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDManufacturerKey));
         CFStringRef product = (CFStringRef)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductKey));
-        listener->m_finder.m_tokens.insert(std::make_pair(device,
-            CDeviceToken(vid, pid,
-                         CFStringGetCStringPtr(manuf, kCFStringEncodingUTF8),
-                         CFStringGetCStringPtr(product, kCFStringEncodingUTF8),
-                         device)));
+        listener->m_finder._insertToken(CDeviceToken(vid, pid,
+                                                     CFStringGetCStringPtr(manuf, kCFStringEncodingUTF8),
+                                                     CFStringGetCStringPtr(product, kCFStringEncodingUTF8),
+                                                     device));
     }
 
 public:

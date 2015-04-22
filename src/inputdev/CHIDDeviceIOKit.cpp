@@ -5,6 +5,12 @@
 class CHIDDeviceIOKit final : public IHIDDevice
 {
     IOHIDDeviceRef m_dev;
+    
+    void _deviceDisconnected()
+    {
+        IOHIDDeviceClose(m_dev, kIOHIDOptionsTypeNone);
+    }
+    
 public:
     
     CHIDDeviceIOKit(CDeviceToken* token)
@@ -13,15 +19,12 @@ public:
         IOHIDDeviceOpen(m_dev, kIOHIDOptionsTypeNone);
     }
     
-    CHIDDeviceIOKit()
+    ~CHIDDeviceIOKit()
     {
         IOHIDDeviceClose(m_dev, kIOHIDOptionsTypeNone);
     }
     
-    void deviceDisconnected()
-    {
-        IOHIDDeviceClose(m_dev, kIOHIDOptionsTypeNone);
-    }
+
 };
 
 IHIDDevice* IHIDDeviceNew(CDeviceToken* token)

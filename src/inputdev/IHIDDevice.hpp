@@ -7,7 +7,7 @@ class CDeviceBase;
 class IHIDDevice
 {
     friend CDeviceBase;
-    virtual void deviceDisconnected()=0;
+    virtual void _deviceDisconnected()=0;
 };
 
 #endif // IHIDDEVICE_HPP
