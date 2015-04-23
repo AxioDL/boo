@@ -26,7 +26,6 @@ class CDeviceToken
     friend class CDeviceFinder;
     inline void _deviceClose()
     {
-        printf("CLOSE %p\n", this);
         if (m_connectedDev)
             m_connectedDev->_deviceDisconnected();
         m_connectedDev = NULL;
@@ -52,7 +51,6 @@ public:
     inline bool isDeviceOpen() const {return m_connectedDev;}
     inline CDeviceBase* openAndGetDevice()
     {
-        printf("OPEN %p\n", this);
         if (!m_connectedDev)
             m_connectedDev = BooDeviceNew(this);
         return m_connectedDev;

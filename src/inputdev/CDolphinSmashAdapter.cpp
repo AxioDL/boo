@@ -4,10 +4,15 @@
 CDolphinSmashAdapter::CDolphinSmashAdapter(CDeviceToken* token, IHIDDevice* hidDev)
 : CDeviceBase(token, hidDev)
 {
-    printf("I've been plugged!!\n");
+    
+}
+
+CDolphinSmashAdapter::~CDolphinSmashAdapter()
+{
+    
 }
 
 void CDolphinSmashAdapter::deviceDisconnected()
 {
-    printf("I've been unplugged!!\n");
+    
 }

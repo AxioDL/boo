@@ -55,8 +55,9 @@ private:
         if (preCheck != m_tokens.end())
         {
             CDeviceToken& tok = preCheck->second;
+            CDeviceBase* dev = tok.m_connectedDev;
             tok._deviceClose();
-            deviceDisconnected(tok);
+            deviceDisconnected(tok, dev);
             m_tokensLock.lock();
             m_tokens.erase(preCheck);
             m_tokensLock.unlock();
@@ -127,7 +128,7 @@ public:
     }
     
     virtual void deviceConnected(CDeviceToken&) {}
-    virtual void deviceDisconnected(CDeviceToken&) {}
+    virtual void deviceDisconnected(CDeviceToken&, CDeviceBase*) {}
     
 };
 

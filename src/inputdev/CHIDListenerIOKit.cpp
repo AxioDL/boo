@@ -7,6 +7,7 @@ class CHIDListenerIOKit final : public IHIDListener
 {
     CDeviceFinder& m_finder;
     
+    CFRunLoopRef m_listenerRunLoop;
     IOHIDManagerRef m_hidManager;
     bool m_scanningEnabled;
     
@@ -31,10 +32,18 @@ class CHIDListenerIOKit final : public IHIDListener
     }
     
     static void deviceDisconnected(CHIDListenerIOKit* listener,
-                                   IOReturn,
-                                   void*,
+                                   IOReturn ret,
+                                   void* sender,
                                    IOHIDDeviceRef device)
     {
+        if (CFRunLoopGetCurrent() != listener->m_listenerRunLoop)
+        {
+            CFRunLoopPerformBlock(listener->m_listenerRunLoop, kCFRunLoopDefaultMode, ^{
+                deviceDisconnected(listener, ret, sender, device);
+            });
+            CFRunLoopWakeUp(listener->m_listenerRunLoop);
+            return;
+        }
         listener->m_finder._removeToken(device);
     }
     
@@ -63,7 +72,8 @@ public:
         IOHIDManagerSetDeviceMatching(m_hidManager, NULL);
         IOHIDManagerRegisterDeviceMatchingCallback(m_hidManager, (IOHIDDeviceCallback)deviceConnected, this);
         IOHIDManagerRegisterDeviceRemovalCallback(m_hidManager, (IOHIDDeviceCallback)deviceDisconnected, this);
-        IOHIDManagerScheduleWithRunLoop(m_hidManager, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
+        m_listenerRunLoop = CFRunLoopGetCurrent();
+        IOHIDManagerScheduleWithRunLoop(m_hidManager, m_listenerRunLoop, kCFRunLoopDefaultMode);
         IOReturn ret = IOHIDManagerOpen(m_hidManager, kIOHIDManagerOptionNone);
         if (ret != kIOReturnSuccess)
             throw std::runtime_error("error establishing IOHIDManager");
@@ -77,7 +87,7 @@ public:
     
     ~CHIDListenerIOKit()
     {
-        IOHIDManagerUnscheduleFromRunLoop(m_hidManager, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
+        IOHIDManagerUnscheduleFromRunLoop(m_hidManager, m_listenerRunLoop, kCFRunLoopDefaultMode);
         IOHIDManagerClose(m_hidManager, kIOHIDManagerOptionNone);
         CFRelease(m_hidManager);
     }

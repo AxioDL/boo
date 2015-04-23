@@ -7,6 +7,9 @@
 #include "CDualshockPad.hpp"
 #include "CGenericPad.hpp"
 
+#define VID_NINTENDO 0x57e
+#define PID_SMASH_ADAPTER 0x337
+
 enum EDeviceMask
 {
     DEV_NONE                = 0,

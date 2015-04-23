@@ -8,6 +8,7 @@ class CDolphinSmashAdapter final : public CDeviceBase
     void deviceDisconnected();
 public:
     CDolphinSmashAdapter(CDeviceToken* token, IHIDDevice* hidDev);
+    ~CDolphinSmashAdapter();
 };
 
 #endif // CDOLPHINSMASHADAPTER_HPP

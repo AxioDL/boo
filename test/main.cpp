@@ -12,14 +12,15 @@ public:
     {}
     void deviceConnected(CDeviceToken& tok)
     {
-        printf("CONNECTED %s %s\n", tok.getVendorName().c_str(), tok.getProductName().c_str());
         smashAdapter = dynamic_cast<CDolphinSmashAdapter*>(tok.openAndGetDevice());
     }
-    void deviceDisconnected(CDeviceToken& tok)
+    void deviceDisconnected(CDeviceToken&, CDeviceBase* device)
     {
-        printf("DISCONNECTED %s %s\n", tok.getVendorName().c_str(), tok.getProductName().c_str());
-        delete smashAdapter;
-        smashAdapter = NULL;
+        if (smashAdapter == device)
+        {
+            delete smashAdapter;
+            smashAdapter = NULL;
+        }
     }
 };
 
