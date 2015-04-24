@@ -11,7 +11,6 @@ struct IDolphinSmashAdapterCallback
         DOL_TYPE_NONE     = 0,
         DOL_TYPE_NORMAL   = 0x10,
         DOL_TYPE_WAVEBIRD = 0x20,
-        DOL_TYPE_RUMBLE   = 0xF0
     };
     enum EDolphinControllerButtons
     {

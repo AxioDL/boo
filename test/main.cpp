@@ -32,6 +32,7 @@ public:
     {
         smashAdapter = dynamic_cast<CDolphinSmashAdapter*>(tok.openAndGetDevice());
         smashAdapter->setCallback(&m_cb);
+        smashAdapter->startRumble(0);
     }
     void deviceDisconnected(CDeviceToken&, CDeviceBase* device)
     {

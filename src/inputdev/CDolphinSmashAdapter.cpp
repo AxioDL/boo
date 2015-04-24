@@ -5,26 +5,6 @@
 /* Reference: https://github.com/ToadKing/wii-u-gc-adapter/blob/master/wii-u-gc-adapter.c
  */
 
-static const bool BUTTON_MASK[] =
-{
-    true,
-    true,
-    true,
-    true,
-    false,
-    false,
-    false,
-    false,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true
-};
-
 CDolphinSmashAdapter::CDolphinSmashAdapter(CDeviceToken* token)
 : CDeviceBase(token),
   m_callback(NULL),
@@ -57,15 +37,13 @@ parseType(unsigned char status)
 }
 
 static inline IDolphinSmashAdapterCallback::EDolphinControllerType
-parseState(IDolphinSmashAdapterCallback::SDolphinControllerState* stateOut, uint8_t* payload)
+parseState(IDolphinSmashAdapterCallback::SDolphinControllerState* stateOut, uint8_t* payload, bool& rumble)
 {
     memset(stateOut, 0, sizeof(IDolphinSmashAdapterCallback::SDolphinControllerState));
     unsigned char status = payload[0];
     IDolphinSmashAdapterCallback::EDolphinControllerType type = parseType(status);
     
-    IDolphinSmashAdapterCallback::EDolphinControllerType extra =
-    ((status & 0x04) != 0) ? IDolphinSmashAdapterCallback::DOL_TYPE_RUMBLE :
-    IDolphinSmashAdapterCallback::DOL_TYPE_NONE;
+    rumble = ((status & 0x04) != 0) ? true : false;
     
     stateOut->m_btns = (uint16_t)payload[1] << 8 | (uint16_t)payload[2];
     
@@ -76,7 +54,7 @@ parseState(IDolphinSmashAdapterCallback::SDolphinControllerState* stateOut, uint
     stateOut->m_analogTriggers[0] = payload[7];
     stateOut->m_analogTriggers[1] = payload[8];
     
-    return static_cast<IDolphinSmashAdapterCallback::EDolphinControllerType>(type|extra);
+    return type;
 }
 
 void CDolphinSmashAdapter::transferCycle()
@@ -101,11 +79,12 @@ void CDolphinSmashAdapter::transferCycle()
         
         /* Parse controller states */
         uint8_t* controller = &payload[1];
-        bool rumbleMask[4] = {false};
+        uint8_t rumbleMask = 0;
         for (int i=0 ; i<4 ; i++, controller += 9)
         {
             IDolphinSmashAdapterCallback::SDolphinControllerState state;
-            IDolphinSmashAdapterCallback::EDolphinControllerType type = parseState(&state, controller);
+            bool rumble = false;
+            IDolphinSmashAdapterCallback::EDolphinControllerType type = parseState(&state, controller, rumble);
             if (type && !(m_knownControllers & 1<<i))
             {
                 m_knownControllers |= 1<<i;
@@ -116,18 +95,19 @@ void CDolphinSmashAdapter::transferCycle()
                 m_knownControllers &= ~(1<<i);
                 m_callback->controllerDisconnected(i, type);
             }
-            m_callback->controllerUpdate(i, type, state);
-            rumbleMask[i] = type & IDolphinSmashAdapterCallback::DOL_TYPE_RUMBLE;
+            if (m_knownControllers & 1<<i)
+                m_callback->controllerUpdate(i, type, state);
+            rumbleMask |= rumble ? 1<<i : 0;
         }
         
         /* Send rumble message (if needed) */
-        uint8_t rumbleReq = m_rumbleRequest;
+        uint8_t rumbleReq = m_rumbleRequest & rumbleMask;
         if (rumbleReq != m_rumbleState)
         {
             uint8_t rumbleMessage[5] = {0x11};
             for (int i=0 ; i<4 ; ++i)
             {
-                if (rumbleReq & 1<<i && rumbleMask[i])
+                if (rumbleReq & 1<<i)
                     rumbleMessage[i+1] = 1;
                 else
                     rumbleMessage[i+1] = 0;
