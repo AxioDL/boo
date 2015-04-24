@@ -1,10 +1,10 @@
 #ifndef IHIDLISTENER_HPP
 #define IHIDLISTENER_HPP
 
-#include <map>
+#include <unordered_map>
 #include <mutex>
 #include "CDeviceToken.hpp"
-typedef std::map<TDeviceHandle, CDeviceToken> TDeviceTokens;
+typedef std::unordered_map<std::string, CDeviceToken> TDeviceTokens;
 typedef std::pair<TDeviceTokens::iterator, bool> TInsertedDeviceToken;
 class CDeviceFinder;
 

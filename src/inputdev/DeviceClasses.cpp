@@ -10,17 +10,29 @@ bool BooDeviceMatchToken(const CDeviceToken& token, EDeviceMask mask)
     return false;
 }
 
-IHIDDevice* IHIDDeviceNew(CDeviceToken* token);
-CDeviceBase* BooDeviceNew(CDeviceToken* token)
+IHIDDevice* IHIDDeviceNew(CDeviceToken& token, CDeviceBase& devImp, bool lowLevel);
+CDeviceBase* BooDeviceNew(CDeviceToken& token)
 {
-    IHIDDevice* newDev = IHIDDeviceNew(token);
-    if (!newDev)
+    
+    CDeviceBase* retval = NULL;
+    bool lowLevel = false;
+    
+    if (token.getVendorId() == VID_NINTENDO && token.getProductId() == PID_SMASH_ADAPTER)
+    {
+        retval = new CDolphinSmashAdapter(&token);
+        lowLevel = true;
+    }
+    
+    if (!retval)
         return NULL;
     
-    if (token->getVendorId() == VID_NINTENDO && token->getProductId() == PID_SMASH_ADAPTER)
-        return new CDolphinSmashAdapter(token, newDev);
-    else
-        delete newDev;
+    IHIDDevice* newDev = IHIDDeviceNew(token, *retval, lowLevel);
+    if (!newDev)
+    {
+        delete retval;
+        return NULL;
+    }
     
-    return NULL;
+    return retval;
+    
 }

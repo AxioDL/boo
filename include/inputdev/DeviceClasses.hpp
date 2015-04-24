@@ -22,6 +22,6 @@ enum EDeviceMask
 };
 
 bool BooDeviceMatchToken(const CDeviceToken& token, EDeviceMask mask);
-CDeviceBase* BooDeviceNew(CDeviceToken* token);
+CDeviceBase* BooDeviceNew(CDeviceToken& token);
 
 #endif // CDEVICECLASSES_HPP

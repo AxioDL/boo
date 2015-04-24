@@ -5,20 +5,13 @@
 #include "CDeviceBase.hpp"
 #include "DeviceClasses.hpp"
 
-#if __APPLE__
-#include <IOKit/hid/IOHIDLib.h>
-typedef IOHIDDeviceRef TDeviceHandle;
-#elif _WIN32
-#elif __linux__
-#endif
-
 class CDeviceToken
 {
     unsigned m_vendorId;
     unsigned m_productId;
     std::string m_vendorName;
     std::string m_productName;
-    TDeviceHandle m_devHandle;
+    std::string m_devPath;
     
     friend class CDeviceBase;
     CDeviceBase* m_connectedDev;
@@ -34,8 +27,8 @@ class CDeviceToken
 public:
     CDeviceToken(const CDeviceToken&) = delete;
     CDeviceToken(CDeviceToken&&) = default;
-    inline CDeviceToken(unsigned vid, unsigned pid, const char* vname, const char* pname, TDeviceHandle handle)
-    : m_vendorId(vid), m_productId(pid), m_devHandle(handle), m_connectedDev(NULL)
+    inline CDeviceToken(unsigned vid, unsigned pid, const char* vname, const char* pname, const char* path)
+    : m_vendorId(vid), m_productId(pid), m_devPath(path), m_connectedDev(NULL)
     {
         if (vname)
             m_vendorName = vname;
@@ -47,19 +40,19 @@ public:
     inline unsigned getProductId() const {return m_productId;}
     inline const std::string& getVendorName() const {return m_vendorName;}
     inline const std::string& getProductName() const {return m_productName;}
-    inline TDeviceHandle getDeviceHandle() const {return m_devHandle;}
+    inline const std::string& getDevicePath() const {return m_devPath;}
     inline bool isDeviceOpen() const {return m_connectedDev;}
     inline CDeviceBase* openAndGetDevice()
     {
         if (!m_connectedDev)
-            m_connectedDev = BooDeviceNew(this);
+            m_connectedDev = BooDeviceNew(*this);
         return m_connectedDev;
     }
     
     inline bool operator ==(const CDeviceToken& rhs) const
-    {return m_devHandle == rhs.m_devHandle;}
+    {return m_devPath == rhs.m_devPath;}
     inline bool operator <(const CDeviceToken& rhs) const
-    {return m_devHandle < rhs.m_devHandle;}
+    {return m_devPath < rhs.m_devPath;}
 };
 
 #endif // CDEVICETOKEN

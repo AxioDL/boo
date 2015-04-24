@@ -2,10 +2,9 @@
 #include "inputdev/CDeviceToken.hpp"
 #include "IHIDDevice.hpp"
 
-CDeviceBase::CDeviceBase(CDeviceToken* token, IHIDDevice* hidDev)
-: m_token(token), m_hidDev(hidDev)
+CDeviceBase::CDeviceBase(CDeviceToken* token)
+: m_token(token), m_hidDev(NULL)
 {
-    hidDev->_setDeviceImp(this);
 }
 
 CDeviceBase::~CDeviceBase()
@@ -25,11 +24,31 @@ void CDeviceBase::_deviceDisconnected()
     }
 }
 
-
 void CDeviceBase::closeDevice()
 {
     if (m_token)
         m_token->_deviceClose();
+}
+
+bool CDeviceBase::sendInterruptTransfer(uint8_t pipe, const uint8_t* data, size_t length)
+{
+    if (m_hidDev)
+        return m_hidDev->_sendInterruptTransfer(pipe, data, length);
+    return false;
+}
+
+size_t CDeviceBase::receiveInterruptTransfer(uint8_t pipe, uint8_t* data, size_t length)
+{
+    if (m_hidDev)
+        return m_hidDev->_receiveInterruptTransfer(pipe, data, length);
+    return false;
+}
+
+bool CDeviceBase::sendReport(const uint8_t* data, size_t length)
+{
+    if (m_hidDev)
+        return m_hidDev->_sendReport(data, length);
+    return false;
 }
 
 

@@ -33,9 +33,9 @@ private:
     
     /* Friend methods for platform-listener to find/insert/remove
      * tokens with type-filtering */
-    inline bool _hasToken(TDeviceHandle handle)
+    inline bool _hasToken(const std::string& path)
     {
-        auto preCheck = m_tokens.find(handle);
+        auto preCheck = m_tokens.find(path);
         if (preCheck != m_tokens.end())
             return true;
         return false;
@@ -44,14 +44,14 @@ private:
     {
         if (BooDeviceMatchToken(token, m_types)) {
             m_tokensLock.lock();
-            TInsertedDeviceToken inseredTok = m_tokens.insert(std::make_pair(token.getDeviceHandle(), std::move(token)));
+            TInsertedDeviceToken inseredTok = m_tokens.insert(std::make_pair(token.getDevicePath(), std::move(token)));
             m_tokensLock.unlock();
             deviceConnected(inseredTok.first->second);
         }
     }
-    inline void _removeToken(TDeviceHandle handle)
+    inline void _removeToken(const std::string& path)
     {
-        auto preCheck = m_tokens.find(handle);
+        auto preCheck = m_tokens.find(path);
         if (preCheck != m_tokens.end())
         {
             CDeviceToken& tok = preCheck->second;
