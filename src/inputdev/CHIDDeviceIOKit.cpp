@@ -146,10 +146,9 @@ class CHIDDeviceIOKit final : public IHIDDevice
         
         /* Start transfer loop */
         while (device->m_runningTransferLoop)
-        {
             device->m_devImp.transferCycle();
-        }
-        
+        device->m_devImp.finalCycle();
+
         /* Cleanup */
         (*intf)->USBInterfaceClose(intf);
         (*intf)->Release(intf);

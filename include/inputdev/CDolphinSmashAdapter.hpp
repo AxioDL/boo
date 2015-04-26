@@ -49,6 +49,7 @@ class CDolphinSmashAdapter final : public CDeviceBase
     bool m_didHandshake;
     void deviceDisconnected();
     void transferCycle();
+    void finalCycle();
 public:
     CDolphinSmashAdapter(CDeviceToken* token);
     ~CDolphinSmashAdapter();

@@ -48,9 +48,9 @@ parseState(IDolphinSmashAdapterCallback::SDolphinControllerState* stateOut, uint
     stateOut->m_btns = (uint16_t)payload[1] << 8 | (uint16_t)payload[2];
     
     stateOut->m_leftStick[0] = payload[3];
-    stateOut->m_leftStick[1] = payload[4] ^ 0xFF;
+    stateOut->m_leftStick[1] = payload[4];
     stateOut->m_rightStick[0] = payload[5];
-    stateOut->m_rightStick[1] = payload[6] ^ 0xFF;
+    stateOut->m_rightStick[1] = payload[6];
     stateOut->m_analogTriggers[0] = payload[7];
     stateOut->m_analogTriggers[1] = payload[8];
     
@@ -115,6 +115,15 @@ void CDolphinSmashAdapter::transferCycle()
             sendInterruptTransfer(0, rumbleMessage, sizeof(rumbleMessage));
             m_rumbleState = rumbleReq;
         }
+    }
+};
+
+void CDolphinSmashAdapter::finalCycle()
+{
+    if (m_didHandshake)
+    {
+        uint8_t rumbleMessage[5] = {0x11, 0, 0, 0, 0};
+        sendInterruptTransfer(0, rumbleMessage, sizeof(rumbleMessage));
     }
 };
 

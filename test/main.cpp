@@ -1,5 +1,8 @@
 
+#if __APPLE__
 #include <CoreFoundation/CoreFoundation.h>
+#else
+#endif
 #include <stdio.h>
 #include <boo.hpp>
 
@@ -55,7 +58,10 @@ int main(int argc, char** argv)
     {
     }
     
+#if __APPLE__
     CFRunLoopRun();
+#else
+#endif
 
     delete ctx;
     return 0;

@@ -25,6 +25,7 @@ public:
     bool sendInterruptTransfer(uint8_t pipe, const uint8_t* data, size_t length);
     size_t receiveInterruptTransfer(uint8_t pipe, uint8_t* data, size_t length);
     virtual void transferCycle() {};
+    virtual void finalCycle() {};
 
     /* High-Level API */
     bool sendReport(const uint8_t* data, size_t length);
