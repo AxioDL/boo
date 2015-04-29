@@ -1,5 +1,3 @@
-!contains(CONFIG,c++11):CONFIG += C++11
-
 HEADERS += \
     $$PWD/include/boo.hpp \
     $$PWD/include/IGraphicsContext.hpp \
@@ -18,8 +16,8 @@ HEADERS += \
     $$PWD/include/inputdev/CDeviceToken.hpp \
     $$PWD/include/inputdev/CDeviceBase.hpp \
     $$PWD/include/inputdev/DeviceClasses.hpp \
-    $$PWD/src/inputdev/IHIDDevice.hpp \
-    $$PWD/src/inputdev/IHIDListener.hpp
+    $$PWD/include/inputdev/IHIDListener.hpp \
+    $$PWD/src/inputdev/IHIDDevice.hpp
 
 unix:!macx:HEADERS += \
     $$PWD/include/x11/CGLXContext.hpp
@@ -41,12 +39,12 @@ SOURCES += \
     $$PWD/src/inputdev/CDualshockPad.cpp \
     $$PWD/src/inputdev/CGenericPad.cpp \
     $$PWD/src/inputdev/CDeviceBase.cpp \
-    $$PWD/src/inputdev/DeviceClasses.cpp
+    $$PWD/src/inputdev/DeviceClasses.cpp \
+    $$PWD/src/inputdev/CHIDListenerUdev.cpp \
+    $$PWD/src/inputdev/CHIDDeviceUdev.cpp
 
 unix:!macx:SOURCES += \
-    $$PWD/src/x11/CGLXContext.cpp \
-    $$PWD/src/inputdev/CHIDDeviceUdev.cpp \
-    $$PWD/src/inputdev/CHIDListenerUdev.cpp
+    $$PWD/src/x11/CGLXContext.cpp
 
 macx:SOURCES += \
     $$PWD/src/mac/CCGLContext.cpp \
@@ -63,3 +61,5 @@ win32:SOURCES += \
     $$PWD/src/inputdev/CHIDListenerWin32.cpp
 
 INCLUDEPATH += $$PWD/include
+
+unix:!macx:LIBS += -ludev

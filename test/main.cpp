@@ -4,6 +4,7 @@
 #else
 #endif
 #include <stdio.h>
+#include <unistd.h>
 #include <boo.hpp>
 
 class CDolphinSmashAdapterCallback : public IDolphinSmashAdapterCallback
@@ -61,6 +62,7 @@ int main(int argc, char** argv)
 #if __APPLE__
     CFRunLoopRun();
 #else
+    while (true) {sleep(1);}
 #endif
 
     delete ctx;
