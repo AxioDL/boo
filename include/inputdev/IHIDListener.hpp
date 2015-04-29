@@ -4,6 +4,10 @@
 #include <unordered_map>
 #include <mutex>
 #include "CDeviceToken.hpp"
+
+namespace boo
+{
+
 typedef std::unordered_map<std::string, CDeviceToken> TDeviceTokens;
 typedef std::pair<TDeviceTokens::iterator, bool> TInsertedDeviceToken;
 class CDeviceFinder;
@@ -24,5 +28,7 @@ public:
 
 /* Platform-specific constructor */
 IHIDListener* IHIDListenerNew(CDeviceFinder& finder);
+
+}
 
 #endif // IHIDLISTENER_HPP

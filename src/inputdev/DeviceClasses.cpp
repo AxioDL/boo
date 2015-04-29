@@ -2,6 +2,9 @@
 #include "inputdev/CDeviceToken.hpp"
 #include "IHIDDevice.hpp"
 
+namespace boo
+{
+
 bool BooDeviceMatchToken(const CDeviceToken& token, EDeviceMask mask)
 {
     if (mask & DEV_DOL_SMASH_ADAPTER &&
@@ -35,4 +38,6 @@ CDeviceBase* BooDeviceNew(CDeviceToken& token)
     
     return retval;
     
+}
+
 }

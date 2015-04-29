@@ -8,6 +8,9 @@
 #include "IHIDListener.hpp"
 #include "DeviceClasses.hpp"
 
+namespace boo
+{
+
 static class CDeviceFinder* skDevFinder = NULL;
 
 class CDeviceFinder
@@ -131,5 +134,7 @@ public:
     virtual void deviceDisconnected(CDeviceToken&, CDeviceBase*) {}
     
 };
+
+}
 
 #endif // CDEVICEFINDER_HPP

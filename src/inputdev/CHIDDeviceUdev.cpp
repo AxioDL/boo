@@ -14,11 +14,15 @@
 #include <unistd.h>
 #include <string.h>
 
+namespace boo
+{
+
 udev* BooGetUdev();
 
 #define MAX_REPORT_SIZE 65536
 
-/* Reference: http://tali.admingilde.org/linux-docbook/usb/ch07s06.html
+/*
+ * Reference: http://tali.admingilde.org/linux-docbook/usb/ch07s06.html
  */
 
 class CHIDDeviceUdev final : public IHIDDevice
@@ -179,4 +183,6 @@ public:
 IHIDDevice* IHIDDeviceNew(CDeviceToken& token, CDeviceBase& devImp, bool lowLevel)
 {
     return new CHIDDeviceUdev(token, devImp, lowLevel);
+}
+
 }

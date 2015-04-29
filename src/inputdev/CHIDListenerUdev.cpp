@@ -4,6 +4,9 @@
 #include <string.h>
 #include <thread>
 
+namespace boo
+{
+
 static udev* UDEV_INST = NULL;
 udev* BooGetUdev()
 {
@@ -31,7 +34,8 @@ class CHIDListenerUdev final : public IHIDListener
         if (listener->m_finder._hasToken(devPath))
             return;
 
-        udev_device* devCast = udev_device_get_parent_with_subsystem_devtype(device, "bluetooth", "bluetooth_device");
+        udev_device* devCast =
+        udev_device_get_parent_with_subsystem_devtype(device, "bluetooth", "bluetooth_device");
         if (!devCast)
             devCast = udev_device_get_parent_with_subsystem_devtype(device, "usb", "usb_device");
         if (!devCast)
@@ -100,7 +104,7 @@ public:
     : m_finder(finder)
     {
         
-        /* Setup hiddev and hotplug events */
+        /* Setup hotplug events */
         m_udevMon = udev_monitor_new_from_netlink(BooGetUdev(), "udev");
         if (!m_udevMon)
             throw std::runtime_error("unable to init udev_monitor");
@@ -122,6 +126,7 @@ public:
     {
         m_udevRunning = false;
         m_udevThread->join();
+        delete m_udevThread;
         udev_monitor_unref(m_udevMon);
     }
     
@@ -164,3 +169,4 @@ IHIDListener* IHIDListenerNew(CDeviceFinder& finder)
     return new CHIDListenerUdev(finder);
 }
 
+}

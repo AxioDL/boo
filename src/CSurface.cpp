@@ -1,5 +1,8 @@
 #include "CSurface.hpp"
 
+namespace boo
+{
+
 ISurface* CSurfaceNewWindow()
 {
     
@@ -8,4 +11,6 @@ ISurface* CSurfaceNewWindow()
 ISurface* CSurfaceNewQWidget()
 {
     
+}
+
 }

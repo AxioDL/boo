@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+namespace boo
+{
+
 class CDeviceBase
 {
     friend class CDeviceToken;
@@ -32,5 +35,7 @@ public:
     virtual size_t receiveReport(uint8_t* data, size_t length) {};
     
 };
+
+}
 
 #endif // CDEVICEBASE

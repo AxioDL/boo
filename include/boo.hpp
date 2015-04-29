@@ -6,12 +6,12 @@
 
 #elif defined(__APPLE__)
 #include "mac/CCGLContext.hpp"
-typedef CCGLContext CGraphicsContext;
+namespace boo {typedef CCGLContext CGraphicsContext;}
 
 
 #elif defined(__GNUC__) || defined(__clang__)
 #include "x11/CGLXContext.hpp"
-typedef CGLXContext CGraphicsContext;
+namespace boo {typedef boo::CGLXContext CGraphicsContext;}
 
 #endif
 

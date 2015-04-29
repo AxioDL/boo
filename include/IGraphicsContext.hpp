@@ -3,6 +3,9 @@
 
 #include <string>
 
+namespace boo
+{
+
 class IGraphicsContext
 {
 public:
@@ -18,5 +21,7 @@ public:
     virtual int greenDepth() const=0;
     virtual int blueDepth() const=0;
 };
+
+}
 
 #endif // IGRAPHICSCONTEXT_HPP

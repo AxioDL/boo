@@ -7,6 +7,9 @@
 #include "CDualshockPad.hpp"
 #include "CGenericPad.hpp"
 
+namespace boo
+{
+
 #define VID_NINTENDO 0x57e
 #define PID_SMASH_ADAPTER 0x337
 
@@ -23,5 +26,7 @@ enum EDeviceMask
 
 bool BooDeviceMatchToken(const CDeviceToken& token, EDeviceMask mask);
 CDeviceBase* BooDeviceNew(CDeviceToken& token);
+
+}
 
 #endif // CDEVICECLASSES_HPP

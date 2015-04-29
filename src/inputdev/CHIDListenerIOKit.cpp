@@ -6,7 +6,8 @@
 #include <IOKit/usb/IOUSBLib.h>
 #include <IOKit/IOCFPlugIn.h>
 
-/* Reference: http://oroboro.com/usb-serial-number-osx/ 
+/*
+ * Reference: http://oroboro.com/usb-serial-number-osx/
  */
 
 static bool getUSBStringDescriptor(IOUSBDeviceInterface182** usbDevice, UInt8 idx, char* out)

@@ -3,4 +3,9 @@
 
 #include "IInputWaiter.hpp"
 
+namespace boo
+{
+
+}
+
 #endif // CINPUTDEFERREDRELAY_HPP

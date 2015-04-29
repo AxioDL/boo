@@ -3,7 +3,12 @@
 
 #include "ISurface.hpp"
 
+namespace boo
+{
+
 ISurface* CSurfaceNewWindow();
 ISurface* CSurfaceNewQWidget();
+
+}
 
 #endif // CSURFACE_HPP

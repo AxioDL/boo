@@ -5,6 +5,9 @@
 #include "CDeviceBase.hpp"
 #include "DeviceClasses.hpp"
 
+namespace boo
+{
+
 class CDeviceToken
 {
     unsigned m_vendorId;
@@ -54,5 +57,7 @@ public:
     inline bool operator <(const CDeviceToken& rhs) const
     {return m_devPath < rhs.m_devPath;}
 };
+
+}
 
 #endif // CDEVICETOKEN

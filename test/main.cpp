@@ -7,6 +7,9 @@
 #include <unistd.h>
 #include <boo.hpp>
 
+namespace boo
+{
+
 class CDolphinSmashAdapterCallback : public IDolphinSmashAdapterCallback
 {
     void controllerConnected(unsigned idx, EDolphinControllerType type)
@@ -48,12 +51,14 @@ public:
     }
 };
 
+}
+
 int main(int argc, char** argv)
 {
-    CTestDeviceFinder finder;
+    boo::CTestDeviceFinder finder;
     finder.startScanning();
     
-    IGraphicsContext* ctx = new CGraphicsContext;
+    boo::IGraphicsContext* ctx = new boo::CGraphicsContext;
 
     if (ctx->create())
     {

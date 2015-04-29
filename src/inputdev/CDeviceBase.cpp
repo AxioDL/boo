@@ -2,6 +2,9 @@
 #include "inputdev/CDeviceToken.hpp"
 #include "IHIDDevice.hpp"
 
+namespace boo
+{
+
 CDeviceBase::CDeviceBase(CDeviceToken* token)
 : m_token(token), m_hidDev(NULL)
 {
@@ -51,4 +54,4 @@ bool CDeviceBase::sendReport(const uint8_t* data, size_t length)
     return false;
 }
 
-
+}

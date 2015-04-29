@@ -2,11 +2,13 @@
 #define IHIDDEVICE_HPP
 
 #include "inputdev/CDeviceToken.hpp"
-class CDeviceBase;
+
+namespace boo
+{
 
 class IHIDDevice
 {
-    friend CDeviceBase;
+    friend class CDeviceBase;
     virtual void _deviceDisconnected()=0;
     virtual bool _sendInterruptTransfer(uint8_t pipe, const uint8_t* data, size_t length)=0;
     virtual size_t _receiveInterruptTransfer(uint8_t pipe, uint8_t* data, size_t length)=0;
@@ -14,5 +16,7 @@ class IHIDDevice
 public:
     inline virtual ~IHIDDevice() {};
 };
+
+}
 
 #endif // IHIDDEVICE_HPP
