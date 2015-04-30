@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 namespace boo
 {
@@ -23,16 +24,18 @@ public:
     virtual ~CDeviceBase();
     void closeDevice();
     virtual void deviceDisconnected()=0;
+    virtual void deviceError(const char* error) {fprintf(stderr, "%s\n", error);}
     
     /* Low-Level API */
     bool sendInterruptTransfer(uint8_t pipe, const uint8_t* data, size_t length);
     size_t receiveInterruptTransfer(uint8_t pipe, uint8_t* data, size_t length);
-    virtual void transferCycle() {};
-    virtual void finalCycle() {};
+    virtual void initialCycle() {}
+    virtual void transferCycle() {}
+    virtual void finalCycle() {}
 
     /* High-Level API */
     bool sendReport(const uint8_t* data, size_t length);
-    virtual size_t receiveReport(uint8_t* data, size_t length) {};
+    virtual size_t receiveReport(uint8_t* data, size_t length) {return 0;}
     
 };
 

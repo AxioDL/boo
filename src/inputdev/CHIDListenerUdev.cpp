@@ -8,7 +8,7 @@ namespace boo
 {
 
 static udev* UDEV_INST = NULL;
-udev* BooGetUdev()
+udev* GetUdev()
 {
     if (!UDEV_INST)
         UDEV_INST = udev_new();
@@ -105,7 +105,7 @@ public:
     {
         
         /* Setup hotplug events */
-        m_udevMon = udev_monitor_new_from_netlink(BooGetUdev(), "udev");
+        m_udevMon = udev_monitor_new_from_netlink(GetUdev(), "udev");
         if (!m_udevMon)
             throw std::runtime_error("unable to init udev_monitor");
         udev_monitor_filter_add_match_subsystem_devtype(m_udevMon, "hid", NULL);
@@ -145,7 +145,7 @@ public:
     /* Manual device scanning */
     bool scanNow()
     {
-        udev_enumerate* uenum = udev_enumerate_new(BooGetUdev());
+        udev_enumerate* uenum = udev_enumerate_new(GetUdev());
         udev_enumerate_add_match_subsystem(uenum, "hid");
         udev_enumerate_scan_devices(uenum);
         udev_list_entry* uenumList = udev_enumerate_get_list_entry(uenum);

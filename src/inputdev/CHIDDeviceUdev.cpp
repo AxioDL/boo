@@ -17,7 +17,7 @@
 namespace boo
 {
 
-udev* BooGetUdev();
+udev* GetUdev();
 
 #define MAX_REPORT_SIZE 65536
 
@@ -52,7 +52,7 @@ class CHIDDeviceUdev final : public IHIDDevice
                 (void*)data
             };
             int ret = ioctl(m_devFd, USBDEVFS_BULK, &xfer);
-            if (ret != length)
+            if (ret != (int)length)
                 return false;
             return true;
         }
@@ -79,12 +79,23 @@ class CHIDDeviceUdev final : public IHIDDevice
     {
         unsigned i;
         std::unique_lock<std::mutex> lk(device->m_initMutex);
-        udev_device* hidDev = udev_device_new_from_syspath(BooGetUdev(), device->m_devPath.c_str());
+        udev_device* hidDev = udev_device_new_from_syspath(GetUdev(), device->m_devPath.c_str());
 
         /* Get the HID element's parent (USB interrupt transfer-interface) */
         udev_device* usbDev = udev_device_get_parent_with_subsystem_devtype(hidDev, "usb", "usb_device");
         const char* dp = udev_device_get_devnode(usbDev);
-        device->m_devFd = open(dp, O_RDONLY);
+        device->m_devFd = open(dp, O_RDWR);
+        if (device->m_devFd < 0)
+        {
+            char errStr[256];
+            snprintf(errStr, 256, "Unable to open %s@%s: %s\n",
+                     device->m_token.getProductName().c_str(), dp, strerror(errno));
+            device->m_devImp.deviceError(errStr);
+            lk.unlock();
+            device->m_initCond.notify_one();
+            udev_device_unref(hidDev);
+            return;
+        }
         usb_device_descriptor devDesc = {0};
         read(device->m_devFd, &devDesc, 1);
         read(device->m_devFd, &devDesc.bDescriptorType, devDesc.bLength-1);
@@ -128,13 +139,14 @@ class CHIDDeviceUdev final : public IHIDDevice
         device->m_initCond.notify_one();
         
         /* Start transfer loop */
+        device->m_devImp.initialCycle();
         while (device->m_runningTransferLoop)
             device->m_devImp.transferCycle();
         device->m_devImp.finalCycle();
 
         /* Cleanup */
         close(device->m_devFd);
-        device->m_devFd = NULL;
+        device->m_devFd = 0;
         udev_device_unref(hidDev);
         
     }
@@ -173,7 +185,7 @@ public:
     ~CHIDDeviceUdev()
     {
         m_runningTransferLoop = false;
-        m_thread->detach();
+        m_thread->join();
         delete m_thread;
     }
     

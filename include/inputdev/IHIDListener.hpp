@@ -15,7 +15,7 @@ class CDeviceFinder;
 class IHIDListener
 {
 public:
-    virtual ~IHIDListener() {};
+    virtual ~IHIDListener() {}
     
     /* Automatic device scanning */
     virtual bool startScanning()=0;

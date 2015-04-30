@@ -11,11 +11,12 @@ namespace boo {typedef CCGLContext CGraphicsContext;}
 
 #elif defined(__GNUC__) || defined(__clang__)
 #include "x11/CGLXContext.hpp"
-namespace boo {typedef boo::CGLXContext CGraphicsContext;}
+namespace boo {typedef CGLXContext CGraphicsContext;}
 
 #endif
 
 #include "IGraphicsContext.hpp"
 #include "inputdev/CDeviceFinder.hpp"
+#include "inputdev/CDolphinSmashAdapter.hpp"
 
 #endif // BOO_HPP

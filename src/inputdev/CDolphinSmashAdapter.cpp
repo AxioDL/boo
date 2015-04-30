@@ -118,7 +118,12 @@ void CDolphinSmashAdapter::transferCycle()
             m_rumbleState = rumbleReq;
         }
     }
-};
+}
+
+void CDolphinSmashAdapter::initialCycle()
+{
+
+}
 
 void CDolphinSmashAdapter::finalCycle()
 {
@@ -127,7 +132,7 @@ void CDolphinSmashAdapter::finalCycle()
         uint8_t rumbleMessage[5] = {0x11, 0, 0, 0, 0};
         sendInterruptTransfer(0, rumbleMessage, sizeof(rumbleMessage));
     }
-};
+}
 
 void CDolphinSmashAdapter::deviceDisconnected()
 {

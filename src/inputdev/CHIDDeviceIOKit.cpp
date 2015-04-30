@@ -8,6 +8,9 @@
 
 #define MAX_REPORT_SIZE 65536
 
+namespace boo
+{
+
 class CHIDDeviceIOKit final : public IHIDDevice
 {
     CDeviceToken& m_token;
@@ -252,4 +255,6 @@ public:
 IHIDDevice* IHIDDeviceNew(CDeviceToken& token, CDeviceBase& devImp, bool lowLevel)
 {
     return new CHIDDeviceIOKit(token, devImp, lowLevel);
+}
+
 }

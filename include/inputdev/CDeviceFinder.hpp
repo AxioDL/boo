@@ -6,7 +6,8 @@
 #include <stdexcept>
 #include "CDeviceToken.hpp"
 #include "IHIDListener.hpp"
-#include "DeviceClasses.hpp"
+#include "SDeviceSignature.hpp"
+#include <string.h>
 
 namespace boo
 {
@@ -24,7 +25,7 @@ public:
 private:
     
     /* Types this finder is interested in (immutable) */
-    EDeviceMask m_types;
+    SDeviceSignature::TDeviceSignatureSet m_types;
     
     /* Platform-specific USB event registration
      * (for auto-scanning, NULL if not registered) */
@@ -45,9 +46,10 @@ private:
     }
     inline void _insertToken(CDeviceToken&& token)
     {
-        if (BooDeviceMatchToken(token, m_types)) {
+        if (SDeviceSignature::DeviceMatchToken(token, m_types)) {
             m_tokensLock.lock();
-            TInsertedDeviceToken inseredTok = m_tokens.insert(std::make_pair(token.getDevicePath(), std::move(token)));
+            TInsertedDeviceToken inseredTok =
+            m_tokens.insert(std::make_pair(token.getDevicePath(), std::move(token)));
             m_tokensLock.unlock();
             deviceConnected(inseredTok.first->second);
         }
@@ -81,12 +83,22 @@ public:
     };
     
     /* Application must specify its interested device-types */
-    CDeviceFinder(EDeviceMask types)
-    : m_types(types), m_listener(NULL)
+    CDeviceFinder(std::vector<const char*> types)
+    : m_listener(NULL)
     {
         if (skDevFinder)
             throw std::runtime_error("only one instance of CDeviceFinder may be constructed");
         skDevFinder = this;
+        for (const char* typeName : types)
+        {
+            const SDeviceSignature* sigIter = BOO_DEVICE_SIGS;
+            while (sigIter->m_name)
+            {
+                if (!strcmp(sigIter->m_name, typeName))
+                    m_types.push_back(sigIter);
+                ++sigIter;
+            }
+        }
     }
     ~CDeviceFinder()
     {
@@ -97,7 +109,7 @@ public:
     }
     
     /* Get interested device-type mask */
-    inline EDeviceMask getTypes() const {return m_types;}
+    inline const SDeviceSignature::TDeviceSignatureSet& getTypes() const {return m_types;}
     
     /* Iterable set of tokens */
     inline CDeviceTokensHandle getTokens() {return CDeviceTokensHandle(*this);}

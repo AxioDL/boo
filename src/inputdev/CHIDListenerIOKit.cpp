@@ -6,6 +6,9 @@
 #include <IOKit/usb/IOUSBLib.h>
 #include <IOKit/IOCFPlugIn.h>
 
+namespace boo
+{
+
 /*
  * Reference: http://oroboro.com/usb-serial-number-osx/
  */
@@ -286,3 +289,4 @@ IHIDListener* IHIDListenerNew(CDeviceFinder& finder)
     return new CHIDListenerIOKit(finder);
 }
 
+}

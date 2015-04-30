@@ -15,9 +15,9 @@ HEADERS += \
     $$PWD/include/inputdev/CDeviceFinder.hpp \
     $$PWD/include/inputdev/CDeviceToken.hpp \
     $$PWD/include/inputdev/CDeviceBase.hpp \
-    $$PWD/include/inputdev/DeviceClasses.hpp \
     $$PWD/include/inputdev/IHIDListener.hpp \
-    $$PWD/src/inputdev/IHIDDevice.hpp
+    $$PWD/src/inputdev/IHIDDevice.hpp \
+    $$PWD/include/inputdev/SDeviceSignature.hpp
 
 unix:!macx:HEADERS += \
     $$PWD/include/x11/CGLXContext.hpp
@@ -29,6 +29,7 @@ win32:HEADERS += \
     $$PWD/include/win/CWGLContext.hpp
 
 SOURCES += \
+    $$PWD/InputDeviceClasses.cpp \
     $$PWD/src/CSurface.cpp \
     $$PWD/src/CRetraceWaiter.cpp \
     $$PWD/src/CInputRelay.cpp \
@@ -39,9 +40,9 @@ SOURCES += \
     $$PWD/src/inputdev/CDualshockPad.cpp \
     $$PWD/src/inputdev/CGenericPad.cpp \
     $$PWD/src/inputdev/CDeviceBase.cpp \
-    $$PWD/src/inputdev/DeviceClasses.cpp \
     $$PWD/src/inputdev/CHIDListenerUdev.cpp \
-    $$PWD/src/inputdev/CHIDDeviceUdev.cpp
+    $$PWD/src/inputdev/CHIDDeviceUdev.cpp \
+    $$PWD/src/inputdev/SDeviceSignature.cpp
 
 unix:!macx:SOURCES += \
     $$PWD/src/x11/CGLXContext.cpp

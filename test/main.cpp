@@ -33,7 +33,7 @@ class CTestDeviceFinder : public CDeviceFinder
     CDolphinSmashAdapterCallback m_cb;
 public:
     CTestDeviceFinder()
-    : CDeviceFinder(DEV_DOL_SMASH_ADAPTER)
+        : CDeviceFinder({"CDolphinSmashAdapter"})
     {}
     void deviceConnected(CDeviceToken& tok)
     {

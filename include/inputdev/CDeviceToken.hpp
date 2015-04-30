@@ -3,7 +3,7 @@
 
 #include <string>
 #include "CDeviceBase.hpp"
-#include "DeviceClasses.hpp"
+#include "SDeviceSignature.hpp"
 
 namespace boo
 {
@@ -48,7 +48,7 @@ public:
     inline CDeviceBase* openAndGetDevice()
     {
         if (!m_connectedDev)
-            m_connectedDev = BooDeviceNew(*this);
+            m_connectedDev = SDeviceSignature::DeviceNew(*this);
         return m_connectedDev;
     }
     
