@@ -1,5 +1,6 @@
 #include "inputdev/SDeviceSignature.hpp"
 #include "inputdev/CDeviceToken.hpp"
+#include "inputdev/CGenericPad.hpp"
 #include "IHIDDevice.hpp"
 
 namespace boo
@@ -10,6 +11,8 @@ extern const SDeviceSignature BOO_DEVICE_SIGS[];
 
 bool SDeviceSignature::DeviceMatchToken(const CDeviceToken& token, const TDeviceSignatureSet& sigSet)
 {
+    if (token.getDeviceType() == CDeviceToken::DEVTYPE_GENERICHID)
+        return true;
     for (const SDeviceSignature* sig : sigSet)
     {
         if (sig->m_vid == token.getVendorId() && sig->m_pid == token.getProductId())
@@ -18,11 +21,29 @@ bool SDeviceSignature::DeviceMatchToken(const CDeviceToken& token, const TDevice
     return false;
 }
 
-IHIDDevice* IHIDDeviceNew(CDeviceToken& token, CDeviceBase& devImp, bool lowLevel);
+IHIDDevice* IHIDDeviceNew(CDeviceToken& token, CDeviceBase& devImp);
 CDeviceBase* SDeviceSignature::DeviceNew(CDeviceToken& token)
 {
-    
     CDeviceBase* retval = NULL;
+
+    /* Early-return for generic HID devices */
+    if (token.getDeviceType() == CDeviceToken::DEVTYPE_GENERICHID)
+    {
+        retval = new CGenericPad(&token);
+        if (!retval)
+            return NULL;
+
+        IHIDDevice* newDev = IHIDDeviceNew(token, *retval);
+        if (!newDev)
+        {
+            delete retval;
+            return NULL;
+        }
+
+        return retval;
+    }
+
+    /* Otherwise perform signature-matching to find the appropriate device-factory */
     const SDeviceSignature* foundSig = NULL;
     const SDeviceSignature* sigIter = BOO_DEVICE_SIGS;
     unsigned targetVid = token.getVendorId();
@@ -43,7 +64,7 @@ CDeviceBase* SDeviceSignature::DeviceNew(CDeviceToken& token)
     if (!retval)
         return NULL;
     
-    IHIDDevice* newDev = IHIDDeviceNew(token, *retval, foundSig->m_lowLevel);
+    IHIDDevice* newDev = IHIDDeviceNew(token, *retval);
     if (!newDev)
     {
         delete retval;

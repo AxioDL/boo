@@ -44,7 +44,7 @@ private:
             return true;
         return false;
     }
-    inline void _insertToken(CDeviceToken&& token)
+    inline bool _insertToken(CDeviceToken&& token)
     {
         if (SDeviceSignature::DeviceMatchToken(token, m_types)) {
             m_tokensLock.lock();
@@ -52,7 +52,9 @@ private:
             m_tokens.insert(std::make_pair(token.getDevicePath(), std::move(token)));
             m_tokensLock.unlock();
             deviceConnected(inseredTok.first->second);
+            return true;
         }
+        return false;
     }
     inline void _removeToken(const std::string& path)
     {

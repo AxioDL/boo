@@ -10,6 +10,17 @@ namespace boo
 
 class CDeviceToken
 {
+public:
+    enum TDeviceType
+    {
+        DEVTYPE_NONE       = 0,
+        DEVTYPE_USB        = 1,
+        DEVTYPE_BLUETOOTH  = 2,
+        DEVTYPE_GENERICHID = 3
+    };
+
+private:
+    TDeviceType m_devType;
     unsigned m_vendorId;
     unsigned m_productId;
     std::string m_vendorName;
@@ -28,10 +39,11 @@ class CDeviceToken
     }
 
 public:
+
     CDeviceToken(const CDeviceToken&) = delete;
     CDeviceToken(CDeviceToken&&) = default;
-    inline CDeviceToken(unsigned vid, unsigned pid, const char* vname, const char* pname, const char* path)
-    : m_vendorId(vid), m_productId(pid), m_devPath(path), m_connectedDev(NULL)
+    inline CDeviceToken(enum TDeviceType devType, unsigned vid, unsigned pid, const char* vname, const char* pname, const char* path)
+    : m_devType(devType), m_vendorId(vid), m_productId(pid), m_devPath(path), m_connectedDev(NULL)
     {
         if (vname)
             m_vendorName = vname;
@@ -39,6 +51,7 @@ public:
             m_productName = pname;
     }
     
+    inline TDeviceType getDeviceType() const {return m_devType;}
     inline unsigned getVendorId() const {return m_vendorId;}
     inline unsigned getProductId() const {return m_productId;}
     inline const std::string& getVendorName() const {return m_vendorName;}

@@ -27,7 +27,7 @@ class CHIDDeviceIOKit final : public IHIDDevice
     std::thread* m_thread;
     CFRunLoopRef m_runLoop = NULL;
     
-    bool _sendInterruptTransfer(uint8_t pipe, const uint8_t* data, size_t length)
+    bool _sendUSBInterruptTransfer(uint8_t pipe, const uint8_t* data, size_t length)
     {
         if (m_usbIntf)
         {
@@ -37,7 +37,7 @@ class CHIDDeviceIOKit final : public IHIDDevice
         return false;
     }
     
-    size_t _receiveInterruptTransfer(uint8_t pipe, uint8_t* data, size_t length)
+    size_t _receiveUSBInterruptTransfer(uint8_t pipe, uint8_t* data, size_t length)
     {
         if (m_usbIntf)
         {
@@ -215,7 +215,7 @@ class CHIDDeviceIOKit final : public IHIDDevice
         m_runningTransferLoop = false;
     }
     
-    bool _sendReport(const uint8_t* data, size_t length)
+    bool _sendHIDReport(const uint8_t* data, size_t length)
     {
         if (m_runLoop)
         {
@@ -226,7 +226,7 @@ class CHIDDeviceIOKit final : public IHIDDevice
     
 public:
     
-    CHIDDeviceIOKit(CDeviceToken& token, CDeviceBase& devImp, bool lowLevel)
+    CHIDDeviceIOKit(CDeviceToken& token, CDeviceBase& devImp)
     : m_token(token),
       m_devImp(devImp),
       m_devPath(token.getDevicePath())
@@ -252,9 +252,9 @@ public:
 
 };
 
-IHIDDevice* IHIDDeviceNew(CDeviceToken& token, CDeviceBase& devImp, bool lowLevel)
+IHIDDevice* IHIDDeviceNew(CDeviceToken& token, CDeviceBase& devImp)
 {
-    return new CHIDDeviceIOKit(token, devImp, lowLevel);
+    return new CHIDDeviceIOKit(token, devImp);
 }
 
 }

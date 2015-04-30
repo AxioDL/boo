@@ -40,7 +40,7 @@ class CHIDDeviceUdev final : public IHIDDevice
     std::condition_variable m_initCond;
     std::thread* m_thread;
     
-    bool _sendInterruptTransfer(uint8_t pipe, const uint8_t* data, size_t length)
+    bool _sendUSBInterruptTransfer(uint8_t pipe, const uint8_t* data, size_t length)
     {
         if (m_devFd)
         {
@@ -59,7 +59,7 @@ class CHIDDeviceUdev final : public IHIDDevice
         return false;
     }
     
-    size_t _receiveInterruptTransfer(uint8_t pipe, uint8_t* data, size_t length)
+    size_t _receiveUSBInterruptTransfer(uint8_t pipe, uint8_t* data, size_t length)
     {
         if (m_devFd)
         {
@@ -75,15 +75,14 @@ class CHIDDeviceUdev final : public IHIDDevice
         return 0;
     }
     
-    static void _threadProcLL(CHIDDeviceUdev* device)
+    static void _threadProcUSBLL(CHIDDeviceUdev* device)
     {
         unsigned i;
         std::unique_lock<std::mutex> lk(device->m_initMutex);
-        udev_device* hidDev = udev_device_new_from_syspath(GetUdev(), device->m_devPath.c_str());
+        udev_device* udevDev = udev_device_new_from_syspath(GetUdev(), device->m_devPath.c_str());
 
         /* Get the HID element's parent (USB interrupt transfer-interface) */
-        udev_device* usbDev = udev_device_get_parent_with_subsystem_devtype(hidDev, "usb", "usb_device");
-        const char* dp = udev_device_get_devnode(usbDev);
+        const char* dp = udev_device_get_devnode(udevDev);
         device->m_devFd = open(dp, O_RDWR);
         if (device->m_devFd < 0)
         {
@@ -93,7 +92,7 @@ class CHIDDeviceUdev final : public IHIDDevice
             device->m_devImp.deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
-            udev_device_unref(hidDev);
+            udev_device_unref(udevDev);
             return;
         }
         usb_device_descriptor devDesc = {0};
@@ -147,13 +146,46 @@ class CHIDDeviceUdev final : public IHIDDevice
         /* Cleanup */
         close(device->m_devFd);
         device->m_devFd = 0;
-        udev_device_unref(hidDev);
+        udev_device_unref(udevDev);
         
     }
-    
-    static void _threadProcHL(CHIDDeviceUdev* device)
-    {
 
+    static void _threadProcBTLL(CHIDDeviceUdev* device)
+    {
+        std::unique_lock<std::mutex> lk(device->m_initMutex);
+        udev_device* udevDev = udev_device_new_from_syspath(GetUdev(), device->m_devPath.c_str());
+
+        /* Return control to main thread */
+        device->m_runningTransferLoop = true;
+        lk.unlock();
+        device->m_initCond.notify_one();
+
+        /* Start transfer loop */
+        device->m_devImp.initialCycle();
+        while (device->m_runningTransferLoop)
+            device->m_devImp.transferCycle();
+        device->m_devImp.finalCycle();
+
+        udev_device_unref(udevDev);
+    }
+    
+    static void _threadProcHID(CHIDDeviceUdev* device)
+    {
+        std::unique_lock<std::mutex> lk(device->m_initMutex);
+        udev_device* udevDev = udev_device_new_from_syspath(GetUdev(), device->m_devPath.c_str());
+
+        /* Return control to main thread */
+        device->m_runningTransferLoop = true;
+        lk.unlock();
+        device->m_initCond.notify_one();
+
+        /* Start transfer loop */
+        device->m_devImp.initialCycle();
+        while (device->m_runningTransferLoop)
+            device->m_devImp.transferCycle();
+        device->m_devImp.finalCycle();
+
+        udev_device_unref(udevDev);
     }
     
     void _deviceDisconnected()
@@ -161,24 +193,29 @@ class CHIDDeviceUdev final : public IHIDDevice
         m_runningTransferLoop = false;
     }
     
-    bool _sendReport(const uint8_t* data, size_t length)
+    bool _sendHIDReport(const uint8_t* data, size_t length)
     {
         return false;
     }
     
 public:
     
-    CHIDDeviceUdev(CDeviceToken& token, CDeviceBase& devImp, bool lowLevel)
+    CHIDDeviceUdev(CDeviceToken& token, CDeviceBase& devImp)
     : m_token(token),
       m_devImp(devImp),
       m_devPath(token.getDevicePath())
     {
         devImp.m_hidDev = this;
         std::unique_lock<std::mutex> lk(m_initMutex);
-        if (lowLevel)
-            m_thread = new std::thread(_threadProcLL, this);
+        CDeviceToken::TDeviceType dType = token.getDeviceType();
+        if (dType == CDeviceToken::DEVTYPE_USB)
+            m_thread = new std::thread(_threadProcUSBLL, this);
+        else if (dType == CDeviceToken::DEVTYPE_BLUETOOTH)
+            m_thread = new std::thread(_threadProcBTLL, this);
+        else if (dType == CDeviceToken::DEVTYPE_GENERICHID)
+            m_thread = new std::thread(_threadProcHID, this);
         else
-            m_thread = new std::thread(_threadProcHL, this);
+            throw std::runtime_error("invalid token supplied to device constructor");
         m_initCond.wait(lk);
     }
     
@@ -192,9 +229,9 @@ public:
 
 };
 
-IHIDDevice* IHIDDeviceNew(CDeviceToken& token, CDeviceBase& devImp, bool lowLevel)
+IHIDDevice* IHIDDeviceNew(CDeviceToken& token, CDeviceBase& devImp)
 {
-    return new CHIDDeviceUdev(token, devImp, lowLevel);
+    return new CHIDDeviceUdev(token, devImp);
 }
 
 }

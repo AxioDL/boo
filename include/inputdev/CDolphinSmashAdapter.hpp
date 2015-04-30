@@ -52,7 +52,6 @@ class CDolphinSmashAdapter final : public CDeviceBase
     uint8_t m_knownControllers;
     uint8_t m_rumbleRequest;
     uint8_t m_rumbleState;
-    bool m_didHandshake;
     void deviceDisconnected();
     void initialCycle();
     void transferCycle();
