@@ -177,24 +177,6 @@ class CHIDDeviceIOKit final : public IHIDDevice
         
     }
     
-
-    static void _inputReport(CHIDDeviceIOKit*        device,
-                             IOReturn                result,
-                             void*                   sender,
-                             IOHIDReportType         type,
-                             uint32_t                reportID,
-                             uint8_t*                report,
-                             CFIndex                 reportLength)
-    {
-        
-    }
-    static void _disconnect(CHIDDeviceIOKit*         device,
-                            IOReturn                 result,
-                            IOHIDDeviceRef           sender)
-    {
-        device->_deviceDisconnected();
-    }
-    
     static void _threadProcHID(CHIDDeviceIOKit* device)
     {
         std::unique_lock<std::mutex> lk(device->m_initMutex);
