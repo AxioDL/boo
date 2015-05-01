@@ -2,6 +2,9 @@
 #include "CCGLContext.hpp"
 #include <iostream>
 
+namespace boo
+{
+
 CCGLContext::CCGLContext()
     : m_minVersion(3),
       m_majVersion(3)
@@ -58,4 +61,7 @@ int CCGLContext::blueDepth() const
 {
     return -1;
 }
+    
+}
+
 #endif

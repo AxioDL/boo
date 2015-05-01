@@ -25,7 +25,6 @@ class CHIDDeviceIOKit final : public IHIDDevice
     std::mutex m_initMutex;
     std::condition_variable m_initCond;
     std::thread* m_thread;
-    CFRunLoopRef m_runLoop = NULL;
     
     bool _sendUSBInterruptTransfer(uint8_t pipe, const uint8_t* data, size_t length)
     {
@@ -50,7 +49,7 @@ class CHIDDeviceIOKit final : public IHIDDevice
         return 0;
     }
     
-    static void _threadProcLL(CHIDDeviceIOKit* device)
+    static void _threadProcUSBLL(CHIDDeviceIOKit* device)
     {
         char thrName[128];
         snprintf(thrName, 128, "%s Transfer Thread", device->m_token.getProductName().c_str());
@@ -148,6 +147,7 @@ class CHIDDeviceIOKit final : public IHIDDevice
         device->m_initCond.notify_one();
         
         /* Start transfer loop */
+        device->m_devImp.initialCycle();
         while (device->m_runningTransferLoop)
             device->m_devImp.transferCycle();
         device->m_devImp.finalCycle();
@@ -157,6 +157,23 @@ class CHIDDeviceIOKit final : public IHIDDevice
         (*intf)->Release(intf);
         IODestroyPlugInInterface(iodev);
         device->m_usbIntf = NULL;
+        
+    }
+    
+    static void _threadProcBTLL(CHIDDeviceIOKit* device)
+    {
+        std::unique_lock<std::mutex> lk(device->m_initMutex);
+        
+        /* Return control to main thread */
+        device->m_runningTransferLoop = true;
+        lk.unlock();
+        device->m_initCond.notify_one();
+        
+        /* Start transfer loop */
+        device->m_devImp.initialCycle();
+        while (device->m_runningTransferLoop)
+            device->m_devImp.transferCycle();
+        device->m_devImp.finalCycle();
         
     }
     
@@ -178,49 +195,29 @@ class CHIDDeviceIOKit final : public IHIDDevice
         device->_deviceDisconnected();
     }
     
-    static void _threadProcHL(CHIDDeviceIOKit* device)
+    static void _threadProcHID(CHIDDeviceIOKit* device)
     {
-        char thrName[128];
-        snprintf(thrName, 128, "%s HID Thread", device->m_token.getProductName().c_str());
-        pthread_setname_np(thrName);
-        __block std::unique_lock<std::mutex> lk(device->m_initMutex);
-        device->m_runLoop = CFRunLoopGetCurrent();
-        CFRunLoopAddObserver(device->m_runLoop,
-        CFRunLoopObserverCreateWithHandler(kCFAllocatorDefault, kCFRunLoopEntry, false, 0,
-                                           ^(CFRunLoopObserverRef, CFRunLoopActivity) {
-                                               lk.unlock();
-                                               device->m_initCond.notify_one();
-        }), kCFRunLoopCommonModes);
+        std::unique_lock<std::mutex> lk(device->m_initMutex);
         
-        uint8_t* inputBuf = new uint8_t[MAX_REPORT_SIZE];
-        io_registry_entry_t devServ = IORegistryEntryFromPath(kIOMasterPortDefault, device->m_devPath.c_str());
-        IOHIDDeviceRef dev = IOHIDDeviceCreate(kCFAllocatorDefault, devServ);
-        IOHIDDeviceRegisterInputReportCallback(dev, inputBuf, MAX_REPORT_SIZE,
-                                               (IOHIDReportCallback)_inputReport, device);
-        IOHIDDeviceRegisterRemovalCallback(dev, (IOHIDCallback)_disconnect, device);
-        IOHIDDeviceScheduleWithRunLoop(dev, device->m_runLoop, kCFRunLoopDefaultMode);
-        IOHIDDeviceOpen(dev, kIOHIDOptionsTypeNone);
-        CFRunLoopRun();
-        if (device->m_runLoop)
-            IOHIDDeviceClose(dev, kIOHIDOptionsTypeNone);
-        CFRelease(dev);
+        /* Return control to main thread */
+        device->m_runningTransferLoop = true;
+        lk.unlock();
+        device->m_initCond.notify_one();
+        
+        /* Start transfer loop */
+        device->m_devImp.initialCycle();
+        while (device->m_runningTransferLoop)
+            device->m_devImp.transferCycle();
+        device->m_devImp.finalCycle();
     }
     
     void _deviceDisconnected()
     {
-        CFRunLoopRef rl = m_runLoop;
-        m_runLoop = NULL;
-        if (rl)
-            CFRunLoopStop(rl);
         m_runningTransferLoop = false;
     }
     
     bool _sendHIDReport(const uint8_t* data, size_t length)
     {
-        if (m_runLoop)
-        {
-            
-        }
         return false;
     }
     
@@ -233,19 +230,22 @@ public:
     {
         devImp.m_hidDev = this;
         std::unique_lock<std::mutex> lk(m_initMutex);
-        if (lowLevel)
-            m_thread = new std::thread(_threadProcLL, this);
+        CDeviceToken::TDeviceType dType = token.getDeviceType();
+        if (dType == CDeviceToken::DEVTYPE_USB)
+            m_thread = new std::thread(_threadProcUSBLL, this);
+        else if (dType == CDeviceToken::DEVTYPE_BLUETOOTH)
+            m_thread = new std::thread(_threadProcBTLL, this);
+        else if (dType == CDeviceToken::DEVTYPE_GENERICHID)
+            m_thread = new std::thread(_threadProcHID, this);
         else
-            m_thread = new std::thread(_threadProcHL, this);
+            throw std::runtime_error("invalid token supplied to device constructor");
         m_initCond.wait(lk);
     }
     
     ~CHIDDeviceIOKit()
     {
-        if (m_runLoop)
-            CFRunLoopStop(m_runLoop);
         m_runningTransferLoop = false;
-        m_thread->detach();
+        m_thread->join();
         delete m_thread;
     }
     

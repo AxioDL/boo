@@ -57,72 +57,12 @@ class CHIDListenerIOKit final : public IHIDListener
     CDeviceFinder& m_finder;
     
     CFRunLoopRef m_listenerRunLoop;
-    IOHIDManagerRef m_hidManager;
     IONotificationPortRef m_llPort;
+    io_iterator_t m_llAddNotif, m_llRemoveNotif;
     bool m_scanningEnabled;
     
-    static void deviceConnected(CHIDListenerIOKit* listener,
-                                IOReturn,
-                                void*,
-                                IOHIDDeviceRef device)
-    {
-        if (!listener->m_scanningEnabled)
-            return;
-        io_string_t devPath;
-        if (IORegistryEntryGetPath(IOHIDDeviceGetService(device), kIOServicePlane, devPath) != 0)
-            return;
-        if (listener->m_finder._hasToken(devPath))
-            return;
-        CFIndex vid, pid;
-        CFNumberGetValue((CFNumberRef)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey)), kCFNumberCFIndexType, &vid);
-        CFNumberGetValue((CFNumberRef)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey)), kCFNumberCFIndexType, &pid);
-        CFStringRef manuf = (CFStringRef)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDManufacturerKey));
-        CFStringRef product = (CFStringRef)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductKey));
-        listener->m_finder._insertToken(CDeviceToken(vid, pid,
-                                                     CFStringGetCStringPtr(manuf, kCFStringEncodingUTF8),
-                                                     CFStringGetCStringPtr(product, kCFStringEncodingUTF8),
-                                                     devPath));
-    }
-    
-    static void deviceDisconnected(CHIDListenerIOKit* listener,
-                                   IOReturn ret,
-                                   void* sender,
-                                   IOHIDDeviceRef device)
-    {
-        if (CFRunLoopGetCurrent() != listener->m_listenerRunLoop)
-        {
-            CFRunLoopPerformBlock(listener->m_listenerRunLoop, kCFRunLoopDefaultMode, ^{
-                deviceDisconnected(listener, ret, sender, device);
-            });
-            CFRunLoopWakeUp(listener->m_listenerRunLoop);
-            return;
-        }
-        io_string_t devPath;
-        if (IORegistryEntryGetPath(IOHIDDeviceGetService(device), kIOServicePlane, devPath) != 0)
-            return;
-        listener->m_finder._removeToken(devPath);
-    }
-    
-    static void applyDevice(IOHIDDeviceRef device, CHIDListenerIOKit* listener)
-    {
-        io_string_t devPath;
-        if (IORegistryEntryGetPath(IOHIDDeviceGetService(device), kIOServicePlane, devPath) != 0)
-            return;
-        if (listener->m_finder._hasToken(devPath))
-            return;
-        CFIndex vid, pid;
-        CFNumberGetValue((CFNumberRef)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey)), kCFNumberCFIndexType, &vid);
-        CFNumberGetValue((CFNumberRef)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey)), kCFNumberCFIndexType, &pid);
-        CFStringRef manuf = (CFStringRef)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDManufacturerKey));
-        CFStringRef product = (CFStringRef)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductKey));
-        listener->m_finder._insertToken(CDeviceToken(vid, pid,
-                                                     CFStringGetCStringPtr(manuf, kCFStringEncodingUTF8),
-                                                     CFStringGetCStringPtr(product, kCFStringEncodingUTF8),
-                                                     devPath));
-    }
-    
-    static void devicesConnectedLL(CHIDListenerIOKit* listener,
-                                   io_iterator_t      iterator)
+    static void devicesConnectedUSBLL(CHIDListenerIOKit* listener,
+                                      io_iterator_t      iterator)
     {
         io_object_t obj;
         while ((obj = IOIteratorNext(iterator)))
@@ -165,7 +105,12 @@ class CHIDListenerIOKit final : public IHIDListener
             getUSBStringDescriptor(dev, vstridx, vstr);
             getUSBStringDescriptor(dev, pstridx, pstr);
 
-            listener->m_finder._insertToken(CDeviceToken(vid, pid, vstr, pstr, devPath));
+            if (!listener->m_finder._insertToken(CDeviceToken(CDeviceToken::DEVTYPE_USB,
+                                                              vid, pid, vstr, pstr, devPath)))
+            {
+                /* Matched-insertion failed; see if generic HID interface is available */
+                /* TODO: Do */
+            }
 
             //printf("ADDED %08X %s\n", obj, devPath);
             (*dev)->Release(dev);
@@ -175,13 +120,13 @@ class CHIDListenerIOKit final : public IHIDListener
         
     }
     
-    static void devicesDisconnectedLL(CHIDListenerIOKit* listener,
-                                      io_iterator_t      iterator)
+    static void devicesDisconnectedUSBLL(CHIDListenerIOKit* listener,
+                                         io_iterator_t      iterator)
     {
         if (CFRunLoopGetCurrent() != listener->m_listenerRunLoop)
         {
             CFRunLoopPerformBlock(listener->m_listenerRunLoop, kCFRunLoopDefaultMode, ^{
-                devicesDisconnectedLL(listener, iterator);
+                devicesDisconnectedUSBLL(listener, iterator);
             });
             CFRunLoopWakeUp(listener->m_listenerRunLoop);
             return;
@@ -203,48 +148,27 @@ public:
     : m_finder(finder)
     {
         
-        /* Register HID Manager */
-        m_hidManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDManagerOptionNone);
-        IOHIDManagerSetDeviceMatching(m_hidManager, NULL);
-        IOHIDManagerRegisterDeviceMatchingCallback(m_hidManager, (IOHIDDeviceCallback)deviceConnected, this);
-        IOHIDManagerRegisterDeviceRemovalCallback(m_hidManager, (IOHIDDeviceCallback)deviceDisconnected, this);
+        /* Register Low-Level USB Matcher */
         m_listenerRunLoop = CFRunLoopGetCurrent();
-        IOHIDManagerScheduleWithRunLoop(m_hidManager, m_listenerRunLoop, kCFRunLoopDefaultMode);
-        IOReturn ret = IOHIDManagerOpen(m_hidManager, kIOHIDManagerOptionNone);
-        if (ret != kIOReturnSuccess)
-            throw std::runtime_error("error establishing IOHIDManager");
-        
-        /* Initial HID Device Add */
-        m_scanningEnabled = true;
-        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0, false);
-        
-        /* Register Low-Level Matcher */
         m_llPort = IONotificationPortCreate(kIOMasterPortDefault);
-        CFRunLoopAddSource(m_listenerRunLoop, IONotificationPortGetRunLoopSource(m_llPort), kCFRunLoopDefaultMode);
+        CFRunLoopSourceRef rlSrc = IONotificationPortGetRunLoopSource(m_llPort);
+        CFRunLoopAddSource(m_listenerRunLoop, rlSrc, kCFRunLoopDefaultMode);
         
         CFMutableDictionaryRef matchDict = IOServiceMatching(kIOUSBDeviceClassName);
-        CFIndex nintendoVid = VID_NINTENDO;
-        CFIndex smashPid = PID_SMASH_ADAPTER;
-        CFNumberRef nintendoVidNum = CFNumberCreate(kCFAllocatorDefault, kCFNumberCFIndexType, &nintendoVid);
-        CFNumberRef smashPidNum = CFNumberCreate(kCFAllocatorDefault, kCFNumberCFIndexType, &smashPid);
-        CFDictionaryAddValue(matchDict, CFSTR(kUSBVendorID), nintendoVidNum);
-        CFDictionaryAddValue(matchDict, CFSTR(kUSBProductID), smashPidNum);
-        CFRelease(nintendoVidNum);
-        CFRelease(smashPidNum);
         CFRetain(matchDict);
         
-        io_iterator_t initialIt;
+        m_scanningEnabled = true;
         kern_return_t llRet =
         IOServiceAddMatchingNotification(m_llPort, kIOMatchedNotification, matchDict,
-                                         (IOServiceMatchingCallback)devicesConnectedLL, this, &initialIt);
-        if (llRet == 0)
-            devicesConnectedLL(this, initialIt);
+                                         (IOServiceMatchingCallback)devicesConnectedUSBLL, this, &m_llAddNotif);
+        if (llRet == kIOReturnSuccess)
+            devicesConnectedUSBLL(this, m_llAddNotif);
         
         llRet =
         IOServiceAddMatchingNotification(m_llPort, kIOTerminatedNotification, matchDict,
-                                         (IOServiceMatchingCallback)devicesDisconnectedLL, this, &initialIt);
-        if (llRet == 0)
-            devicesDisconnectedLL(this, initialIt);
+                                         (IOServiceMatchingCallback)devicesDisconnectedUSBLL, this, &m_llRemoveNotif);
+        if (llRet == kIOReturnSuccess)
+            devicesDisconnectedUSBLL(this, m_llRemoveNotif);
         
         m_scanningEnabled = false;
         
@@ -252,10 +176,9 @@ public:
     
     ~CHIDListenerIOKit()
     {
-        IOHIDManagerUnscheduleFromRunLoop(m_hidManager, m_listenerRunLoop, kCFRunLoopDefaultMode);
-        IOHIDManagerClose(m_hidManager, kIOHIDManagerOptionNone);
-        CFRelease(m_hidManager);
         CFRunLoopRemoveSource(m_listenerRunLoop, IONotificationPortGetRunLoopSource(m_llPort), kCFRunLoopDefaultMode);
+        IOObjectRelease(m_llAddNotif);
+        IOObjectRelease(m_llRemoveNotif);
         IONotificationPortDestroy(m_llPort);
     }
     
@@ -274,11 +197,13 @@ public:
     /* Manual device scanning */
     bool scanNow()
     {
-        CFSetRef devs = IOHIDManagerCopyDevices(m_hidManager);
-        m_finder.m_tokensLock.lock();
-        CFSetApplyFunction(devs, (CFSetApplierFunction)applyDevice, this);
-        m_finder.m_tokensLock.unlock();
-        CFRelease(devs);
+        io_iterator_t iter;
+        if (IOServiceGetMatchingServices(kIOMasterPortDefault,
+                                         IOServiceMatching(kIOUSBDeviceClassName), &iter) == kIOReturnSuccess)
+        {
+            devicesConnectedUSBLL(this, iter);
+            IOObjectRelease(iter);
+        }
         return true;
     }
     
