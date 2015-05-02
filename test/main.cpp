@@ -4,8 +4,13 @@
 #else
 #endif
 #include <stdio.h>
-#include <unistd.h>
 #include <boo.hpp>
+#if _WIN32
+#define _WIN32_LEAN_AND_MEAN 1
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace boo
 {
@@ -53,23 +58,62 @@ public:
 
 }
 
+#if _WIN32
+extern "C" int genWin32ShellExecute(const wchar_t* AppFullPath,
+                                    const wchar_t* Verb,
+                                    const wchar_t* Params,
+                                    bool ShowAppWindow,
+                                    bool WaitToFinish);
+#include <libwdi/libwdi.h>
+static void scanWinUSB()
+{
+    struct wdi_device_info *device, *list;
+    struct wdi_options_create_list WDI_LIST_OPTS =
+    {
+        true, false, true
+    };
+    int err = wdi_create_list(&list, &WDI_LIST_OPTS);
+    if (err == WDI_SUCCESS)
+    {
+        for (device = list; device != NULL; device = device->next)
+        {
+            if (device->vid == 0x57E && device->pid == 0x337 &&
+                !strcmp(device->driver, "HidUsb"))
+            {
+                printf("GC adapter detected; installing driver\n");
+
+            }
+        }
+        wdi_destroy_list(list);
+    }
+}
+#endif
+
 int main(int argc, char** argv)
 {
+#if _WIN32
+    scanWinUSB();
+#endif
+
     boo::CTestDeviceFinder finder;
     finder.startScanning();
     
+#if 0
     boo::IGraphicsContext* ctx = new boo::CGraphicsContext;
 
     if (ctx->create())
     {
     }
+#endif
     
 #if __APPLE__
     CFRunLoopRun();
+#elif _WIN32
+    while (true) {Sleep(1000);}
 #else
     while (true) {sleep(1);}
 #endif
 
-    delete ctx;
+    //delete ctx;
     return 0;
 }

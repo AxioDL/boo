@@ -1,4 +1,5 @@
 SOURCES += \
-    $$PWD/main.cpp
+    $$PWD/main.cpp \
+    $$PWD/Win32Elevatedlauncher.c
 
-CONFIG += c++11
+win32:SOURCES +=

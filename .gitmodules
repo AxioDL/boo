@@ -1,0 +1,3 @@
+[submodule "extern/libwdi"]
+	path = extern/libwdi
+	url = https://github.com/jackoalan/libwdi.git

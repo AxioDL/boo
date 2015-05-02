@@ -41,9 +41,21 @@ private:
 public:
 
     CDeviceToken(const CDeviceToken&) = delete;
-    CDeviceToken(CDeviceToken&&) = default;
+    CDeviceToken(const CDeviceToken&& other)
+    : m_devType(other.m_devType),
+      m_vendorId(other.m_vendorId),
+      m_productId(other.m_productId),
+      m_vendorName(other.m_vendorName),
+      m_productName(other.m_productName),
+      m_devPath(other.m_devPath),
+      m_connectedDev(other.m_connectedDev)
+    {}
     inline CDeviceToken(enum TDeviceType devType, unsigned vid, unsigned pid, const char* vname, const char* pname, const char* path)
-    : m_devType(devType), m_vendorId(vid), m_productId(pid), m_devPath(path), m_connectedDev(NULL)
+    : m_devType(devType),
+      m_vendorId(vid),
+      m_productId(pid),
+      m_devPath(path),
+      m_connectedDev(NULL)
     {
         if (vname)
             m_vendorName = vname;
