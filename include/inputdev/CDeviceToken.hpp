@@ -69,7 +69,7 @@ public:
     inline const std::string& getVendorName() const {return m_vendorName;}
     inline const std::string& getProductName() const {return m_productName;}
     inline const std::string& getDevicePath() const {return m_devPath;}
-    inline bool isDeviceOpen() const {return m_connectedDev;}
+    inline bool isDeviceOpen() const {return (m_connectedDev != NULL);}
     inline CDeviceBase* openAndGetDevice()
     {
         if (!m_connectedDev)

@@ -13,7 +13,7 @@ class CDeviceBase
     friend class CDeviceToken;
     friend class CHIDDeviceIOKit;
     friend class CHIDDeviceUdev;
-    friend class CHIDDeviceWin32;
+    friend class CHIDDeviceWinUSB;
 
     class CDeviceToken* m_token;
     class IHIDDevice* m_hidDev;

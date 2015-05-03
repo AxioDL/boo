@@ -1,5 +1,4 @@
 SOURCES += \
-    $$PWD/main.cpp \
-    $$PWD/Win32Elevatedlauncher.c
+    $$PWD/main.cpp
 
 win32:SOURCES +=

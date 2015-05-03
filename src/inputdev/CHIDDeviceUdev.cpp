@@ -19,8 +19,6 @@ namespace boo
 
 udev* GetUdev();
 
-#define MAX_REPORT_SIZE 65536
-
 /*
  * Reference: http://tali.admingilde.org/linux-docbook/usb/ch07s06.html
  */
@@ -78,15 +76,15 @@ class CHIDDeviceUdev final : public IHIDDevice
     static void _threadProcUSBLL(CHIDDeviceUdev* device)
     {
         unsigned i;
+        char errStr[256];
         std::unique_lock<std::mutex> lk(device->m_initMutex);
         udev_device* udevDev = udev_device_new_from_syspath(GetUdev(), device->m_devPath.c_str());
 
-        /* Get the HID element's parent (USB interrupt transfer-interface) */
+        /* Get device file */
         const char* dp = udev_device_get_devnode(udevDev);
         device->m_devFd = open(dp, O_RDWR);
         if (device->m_devFd < 0)
         {
-            char errStr[256];
             snprintf(errStr, 256, "Unable to open %s@%s: %s\n",
                      device->m_token.getProductName().c_str(), dp, strerror(errno));
             device->m_devImp.deviceError(errStr);

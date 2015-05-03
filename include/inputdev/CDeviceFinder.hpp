@@ -19,7 +19,7 @@ class CDeviceFinder
 public:
     friend class CHIDListenerIOKit;
     friend class CHIDListenerUdev;
-    friend class CHIDListenerWin32;
+    friend class CHIDListenerWinUSB;
     static inline CDeviceFinder* instance() {return skDevFinder;}
     
 private:

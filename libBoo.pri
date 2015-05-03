@@ -31,7 +31,9 @@ SOURCES += \
     $$PWD/src/inputdev/CDualshockPad.cpp \
     $$PWD/src/inputdev/CGenericPad.cpp \
     $$PWD/src/inputdev/CDeviceBase.cpp \
-    $$PWD/src/inputdev/SDeviceSignature.cpp
+    $$PWD/src/inputdev/SDeviceSignature.cpp \
+    $$PWD/src/inputdev/CHIDListenerWinUSB.cpp \
+    $$PWD/src/inputdev/CHIDDeviceWinUSB.cpp
 
 unix:!macx {
     HEADERS += \
@@ -66,9 +68,7 @@ win32 {
     HEADERS += \
         $$PWD/include/win/CWGLContext.hpp
     SOURCES += \
-        $$PWD/src/win/CWGLContext.cpp \
-        $$PWD/src/inputdev/CHIDDeviceWin32.cpp \
-        $$PWD/src/inputdev/CHIDListenerWin32.cpp
+        $$PWD/src/win/CWGLContext.cpp
 }
 
 INCLUDEPATH += $$PWD/include

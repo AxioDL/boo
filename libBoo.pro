@@ -5,14 +5,7 @@ CONFIG += console
 unix:QMAKE_CXXFLAGS += -stdlib=libc++
 unix:LIBS += -std=c++11 -stdlib=libc++ -lc++abi
 
-win32:INCLUDEPATH += $$PWD/extern/libwdi
-win32:LIBS += \
-    Shell32.lib \
-    Ole32.lib \
-    Setupapi.lib \
-    Advapi32.lib \
-    User32.lib \
-    $$PWD/extern/libwdi/x64/Debug/lib/libwdi.lib
+win32:LIBS += Setupapi.lib winusb.lib User32.lib
 
 #unix:!macx:CONFIG += link_pkgconfig
 #unix:!macx:PKGCONFIG += x11

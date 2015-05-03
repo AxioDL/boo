@@ -8,6 +8,9 @@
 #if _WIN32
 #define _WIN32_LEAN_AND_MEAN 1
 #include <windows.h>
+#include <initguid.h>
+#include <Usbiodef.h>
+#include <Dbt.h>
 #else
 #include <unistd.h>
 #endif
@@ -58,70 +61,8 @@ public:
 
 }
 
-#if _WIN32
-static int genWin32ShellExecute(const wchar_t* AppFullPath,
-                                const wchar_t* Verb,
-                                const wchar_t* Params,
-                                bool ShowAppWindow,
-                                bool WaitToFinish)
-{
-    int Result = 0;
-
-    // Setup the required structure
-    SHELLEXECUTEINFO ShExecInfo;
-    memset(&ShExecInfo, 0, sizeof(SHELLEXECUTEINFO));
-    ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
-    ShExecInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
-    ShExecInfo.hwnd = NULL;
-    ShExecInfo.lpVerb = Verb;
-    ShExecInfo.lpFile = AppFullPath;
-    ShExecInfo.lpParameters = Params;
-    ShExecInfo.lpDirectory = NULL;
-    ShExecInfo.nShow = (ShowAppWindow ? SW_SHOW : SW_HIDE);
-    ShExecInfo.hInstApp = NULL;
-
-    // Spawn the process
-    if (ShellExecuteEx(&ShExecInfo) == FALSE)
-    {
-        Result = -1; // Failed to execute process
-    } else if (WaitToFinish)
-    {
-        WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
-    }
-
-    return Result;
-}
-
-#include <libwdi/libwdi.h>
-static void scanWinUSB()
-{
-    struct wdi_device_info *device, *list;
-    struct wdi_options_create_list WDI_LIST_OPTS =
-    {
-        true, false, true
-    };
-    int err = wdi_create_list(&list, &WDI_LIST_OPTS);
-    if (err == WDI_SUCCESS)
-    {
-        for (device = list; device != NULL; device = device->next)
-        {
-            if (device->vid == 0x57E && device->pid == 0x337 &&
-                !strcmp(device->driver, "HidUsb"))
-            {
-                printf("GC adapter detected; installing driver\n");
-                genWin32ShellExecute(L"WinUsbInstaller.exe", L"", L"", false, true);
-            }
-        }
-        wdi_destroy_list(list);
-    }
-}
-#endif
-
 int main(int argc, char** argv)
 {
-#if _WIN32
-    scanWinUSB();
-#endif
 
     boo::CTestDeviceFinder finder;
     finder.startScanning();
@@ -137,7 +78,35 @@ int main(int argc, char** argv)
 #if __APPLE__
     CFRunLoopRun();
 #elif _WIN32
-    while (true) {Sleep(1000);}
+
+    /* Register hotplug notification with windows */
+    DEV_BROADCAST_DEVICEINTERFACE_A hotplugConf =
+    {
+        sizeof(DEV_BROADCAST_DEVICEINTERFACE_A),
+        DBT_DEVTYP_DEVICEINTERFACE,
+        0,
+        GUID_DEVINTERFACE_USB_DEVICE
+    };
+    HWND consoleWnd = GetConsoleWindow();
+    HDEVNOTIFY notHandle = RegisterDeviceNotificationA(consoleWnd, &hotplugConf, DEVICE_NOTIFY_WINDOW_HANDLE);
+
+    MSG recvMsg;
+    while (GetMessage(&recvMsg, consoleWnd, 0, 0))
+    {
+        printf("MSG: %d\n", recvMsg.message);
+        switch (recvMsg.message)
+        {
+        case WM_DEVICECHANGE:
+            printf("DEVICECHANGE!!\n");
+            break;
+
+        default:
+            TranslateMessage(&recvMsg);
+            DispatchMessage(&recvMsg);
+            break;
+        }
+    }
+
 #else
     while (true) {sleep(1);}
 #endif

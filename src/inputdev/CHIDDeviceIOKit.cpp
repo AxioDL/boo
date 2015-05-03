@@ -6,8 +6,6 @@
 #include <IOKit/IOCFPlugIn.h>
 #include <thread>
 
-#define MAX_REPORT_SIZE 65536
-
 namespace boo
 {
 
@@ -54,6 +52,7 @@ class CHIDDeviceIOKit final : public IHIDDevice
         char thrName[128];
         snprintf(thrName, 128, "%s Transfer Thread", device->m_token.getProductName().c_str());
         pthread_setname_np(thrName);
+        char errStr[256];
         std::unique_lock<std::mutex> lk(device->m_initMutex);
         
         /* Get the HID element's parent (USB interrupt transfer-interface) */
@@ -70,7 +69,10 @@ class CHIDDeviceIOKit final : public IHIDDevice
         }
         if (!interfaceEntry)
         {
-            throw std::runtime_error("unable to find device interface");
+            snprintf(errStr, 256, "Unable to find interface for %s@%s\n",
+                     device->m_token.getProductName().c_str(),
+                     device->m_devPath.c_str());
+            device->m_devImp.deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
             return;
@@ -88,7 +90,9 @@ class CHIDDeviceIOKit final : public IHIDDevice
         IOObjectRelease(interfaceEntry);
         if (err)
         {
-            throw std::runtime_error("unable to obtain IOKit plugin service");
+            snprintf(errStr, 256, "Unable to open %s@%s\n",
+                     device->m_token.getProductName().c_str(), device->m_devPath.c_str());
+            device->m_devImp.deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
             return;
@@ -101,7 +105,9 @@ class CHIDDeviceIOKit final : public IHIDDevice
                                        (LPVOID*)&intf);
         if (err)
         {
-            throw std::runtime_error("unable to query IOKit USB interface");
+            snprintf(errStr, 256, "Unable to open %s@%s\n",
+                     device->m_token.getProductName().c_str(), device->m_devPath.c_str());
+            device->m_devImp.deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
             IODestroyPlugInInterface(iodev);
@@ -114,9 +120,17 @@ class CHIDDeviceIOKit final : public IHIDDevice
         if (err != kIOReturnSuccess)
         {
             if (err == kIOReturnExclusiveAccess)
-                throw std::runtime_error("unable to open IOKit USB interface; someone else using it");
+            {
+                snprintf(errStr, 256, "Unable to open %s@%s: someone else using it\n",
+                         device->m_token.getProductName().c_str(), device->m_devPath.c_str());
+                device->m_devImp.deviceError(errStr);
+            }
             else
-                throw std::runtime_error("unable to open IOKit USB interface");
+            {
+                snprintf(errStr, 256, "Unable to open %s@%s\n",
+                         device->m_token.getProductName().c_str(), device->m_devPath.c_str());
+                device->m_devImp.deviceError(errStr);
+            }
             lk.unlock();
             device->m_initCond.notify_one();
             (*intf)->Release(intf);
