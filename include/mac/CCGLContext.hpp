@@ -5,6 +5,9 @@
 #include "IGraphicsContext.hpp"
 #include <OpenGL/OpenGL.h>
 
+namespace boo
+{
+
 class CCGLContext final : public IGraphicsContext
 {
 public:
@@ -24,6 +27,8 @@ private:
     int m_minVersion;
     int m_majVersion;
 };
+
+}
 
 #endif // __APPLE__
 #endif // CCGLCONTEXT_HPP

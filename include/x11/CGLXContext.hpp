@@ -3,8 +3,10 @@
 
 #if !defined(__APPLE__) && (defined(__linux__) || defined(BSD))
 #include <GL/glx.h>
+#include "IGraphicsContext.hpp"
 
-#include <IGraphicsContext.hpp>
+namespace boo
+{
 
 class CGLXContext final : public IGraphicsContext
 {
@@ -28,6 +30,7 @@ private:
     Display* m_display;
 };
 
+}
 
 #endif // !defined(__APPLE__) && (defined(__linux__) || defined(BSD))
 #endif // CGLXCONTEXT_HPP

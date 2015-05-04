@@ -3,9 +3,14 @@
 
 #include "IInputWaiter.hpp"
 
+namespace boo
+{
+
 class CInputRelay : IInputWaiter
 {
     
 };
+
+}
 
 #endif // CINPUTRELAY_HPP

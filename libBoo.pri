@@ -1,5 +1,3 @@
-!contains(CONFIG,c++11):CONFIG += C++11
-
 HEADERS += \
     $$PWD/include/boo.hpp \
     $$PWD/include/IGraphicsContext.hpp \
@@ -17,19 +15,12 @@ HEADERS += \
     $$PWD/include/inputdev/CDeviceFinder.hpp \
     $$PWD/include/inputdev/CDeviceToken.hpp \
     $$PWD/include/inputdev/CDeviceBase.hpp \
+    $$PWD/include/inputdev/IHIDListener.hpp \
     $$PWD/src/inputdev/IHIDDevice.hpp \
-    $$PWD/src/inputdev/IHIDListener.hpp
-
-unix:!macx:HEADERS += \
-    $$PWD/include/x11/CGLXContext.hpp
-
-macx:HEADERS += \
-    $$PWD/include/mac/CCGLContext.hpp
-
-win32:HEADERS += \
-    $$PWD/include/win/CWGLContext.hpp
+    $$PWD/include/inputdev/SDeviceSignature.hpp
 
 SOURCES += \
+    $$PWD/InputDeviceClasses.cpp \
     $$PWD/src/CSurface.cpp \
     $$PWD/src/CRetraceWaiter.cpp \
     $$PWD/src/CInputRelay.cpp \
@@ -39,25 +30,46 @@ SOURCES += \
     $$PWD/src/inputdev/CCafeProPad.cpp \
     $$PWD/src/inputdev/CDualshockPad.cpp \
     $$PWD/src/inputdev/CGenericPad.cpp \
-    $$PWD/src/inputdev/CDeviceFinder.cpp \
-    $$PWD/src/inputdev/CDeviceBase.cpp
+    $$PWD/src/inputdev/CDeviceBase.cpp \
+    $$PWD/src/inputdev/SDeviceSignature.cpp
 
-unix:!macx:SOURCES += \
-    $$PWD/src/x11/CGLXContext.cpp \
-    $$PWD/src/inputdev/CHIDDeviceUdev.cpp \
-    $$PWD/src/inputdev/CHIDListenerUdev.cpp
+unix:!macx {
+    HEADERS += \
+        $$PWD/include/x11/CGLXContext.hpp
 
-macx:SOURCES += \
-    $$PWD/src/mac/CCGLContext.cpp
+    SOURCES += \
+        $$PWD/src/x11/CGLXContext.cpp
+}
 
-macx:OBJECTIVE_SOURCES += \
-    $$PWD/src/mac/CCGLCocoaView.mm \
-    $$PWD/src/inputdev/CHIDDeviceIOKit.mm \
-    $$PWD/src/inputdev/CHIDListenerIOKit.mm
+linux {
+    SOURCES += \
+        $$PWD/src/inputdev/CHIDListenerUdev.cpp \
+        $$PWD/src/inputdev/CHIDDeviceUdev.cpp
 
-win32:SOURCES += \
-    $$PWD/src/win/CWGLContext.cpp \
-    $$PWD/src/inputdev/CHIDDeviceWin32.cpp \
-    $$PWD/src/inputdev/CHIDListenerWin32.cpp
+    LIBS += -ludev
+}
+
+macx {
+    HEADERS += \
+        $$PWD/include/mac/CCGLContext.hpp
+
+    SOURCES += \
+        $$PWD/src/mac/CCGLContext.cpp \
+        $$PWD/src/inputdev/CHIDDeviceIOKit.cpp \
+        $$PWD/src/inputdev/CHIDListenerIOKit.cpp
+
+    OBJECTIVE_SOURCES += \
+        $$PWD/src/mac/CCGLCocoaView.mm
+}
+
+win32 {
+    HEADERS += \
+        $$PWD/include/win/CWGLContext.hpp
+    SOURCES += \
+        $$PWD/src/win/CWGLContext.cpp \
+        $$PWD/src/inputdev/CHIDListenerWinUSB.cpp \
+        $$PWD/src/inputdev/CHIDDeviceWinUSB.cpp
+}
 
 INCLUDEPATH += $$PWD/include
+

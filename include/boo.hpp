@@ -1,16 +1,22 @@
 #ifndef BOO_HPP
 #define BOO_HPP
 
-#include "IGraphicsContext.hpp"
-
 #if defined(_WIN32)
-#error "No support for WGL"
+#include "win/CWGLContext.hpp"
+namespace boo {typedef CWGLContext CGraphicsContext;}
+
 #elif defined(__APPLE__)
 #include "mac/CCGLContext.hpp"
-typedef CCGLContext CGraphicsContext;
+namespace boo {typedef CCGLContext CGraphicsContext;}
+
 #elif defined(__GNUC__) || defined(__clang__)
 #include "x11/CGLXContext.hpp"
-typedef CGLXContext CGraphicsContext;
+namespace boo {typedef CGLXContext CGraphicsContext;}
+
 #endif
+
+#include "IGraphicsContext.hpp"
+#include "inputdev/CDeviceFinder.hpp"
+#include "inputdev/CDolphinSmashAdapter.hpp"
 
 #endif // BOO_HPP

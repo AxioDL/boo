@@ -2,6 +2,9 @@
 #include "x11/CGLXContext.hpp"
 #include <iostream>
 
+namespace boo
+{
+
 CGLXContext::CGLXContext()
     : m_majVersion(3),
       m_minVersion(3),
@@ -53,6 +56,8 @@ int CGLXContext::greenDepth() const
 int CGLXContext::blueDepth() const
 {
     return -1;
+}
+
 }
 
 #endif // !defined(__APPLE__) && (defined(__linux__) || defined(BSD))
