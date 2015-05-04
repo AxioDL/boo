@@ -56,6 +56,12 @@ parseState(SDolphinControllerState* stateOut, uint8_t* payload, bool& rumble)
     return type;
 }
 
+void CDolphinSmashAdapter::initialCycle()
+{
+    uint8_t handshakePayload[] = {0x13};
+    sendUSBInterruptTransfer(0, handshakePayload, sizeof(handshakePayload));
+}
+
 void CDolphinSmashAdapter::transferCycle()
 {
     uint8_t payload[37];
@@ -105,12 +111,6 @@ void CDolphinSmashAdapter::transferCycle()
         sendUSBInterruptTransfer(0, rumbleMessage, sizeof(rumbleMessage));
         m_rumbleState = rumbleReq;
     }
-}
-
-void CDolphinSmashAdapter::initialCycle()
-{
-    uint8_t handshakePayload[] = {0x13};
-    sendUSBInterruptTransfer(0, handshakePayload, sizeof(handshakePayload));
 }
 
 void CDolphinSmashAdapter::finalCycle()

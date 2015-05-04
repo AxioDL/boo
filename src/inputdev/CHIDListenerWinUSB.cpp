@@ -20,15 +20,13 @@ class CHIDListenerWinUSB final : public IHIDListener
 {
     CDeviceFinder& m_finder;
 
-    std::thread* m_setupThread;
-    bool m_setupRunning;
     bool m_scanningEnabled;
 
     /*
      * Reference: https://github.com/pbatard/libwdi/blob/master/libwdi/libwdi.c
      */
 
-    void _pollDevices()
+    void _pollDevices(const char* pathFilter)
     {
 
         /* Don't ask */
@@ -133,6 +131,13 @@ class CHIDListenerWinUSB final : public IHIDListener
                                       &devpropType, (BYTE*)manufW, 1024, &manufSz, 0);
             wcstombs(manuf, manufW, manufSz / 2);
 
+            /* Store as a shouting string (to keep hash-lookups consistent) */
+            CharUpperA(DeviceInterfaceDetailData.wtf.DevicePath);
+
+            /* Filter to specific device (provided by hotplug event) */
+            if (pathFilter && strcmp(pathFilter, DeviceInterfaceDetailData.wtf.DevicePath))
+                continue;
+
             /* Whew!! that's a single device enumerated!! */
             if (!m_finder._hasToken(DeviceInterfaceDetailData.wtf.DevicePath))
                 m_finder._insertToken(CDeviceToken(CDeviceToken::DEVTYPE_USB,
@@ -145,34 +150,16 @@ class CHIDListenerWinUSB final : public IHIDListener
 
     }
 
-    static void _setupProc(CHIDListenerWinUSB* listener)
-    {
-        while (listener->m_setupRunning)
-        {
-            if (listener->m_scanningEnabled)
-                listener->_pollDevices();
-
-            /* Due to NT derpiness, this needs to be a periodic poll */
-            Sleep(1000);
-        }
-    }
-
 public:
     CHIDListenerWinUSB(CDeviceFinder& finder)
     : m_finder(finder)
     {
-
         /* Initial HID Device Add */
-        _pollDevices();
-
+        _pollDevices(NULL);
     }
 
     ~CHIDListenerWinUSB()
-    {
-        m_setupRunning = false;
-        m_setupThread->join();
-        delete m_setupThread;
-    }
+    {}
 
     /* Automatic device scanning */
     bool startScanning()
@@ -189,7 +176,26 @@ public:
     /* Manual device scanning */
     bool scanNow()
     {
-        _pollDevices();
+        _pollDevices(NULL);
+        return true;
+    }
+
+    bool _extDevConnect(const char* path)
+    {
+        char upperPath[1024];
+        strcpy_s(upperPath, 1024, path);
+        CharUpperA(upperPath);
+        if (m_scanningEnabled && !m_finder._hasToken(upperPath))
+            _pollDevices(upperPath);
+        return true;
+    }
+
+    bool _extDevDisconnect(const char* path)
+    {
+        char upperPath[1024];
+        strcpy_s(upperPath, 1024, path);
+        CharUpperA(upperPath);
+        m_finder._removeToken(upperPath);
         return true;
     }
 

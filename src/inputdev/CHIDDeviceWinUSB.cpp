@@ -11,6 +11,8 @@
 #define _WIN32_LEAN_AND_MEAN 1
 #include <windows.h>
 #include <winusb.h>
+#include <usb100.h>
+#include <Winusbio.h>
 
 namespace boo
 {
@@ -37,8 +39,8 @@ class CHIDDeviceWinUSB final : public IHIDDevice
         {
             ULONG lengthTransferred = 0;
             if (!WinUsb_WritePipe(m_usbHandle, m_usbIntfOutPipe, (PUCHAR)data,
-                                  (ULONG)length, &lengthTransferred, NULL)
-                || lengthTransferred != length)
+                                  (ULONG)length, &lengthTransferred, NULL) ||
+                lengthTransferred != length)
                 return false;
             return true;
         }
@@ -72,25 +74,53 @@ class CHIDDeviceWinUSB final : public IHIDDevice
                                           OPEN_EXISTING,
                                           FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
                                           NULL);
-        if (INVALID_HANDLE_VALUE == device->m_devHandle) {
+        if (INVALID_HANDLE_VALUE == device->m_devHandle)
+        {
             _snprintf(errStr, 256, "Unable to open %s@%s: %d\n",
                       device->m_token.getProductName().c_str(),
-                      device->m_devPath, GetLastError());
+                      device->m_devPath.c_str(), GetLastError());
             device->m_devImp.deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
             return;
         }
 
-        if (!WinUsb_Initialize(device->m_devHandle, &device->m_usbHandle)) {
+        if (!WinUsb_Initialize(device->m_devHandle, &device->m_usbHandle))
+        {
             _snprintf(errStr, 256, "Unable to open %s@%s: %d\n",
                       device->m_token.getProductName().c_str(),
-                      device->m_devPath, GetLastError());
+                      device->m_devPath.c_str(), GetLastError());
             device->m_devImp.deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
             CloseHandle(device->m_devHandle);
             return;
+        }
+
+        /* Enumerate device pipes */
+        USB_INTERFACE_DESCRIPTOR ifDesc = {0};
+        if (!WinUsb_QueryInterfaceSettings(device->m_usbHandle, 0, &ifDesc))
+        {
+            _snprintf(errStr, 256, "Unable to open %s@%s: %d\n",
+                      device->m_token.getProductName().c_str(),
+                      device->m_devPath.c_str(), GetLastError());
+            device->m_devImp.deviceError(errStr);
+            lk.unlock();
+            device->m_initCond.notify_one();
+            CloseHandle(device->m_devHandle);
+            return;
+        }
+        for (i=0 ; i<ifDesc.bNumEndpoints ; ++i)
+        {
+            WINUSB_PIPE_INFORMATION pipeDesc;
+            WinUsb_QueryPipe(device->m_usbHandle, 0, i, &pipeDesc);
+            if (pipeDesc.PipeType == UsbdPipeTypeInterrupt)
+            {
+                if (USB_ENDPOINT_DIRECTION_IN(pipeDesc.PipeId))
+                    device->m_usbIntfInPipe = pipeDesc.PipeId;
+                else
+                    device->m_usbIntfOutPipe = pipeDesc.PipeId;
+            }
         }
 
         /* Return control to main thread */

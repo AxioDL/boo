@@ -14,7 +14,7 @@ class IHIDDevice
     virtual size_t _receiveUSBInterruptTransfer(uint8_t pipe, uint8_t* data, size_t length)=0;
     virtual bool _sendHIDReport(const uint8_t* data, size_t length)=0;
 public:
-    inline virtual ~IHIDDevice() {};
+    inline virtual ~IHIDDevice() {}
 };
 
 }
