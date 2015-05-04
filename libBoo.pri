@@ -1,12 +1,7 @@
 HEADERS += \
     $$PWD/include/boo.hpp \
-    $$PWD/include/IGraphicsContext.hpp \
-    $$PWD/include/ISurface.hpp \
-    $$PWD/include/CSurface.hpp \
-    $$PWD/include/IRetraceWaiter.hpp \
-    $$PWD/include/IInputWaiter.hpp \
-    $$PWD/include/CInputRelay.hpp \
-    $$PWD/include/CInputDeferredRelay.hpp \
+    $$PWD/include/windowsys/IWindow.hpp \
+    $$PWD/include/windowsys/IGraphicsContext.hpp \
     $$PWD/include/inputdev/CDolphinSmashAdapter.hpp \
     $$PWD/include/inputdev/CRevolutionPad.hpp \
     $$PWD/include/inputdev/CCafeProPad.hpp \
@@ -36,7 +31,6 @@ SOURCES += \
 unix:!macx {
     HEADERS += \
         $$PWD/include/x11/CGLXContext.hpp
-
     SOURCES += \
         $$PWD/src/x11/CGLXContext.cpp
 }
@@ -45,21 +39,17 @@ linux {
     SOURCES += \
         $$PWD/src/inputdev/CHIDListenerUdev.cpp \
         $$PWD/src/inputdev/CHIDDeviceUdev.cpp
-
     LIBS += -ludev
 }
 
 macx {
-    HEADERS += \
-        $$PWD/include/mac/CCGLContext.hpp
-
     SOURCES += \
-        $$PWD/src/mac/CCGLContext.cpp \
         $$PWD/src/inputdev/CHIDDeviceIOKit.cpp \
         $$PWD/src/inputdev/CHIDListenerIOKit.cpp
-
     OBJECTIVE_SOURCES += \
-        $$PWD/src/mac/CCGLCocoaView.mm
+        $$PWD/src/windowsys/CWindowCocoa.mm \
+        $$PWD/src/windowsys/CGraphicsContextCocoa.mm
+    LIBS += -framework AppKit
 }
 
 win32 {
