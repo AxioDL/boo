@@ -6,6 +6,10 @@ namespace boo
 
 class IGraphicsContext
 {
+    friend class CWindowCocoa;
+    virtual void _setPlatformWindowHandle(void* handle) {(void)handle;};
+    virtual void _setCallback(class IWindowCallback* cb) {(void)cb;};
+
 public:
     
     enum EGraphicsAPI
@@ -16,7 +20,9 @@ public:
         API_OPENGLES_3 = 3,
         API_VULKAN     = 4,
         API_D3D11      = 5,
-        API_METAL      = 6
+        API_METAL      = 6,
+        API_GX         = 7,
+        API_GX2        = 8
     };
     
     enum EPixelFormat
@@ -33,7 +39,6 @@ public:
     virtual EGraphicsAPI getAPI() const=0;
     virtual EPixelFormat getPixelFormat() const=0;
     virtual void setPixelFormat(EPixelFormat pf)=0;
-    virtual void setPlatformWindowHandle(void* handle)=0;
     virtual void initializeContext()=0;
     virtual IGraphicsContext* makeShareContext() const=0;
     virtual void makeCurrent()=0;

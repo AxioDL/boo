@@ -2,7 +2,12 @@
 #include "windowsys/IWindow.hpp"
 #include "windowsys/IGraphicsContext.hpp"
 
+namespace boo {class CWindowCocoa;}
 @interface CWindowCocoaInternal : NSWindow
+{
+    boo::CWindowCocoa* booWindow;
+}
+- (id)initWithBooWindow:(boo::CWindowCocoa*)bw;
 @end
 
 namespace boo
@@ -13,13 +18,14 @@ class CWindowCocoa final : public IWindow
     
     CWindowCocoaInternal* m_nsWindow;
     IGraphicsContext* m_gfxCtx;
-    
+
 public:
+
     CWindowCocoa()
     {
-        m_nsWindow = [CWindowCocoaInternal new];
+        m_nsWindow = [[CWindowCocoaInternal alloc] initWithBooWindow:this];
         m_gfxCtx = IGraphicsContextNew(IGraphicsContext::API_OPENGL_3_3);
-        m_gfxCtx->setPlatformWindowHandle(m_nsWindow);
+        m_gfxCtx->_setPlatformWindowHandle(m_nsWindow);
         m_gfxCtx->initializeContext();
     }
     
@@ -28,6 +34,11 @@ public:
         [m_nsWindow orderOut:nil];
         [m_nsWindow release];
         delete m_gfxCtx;
+    }
+    
+    void setCallback(IWindowCallback* cb)
+    {
+        m_gfxCtx->_setCallback(cb);
     }
     
     void showWindow()
@@ -74,6 +85,11 @@ public:
         [m_nsWindow setFrame:wFrame display:NO];
     }
     
+    float getVirtualPixelFactor() const
+    {
+        return [m_nsWindow backingScaleFactor];
+    }
+    
     bool isFullscreen() const
     {
         return ([m_nsWindow styleMask] & NSFullScreenWindowMask) == NSFullScreenWindowMask;
@@ -83,6 +99,11 @@ public:
     {
         if ((fs && !isFullscreen()) || (!fs && isFullscreen()))
             [m_nsWindow toggleFullScreen:nil];
+    }
+    
+    ETouchType getTouchType() const
+    {
+        return TOUCH_TRACKPAD;
     }
     
 };
@@ -95,8 +116,17 @@ IWindow* IWindowNew()
 }
 
 @implementation CWindowCocoaInternal
+- (id)initWithBooWindow:(boo::CWindowCocoa *)bw
 {
-    
+    self = [self initWithContentRect:NSMakeRect(0, 0, 100, 100)
+                           styleMask:NSTitledWindowMask|
+                                     NSClosableWindowMask|
+                                     NSMiniaturizableWindowMask|
+                                     NSResizableWindowMask
+                             backing:NSBackingStoreBuffered
+                               defer:YES];
+    booWindow = bw;
+    return self;
 }
 @end
 

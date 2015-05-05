@@ -20,15 +20,15 @@ namespace boo
 
 class CDolphinSmashAdapterCallback : public IDolphinSmashAdapterCallback
 {
-    void controllerConnected(unsigned idx, EDolphinControllerType type)
+    void controllerConnected(unsigned idx, EDolphinControllerType)
     {
         printf("CONTROLLER %u CONNECTED\n", idx);
     }
-    void controllerDisconnected(unsigned idx, EDolphinControllerType type)
+    void controllerDisconnected(unsigned idx, EDolphinControllerType)
     {
         printf("CONTROLLER %u DISCONNECTED\n", idx);
     }
-    void controllerUpdate(unsigned idx, EDolphinControllerType type,
+    void controllerUpdate(unsigned idx, EDolphinControllerType,
                           const SDolphinControllerState& state)
     {
         printf("CONTROLLER %u UPDATE %d %d\n", idx, state.m_leftStick[0], state.m_leftStick[1]);
@@ -41,7 +41,7 @@ class CTestDeviceFinder : public CDeviceFinder
     CDolphinSmashAdapterCallback m_cb;
 public:
     CTestDeviceFinder()
-        : CDeviceFinder({"CDolphinSmashAdapter"})
+        : CDeviceFinder({typeid(CDolphinSmashAdapter)})
     {}
     void deviceConnected(CDeviceToken& tok)
     {
@@ -141,19 +141,14 @@ int APIENTRY wWinMain(
 
 #else
 
-int main(int argc, char** argv)
+int main(int, char**)
 {
 
     boo::CTestDeviceFinder finder;
     finder.startScanning();
     
-#if 0
-    boo::IGraphicsContext* ctx = new boo::CGraphicsContext;
-
-    if (ctx->create())
-    {
-    }
-#endif
+    boo::IWindow* window = boo::IWindowNew();
+    (void)window;
     
 #if __APPLE__
     CFRunLoopRun();
