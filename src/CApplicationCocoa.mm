@@ -5,6 +5,7 @@
 @interface AppDelegate : NSObject <NSApplicationDelegate>
 {
     boo::IApplicationCallback* callback;
+    @public
     NSPanel* aboutPanel;
 }
 - (id)initWithCallback:(boo::IApplicationCallback*)cb;
@@ -134,6 +135,7 @@ public:
             [aboutText setAlignment:NSCenterTextAlignment];
             [aboutText setString:@"\nRWK Authors\n\nJackoalan\nAntidote\n"];
             [aboutPanel setContentView:aboutText];
+            appDelegate->aboutPanel = aboutPanel;
             
             [app run];
         }

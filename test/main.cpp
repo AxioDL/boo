@@ -1,15 +1,5 @@
-
-#if __APPLE__
-#include <CoreFoundation/CoreFoundation.h>
-#else
-#endif
 #include <stdio.h>
 #include <boo.hpp>
-#if _WIN32
-
-#else
-#include <unistd.h>
-#endif
 
 namespace boo
 {
