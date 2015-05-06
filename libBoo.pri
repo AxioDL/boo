@@ -1,5 +1,6 @@
 HEADERS += \
     $$PWD/include/boo.hpp \
+    $$PWD/include/IApplication.hpp \
     $$PWD/include/windowsys/IWindow.hpp \
     $$PWD/include/windowsys/IGraphicsContext.hpp \
     $$PWD/include/inputdev/CDolphinSmashAdapter.hpp \
@@ -16,10 +17,6 @@ HEADERS += \
 
 SOURCES += \
     $$PWD/InputDeviceClasses.cpp \
-    $$PWD/src/CSurface.cpp \
-    $$PWD/src/CRetraceWaiter.cpp \
-    $$PWD/src/CInputRelay.cpp \
-    $$PWD/src/CInputDeferredRelay.cpp \
     $$PWD/src/inputdev/CDolphinSmashAdapter.cpp \
     $$PWD/src/inputdev/CRevolutionPad.cpp \
     $$PWD/src/inputdev/CCafeProPad.cpp \
@@ -29,10 +26,13 @@ SOURCES += \
     $$PWD/src/inputdev/SDeviceSignature.cpp
 
 unix:!macx {
-    HEADERS += \
-        $$PWD/include/x11/CGLXContext.hpp
     SOURCES += \
-        $$PWD/src/x11/CGLXContext.cpp
+        $$PWD/src/CApplicationXCB.cpp \
+        $$PWD/src/CApplicationWayland.cpp \
+        $$PWD/src/windowsys/CWindowXCB.cpp \
+        $$PWD/src/windowsys/CWindowWayland.cpp \
+        $$PWD/src/windowsys/CGraphicsContextXCB.cpp \
+        $$PWD/src/windowsys/CGraphicsContextWayland.cpp
 }
 
 linux {
@@ -47,18 +47,19 @@ macx {
         $$PWD/src/inputdev/CHIDDeviceIOKit.cpp \
         $$PWD/src/inputdev/CHIDListenerIOKit.cpp
     OBJECTIVE_SOURCES += \
+        $$PWD/src/CApplicationCocoa.mm \
         $$PWD/src/windowsys/CWindowCocoa.mm \
         $$PWD/src/windowsys/CGraphicsContextCocoa.mm
     LIBS += -framework AppKit
 }
 
 win32 {
-    HEADERS += \
-        $$PWD/include/win/CWGLContext.hpp
     SOURCES += \
-        $$PWD/src/win/CWGLContext.cpp \
+        $$PWD/src/CApplicationWin32.cpp \
         $$PWD/src/inputdev/CHIDListenerWinUSB.cpp \
-        $$PWD/src/inputdev/CHIDDeviceWinUSB.cpp
+        $$PWD/src/inputdev/CHIDDeviceWinUSB.cpp \
+        $$PWD/src/windowsys/CWindowWin32.cpp \
+        $$PWD/src/windowsys/CGraphicsContextWin32.cpp
 }
 
 INCLUDEPATH += $$PWD/include

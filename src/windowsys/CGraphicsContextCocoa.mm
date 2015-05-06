@@ -4,6 +4,12 @@
 #include "windowsys/IGraphicsContext.hpp"
 #include "windowsys/IWindow.hpp"
 
+/* AppKit applies OpenGL much differently than other platforms
+ * the NSOpenGLView class composes together all necessary
+ * OGL context members and provides the necessary event hooks
+ * for KB/Mouse/Touch events 
+ */
+
 static const NSOpenGLPixelFormatAttribute PF_RGBA8_ATTRS[] =
 {
     NSOpenGLPFAAccelerated,
@@ -70,17 +76,17 @@ class CGraphicsContextCocoa final : public IGraphicsContext
     
     EGraphicsAPI m_api;
     EPixelFormat m_pf;
-    NSWindow* m_parentWindow;
+    IWindow* m_parentWindow;
     CGraphicsContextCocoaInternal* m_nsContext;
     NSOpenGLContext* m_nsShareContext;
     
 public:
     IWindowCallback* m_callback;
     
-    CGraphicsContextCocoa(EGraphicsAPI api)
+    CGraphicsContextCocoa(EGraphicsAPI api, IWindow* parentWindow)
     : m_api(api),
       m_pf(PF_RGBA8),
-      m_parentWindow(NULL),
+      m_parentWindow(parentWindow),
       m_nsContext(NULL),
       m_nsShareContext(NULL),
       m_callback(NULL)
@@ -114,17 +120,12 @@ public:
         m_pf = pf;
     }
     
-    void setPlatformWindowHandle(void* handle)
-    {
-        m_parentWindow = (NSWindow*)handle;
-    }
-    
     void initializeContext()
     {
         if (m_nsShareContext)
             return;
         m_nsContext = [[CGraphicsContextCocoaInternal alloc] initWithBooContext:this];
-        [m_parentWindow setContentView:m_nsContext];
+        [(NSWindow*)m_parentWindow->getPlatformHandle() setContentView:m_nsContext];
     }
     
     IGraphicsContext* makeShareContext() const
@@ -144,7 +145,7 @@ public:
             return NULL;
         if (!nsctx)
             return NULL;
-        CGraphicsContextCocoa* newCtx = new CGraphicsContextCocoa(m_api);
+        CGraphicsContextCocoa* newCtx = new CGraphicsContextCocoa(m_api, NULL);
         newCtx->m_nsShareContext = nsctx;
         return newCtx;
     }
@@ -169,7 +170,8 @@ public:
     
 };
     
-IGraphicsContext* IGraphicsContextNew(IGraphicsContext::EGraphicsAPI api)
+IGraphicsContext* _CGraphicsContextCocoaNew(IGraphicsContext::EGraphicsAPI api,
+                                            IWindow* parentWindow)
 {
     if (api != IGraphicsContext::API_OPENGL_3_3 && api != IGraphicsContext::API_OPENGL_4_2)
         return NULL;
@@ -202,7 +204,7 @@ IGraphicsContext* IGraphicsContextNew(IGraphicsContext::EGraphicsAPI api)
         if (api == IGraphicsContext::API_OPENGL_4_2)
             return NULL;
 
-    return new CGraphicsContextCocoa(api);
+    return new CGraphicsContextCocoa(api, parentWindow);
 }
 
 }

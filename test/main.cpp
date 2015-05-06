@@ -1,4 +1,3 @@
-#define _CRT_SECURE_NO_WARNINGS 1
 
 #if __APPLE__
 #include <CoreFoundation/CoreFoundation.h>
@@ -7,10 +6,7 @@
 #include <stdio.h>
 #include <boo.hpp>
 #if _WIN32
-#define _WIN32_LEAN_AND_MEAN 1
-#include <windows.h>
-#include <initguid.h>
-#include <Usbiodef.h>
+
 #else
 #include <unistd.h>
 #endif
@@ -58,104 +54,37 @@ public:
         }
     }
 };
-
-}
-
-#if _WIN32
-
-/* This simple 'test' console app needs a full windows
- * message loop for receiving device connection events
- */
-static const DEV_BROADCAST_DEVICEINTERFACE_A HOTPLUG_CONF =
+    
+    
+struct CTestApplicationCallback : public IApplicationCallback
 {
-    sizeof(DEV_BROADCAST_DEVICEINTERFACE_A),
-    DBT_DEVTYP_DEVICEINTERFACE,
-    0,
-    GUID_DEVINTERFACE_USB_DEVICE
+    IWindow* mainWindow = NULL;
+    boo::CTestDeviceFinder devFinder;
+    void appLaunched(IApplication* app)
+    {
+        mainWindow = app->newWindow("YAY!");
+        mainWindow->showWindow();
+        devFinder.startScanning();
+    }
+    void appQuitting(IApplication*)
+    {
+        delete mainWindow;
+    }
+    bool appFileOpen(IApplication*, const std::string& path)
+    {
+        printf("OPENING: %s\n", path.c_str());
+        return true;
+    }
 };
 
-LRESULT CALLBACK WindowProc(
-  _In_ HWND   hwnd,
-  _In_ UINT   uMsg,
-  _In_ WPARAM wParam,
-  _In_ LPARAM lParam
-)
-{
-    switch (uMsg)
-    {
-    case WM_CREATE:
-        /* Register hotplug notification with windows */
-        RegisterDeviceNotificationA(hwnd, (LPVOID)&HOTPLUG_CONF, DEVICE_NOTIFY_WINDOW_HANDLE);
-        return 0;
-
-    case WM_DEVICECHANGE:
-        return boo::CDeviceFinder::winDevChangedHandler(wParam, lParam);
-
-    default:
-        return DefWindowProc(hwnd, uMsg, wParam, lParam);
-    }
 }
 
-int APIENTRY wWinMain(
-  _In_ HINSTANCE hInstance,
-  _In_ HINSTANCE,
-  _In_ LPTSTR,
-  _In_ int
-)
+int main(int argc, char** argv)
 {
-    AllocConsole();
-    freopen("CONOUT$", "w", stdout);
-
-    WNDCLASS wndClass =
-    {
-        0,
-        WindowProc,
-        0,
-        0,
-        hInstance,
-        0,
-        0,
-        0,
-        0,
-        L"BooTestWindow"
-    };
-
-    RegisterClassW(&wndClass);
-
-    boo::CTestDeviceFinder finder;
-    finder.startScanning();
-
-    HWND hwnd = CreateWindowW(L"BooTestWindow", L"BooTest", WS_OVERLAPPEDWINDOW,
-                              CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-                              NULL, NULL, hInstance, NULL);
-
-    /* Pump messages */
-    MSG msg = {0};
-    while (GetMessage(&msg, hwnd, 0, 0))
-    {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-    }
-
-}
-
-#else
-
-int main(int, char**)
-{
-
-    boo::CTestDeviceFinder finder;
-    finder.startScanning();
-    
-    boo::IWindow* window = boo::IWindowNew();
-    (void)window;
-    
-#if __APPLE__
-    CFRunLoopRun();
-#endif
-
-    //delete ctx;
+    boo::CTestApplicationCallback appCb;
+    boo::IApplication* app = IApplicationBootstrap(boo::IApplication::PLAT_AUTO, appCb, "RWK", argc, argv);
+    app->run();
+    delete app;
     return 0;
 }
 
-#endif

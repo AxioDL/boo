@@ -50,8 +50,6 @@ public:
     
 };
     
-IGraphicsContext* IGraphicsContextNew(IGraphicsContext::EGraphicsAPI api);
-    
 }
 
 #endif // IGRAPHICSCONTEXT_HPP

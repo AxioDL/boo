@@ -123,6 +123,8 @@ public:
     virtual bool isFullscreen() const=0;
     virtual void setFullscreen(bool fs)=0;
     
+    virtual void* getPlatformHandle() const=0;
+    
     enum ETouchType
     {
         TOUCH_NONE     = 0,
@@ -132,8 +134,6 @@ public:
     virtual ETouchType getTouchType() const=0;
     
 };
-    
-IWindow* IWindowNew();
     
 }
 
