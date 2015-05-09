@@ -77,6 +77,11 @@ public:
     {
         
     }
+
+    uintptr_t getPlatformHandle() const
+    {
+
+    }
     
     ETouchType getTouchType() const
     {

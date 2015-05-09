@@ -26,9 +26,11 @@ SOURCES += \
     $$PWD/src/inputdev/SDeviceSignature.cpp
 
 unix:!macx {
+    HEADERS += \
+        $$PWD/src/CApplicationXCB.hpp \
+        $$PWD/src/CApplicationWayland.hpp
     SOURCES += \
-        $$PWD/src/CApplicationXCB.cpp \
-        $$PWD/src/CApplicationWayland.cpp \
+        $$PWD/src/CApplicationUnix.cpp \
         $$PWD/src/windowsys/CWindowXCB.cpp \
         $$PWD/src/windowsys/CWindowWayland.cpp \
         $$PWD/src/windowsys/CGraphicsContextXCB.cpp \

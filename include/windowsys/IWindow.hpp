@@ -78,7 +78,7 @@ public:
     virtual void mouseMove(const SWindowCoord& coord)
     {(void)coord;}
     virtual void scroll(const SScrollDelta& scroll)
-    {(void)scroll;};
+    {(void)scroll;}
     
     virtual void touchDown(const SWindowCoord& coord, uintptr_t tid)
     {(void)coord;(void)tid;}
@@ -123,8 +123,9 @@ public:
     virtual bool isFullscreen() const=0;
     virtual void setFullscreen(bool fs)=0;
     
-    virtual void* getPlatformHandle() const=0;
-    
+    virtual uintptr_t getPlatformHandle() const=0;
+    virtual void _incomingEvent(void* event) {(void)event;}
+
     enum ETouchType
     {
         TOUCH_NONE     = 0,

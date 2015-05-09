@@ -118,9 +118,9 @@ public:
         return TOUCH_TRACKPAD;
     }
     
-    void* getPlatformHandle() const
+    uintptr_t getPlatformHandle() const
     {
-        return m_nsWindow;
+        return (uintptr_t)m_nsWindow;
     }
     
 };

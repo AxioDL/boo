@@ -41,6 +41,11 @@ public:
     {
         
     }
+
+    void quit()
+    {
+
+    }
     
     const std::string& getProcessName() const
     {
