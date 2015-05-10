@@ -3,6 +3,7 @@
 #include "IApplication.hpp"
 
 #include <xcb/xcb.h>
+#include <xcb/xcb_event.h>
 #include <xcb/xproto.h>
 #include <xcb/xcb_keysyms.h>
 #include <xkbcommon/xkbcommon.h>
@@ -99,6 +100,7 @@ do {\
     xcb_intern_atom_reply_t* reply = \
     xcb_intern_atom_reply(conn, cookie, NULL); \
     var = reply->atom; \
+    free(reply); \
 } while(0)
 
 struct SXCBAtoms
@@ -107,6 +109,7 @@ struct SXCBAtoms
     xcb_atom_t m_netwmStateFullscreen = 0;
     xcb_atom_t m_netwmStateAdd = 0;
     xcb_atom_t m_netwmStateRemove = 0;
+    xcb_atom_t m_
     xcb_key_symbols_t* m_keySyms = NULL;
     SXCBAtoms(xcb_connection_t* conn)
     {
@@ -130,7 +133,8 @@ static void genFrameDefault(xcb_screen_t* screen, int* xOut, int* yOut, int* wOu
 }
     
 IGraphicsContext* _CGraphicsContextXCBNew(IGraphicsContext::EGraphicsAPI api,
-                                          IWindow* parentWindow);
+                                          IWindow* parentWindow, xcb_connection_t* conn,
+                                          uint32_t& visualIdOut);
 
 class CWindowXCB final : public IWindow
 {
@@ -151,11 +155,20 @@ public:
     {
         if (!S_ATOMS)
             S_ATOMS = new SXCBAtoms(conn);
-        m_windowId = xcb_generate_id(conn);
 
         /* Default screen */
         xcb_screen_t* screen = xcb_setup_roots_iterator(xcb_get_setup(m_xcbConn)).data;
         m_pixelFactor = screen->width_in_pixels / (float)screen->width_in_millimeters / REF_DPMM;
+
+        /* Construct graphics context */
+        uint32_t visualId;
+        m_gfxCtx = _CGraphicsContextXCBNew(IGraphicsContext::API_OPENGL_3_3, this, m_xcbConn, visualId);
+
+
+        /* Create colormap */
+        xcb_colormap_t colormap = xcb_generate_id(m_xcbConn);
+        xcb_create_colormap(m_xcbConn, XCB_COLORMAP_ALLOC_NONE,
+                            colormap, screen->root, visualId);
 
         /* Create window */
         int x, y, w, h;
@@ -166,10 +179,16 @@ public:
             XCB_EVENT_MASK_KEY_PRESS | XCB_EVENT_MASK_KEY_RELEASE |
             XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE |
             XCB_EVENT_MASK_POINTER_MOTION | XCB_EVENT_MASK_EXPOSURE |
-            XCB_EVENT_MASK_STRUCTURE_NOTIFY
+            XCB_EVENT_MASK_STRUCTURE_NOTIFY | 0xFFFFFF,
+            colormap,
+            XCB_NONE
         };
-        xcb_create_window(m_xcbConn, 0, m_windowId, 0, x, y, w, h, 10, 0, screen->root_visual,
-                          XCB_CW_BORDER_PIXEL | XCB_CW_EVENT_MASK, valueMasks);
+        m_windowId = xcb_generate_id(conn);
+        xcb_create_window(m_xcbConn, XCB_COPY_FROM_PARENT, m_windowId, screen->root,
+                          x, y, w, h, 10,
+                          XCB_WINDOW_CLASS_INPUT_OUTPUT, visualId,
+                          XCB_CW_BORDER_PIXEL | XCB_CW_EVENT_MASK | XCB_CW_COLORMAP,
+                          valueMasks);
 
         /* Set the title of the window */
         const char* c_title = title.c_str();
@@ -182,8 +201,9 @@ public:
                             XCB_ATOM_WM_ICON_NAME, XCB_ATOM_STRING, 8,
                             strlen(c_title), c_title);
 
-        /* Construct graphics context */
-        m_gfxCtx = _CGraphicsContextXCBNew(IGraphicsContext::API_OPENGL_3_3, this);
+        /* Initialize context */
+        xcb_map_window(m_xcbConn, m_windowId);
+        m_gfxCtx->initializeContext();
 
     }
     
@@ -274,9 +294,9 @@ public:
         xcb_get_property_reply(m_xcbConn, cookie, NULL);
         char* props = (char*)xcb_get_property_value(reply);
         char fullscreen = false;
-        for (int i ; i<reply->length/4 ; ++i)
+        for (unsigned i=0 ; i<reply->length/4 ; ++i)
         {
-            if (props[i] == S_ATOMS->m_netwmStateFullscreen)
+            if ((xcb_atom_t)props[i] == S_ATOMS->m_netwmStateFullscreen)
             {
                 fullscreen = true;
                 break;
@@ -294,7 +314,8 @@ public:
             32,
             0,
             m_windowId,
-            S_ATOMS->m_netwmState
+            S_ATOMS->m_netwmState,
+            {}
         };
         fsEvent.data.data32[0] = fs ? S_ATOMS->m_netwmStateAdd : S_ATOMS->m_netwmStateRemove;
         fsEvent.data.data32[1] = S_ATOMS->m_netwmStateFullscreen;
@@ -313,7 +334,7 @@ public:
     void _incomingEvent(void* e)
     {
         xcb_generic_event_t* event = (xcb_generic_event_t*)e;
-        switch (event->response_type & ~0x80)
+        switch (XCB_EVENT_RESPONSE_TYPE(event))
         {
         case XCB_EXPOSE:
         {

@@ -31,7 +31,6 @@ public:
     {
         m_nsWindow = [[CWindowCocoaInternal alloc] initWithBooWindow:this title:title];
         m_gfxCtx = _CGraphicsContextCocoaNew(IGraphicsContext::API_OPENGL_3_3, this);
-        m_gfxCtx->_setPlatformWindowHandle(m_nsWindow);
         m_gfxCtx->initializeContext();
     }
     

@@ -11,7 +11,7 @@ IWindow* _CWindowWaylandNew(const std::string& title);
     
 class CApplicationWayland final : public IApplication
 {
-    const IApplicationCallback& m_callback;
+    IApplicationCallback& m_callback;
     const std::string m_friendlyName;
     const std::string m_pname;
     const std::vector<std::string> m_args;
@@ -22,7 +22,7 @@ class CApplicationWayland final : public IApplication
     }
     
 public:
-    CApplicationWayland(const IApplicationCallback& callback,
+    CApplicationWayland(IApplicationCallback& callback,
                         const std::string& friendlyName,
                         const std::string& pname,
                         const std::vector<std::string>& args)

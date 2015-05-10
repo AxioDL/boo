@@ -47,10 +47,6 @@ public:
         m_pf = pf;
     }
     
-    void setPlatformWindowHandle(void* handle)
-    {
-    }
-    
     void initializeContext()
     {
 

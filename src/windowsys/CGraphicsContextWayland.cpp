@@ -47,10 +47,6 @@ public:
         m_pf = pf;
     }
     
-    void setPlatformWindowHandle(void* handle)
-    {
-    }
-    
     void initializeContext()
     {
         
@@ -58,7 +54,7 @@ public:
     
     IGraphicsContext* makeShareContext() const
     {
-        
+        return NULL;
     }
     
     void makeCurrent()
@@ -81,7 +77,7 @@ public:
 IGraphicsContext* _CGraphicsContextWaylandNew(IGraphicsContext::EGraphicsAPI api,
                                               IWindow* parentWindow)
 {
-    
+    return new CGraphicsContextWayland(api, parentWindow);
 }
     
 }

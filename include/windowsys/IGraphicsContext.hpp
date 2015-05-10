@@ -7,7 +7,6 @@ namespace boo
 class IGraphicsContext
 {
     friend class CWindowCocoa;
-    virtual void _setPlatformWindowHandle(void* handle) {(void)handle;};
     virtual void _setCallback(class IWindowCallback* cb) {(void)cb;};
 
 public:

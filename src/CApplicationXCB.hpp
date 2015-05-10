@@ -6,6 +6,7 @@
 
 #define explicit explicit_c
 #include <xcb/xcb.h>
+#include <xcb/xcb_event.h>
 #include <xkbcommon/xkbcommon-x11.h>
 #include <xcb/xkb.h>
 #undef explicit
@@ -15,7 +16,7 @@ namespace boo
 
 static xcb_window_t getWindowOfEvent(xcb_generic_event_t* event, bool& windowEvent)
 {
-    switch (event->response_type & ~0x80)
+    switch (XCB_EVENT_RESPONSE_TYPE(event))
     {
     case XCB_EXPOSE:
     {
@@ -69,7 +70,7 @@ IWindow* _CWindowXCBNew(const std::string& title, xcb_connection_t* conn);
     
 class CApplicationXCB final : public IApplication
 {
-    const IApplicationCallback& m_callback;
+    IApplicationCallback& m_callback;
     const std::string m_friendlyName;
     const std::string m_pname;
     const std::vector<std::string> m_args;
@@ -86,7 +87,7 @@ class CApplicationXCB final : public IApplication
     }
     
 public:
-    CApplicationXCB(const IApplicationCallback& callback,
+    CApplicationXCB(IApplicationCallback& callback,
                     const std::string& friendlyName,
                     const std::string& pname,
                     const std::vector<std::string>& args)
@@ -97,7 +98,7 @@ public:
     {
         m_xcbConn = xcb_connect(NULL, NULL);
 
-        /* The convoluted xkb extension requests that the X server does not
+        /* This convoluted xkb extension requests that the X server does not
          * send repeated keydown events when a key is held */
         xkb_x11_setup_xkb_extension(m_xcbConn,
                                     XKB_X11_MIN_MAJOR_XKB_VERSION,
@@ -122,17 +123,22 @@ public:
     void run()
     {
         xcb_generic_event_t* event;
+        m_running = true;
+        m_callback.appLaunched(this);
         while (m_running && (event = xcb_wait_for_event(m_xcbConn)))
         {
             bool windowEvent;
             xcb_window_t evWindow = getWindowOfEvent(event, windowEvent);
+            fprintf(stderr, "EVENT %d\n", XCB_EVENT_RESPONSE_TYPE(event));
             if (windowEvent)
             {
                 IWindow* window = m_windows[evWindow];
-
+                if (window)
+                    window->_incomingEvent(event);
             }
             free(event);
         }
+        m_callback.appQuitting(this);
     }
 
     void quit()
