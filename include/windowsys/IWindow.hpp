@@ -77,7 +77,7 @@ public:
     {(void)coord;(void)button;(void)mods;}
     virtual void mouseMove(const SWindowCoord& coord)
     {(void)coord;}
-    virtual void scroll(const SScrollDelta& scroll)
+    virtual void scroll(const SWindowCoord& coord, const SScrollDelta& scroll)
     {(void)scroll;}
     
     virtual void touchDown(const SWindowCoord& coord, uintptr_t tid)

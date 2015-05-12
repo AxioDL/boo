@@ -9,15 +9,25 @@
 #include <xcb/xcb_event.h>
 #include <xkbcommon/xkbcommon-x11.h>
 #include <xcb/xkb.h>
+#include <xcb/xinput.h>
 #undef explicit
 
 namespace boo
 {
 
+
+int XINPUT_OPCODE = 0;
+
 static xcb_window_t getWindowOfEvent(xcb_generic_event_t* event, bool& windowEvent)
 {
     switch (XCB_EVENT_RESPONSE_TYPE(event))
     {
+    case XCB_CLIENT_MESSAGE:
+    {
+        xcb_client_message_event_t* ev = (xcb_client_message_event_t*)event;
+        windowEvent = true;
+        return ev->window;
+    }
     case XCB_EXPOSE:
     {
         xcb_expose_event_t* ev = (xcb_expose_event_t*)event;
@@ -34,31 +44,56 @@ static xcb_window_t getWindowOfEvent(xcb_generic_event_t* event, bool& windowEve
     {
         xcb_key_press_event_t* ev = (xcb_key_press_event_t*)event;
         windowEvent = true;
-        return ev->root;
+        return ev->event;
     }
     case XCB_KEY_RELEASE:
     {
         xcb_key_release_event_t* ev = (xcb_key_release_event_t*)event;
         windowEvent = true;
-        return ev->root;
+        return ev->event;
     }
     case XCB_BUTTON_PRESS:
     {
         xcb_button_press_event_t* ev = (xcb_button_press_event_t*)event;
         windowEvent = true;
-        return ev->root;
+        return ev->event;
     }
     case XCB_BUTTON_RELEASE:
     {
         xcb_button_release_event_t* ev = (xcb_button_release_event_t*)event;
         windowEvent = true;
-        return ev->root;
+        return ev->event;
     }
     case XCB_MOTION_NOTIFY:
     {
         xcb_motion_notify_event_t* ev = (xcb_motion_notify_event_t*)event;
         windowEvent = true;
-        return ev->root;
+        return ev->event;
+    }
+    case XCB_GE_GENERIC:
+    {
+        xcb_ge_event_t* gev = (xcb_ge_event_t*)event;
+        if (gev->pad0 == XINPUT_OPCODE)
+        {
+            fprintf(stderr, "INPUTEVENT\n");
+            return 0;
+            switch (XCB_EVENT_RESPONSE_TYPE(gev))
+            {
+            case XCB_INPUT_DEVICE_CHANGED:
+            {
+                xcb_input_device_changed_event_t* ev = (xcb_input_device_changed_event_t*)event;
+                return 0;
+            }
+            case XCB_INPUT_DEVICE_MOTION_NOTIFY:
+            {
+                xcb_input_device_motion_notify_event_t* ev = (xcb_input_device_motion_notify_event_t*)event;
+                windowEvent = true;
+                return ev->event;
+            }
+            default:
+                return 0;
+            }
+        }
     }
     default:
         windowEvent = false;
@@ -108,6 +143,10 @@ public:
         xcb_xkb_per_client_flags(m_xcbConn, XCB_XKB_ID_USE_CORE_KBD,
                                  XCB_XKB_PER_CLIENT_FLAG_DETECTABLE_AUTO_REPEAT,
                                  XCB_XKB_PER_CLIENT_FLAG_DETECTABLE_AUTO_REPEAT, 0, 0, 0);
+
+
+
+
     }
 
     ~CApplicationXCB()
@@ -125,6 +164,7 @@ public:
         xcb_generic_event_t* event;
         m_running = true;
         m_callback.appLaunched(this);
+        xcb_flush(m_xcbConn);
         while (m_running && (event = xcb_wait_for_event(m_xcbConn)))
         {
             bool windowEvent;
@@ -132,9 +172,9 @@ public:
             fprintf(stderr, "EVENT %d\n", XCB_EVENT_RESPONSE_TYPE(event));
             if (windowEvent)
             {
-                IWindow* window = m_windows[evWindow];
-                if (window)
-                    window->_incomingEvent(event);
+                auto window = m_windows.find(evWindow);
+                if (window != m_windows.end())
+                    window->second->_incomingEvent(event);
             }
             free(event);
         }

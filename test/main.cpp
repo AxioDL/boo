@@ -44,15 +44,78 @@ public:
         }
     }
 };
-    
+
+
+struct CTestWindowCallback : public IWindowCallback
+{
+
+    void mouseDown(const SWindowCoord& coord, EMouseButton button, EModifierKey mods)
+    {
+        fprintf(stderr, "Mouse Down %d (%f,%f)\n", button, coord.norm[0], coord.norm[1]);
+    }
+    void mouseUp(const SWindowCoord& coord, EMouseButton button, EModifierKey mods)
+    {
+        fprintf(stderr, "Mouse Up %d (%f,%f)\n", button, coord.norm[0], coord.norm[1]);
+    }
+    void mouseMove(const SWindowCoord& coord)
+    {
+        //fprintf(stderr, "Mouse Move (%f,%f)\n", coord.norm[0], coord.norm[1]);
+    }
+    void scroll(const SWindowCoord& coord, const SScrollDelta& scroll)
+    {
+        fprintf(stderr, "Mouse Move (%f,%f)\n", coord.norm[0], coord.norm[1]);
+    }
+
+    void touchDown(const SWindowCoord& coord, uintptr_t tid)
+    {
+
+    }
+    void touchUp(const SWindowCoord& coord, uintptr_t tid)
+    {
+
+    }
+    void touchMove(const SWindowCoord& coord, uintptr_t tid)
+    {
+
+    }
+
+    void charKeyDown(unsigned long charCode, EModifierKey mods, bool isRepeat)
+    {
+
+    }
+    void charKeyUp(unsigned long charCode, EModifierKey mods)
+    {
+
+    }
+    void specialKeyDown(ESpecialKey key, EModifierKey mods, bool isRepeat)
+    {
+
+    }
+    void specialKeyUp(ESpecialKey key, EModifierKey mods)
+    {
+
+    }
+    void modKeyDown(EModifierKey mod, bool isRepeat)
+    {
+
+    }
+    void modKeyUp(EModifierKey mod)
+    {
+
+    }
+
+};
+
     
 struct CTestApplicationCallback : public IApplicationCallback
 {
     IWindow* mainWindow = NULL;
     boo::CTestDeviceFinder devFinder;
+    CTestWindowCallback windowCallback;
     void appLaunched(IApplication* app)
     {
         mainWindow = app->newWindow("YAY!");
+        mainWindow->setCallback(&windowCallback);
         mainWindow->showWindow();
         devFinder.startScanning();
     }
@@ -75,6 +138,7 @@ int main(int argc, char** argv)
     boo::IApplication* app = IApplicationBootstrap(boo::IApplication::PLAT_AUTO, appCb, "RWK", argc, argv);
     app->run();
     delete app;
+    printf("IM DYING!!\n");
     return 0;
 }
 

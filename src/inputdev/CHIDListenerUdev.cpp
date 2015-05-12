@@ -2,6 +2,7 @@
 #include "inputdev/CDeviceFinder.hpp"
 #include <libudev.h>
 #include <string.h>
+#include <signal.h>
 #include <thread>
 
 namespace boo
@@ -165,6 +166,8 @@ public:
     ~CHIDListenerUdev()
     {
         m_udevRunning = false;
+        //raise(SIGINT);
+        pthread_kill(m_udevThread->native_handle(), SIGINT);
         m_udevThread->join();
         delete m_udevThread;
         udev_monitor_unref(m_udevMon);

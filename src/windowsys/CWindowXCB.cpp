@@ -7,8 +7,10 @@
 #include <xcb/xproto.h>
 #include <xcb/xcb_keysyms.h>
 #include <xkbcommon/xkbcommon.h>
+#include <xcb/xinput.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 
 #define XK_MISCELLANY
@@ -77,46 +79,50 @@ static int translateModifiers(unsigned state)
     return retval;
 }
 
-static int translateButton(unsigned state)
+static int translateButton(unsigned detail)
 {
     int retval = 0;
-    if (state & XCB_BUTTON_MASK_1)
+    if (detail == 1)
         retval = IWindowCallback::BUTTON_PRIMARY;
-    else if (state & XCB_BUTTON_MASK_2)
+    else if (detail == 3)
         retval = IWindowCallback::BUTTON_SECONDARY;
-    else if (state & XCB_BUTTON_MASK_3)
+    else if (detail == 2)
         retval = IWindowCallback::BUTTON_MIDDLE;
-    else if (state & XCB_BUTTON_MASK_4)
+    else if (detail == 8)
         retval = IWindowCallback::BUTTON_AUX1;
-    else if (state & XCB_BUTTON_MASK_5)
-        retval = IWindowCallback::BUTTON_AUX2;
+    else if (detail == 9)
+        retval =
+IWindowCallback::BUTTON_AUX2;
     return retval;
 }
 
-#define INTERN_ATOM(var, conn, name) \
+#define INTERN_ATOM(var, conn, name, if_exists) \
 do {\
     xcb_intern_atom_cookie_t cookie = \
-    xcb_intern_atom(conn, 0, sizeof(#name), #name); \
+    xcb_intern_atom(conn, if_exists, sizeof(#name), #name); \
     xcb_intern_atom_reply_t* reply = \
     xcb_intern_atom_reply(conn, cookie, NULL); \
     var = reply->atom; \
-    free(reply); \
+    /*free(reply);*/ \
 } while(0)
 
 struct SXCBAtoms
 {
+    xcb_atom_t m_wmProtocols = 0;
+    xcb_atom_t m_wmDeleteWindow = 0;
     xcb_atom_t m_netwmState = 0;
     xcb_atom_t m_netwmStateFullscreen = 0;
     xcb_atom_t m_netwmStateAdd = 0;
     xcb_atom_t m_netwmStateRemove = 0;
-    xcb_atom_t m_
     xcb_key_symbols_t* m_keySyms = NULL;
     SXCBAtoms(xcb_connection_t* conn)
     {
-        INTERN_ATOM(m_netwmState, conn, _NET_WM_STATE);
-        INTERN_ATOM(m_netwmStateFullscreen, conn, _NET_WM_STATE_FULLSCREEN);
-        INTERN_ATOM(m_netwmStateAdd, conn, _NET_WM_STATE_ADD);
-        INTERN_ATOM(m_netwmStateRemove, conn, _NET_WM_STATE_REMOVE);
+        INTERN_ATOM(m_wmProtocols, conn, WM_PROTOCOLS, 1);
+        INTERN_ATOM(m_wmDeleteWindow, conn, WM_DELETE_WINDOW, 1);
+        INTERN_ATOM(m_netwmState, conn, _NET_WM_STATE, 0);
+        INTERN_ATOM(m_netwmStateFullscreen, conn, _NET_WM_STATE_FULLSCREEN, 0);
+        INTERN_ATOM(m_netwmStateAdd, conn, _NET_WM_STATE_ADD, 0);
+        INTERN_ATOM(m_netwmStateRemove, conn, _NET_WM_STATE_REMOVE, 0);
         m_keySyms = xcb_key_symbols_alloc(conn);
     }
 };
@@ -138,7 +144,6 @@ IGraphicsContext* _CGraphicsContextXCBNew(IGraphicsContext::EGraphicsAPI api,
 
 class CWindowXCB final : public IWindow
 {
-    
     xcb_connection_t* m_xcbConn;
     xcb_window_t m_windowId;
     IGraphicsContext* m_gfxCtx;
@@ -164,7 +169,6 @@ public:
         uint32_t visualId;
         m_gfxCtx = _CGraphicsContextXCBNew(IGraphicsContext::API_OPENGL_3_3, this, m_xcbConn, visualId);
 
-
         /* Create colormap */
         xcb_colormap_t colormap = xcb_generate_id(m_xcbConn);
         xcb_create_colormap(m_xcbConn, XCB_COLORMAP_ALLOC_NONE,
@@ -179,7 +183,7 @@ public:
             XCB_EVENT_MASK_KEY_PRESS | XCB_EVENT_MASK_KEY_RELEASE |
             XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE |
             XCB_EVENT_MASK_POINTER_MOTION | XCB_EVENT_MASK_EXPOSURE |
-            XCB_EVENT_MASK_STRUCTURE_NOTIFY | 0xFFFFFF,
+            XCB_EVENT_MASK_STRUCTURE_NOTIFY,
             colormap,
             XCB_NONE
         };
@@ -189,6 +193,27 @@ public:
                           XCB_WINDOW_CLASS_INPUT_OUTPUT, visualId,
                           XCB_CW_BORDER_PIXEL | XCB_CW_EVENT_MASK | XCB_CW_COLORMAP,
                           valueMasks);
+
+        /* The XInput extension enables per-pixel smooth scrolling trackpads */
+        struct
+        {
+            xcb_input_event_mask_t mask;
+            uint32_t maskVal;
+        } masks =
+        {
+            {XCB_INPUT_DEVICE_ALL_MASTER, 1},
+            XCB_INPUT_XI_EVENT_MASK_MOTION
+        };
+        xcb_input_xi_select_events(m_xcbConn, m_windowId, 1, &masks.mask);
+
+        xcb_change_property(m_xcbConn, XCB_PROP_MODE_REPLACE, m_windowId, S_ATOMS->m_wmProtocols,
+                            XCB_ATOM_ATOM, 32, 1, &S_ATOMS->m_wmDeleteWindow);
+        const xcb_atom_t wm_protocols[1] = {
+            S_ATOMS->m_wmDeleteWindow,
+        };
+        xcb_change_property(m_xcbConn, XCB_PROP_MODE_REPLACE, m_windowId,
+                            S_ATOMS->m_wmProtocols, 4,
+                            32, 1, wm_protocols);
 
         /* Set the title of the window */
         const char* c_title = title.c_str();
@@ -203,8 +228,9 @@ public:
 
         /* Initialize context */
         xcb_map_window(m_xcbConn, m_windowId);
-        m_gfxCtx->initializeContext();
+        xcb_flush(m_xcbConn);
 
+        m_gfxCtx->initializeContext();
     }
     
     ~CWindowXCB()
@@ -323,7 +349,6 @@ public:
                        XCB_EVENT_MASK_STRUCTURE_NOTIFY |
                        XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT,
                        (const char*)&fsEvent);
-
     }
 
     uintptr_t getPlatformHandle() const
@@ -336,6 +361,14 @@ public:
         xcb_generic_event_t* event = (xcb_generic_event_t*)e;
         switch (XCB_EVENT_RESPONSE_TYPE(event))
         {
+        case XCB_CLIENT_MESSAGE:
+        {
+            xcb_client_message_event_t* ev = (xcb_client_message_event_t*)event;
+            if (ev->data.data32[0] == S_ATOMS->m_wmDeleteWindow)
+            {
+                fprintf(stderr, "CLOSED\n");
+            }
+        }
         case XCB_EXPOSE:
         {
             xcb_expose_event_t* ev = (xcb_expose_event_t*)event;
@@ -347,10 +380,13 @@ public:
         case XCB_CONFIGURE_NOTIFY:
         {
             xcb_configure_notify_event_t* ev = (xcb_configure_notify_event_t*)event;
-            m_wx = ev->x;
-            m_wy = ev->y;
-            m_ww = ev->width;
-            m_wh = ev->height;
+            if (ev->width && ev->height)
+            {
+                m_wx = ev->x;
+                m_wy = ev->y;
+                m_ww = ev->width;
+                m_wh = ev->height;
+            }
         }
         case XCB_KEY_PRESS:
         {
@@ -395,15 +431,15 @@ public:
         case XCB_BUTTON_PRESS:
         {
             xcb_button_press_event_t* ev = (xcb_button_press_event_t*)event;
-            int button = translateButton(ev->state);
+            int button = translateButton(ev->detail);
             if (m_callback && button)
             {
                 int modifierMask = translateModifiers(ev->state);
                 IWindowCallback::SWindowCoord coord =
                 {
-                    {(unsigned)ev->root_x, (unsigned)ev->root_y},
-                    {(unsigned)(ev->root_x / m_pixelFactor), (unsigned)(ev->root_y / m_pixelFactor)},
-                    {ev->root_x / (float)m_ww, ev->root_y / (float)m_wh}
+                    {(unsigned)ev->event_x, (unsigned)ev->event_y},
+                    {(unsigned)(ev->event_x / m_pixelFactor), (unsigned)(ev->event_y / m_pixelFactor)},
+                    {ev->event_x / (float)m_ww, ev->event_y / (float)m_wh}
                 };
                 m_callback->mouseDown(coord, (IWindowCallback::EMouseButton)button,
                                       (IWindowCallback::EModifierKey)modifierMask);
@@ -412,15 +448,15 @@ public:
         case XCB_BUTTON_RELEASE:
         {
             xcb_button_release_event_t* ev = (xcb_button_release_event_t*)event;
-            int button = translateButton(ev->state);
+            int button = translateButton(ev->detail);
             if (m_callback && button)
             {
                 int modifierMask = translateModifiers(ev->state);
                 IWindowCallback::SWindowCoord coord =
                 {
-                    {(unsigned)ev->root_x, (unsigned)ev->root_y},
-                    {(unsigned)(ev->root_x / m_pixelFactor), (unsigned)(ev->root_y / m_pixelFactor)},
-                    {ev->root_x / (float)m_ww, ev->root_y / (float)m_wh}
+                    {(unsigned)ev->event_x, (unsigned)ev->event_y},
+                    {(unsigned)(ev->event_x / m_pixelFactor), (unsigned)(ev->event_y / m_pixelFactor)},
+                    {ev->event_x / (float)m_ww, ev->event_y / (float)m_wh}
                 };
                 m_callback->mouseUp(coord, (IWindowCallback::EMouseButton)button,
                                     (IWindowCallback::EModifierKey)modifierMask);
@@ -433,9 +469,9 @@ public:
             {
                 IWindowCallback::SWindowCoord coord =
                 {
-                    {(unsigned)ev->root_x, (unsigned)ev->root_y},
-                    {(unsigned)(ev->root_x / m_pixelFactor), (unsigned)(ev->root_y / m_pixelFactor)},
-                    {ev->root_x / (float)m_ww, ev->root_y / (float)m_wh}
+                    {(unsigned)ev->event_x, (unsigned)ev->event_y},
+                    {(unsigned)(ev->event_x / m_pixelFactor), (unsigned)(ev->event_y / m_pixelFactor)},
+                    {ev->event_x / (float)m_ww, ev->event_y / (float)m_wh}
                 };
                 m_callback->mouseMove(coord);
             }
