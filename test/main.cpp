@@ -123,10 +123,12 @@ struct CTestApplicationCallback : public IApplicationCallback
     {
         delete mainWindow;
     }
-    bool appFileOpen(IApplication*, const std::string& path)
+    void appFilesOpen(IApplication*, const std::vector<const std::string>& paths)
     {
-        printf("OPENING: %s\n", path.c_str());
-        return true;
+        fprintf(stderr, "OPENING: ");
+        for (const std::string& path : paths)
+            fprintf(stderr, "%s ", path.c_str());
+        fprintf(stderr, "\n");
     }
 };
 
@@ -135,7 +137,8 @@ struct CTestApplicationCallback : public IApplicationCallback
 int main(int argc, char** argv)
 {
     boo::CTestApplicationCallback appCb;
-    boo::IApplication* app = IApplicationBootstrap(boo::IApplication::PLAT_AUTO, appCb, "RWK", argc, argv);
+    boo::IApplication* app = IApplicationBootstrap(boo::IApplication::PLAT_AUTO,
+                                                   appCb, "rwk", "RWK", argc, argv);
     app->run();
     delete app;
     printf("IM DYING!!\n");

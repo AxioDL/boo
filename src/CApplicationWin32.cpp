@@ -21,6 +21,7 @@ class CApplicationWin32 final : public IApplication
     const std::string m_pname;
     const std::vector<std::string> m_args;
     std::unordered_map<HWND, IWindow*> m_allWindows;
+    bool m_singleInstance;
     
     void _deletedWindow(IWindow* window)
     {
@@ -32,11 +33,13 @@ public:
     CApplicationWin32(const IApplicationCallback& callback,
                       const std::string& friendlyName,
                       const std::string& pname,
-                      const std::vector<std::string>& args)
+                      const std::vector<std::string>& args,
+                      bool singleInstance)
     : m_callback(callback),
       m_friendlyName(friendlyName),
       m_pname(pname),
-      m_args(args)
+      m_args(args),
+      m_singleInstance(singleInstance)
     {}
     
     EPlatformType getPlatformType() const
@@ -95,14 +98,15 @@ IApplication* IApplicationBootstrap(IApplication::EPlatformType platform,
                                     IApplicationCallback& cb,
                                     const std::string& friendlyName,
                                     const std::string& pname,
-                                    const std::vector<std::string>& args)
+                                    const std::vector<std::string>& args,
+                                    bool singleInstance)
 {
     if (!APP)
     {
         if (platform != IApplication::PLAT_WIN32 &&
             platform != IApplication::PLAT_AUTO)
             return NULL;
-        APP = new CApplicationWin32(cb, friendlyName, pname, args);
+        APP = new CApplicationWin32(cb, friendlyName, pname, args, singleInstance);
     }
     return APP;
 }

@@ -15,7 +15,7 @@ struct IApplicationCallback
 {
     virtual void appLaunched(IApplication* app) {(void)app;}
     virtual void appQuitting(IApplication* app) {(void)app;}
-    virtual bool appFileOpen(IApplication* app, const std::string& path) {(void)app;(void)path;return true;}
+    virtual void appFilesOpen(IApplication* app, const std::vector<const std::string>& paths) {(void)app;(void)paths;}
 };
 
 class IApplication
@@ -45,6 +45,8 @@ public:
     
     virtual void run()=0;
     virtual void quit()=0;
+    virtual const std::string& getUniqueName() const=0;
+    virtual const std::string& getFriendlyName() const=0;
     virtual const std::string& getProcessName() const=0;
     virtual const std::vector<std::string>& getArgs() const=0;
     
@@ -55,23 +57,27 @@ public:
 
 IApplication* IApplicationBootstrap(IApplication::EPlatformType platform,
                                     IApplicationCallback& cb,
+                                    const std::string& uniqueName,
                                     const std::string& friendlyName,
                                     const std::string& pname,
-                                    const std::vector<std::string>& args);
+                                    const std::vector<std::string>& args,
+                                    bool singleInstance=true);
 extern IApplication* APP;
 #define IApplicationInstance() APP
     
 static inline IApplication* IApplicationBootstrap(IApplication::EPlatformType platform,
                                                   IApplicationCallback& cb,
+                                                  const std::string& uniqueName,
                                                   const std::string& friendlyName,
-                                                  int argc, char** argv)
+                                                  int argc, char** argv,
+                                                  bool singleInstance=true)
 {
     if (APP)
         return APP;
     std::vector<std::string> args;
     for (int i=1 ; i<argc ; ++i)
         args.push_back(argv[i]);
-    return IApplicationBootstrap(platform, cb, friendlyName, argv[0], args);
+    return IApplicationBootstrap(platform, cb, uniqueName, friendlyName, argv[0], args, singleInstance);
 }
     
 }

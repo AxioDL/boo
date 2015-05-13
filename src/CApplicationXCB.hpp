@@ -12,6 +12,11 @@
 #include <xcb/xinput.h>
 #undef explicit
 
+#include <dbus/dbus.h>
+DBusConnection* registerDBus(const char* appName, bool& isFirst);
+
+#include <sys/param.h>
+
 namespace boo
 {
 
@@ -113,14 +118,19 @@ IWindow* _CWindowXCBNew(const std::string& title, xcb_connection_t* conn);
 class CApplicationXCB final : public IApplication
 {
     IApplicationCallback& m_callback;
+    const std::string m_uniqueName;
     const std::string m_friendlyName;
     const std::string m_pname;
     const std::vector<std::string> m_args;
 
+    /* DBus single-instance */
+    bool m_singleInstance;
+    DBusConnection* m_dbus = NULL;
+
     /* All windows */
     std::unordered_map<xcb_window_t, IWindow*> m_windows;
 
-    xcb_connection_t* m_xcbConn;
+    xcb_connection_t* m_xcbConn = NULL;
     bool m_running;
     
     void _deletedWindow(IWindow* window)
@@ -130,14 +140,62 @@ class CApplicationXCB final : public IApplication
     
 public:
     CApplicationXCB(IApplicationCallback& callback,
+                    const std::string& uniqueName,
                     const std::string& friendlyName,
                     const std::string& pname,
-                    const std::vector<std::string>& args)
+                    const std::vector<std::string>& args,
+                    bool singleInstance)
     : m_callback(callback),
+      m_uniqueName(uniqueName),
       m_friendlyName(friendlyName),
       m_pname(pname),
-      m_args(args)
+      m_args(args),
+      m_singleInstance(singleInstance)
     {
+        /* DBus single instance registration */
+        bool isFirst;
+        m_dbus = registerDBus(uniqueName.c_str(), isFirst);
+        if (m_singleInstance)
+        {
+            if (!isFirst)
+            {
+                /* This is a duplicate instance, send signal and return */
+                if (args.size())
+                {
+                    /* create a signal & check for errors */
+                    DBusMessage*
+                    msg = dbus_message_new_signal("/boo/signal/FileHandler",
+                                                  "boo.signal.FileHandling",
+                                                  "Open");
+
+                    /* append arguments onto signal */
+                    DBusMessageIter argsIter;
+                    dbus_message_iter_init_append(msg, &argsIter);
+                    for (const std::string& arg : args)
+                    {
+                        const char* sigvalue = arg.c_str();
+                        dbus_message_iter_append_basic(&argsIter, DBUS_TYPE_STRING, &sigvalue);
+                    }
+
+                    /* send the message and flush the connection */
+                    dbus_uint32_t serial;
+                    dbus_connection_send(m_dbus, msg, &serial);
+                    dbus_connection_flush(m_dbus);
+                    dbus_message_unref(msg);
+                }
+                return;
+            }
+            else
+            {
+                /* This is the first instance, register for signal */
+                // add a rule for which messages we want to see
+                DBusError err = {};
+                dbus_bus_add_match(m_dbus, "type='signal',interface='boo.signal.FileHandling'", &err);
+                dbus_connection_flush(m_dbus);
+            }
+        }
+
+        /* Open X connection */
         m_xcbConn = xcb_connect(NULL, NULL);
 
         /* The xkb extension requests that the X server does not
@@ -157,9 +215,6 @@ public:
         if (xiReply)
             XINPUT_OPCODE = xiReply->major_opcode;
 
-
-
-
     }
 
     ~CApplicationXCB()
@@ -174,30 +229,89 @@ public:
     
     void run()
     {
+        if (!m_xcbConn)
+            return;
+
         xcb_generic_event_t* event;
         m_running = true;
         m_callback.appLaunched(this);
         xcb_flush(m_xcbConn);
 
-        while (m_running && (event = xcb_wait_for_event(m_xcbConn)))
+        int xcbFd = xcb_get_file_descriptor(m_xcbConn);
+        int dbusFd;
+        dbus_connection_get_unix_fd(m_dbus, &dbusFd);
+        int maxFd = MAX(xcbFd, dbusFd);
+
+        while (m_running)
         {
-            bool windowEvent;
-            xcb_window_t evWindow = getWindowOfEvent(event, windowEvent);
-            //fprintf(stderr, "EVENT %d\n", XCB_EVENT_RESPONSE_TYPE(event));
-            if (windowEvent)
+            fd_set fds;
+            FD_ZERO(&fds);
+            FD_SET(xcbFd, &fds);
+            FD_SET(dbusFd, &fds);
+            select(maxFd+1, &fds, NULL, NULL, NULL);
+
+            if (FD_ISSET(xcbFd, &fds))
             {
-                auto window = m_windows.find(evWindow);
-                if (window != m_windows.end())
-                    window->second->_incomingEvent(event);
+                event = xcb_poll_for_event(m_xcbConn);
+                if (!event)
+                    break;
+
+                bool windowEvent;
+                xcb_window_t evWindow = getWindowOfEvent(event, windowEvent);
+                //fprintf(stderr, "EVENT %d\n", XCB_EVENT_RESPONSE_TYPE(event));
+                if (windowEvent)
+                {
+                    auto window = m_windows.find(evWindow);
+                    if (window != m_windows.end())
+                        window->second->_incomingEvent(event);
+                }
+                free(event);
             }
-            free(event);
+
+            if (FD_ISSET(dbusFd, &fds))
+            {
+                DBusMessage* msg;
+                dbus_connection_read_write(m_dbus, 0);
+                while ((msg = dbus_connection_pop_message(m_dbus)))
+                {
+
+                    /* check if the message is a signal from the correct interface and with the correct name */
+                    if (dbus_message_is_signal(msg, "boo.signal.FileHandling", "Open"))
+                    {
+                        /* read the parameters */
+                        std::vector<const std::string> paths;
+                        DBusMessageIter iter;
+                        dbus_message_iter_init(msg, &iter);
+                        while (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_INVALID)
+                        {
+                            const char* argVal;
+                            dbus_message_iter_get_basic(&iter, &argVal);
+                            paths.push_back(argVal);
+                            dbus_message_iter_next(&iter);
+                        }
+                        m_callback.appFilesOpen(this, paths);
+                    }
+                    dbus_message_unref(msg);
+                }
+            }
         }
+
         m_callback.appQuitting(this);
     }
 
     void quit()
     {
         m_running = false;
+    }
+
+    const std::string& getUniqueName() const
+    {
+        return m_uniqueName;
+    }
+
+    const std::string& getFriendlyName() const
+    {
+        return m_friendlyName;
     }
     
     const std::string& getProcessName() const

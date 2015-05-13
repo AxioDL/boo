@@ -4,6 +4,9 @@
 
 #include "IApplication.hpp"
 
+#include <dbus/dbus.h>
+DBusConnection* registerDBus(const char* appName, bool& isFirst);
+
 namespace boo
 {
     
@@ -12,10 +15,12 @@ IWindow* _CWindowWaylandNew(const std::string& title);
 class CApplicationWayland final : public IApplication
 {
     IApplicationCallback& m_callback;
+    const std::string m_uniqueName;
     const std::string m_friendlyName;
     const std::string m_pname;
     const std::vector<std::string> m_args;
-    
+    bool m_singleInstance;
+
     void _deletedWindow(IWindow* window)
     {
         (void)window;
@@ -23,13 +28,17 @@ class CApplicationWayland final : public IApplication
     
 public:
     CApplicationWayland(IApplicationCallback& callback,
+                        const std::string& uniqueName,
                         const std::string& friendlyName,
                         const std::string& pname,
-                        const std::vector<std::string>& args)
+                        const std::vector<std::string>& args,
+                        bool singleInstance)
     : m_callback(callback),
+      m_uniqueName(uniqueName),
       m_friendlyName(friendlyName),
       m_pname(pname),
-      m_args(args)
+      m_args(args),
+      m_singleInstance(singleInstance)
     {}
     
     EPlatformType getPlatformType() const
@@ -45,6 +54,16 @@ public:
     void quit()
     {
 
+    }
+
+    const std::string& getUniqueName() const
+    {
+        return m_uniqueName;
+    }
+
+    const std::string& getFriendlyName() const
+    {
+        return m_friendlyName;
     }
     
     const std::string& getProcessName() const
