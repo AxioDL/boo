@@ -166,7 +166,6 @@ public:
     ~CHIDListenerUdev()
     {
         m_udevRunning = false;
-        //raise(SIGINT);
         pthread_kill(m_udevThread->native_handle(), SIGINT);
         m_udevThread->join();
         delete m_udevThread;

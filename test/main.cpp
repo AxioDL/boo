@@ -63,20 +63,20 @@ struct CTestWindowCallback : public IWindowCallback
     }
     void scroll(const SWindowCoord& coord, const SScrollDelta& scroll)
     {
-        fprintf(stderr, "Mouse Move (%f,%f)\n", coord.norm[0], coord.norm[1]);
+        fprintf(stderr, "Mouse Scroll (%f,%f) (%f,%f)\n", coord.norm[0], coord.norm[1], scroll.delta[0], scroll.delta[1]);
     }
 
-    void touchDown(const SWindowCoord& coord, uintptr_t tid)
+    void touchDown(const STouchCoord& coord, uintptr_t tid)
     {
-
+        //fprintf(stderr, "Touch Down %16lX (%f,%f)\n", tid, coord.coord[0], coord.coord[1]);
     }
-    void touchUp(const SWindowCoord& coord, uintptr_t tid)
+    void touchUp(const STouchCoord& coord, uintptr_t tid)
     {
-
+        //fprintf(stderr, "Touch Up %16lX (%f,%f)\n", tid, coord.coord[0], coord.coord[1]);
     }
-    void touchMove(const SWindowCoord& coord, uintptr_t tid)
+    void touchMove(const STouchCoord& coord, uintptr_t tid)
     {
-
+        //fprintf(stderr, "Touch Move %16lX (%f,%f)\n", tid, coord.coord[0], coord.coord[1]);
     }
 
     void charKeyDown(unsigned long charCode, EModifierKey mods, bool isRepeat)

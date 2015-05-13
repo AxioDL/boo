@@ -15,7 +15,6 @@
 namespace boo
 {
 
-
 int XINPUT_OPCODE = 0;
 
 static xcb_window_t getWindowOfEvent(xcb_generic_event_t* event, bool& windowEvent)
@@ -75,30 +74,38 @@ static xcb_window_t getWindowOfEvent(xcb_generic_event_t* event, bool& windowEve
         xcb_ge_event_t* gev = (xcb_ge_event_t*)event;
         if (gev->pad0 == XINPUT_OPCODE)
         {
-            fprintf(stderr, "INPUTEVENT\n");
-            return 0;
-            switch (XCB_EVENT_RESPONSE_TYPE(gev))
+            switch (gev->event_type)
             {
-            case XCB_INPUT_DEVICE_CHANGED:
+            case XCB_INPUT_MOTION:
             {
-                xcb_input_device_changed_event_t* ev = (xcb_input_device_changed_event_t*)event;
-                return 0;
-            }
-            case XCB_INPUT_DEVICE_MOTION_NOTIFY:
-            {
-                xcb_input_device_motion_notify_event_t* ev = (xcb_input_device_motion_notify_event_t*)event;
+                xcb_input_motion_event_t* ev = (xcb_input_motion_event_t*)event;
                 windowEvent = true;
                 return ev->event;
             }
-            default:
-                return 0;
+            case XCB_INPUT_TOUCH_BEGIN:
+            {
+                xcb_input_touch_begin_event_t* ev = (xcb_input_touch_begin_event_t*)event;
+                windowEvent = true;
+                return ev->event;
+            }
+            case XCB_INPUT_TOUCH_UPDATE:
+            {
+                xcb_input_touch_update_event_t* ev = (xcb_input_touch_update_event_t*)event;
+                windowEvent = true;
+                return ev->event;
+            }
+            case XCB_INPUT_TOUCH_END:
+            {
+                xcb_input_touch_end_event_t* ev = (xcb_input_touch_end_event_t*)event;
+                windowEvent = true;
+                return ev->event;
+            }
             }
         }
     }
-    default:
-        windowEvent = false;
-        return 0;
     }
+    windowEvent = false;
+    return 0;
 }
     
 IWindow* _CWindowXCBNew(const std::string& title, xcb_connection_t* conn);
@@ -133,7 +140,7 @@ public:
     {
         m_xcbConn = xcb_connect(NULL, NULL);
 
-        /* This convoluted xkb extension requests that the X server does not
+        /* The xkb extension requests that the X server does not
          * send repeated keydown events when a key is held */
         xkb_x11_setup_xkb_extension(m_xcbConn,
                                     XKB_X11_MIN_MAJOR_XKB_VERSION,
@@ -143,6 +150,12 @@ public:
         xcb_xkb_per_client_flags(m_xcbConn, XCB_XKB_ID_USE_CORE_KBD,
                                  XCB_XKB_PER_CLIENT_FLAG_DETECTABLE_AUTO_REPEAT,
                                  XCB_XKB_PER_CLIENT_FLAG_DETECTABLE_AUTO_REPEAT, 0, 0, 0);
+
+        /* Xinput major opcode */
+        const xcb_query_extension_reply_t* xiReply =
+        xcb_get_extension_data(m_xcbConn, &xcb_input_id);
+        if (xiReply)
+            XINPUT_OPCODE = xiReply->major_opcode;
 
 
 
@@ -165,11 +178,12 @@ public:
         m_running = true;
         m_callback.appLaunched(this);
         xcb_flush(m_xcbConn);
+
         while (m_running && (event = xcb_wait_for_event(m_xcbConn)))
         {
             bool windowEvent;
             xcb_window_t evWindow = getWindowOfEvent(event, windowEvent);
-            fprintf(stderr, "EVENT %d\n", XCB_EVENT_RESPONSE_TYPE(event));
+            //fprintf(stderr, "EVENT %d\n", XCB_EVENT_RESPONSE_TYPE(event));
             if (windowEvent)
             {
                 auto window = m_windows.find(evWindow);

@@ -25,10 +25,15 @@ public:
         unsigned virtualPixel[2];
         float norm[2];
     };
+
+    struct STouchCoord
+    {
+        double coord[2];
+    };
     
     struct SScrollDelta
     {
-        float delta[2];
+        double delta[2];
         bool isFine; /* Use system-scale fine-scroll (for scrollable-trackpads) */
     };
     
@@ -78,13 +83,13 @@ public:
     virtual void mouseMove(const SWindowCoord& coord)
     {(void)coord;}
     virtual void scroll(const SWindowCoord& coord, const SScrollDelta& scroll)
-    {(void)scroll;}
-    
-    virtual void touchDown(const SWindowCoord& coord, uintptr_t tid)
+    {(void)coord;(void)scroll;}
+
+    virtual void touchDown(const STouchCoord& coord, uintptr_t tid)
     {(void)coord;(void)tid;}
-    virtual void touchUp(const SWindowCoord& coord, uintptr_t tid)
+    virtual void touchUp(const STouchCoord& coord, uintptr_t tid)
     {(void)coord;(void)tid;}
-    virtual void touchMove(const SWindowCoord& coord, uintptr_t tid)
+    virtual void touchMove(const STouchCoord& coord, uintptr_t tid)
     {(void)coord;(void)tid;}
 
     virtual void charKeyDown(unsigned long charCode, EModifierKey mods, bool isRepeat)

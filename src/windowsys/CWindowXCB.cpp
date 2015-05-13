@@ -24,6 +24,13 @@
 namespace boo
 {
 
+extern int XINPUT_OPCODE;
+
+static inline double fp3232val(xcb_input_fp3232_t* val)
+{
+    return val->integral + val->frac / (double)UINT_MAX;
+}
+
 static uint32_t translateKeysym(xcb_keysym_t sym, int& specialSym, int& modifierSym)
 {
     specialSym = IWindowCallback::KEY_NONE;
@@ -103,7 +110,7 @@ do {\
     xcb_intern_atom_reply_t* reply = \
     xcb_intern_atom_reply(conn, cookie, NULL); \
     var = reply->atom; \
-    /*free(reply);*/ \
+    free(reply); \
 } while(0)
 
 struct SXCBAtoms
@@ -148,6 +155,16 @@ class CWindowXCB final : public IWindow
     xcb_window_t m_windowId;
     IGraphicsContext* m_gfxCtx;
     IWindowCallback* m_callback;
+
+    /* Last known input device id (0xffff if not yet set) */
+    xcb_input_device_id_t m_lastInputID = 0xffff;
+    ETouchType m_touchType = TOUCH_NONE;
+
+    /* Scroll valuators */
+    int m_hScrollValuator = -1;
+    int m_vScrollValuator = -1;
+    double m_hScrollLast = 0.0;
+    double m_vScrollLast = 0.0;
 
     /* Cached window rectangle (to avoid repeated X queries) */
     int m_wx, m_wy, m_ww, m_wh;
@@ -194,18 +211,31 @@ public:
                           XCB_CW_BORDER_PIXEL | XCB_CW_EVENT_MASK | XCB_CW_COLORMAP,
                           valueMasks);
 
-        /* The XInput extension enables per-pixel smooth scrolling trackpads */
-        struct
+        /* The XInput 2.1 extension enables per-pixel smooth scrolling trackpads */
+        xcb_generic_error_t* xiErr = NULL;
+        xcb_input_xi_query_version_reply_t* xiReply =
+        xcb_input_xi_query_version_reply(m_xcbConn,
+        xcb_input_xi_query_version(m_xcbConn, 2, 1), &xiErr);
+        if (!xiErr)
         {
-            xcb_input_event_mask_t mask;
-            uint32_t maskVal;
-        } masks =
-        {
-            {XCB_INPUT_DEVICE_ALL_MASTER, 1},
-            XCB_INPUT_XI_EVENT_MASK_MOTION
-        };
-        xcb_input_xi_select_events(m_xcbConn, m_windowId, 1, &masks.mask);
+            struct
+            {
+                xcb_input_event_mask_t mask;
+                uint32_t maskVal;
+            } masks =
+            {
+                {XCB_INPUT_DEVICE_ALL_MASTER, 1},
+                XCB_INPUT_XI_EVENT_MASK_MOTION |
+                XCB_INPUT_XI_EVENT_MASK_TOUCH_BEGIN |
+                XCB_INPUT_XI_EVENT_MASK_TOUCH_UPDATE |
+                XCB_INPUT_XI_EVENT_MASK_TOUCH_END
+            };
+            xcb_input_xi_select_events(m_xcbConn, m_windowId, 1, &masks.mask);
+        }
+        free(xiReply);
 
+        /* Register netwm extension atom for window closing */
+#if 0
         xcb_change_property(m_xcbConn, XCB_PROP_MODE_REPLACE, m_windowId, S_ATOMS->m_wmProtocols,
                             XCB_ATOM_ATOM, 32, 1, &S_ATOMS->m_wmDeleteWindow);
         const xcb_atom_t wm_protocols[1] = {
@@ -214,6 +244,7 @@ public:
         xcb_change_property(m_xcbConn, XCB_PROP_MODE_REPLACE, m_windowId,
                             S_ATOMS->m_wmProtocols, 4,
                             32, 1, wm_protocols);
+#endif
 
         /* Set the title of the window */
         const char* c_title = title.c_str();
@@ -356,19 +387,78 @@ public:
         return (uintptr_t)m_windowId;
     }
 
+    void _pointingDeviceChanged(xcb_input_device_id_t deviceId)
+    {
+        xcb_input_xi_query_device_reply_t* reply =
+        xcb_input_xi_query_device_reply(m_xcbConn, xcb_input_xi_query_device(m_xcbConn, deviceId), NULL);
+
+        xcb_input_xi_device_info_iterator_t infoIter = xcb_input_xi_query_device_infos_iterator(reply);
+        while (infoIter.rem)
+        {
+            /* First iterate classes for scrollables */
+            xcb_input_device_class_iterator_t classIter =
+            xcb_input_xi_device_info_classes_iterator(infoIter.data);
+            int hScroll = -1;
+            int vScroll = -1;
+            m_hScrollLast = 0.0;
+            m_vScrollLast = 0.0;
+            m_hScrollValuator = -1;
+            m_vScrollValuator = -1;
+            while (classIter.rem)
+            {
+                if (classIter.data->type == XCB_INPUT_DEVICE_CLASS_TYPE_SCROLL)
+                {
+                    xcb_input_scroll_class_t* scrollClass = (xcb_input_scroll_class_t*)classIter.data;
+                    if (scrollClass->scroll_type == XCB_INPUT_SCROLL_TYPE_VERTICAL)
+                        vScroll = scrollClass->number;
+                    else if (scrollClass->scroll_type == XCB_INPUT_SCROLL_TYPE_HORIZONTAL)
+                        hScroll = scrollClass->number;
+                }
+                xcb_input_device_class_next(&classIter);
+            }
+
+            /* Next iterate for touch and scroll valuators */
+            classIter = xcb_input_xi_device_info_classes_iterator(infoIter.data);
+            while (classIter.rem)
+            {
+                if (classIter.data->type == XCB_INPUT_DEVICE_CLASS_TYPE_VALUATOR)
+                {
+                    xcb_input_valuator_class_t* valClass = (xcb_input_valuator_class_t*)classIter.data;
+                    if (valClass->number == vScroll)
+                    {
+                        m_vScrollLast = fp3232val(&valClass->value);
+                        m_vScrollValuator = vScroll;
+                    }
+                    else if (valClass->number == hScroll)
+                    {
+                        m_hScrollLast = fp3232val(&valClass->value);
+                        m_hScrollValuator = hScroll;
+                    }
+                }
+                else if (classIter.data->type == XCB_INPUT_DEVICE_CLASS_TYPE_TOUCH)
+                {
+                    xcb_input_touch_class_t* touchClass = (xcb_input_touch_class_t*)classIter.data;
+                    if (touchClass->mode == XCB_INPUT_TOUCH_MODE_DIRECT)
+                        m_touchType = TOUCH_DISPLAY;
+                    else if (touchClass->mode == XCB_INPUT_TOUCH_MODE_DEPENDENT)
+                        m_touchType = TOUCH_TRACKPAD;
+                    else
+                        m_touchType = TOUCH_NONE;
+                }
+                xcb_input_device_class_next(&classIter);
+            }
+            xcb_input_xi_device_info_next(&infoIter);
+        }
+
+        free(reply);
+        m_lastInputID = deviceId;
+    }
+
     void _incomingEvent(void* e)
     {
         xcb_generic_event_t* event = (xcb_generic_event_t*)e;
         switch (XCB_EVENT_RESPONSE_TYPE(event))
         {
-        case XCB_CLIENT_MESSAGE:
-        {
-            xcb_client_message_event_t* ev = (xcb_client_message_event_t*)event;
-            if (ev->data.data32[0] == S_ATOMS->m_wmDeleteWindow)
-            {
-                fprintf(stderr, "CLOSED\n");
-            }
-        }
         case XCB_EXPOSE:
         {
             xcb_expose_event_t* ev = (xcb_expose_event_t*)event;
@@ -376,6 +466,7 @@ public:
             m_wy = ev->y;
             m_ww = ev->width;
             m_wh = ev->height;
+            return;
         }
         case XCB_CONFIGURE_NOTIFY:
         {
@@ -387,6 +478,7 @@ public:
                 m_ww = ev->width;
                 m_wh = ev->height;
             }
+            return;
         }
         case XCB_KEY_PRESS:
         {
@@ -407,6 +499,7 @@ public:
                 else if (modifierKey)
                     m_callback->modKeyDown((IWindowCallback::EModifierKey)modifierKey, false);
             }
+            return;
         }
         case XCB_KEY_RELEASE:
         {
@@ -427,40 +520,75 @@ public:
                 else if (modifierKey)
                     m_callback->modKeyUp((IWindowCallback::EModifierKey)modifierKey);
             }
+            return;
         }
         case XCB_BUTTON_PRESS:
         {
             xcb_button_press_event_t* ev = (xcb_button_press_event_t*)event;
-            int button = translateButton(ev->detail);
-            if (m_callback && button)
+            if (m_callback)
             {
-                int modifierMask = translateModifiers(ev->state);
-                IWindowCallback::SWindowCoord coord =
+                int button = translateButton(ev->detail);
+                if (button)
                 {
-                    {(unsigned)ev->event_x, (unsigned)ev->event_y},
-                    {(unsigned)(ev->event_x / m_pixelFactor), (unsigned)(ev->event_y / m_pixelFactor)},
-                    {ev->event_x / (float)m_ww, ev->event_y / (float)m_wh}
-                };
-                m_callback->mouseDown(coord, (IWindowCallback::EMouseButton)button,
-                                      (IWindowCallback::EModifierKey)modifierMask);
+                    int modifierMask = translateModifiers(ev->state);
+                    IWindowCallback::SWindowCoord coord =
+                    {
+                        {(unsigned)ev->event_x, (unsigned)ev->event_y},
+                        {(unsigned)(ev->event_x / m_pixelFactor), (unsigned)(ev->event_y / m_pixelFactor)},
+                        {ev->event_x / (float)m_ww, ev->event_y / (float)m_wh}
+                    };
+                    m_callback->mouseDown(coord, (IWindowCallback::EMouseButton)button,
+                                          (IWindowCallback::EModifierKey)modifierMask);
+                }
+
+                /* Also handle legacy scroll events here */
+                if (ev->detail >= 4 && ev->detail <= 7 &&
+                    m_hScrollValuator == -1 && m_vScrollValuator == -1)
+                {
+                    IWindowCallback::SWindowCoord coord =
+                    {
+                        {(unsigned)ev->event_x, (unsigned)ev->event_y},
+                        {(unsigned)(ev->event_x / m_pixelFactor), (unsigned)(ev->event_y / m_pixelFactor)},
+                        {ev->event_x / (float)m_ww, ev->event_y / (float)m_wh}
+                    };
+                    IWindowCallback::SScrollDelta scrollDelta =
+                    {
+                        {0.0, 0.0},
+                        false
+                    };
+                    if (ev->detail == 4)
+                        scrollDelta.delta[1] = 1.0;
+                    else if (ev->detail == 5)
+                        scrollDelta.delta[1] = -1.0;
+                    else if (ev->detail == 6)
+                        scrollDelta.delta[0] = 1.0;
+                    else if (ev->detail == 7)
+                        scrollDelta.delta[0] = -1.0;
+                    m_callback->scroll(coord, scrollDelta);
+                }
             }
+            return;
         }
         case XCB_BUTTON_RELEASE:
         {
             xcb_button_release_event_t* ev = (xcb_button_release_event_t*)event;
-            int button = translateButton(ev->detail);
-            if (m_callback && button)
+            if (m_callback)
             {
-                int modifierMask = translateModifiers(ev->state);
-                IWindowCallback::SWindowCoord coord =
+                int button = translateButton(ev->detail);
+                if (button)
                 {
-                    {(unsigned)ev->event_x, (unsigned)ev->event_y},
-                    {(unsigned)(ev->event_x / m_pixelFactor), (unsigned)(ev->event_y / m_pixelFactor)},
-                    {ev->event_x / (float)m_ww, ev->event_y / (float)m_wh}
-                };
-                m_callback->mouseUp(coord, (IWindowCallback::EMouseButton)button,
-                                    (IWindowCallback::EModifierKey)modifierMask);
+                    int modifierMask = translateModifiers(ev->state);
+                    IWindowCallback::SWindowCoord coord =
+                    {
+                        {(unsigned)ev->event_x, (unsigned)ev->event_y},
+                        {(unsigned)(ev->event_x / m_pixelFactor), (unsigned)(ev->event_y / m_pixelFactor)},
+                        {ev->event_x / (float)m_ww, ev->event_y / (float)m_wh}
+                    };
+                    m_callback->mouseUp(coord, (IWindowCallback::EMouseButton)button,
+                                        (IWindowCallback::EModifierKey)modifierMask);
+                }
             }
+            return;
         }
         case XCB_MOTION_NOTIFY:
         {
@@ -475,13 +603,160 @@ public:
                 };
                 m_callback->mouseMove(coord);
             }
+            return;
+        }
+        case XCB_GE_GENERIC:
+        {
+            xcb_ge_event_t* gev = (xcb_ge_event_t*)event;
+            if (gev->pad0 == XINPUT_OPCODE)
+            {
+                switch (gev->event_type)
+                {
+                case XCB_INPUT_MOTION:
+                {
+                    xcb_input_motion_event_t* ev = (xcb_input_motion_event_t*)event;
+                    if (m_lastInputID != ev->deviceid)
+                        _pointingDeviceChanged(ev->deviceid);
+
+                    uint32_t* valuators = (uint32_t*)(((char*)ev) + sizeof(xcb_input_motion_event_t) + sizeof(uint32_t) * ev->buttons_len);
+                    xcb_input_fp3232_t* valuatorVals = (xcb_input_fp3232_t*)(((char*)valuators) + sizeof(uint32_t) * ev->valuators_len);
+                    int cv = 0;
+                    double newScroll[2] = {m_hScrollLast, m_vScrollLast};
+                    bool didScroll = false;
+                    for (int i=0 ; i<32 ; ++i)
+                    {
+                        if (valuators[0] & (1<<i))
+                        {
+                            if (i == m_hScrollValuator)
+                            {
+                                newScroll[0] = fp3232val(&valuatorVals[cv]);
+                                didScroll = true;
+                            }
+                            else if (i == m_vScrollValuator)
+                            {
+                                newScroll[1] = fp3232val(&valuatorVals[cv]);
+                                didScroll = true;
+                            }
+                            ++cv;
+                        }
+                    }
+
+                    IWindowCallback::SScrollDelta scrollDelta =
+                    {
+                        {newScroll[0] - m_hScrollLast, newScroll[1] - m_vScrollLast},
+                        true
+                    };
+
+                    m_hScrollLast = newScroll[0];
+                    m_vScrollLast = newScroll[1];
+
+                    if (m_callback && didScroll)
+                    {
+                        unsigned event_x = ev->event_x >> 16;
+                        unsigned event_y = ev->event_y >> 16;
+                        IWindowCallback::SWindowCoord coord =
+                        {
+                            {event_x, event_y},
+                            {(unsigned)(event_x / m_pixelFactor), (unsigned)(event_y / m_pixelFactor)},
+                            {event_x / (float)m_ww, event_y / (float)m_wh}
+                        };
+                        m_callback->scroll(coord, scrollDelta);
+                    }
+                    return;
+                }
+                case XCB_INPUT_TOUCH_BEGIN:
+                {
+                    xcb_input_touch_begin_event_t* ev = (xcb_input_touch_begin_event_t*)event;
+                    if (m_lastInputID != ev->deviceid)
+                        _pointingDeviceChanged(ev->deviceid);
+
+                    uint32_t* valuators = (uint32_t*)(((char*)ev) + sizeof(xcb_input_motion_event_t) + sizeof(uint32_t) * ev->buttons_len);
+                    xcb_input_fp3232_t* valuatorVals = (xcb_input_fp3232_t*)(((char*)valuators) + sizeof(uint32_t) * ev->valuators_len);
+                    int cv = 0;
+                    double vals[32] = {};
+                    for (int i=0 ; i<32 ; ++i)
+                    {
+                        if (valuators[0] & (1<<i))
+                        {
+                            vals[i] = fp3232val(&valuatorVals[cv]);
+                            ++cv;
+                        }
+                    }
+
+                    IWindowCallback::STouchCoord coord =
+                    {
+                        {vals[0], vals[1]}
+                    };
+
+                    if (m_callback)
+                        m_callback->touchDown(coord, ev->detail);
+                    return;
+                }
+                case XCB_INPUT_TOUCH_UPDATE:
+                {
+                    xcb_input_touch_update_event_t* ev = (xcb_input_touch_update_event_t*)event;
+                    if (m_lastInputID != ev->deviceid)
+                        _pointingDeviceChanged(ev->deviceid);
+
+                    uint32_t* valuators = (uint32_t*)(((char*)ev) + sizeof(xcb_input_motion_event_t) + sizeof(uint32_t) * ev->buttons_len);
+                    xcb_input_fp3232_t* valuatorVals = (xcb_input_fp3232_t*)(((char*)valuators) + sizeof(uint32_t) * ev->valuators_len);
+                    int cv = 0;
+                    double vals[32] = {};
+                    for (int i=0 ; i<32 ; ++i)
+                    {
+                        if (valuators[0] & (1<<i))
+                        {
+                            vals[i] = fp3232val(&valuatorVals[cv]);
+                            ++cv;
+                        }
+                    }
+
+                    IWindowCallback::STouchCoord coord =
+                    {
+                        {vals[0], vals[1]}
+                    };
+
+                    if (m_callback)
+                        m_callback->touchMove(coord, ev->detail);
+                    return;
+                }
+                case XCB_INPUT_TOUCH_END:
+                {
+                    xcb_input_touch_end_event_t* ev = (xcb_input_touch_end_event_t*)event;
+                    if (m_lastInputID != ev->deviceid)
+                        _pointingDeviceChanged(ev->deviceid);
+
+                    uint32_t* valuators = (uint32_t*)(((char*)ev) + sizeof(xcb_input_motion_event_t) + sizeof(uint32_t) * ev->buttons_len);
+                    xcb_input_fp3232_t* valuatorVals = (xcb_input_fp3232_t*)(((char*)valuators) + sizeof(uint32_t) * ev->valuators_len);
+                    int cv = 0;
+                    double vals[32] = {};
+                    for (int i=0 ; i<32 ; ++i)
+                    {
+                        if (valuators[0] & (1<<i))
+                        {
+                            vals[i] = fp3232val(&valuatorVals[cv]);
+                            ++cv;
+                        }
+                    }
+
+                    IWindowCallback::STouchCoord coord =
+                    {
+                        {vals[0], vals[1]}
+                    };
+
+                    if (m_callback)
+                        m_callback->touchUp(coord, ev->detail);
+                    return;
+                }
+                }
+            }
         }
         }
     }
     
     ETouchType getTouchType() const
     {
-        return TOUCH_NONE;
+        return m_touchType;
     }
     
 };
