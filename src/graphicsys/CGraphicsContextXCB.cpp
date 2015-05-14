@@ -1,4 +1,4 @@
-#include "windowsys/IGraphicsContext.hpp"
+#include "graphicsys/IGFXContext.hpp"
 #include "windowsys/IWindow.hpp"
 
 #include <xcb/xcb.h>
@@ -7,11 +7,12 @@
 #include <GL/glcorearb.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <thread>
 
 namespace boo
 {
 
-class CGraphicsContextXCB final : public IGraphicsContext
+class CGraphicsContextXCB final : public IGFXContext
 {
     
     EGraphicsAPI m_api;
@@ -24,6 +25,8 @@ class CGraphicsContextXCB final : public IGraphicsContext
     xcb_glx_window_t m_glxWindow = 0;
     xcb_glx_context_t m_glxCtx = 0;
     xcb_glx_context_tag_t m_glxCtxTag = 0;
+
+    std::thread* m_commandThread = NULL;
     
 public:
     IWindowCallback* m_callback;
@@ -34,6 +37,7 @@ public:
       m_parentWindow(parentWindow),
       m_xcbConn(conn)
     {
+
         /* WTF freedesktop?? Fix this awful API and your nonexistant docs */
         xcb_glx_get_fb_configs_reply_t* fbconfigs =
         xcb_glx_get_fb_configs_reply(m_xcbConn, xcb_glx_get_fb_configs(m_xcbConn, 0), NULL);
@@ -137,36 +141,11 @@ public:
                               m_glxWindow, 0, NULL);
     }
     
-    IGraphicsContext* makeShareContext() const
-    {
-        return NULL;
-    }
-    
-    void makeCurrent()
-    {
-        xcb_glx_make_context_current_reply_t* reply =
-        xcb_glx_make_context_current_reply(m_xcbConn,
-        xcb_glx_make_context_current(m_xcbConn, 0, m_glxWindow, m_glxWindow, m_glxCtx), NULL);
-        m_glxCtxTag = reply->context_tag;
-        free(reply);
-    }
-    
-    void clearCurrent()
-    {
-        xcb_glx_make_context_current(m_xcbConn, m_glxCtxTag, m_glxWindow, m_glxWindow, 0);
-        m_glxCtxTag = 0;
-    }
-    
-    void swapBuffer()
-    {
-        xcb_glx_swap_buffers(m_xcbConn, m_glxCtxTag, m_glxWindow);
-    }
-    
 };
 
-IGraphicsContext* _CGraphicsContextXCBNew(IGraphicsContext::EGraphicsAPI api,
-                                          IWindow* parentWindow, xcb_connection_t* conn,
-                                          uint32_t& visualIdOut)
+IGFXContext* _CGraphicsContextXCBNew(IGFXContext::EGraphicsAPI api,
+                                     IWindow* parentWindow, xcb_connection_t* conn,
+                                     uint32_t& visualIdOut)
 {
     return new CGraphicsContextXCB(api, parentWindow, conn, visualIdOut);
 }

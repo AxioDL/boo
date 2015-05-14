@@ -1,5 +1,5 @@
 #include "windowsys/IWindow.hpp"
-#include "windowsys/IGraphicsContext.hpp"
+#include "graphicsys/IGFXContext.hpp"
 #include "IApplication.hpp"
 
 #include <xcb/xcb.h>
@@ -145,15 +145,15 @@ static void genFrameDefault(xcb_screen_t* screen, int* xOut, int* yOut, int* wOu
     *hOut = height;
 }
     
-IGraphicsContext* _CGraphicsContextXCBNew(IGraphicsContext::EGraphicsAPI api,
-                                          IWindow* parentWindow, xcb_connection_t* conn,
-                                          uint32_t& visualIdOut);
+IGFXContext* _CGraphicsContextXCBNew(IGFXContext::EGraphicsAPI api,
+                                     IWindow* parentWindow, xcb_connection_t* conn,
+                                     uint32_t& visualIdOut);
 
 class CWindowXCB final : public IWindow
 {
     xcb_connection_t* m_xcbConn;
     xcb_window_t m_windowId;
-    IGraphicsContext* m_gfxCtx;
+    IGFXContext* m_gfxCtx;
     IWindowCallback* m_callback;
 
     /* Last known input device id (0xffff if not yet set) */
@@ -184,7 +184,7 @@ public:
 
         /* Construct graphics context */
         uint32_t visualId;
-        m_gfxCtx = _CGraphicsContextXCBNew(IGraphicsContext::API_OPENGL_3_3, this, m_xcbConn, visualId);
+        m_gfxCtx = _CGraphicsContextXCBNew(IGFXContext::API_OPENGL_3_3, this, m_xcbConn, visualId);
 
         /* Create colormap */
         xcb_colormap_t colormap = xcb_generate_id(m_xcbConn);

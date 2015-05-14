@@ -2,7 +2,6 @@ HEADERS += \
     $$PWD/include/boo.hpp \
     $$PWD/include/IApplication.hpp \
     $$PWD/include/windowsys/IWindow.hpp \
-    $$PWD/include/windowsys/IGraphicsContext.hpp \
     $$PWD/include/inputdev/CDolphinSmashAdapter.hpp \
     $$PWD/include/inputdev/CRevolutionPad.hpp \
     $$PWD/include/inputdev/CCafeProPad.hpp \
@@ -13,7 +12,18 @@ HEADERS += \
     $$PWD/include/inputdev/CDeviceBase.hpp \
     $$PWD/include/inputdev/IHIDListener.hpp \
     $$PWD/src/inputdev/IHIDDevice.hpp \
-    $$PWD/include/inputdev/SDeviceSignature.hpp
+    $$PWD/include/inputdev/SDeviceSignature.hpp \
+    $$PWD/include/windowsys/IGFXCommandBuffer.hpp \
+    $$PWD/include/graphicsys/IGFXCommandBuffer.hpp \
+    $$PWD/include/graphicsys/IGFXContext.hpp \
+    $$PWD/include/graphicsys/IGFXPipelineState.hpp \
+    $$PWD/include/graphicsys/IGFXTransformSet.hpp \
+    $$PWD/include/graphicsys/hecl/CHECLLexer.hpp \
+    $$PWD/src/graphicsys/hecl/IHECLBackend.hpp \
+    $$PWD/src/graphicsys/hecl/HECLExpressions.hpp \
+    $$PWD/include/graphicsys/CGFXVertexLayoutBase.hpp \
+    $$PWD/include/graphicsys/hecl/HECLExpressions.hpp \
+    $$PWD/include/graphicsys/hecl/IHECLBackend.hpp
 
 SOURCES += \
     $$PWD/InputDeviceClasses.cpp \
@@ -23,7 +33,13 @@ SOURCES += \
     $$PWD/src/inputdev/CDualshockPad.cpp \
     $$PWD/src/inputdev/CGenericPad.cpp \
     $$PWD/src/inputdev/CDeviceBase.cpp \
-    $$PWD/src/inputdev/SDeviceSignature.cpp
+    $$PWD/src/inputdev/SDeviceSignature.cpp \
+    $$PWD/src/graphicsys/hecl/CHECLBackendGLSL.cpp \
+    $$PWD/src/graphicsys/hecl/CHECLBackendHLSL.cpp \
+    $$PWD/src/graphicsys/hecl/CHECLBackendMetal.cpp \
+    $$PWD/src/graphicsys/hecl/CHECLLexer.cpp \
+    $$PWD/src/graphicsys/hecl/CHECLBackendOutline.cpp \
+    $$PWD/src/graphicsys/hecl/CHECLBackendTEV.cpp
 
 unix:!macx {
     HEADERS += \
@@ -33,8 +49,8 @@ unix:!macx {
         $$PWD/src/CApplicationUnix.cpp \
         $$PWD/src/windowsys/CWindowXCB.cpp \
         $$PWD/src/windowsys/CWindowWayland.cpp \
-        $$PWD/src/windowsys/CGraphicsContextXCB.cpp \
-        $$PWD/src/windowsys/CGraphicsContextWayland.cpp
+        $$PWD/src/graphicsys/CGraphicsContextXCB.cpp \
+        $$PWD/src/graphicsys/CGraphicsContextWayland.cpp
 }
 
 linux {
@@ -61,7 +77,7 @@ win32 {
         $$PWD/src/inputdev/CHIDListenerWinUSB.cpp \
         $$PWD/src/inputdev/CHIDDeviceWinUSB.cpp \
         $$PWD/src/windowsys/CWindowWin32.cpp \
-        $$PWD/src/windowsys/CGraphicsContextWin32.cpp
+        $$PWD/src/graphicsys/CGraphicsContextWin32.cpp
 }
 
 INCLUDEPATH += $$PWD/include

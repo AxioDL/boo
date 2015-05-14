@@ -274,7 +274,6 @@ public:
                 dbus_connection_read_write(m_dbus, 0);
                 while ((msg = dbus_connection_pop_message(m_dbus)))
                 {
-
                     /* check if the message is a signal from the correct interface and with the correct name */
                     if (dbus_message_is_signal(msg, "boo.signal.FileHandling", "Open"))
                     {

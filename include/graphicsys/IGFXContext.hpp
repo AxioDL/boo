@@ -1,13 +1,14 @@
-#ifndef IGRAPHICSCONTEXT_HPP
-#define IGRAPHICSCONTEXT_HPP
+#ifndef IGFXCONTEXT_HPP
+#define IGFXCONTEXT_HPP
 
 namespace boo
 {
 
-class IGraphicsContext
+class IGFXContext
 {
     friend class CWindowCocoa;
-    virtual void _setCallback(class IWindowCallback* cb) {(void)cb;};
+    friend class CWindowXCB;
+    virtual void _setCallback(class IWindowCallback* cb) {(void)cb;}
 
 public:
     
@@ -33,22 +34,15 @@ public:
         PF_RGBAF32_Z24 = 4
     };
     
-    virtual ~IGraphicsContext() {}
+    virtual ~IGFXContext() {}
     
     virtual EGraphicsAPI getAPI() const=0;
     virtual EPixelFormat getPixelFormat() const=0;
     virtual void setPixelFormat(EPixelFormat pf)=0;
     virtual void initializeContext()=0;
-    virtual IGraphicsContext* makeShareContext() const=0;
-    virtual void makeCurrent()=0;
-    virtual void clearCurrent()=0;
-
-    /* Note: *all* contexts are double-buffered with
-     * v-sync interval; please call this */
-    virtual void swapBuffer()=0;
     
 };
     
 }
 
-#endif // IGRAPHICSCONTEXT_HPP
+#endif // IGFXCONTEXT_HPP

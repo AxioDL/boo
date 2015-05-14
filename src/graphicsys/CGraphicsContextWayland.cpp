@@ -1,10 +1,10 @@
-#include "windowsys/IGraphicsContext.hpp"
+#include "graphicsys/IGFXContext.hpp"
 #include "windowsys/IWindow.hpp"
 
 namespace boo
 {
 
-class CGraphicsContextWayland final : public IGraphicsContext
+class CGraphicsContextWayland final : public IGFXContext
 {
     
     EGraphicsAPI m_api;
@@ -52,30 +52,10 @@ public:
         
     }
     
-    IGraphicsContext* makeShareContext() const
-    {
-        return NULL;
-    }
-    
-    void makeCurrent()
-    {
-        
-    }
-    
-    void clearCurrent()
-    {
-        
-    }
-    
-    void swapBuffer()
-    {
-        
-    }
-    
 };
 
-IGraphicsContext* _CGraphicsContextWaylandNew(IGraphicsContext::EGraphicsAPI api,
-                                              IWindow* parentWindow)
+IGFXContext* _CGraphicsContextWaylandNew(IGFXContext::EGraphicsAPI api,
+                                         IWindow* parentWindow)
 {
     return new CGraphicsContextWayland(api, parentWindow);
 }
