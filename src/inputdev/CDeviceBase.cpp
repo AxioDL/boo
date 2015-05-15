@@ -47,10 +47,17 @@ size_t CDeviceBase::receiveUSBInterruptTransfer(uint8_t pipe, uint8_t* data, siz
     return false;
 }
 
-bool CDeviceBase::sendHIDReport(const uint8_t* data, size_t length)
+bool CDeviceBase::sendHIDReport(const uint8_t* data, size_t length, uint16_t message)
 {
     if (m_hidDev)
-        return m_hidDev->_sendHIDReport(data, length);
+        return m_hidDev->_sendHIDReport(data, length, message);
+    return false;
+}
+
+size_t CDeviceBase::receiveReport(uint8_t* data, size_t length, uint16_t message)
+{
+    if (m_hidDev)
+        return m_hidDev->_recieveReport(data, length, message);
     return false;
 }
 

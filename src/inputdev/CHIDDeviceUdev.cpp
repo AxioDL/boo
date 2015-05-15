@@ -44,7 +44,7 @@ class CHIDDeviceUdev final : public IHIDDevice
         {
             usbdevfs_bulktransfer xfer =
             {
-                m_usbIntfOutPipe | USB_DIR_OUT,
+                m_usbIntfOutPipe | USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
                 (unsigned)length,
                 0,
                 (void*)data
@@ -56,7 +56,7 @@ class CHIDDeviceUdev final : public IHIDDevice
         }
         return false;
     }
-    
+
     size_t _receiveUSBInterruptTransfer(uint8_t pipe, uint8_t* data, size_t length)
     {
         if (m_devFd)
@@ -191,17 +191,53 @@ class CHIDDeviceUdev final : public IHIDDevice
         m_runningTransferLoop = false;
     }
     
-    bool _sendHIDReport(const uint8_t* data, size_t length)
+    bool _sendHIDReport(const uint8_t* data, size_t length, uint16_t message)
     {
+        if (m_devFd)
+        {
+            usbdevfs_ctrltransfer xfer =
+            {
+                USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
+                0x09, // HID_SET_REPORT
+                message,
+                0,
+                (uint16_t)length,
+                0,
+                (void*)data
+            };
+            int ret = ioctl(m_devFd, USBDEVFS_CONTROL, &xfer);
+            if (ret != (int)length)
+                return false;
+            return true;
+        }
         return false;
+    }
+
+    size_t _recieveReport(const uint8_t *data, size_t length, uint16_t message)
+    {
+        if (m_devFd)
+        {
+            usbdevfs_ctrltransfer xfer =
+            {
+                USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
+                0x01, // HID_GET_REPORT
+                message,
+                0,
+                (uint16_t)length,
+                0,
+                (void*)data
+            };
+            return ioctl(m_devFd, USBDEVFS_CONTROL, &xfer);
+        }
+        return 0;
     }
     
 public:
     
     CHIDDeviceUdev(CDeviceToken& token, CDeviceBase& devImp)
-    : m_token(token),
-      m_devImp(devImp),
-      m_devPath(token.getDevicePath())
+        : m_token(token),
+          m_devImp(devImp),
+          m_devPath(token.getDevicePath())
     {
         devImp.m_hidDev = this;
         std::unique_lock<std::mutex> lk(m_initMutex);

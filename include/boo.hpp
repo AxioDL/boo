@@ -18,5 +18,6 @@ namespace boo {typedef CGLXContext CGraphicsContext;}
 #include "IGraphicsContext.hpp"
 #include "inputdev/CDeviceFinder.hpp"
 #include "inputdev/CDolphinSmashAdapter.hpp"
+#include "inputdev/CDualshockPad.hpp"
 
 #endif // BOO_HPP

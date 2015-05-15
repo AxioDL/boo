@@ -29,7 +29,6 @@ enum EDolphinControllerButtons
     DOL_DOWN   = 1<<14,
     DOL_UP     = 1<<15
 };
-
 struct SDolphinControllerState
 {
     uint8_t m_leftStick[2];

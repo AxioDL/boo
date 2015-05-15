@@ -34,9 +34,8 @@ public:
     virtual void finalCycle() {}
 
     /* High-Level API */
-    bool sendHIDReport(const uint8_t* data, size_t length);
-    virtual size_t receiveReport(uint8_t* data, size_t length) {return 0;}
-    
+    bool sendHIDReport(const uint8_t* data, size_t length, uint16_t message=0);
+    virtual size_t receiveReport(uint8_t* data, size_t length, uint16_t message=0);
 };
 
 }
