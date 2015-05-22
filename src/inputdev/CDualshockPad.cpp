@@ -29,8 +29,7 @@ void hexdump(void *ptr, int buflen) {
 namespace boo
 {
 static const uint8_t defaultReport[35] = {
-        0x01,
-        0xff, 0x00, 0xff, 0x00,
+        0x01, 0xff, 0x00, 0xff, 0x00,
         0xff, 0x80, 0x00, 0x00, 0x00,
         0xff, 0x27, 0x10, 0x00, 0x32,
         0xff, 0x27, 0x10, 0x00, 0x32,
@@ -62,7 +61,11 @@ void CDualshockController::deviceDisconnected()
 void CDualshockController::initialCycle()
 {
     uint8_t setupCommand[4] = {0x42, 0x0c, 0x00, 0x00}; //Tells controller to start sending changes on in pipe
-    sendHIDReport(setupCommand, sizeof(setupCommand), 0x03F4);
+    if (!sendHIDReport(setupCommand, sizeof(setupCommand), 0x03F4))
+    {
+        deviceError("Unable to send complete packet! Request size %x\n", sizeof(setupCommand));
+        return;
+    }
     uint8_t btAddr[8];
     receiveReport(btAddr, sizeof(btAddr), 0x03F5);
     for (int i = 0; i < 6; i++)
@@ -113,9 +116,9 @@ void CDualshockController::transferCycle()
     }
     else
     {
-        if (state.m_reserved5[8] == 0xC0)
+        if (state.m_reserved5[8] & 0x80)
             m_rumbleRequest &= ~DS3_MOTOR_RIGHT;
-        if (state.m_reserved5[7] == 0x01)
+        if (state.m_reserved5[7] & 0x01)
             m_rumbleRequest &= ~DS3_MOTOR_LEFT;
         m_rumbleState = m_rumbleRequest;
         const double zeroG = 511.5; // 1.65/3.3*1023 (1,65V);

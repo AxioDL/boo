@@ -30,7 +30,9 @@ union SDualshockOutReport
     {
         uint8_t reportId;
         SDualshockRumble rumble;
-        uint8_t padding[4];
+        uint8_t gyro1;
+        uint8_t gyro2;
+        uint8_t padding[2];
         uint8_t leds;
         SDualshockLED led[4];
         SDualshockLED reserved;
@@ -40,16 +42,16 @@ union SDualshockOutReport
 
 enum EDualshockControllerButtons
 {
-    DS3_SELECT   = 1<<0,
-    DS3_L3       = 1<<1,
-    DS3_R3       = 1<<2,
-    DS3_START    = 1<<3,
-    DS3_UP       = 1<<4,
-    DS3_RIGHT    = 1<<5,
-    DS3_DOWN     = 1<<6,
-    DS3_LEFT     = 1<<7,
-    DS3_L2       = 1<<8,
-    DS3_R2       = 1<<9,
+    DS3_SELECT   = 1<< 0,
+    DS3_L3       = 1<< 1,
+    DS3_R3       = 1<< 2,
+    DS3_START    = 1<< 3,
+    DS3_UP       = 1<< 4,
+    DS3_RIGHT    = 1<< 5,
+    DS3_DOWN     = 1<< 6,
+    DS3_LEFT     = 1<< 7,
+    DS3_L2       = 1<< 8,
+    DS3_R2       = 1<< 9,
     DS3_L1       = 1<<10,
     DS3_R1       = 1<<11,
     DS3_TRIANGLE = 1<<12,
@@ -102,6 +104,7 @@ struct SDualshockControllerState
     uint8_t  m_reserved5[9];
     uint16_t m_accelerometer[3];
     uint16_t m_gyrometerZ;
+    // INTERNAL, set by libBoo, do not modify directly!
     float accPitch;
     float accYaw;
     float gyroZ;
@@ -112,7 +115,7 @@ struct IDualshockControllerCallback
 {
     CDualshockController* ctrl = nullptr;
     virtual void controllerDisconnected() {}
-    virtual void controllerUpdate(const SDualshockControllerState& state) {}
+    virtual void controllerUpdate(const SDualshockControllerState&) {}
 };
 
 class CDualshockController final : public CDeviceBase

@@ -1,6 +1,7 @@
 #include "inputdev/CDeviceBase.hpp"
 #include "inputdev/CDeviceToken.hpp"
 #include "IHIDDevice.hpp"
+#include <cstdarg>
 
 namespace boo
 {
@@ -31,6 +32,14 @@ void CDeviceBase::closeDevice()
 {
     if (m_token)
         m_token->_deviceClose();
+}
+
+void CDeviceBase::deviceError(const char* error, ...)
+{
+    va_list vl;
+    va_start(vl, error);
+    vfprintf(stderr, error, vl);
+    va_end(vl);
 }
 
 bool CDeviceBase::sendUSBInterruptTransfer(uint8_t pipe, const uint8_t* data, size_t length)

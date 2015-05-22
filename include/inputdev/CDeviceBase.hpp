@@ -24,7 +24,7 @@ public:
     virtual ~CDeviceBase();
     void closeDevice();
     virtual void deviceDisconnected()=0;
-    virtual void deviceError(const char* error) {fprintf(stderr, "%s\n", error);}
+    virtual void deviceError(const char* error, ...);
     
     /* Low-Level API */
     bool sendUSBInterruptTransfer(uint8_t pipe, const uint8_t* data, size_t length);

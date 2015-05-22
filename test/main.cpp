@@ -73,6 +73,7 @@ class CDualshockControllerCallback : public IDualshockControllerCallback
         /*
         else
             ctrl->stopRumble(DS3_MOTOR_RIGHT | DS3_MOTOR_LEFT);*/
+
         printf("CONTROLLER UPDATE %d %d\n", state.m_leftStick[0], state.m_leftStick[1]);
         printf("                  %d %d\n", state.m_rightStick[0], state.m_rightStick[1]);
         printf("                  %f %f %f\n", state.accPitch, state.accYaw, state.gyroZ);

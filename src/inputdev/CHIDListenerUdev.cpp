@@ -47,7 +47,7 @@ class CHIDListenerUdev final : public IHIDListener
 
         int vid = 0, pid = 0;
         udev_list_entry* attrs = udev_device_get_properties_list_entry(device);
-#if 0
+#if 1
         udev_list_entry* att = NULL;
         udev_list_entry_foreach(att, attrs)
         {
