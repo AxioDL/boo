@@ -39,7 +39,7 @@ class CHIDDeviceUdev final : public IHIDDevice
     std::condition_variable m_initCond;
     std::thread* m_thread;
     
-    bool _sendUSBInterruptTransfer(uint8_t pipe, const uint8_t* data, size_t length)
+    bool _sendUSBInterruptTransfer(const uint8_t* data, size_t length)
     {
         if (m_devFd)
         {
@@ -58,7 +58,7 @@ class CHIDDeviceUdev final : public IHIDDevice
         return false;
     }
     
-    size_t _receiveUSBInterruptTransfer(uint8_t pipe, uint8_t* data, size_t length)
+    size_t _receiveUSBInterruptTransfer(uint8_t* data, size_t length)
     {
         if (m_devFd)
         {
@@ -94,22 +94,22 @@ class CHIDDeviceUdev final : public IHIDDevice
             udev_device_unref(udevDev);
             return;
         }
-        usb_device_descriptor devDesc = {0};
+        usb_device_descriptor devDesc = {};
         read(device->m_devFd, &devDesc, 1);
         read(device->m_devFd, &devDesc.bDescriptorType, devDesc.bLength-1);
         if (devDesc.bNumConfigurations)
         {
-            usb_config_descriptor confDesc = {0};
+            usb_config_descriptor confDesc = {};
             read(device->m_devFd, &confDesc, 1);
             read(device->m_devFd, &confDesc.bDescriptorType, confDesc.bLength-1);
             if (confDesc.bNumInterfaces)
             {
-                usb_interface_descriptor intfDesc = {0};
+                usb_interface_descriptor intfDesc = {};
                 read(device->m_devFd, &intfDesc, 1);
                 read(device->m_devFd, &intfDesc.bDescriptorType, intfDesc.bLength-1);
                 for (i=0 ; i<intfDesc.bNumEndpoints+1 ; ++i)
                 {
-                    usb_endpoint_descriptor endpDesc = {0};
+                    usb_endpoint_descriptor endpDesc = {};
                     read(device->m_devFd, &endpDesc, 1);
                     read(device->m_devFd, &endpDesc.bDescriptorType, endpDesc.bLength-1);
                     if ((endpDesc.bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) == USB_ENDPOINT_XFER_INT)
@@ -194,6 +194,8 @@ class CHIDDeviceUdev final : public IHIDDevice
     
     bool _sendHIDReport(const uint8_t* data, size_t length)
     {
+        (void)data;
+        (void)length;
         return false;
     }
     

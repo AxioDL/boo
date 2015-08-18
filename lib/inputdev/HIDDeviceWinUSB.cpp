@@ -33,7 +33,7 @@ class CHIDDeviceWinUSB final : public IHIDDevice
     std::condition_variable m_initCond;
     std::thread* m_thread;
 
-    bool _sendUSBInterruptTransfer(uint8_t pipe, const uint8_t* data, size_t length)
+    bool _sendUSBInterruptTransfer(const uint8_t* data, size_t length)
     {
         if (m_usbHandle)
         {
@@ -47,7 +47,7 @@ class CHIDDeviceWinUSB final : public IHIDDevice
         return false;
     }
 
-    size_t _receiveUSBInterruptTransfer(uint8_t pipe, uint8_t* data, size_t length)
+    size_t _receiveUSBInterruptTransfer(uint8_t* data, size_t length)
     {
         if (m_usbHandle)
         {

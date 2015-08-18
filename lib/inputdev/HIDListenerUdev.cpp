@@ -2,7 +2,11 @@
 #include "inputdev/DeviceFinder.hpp"
 #include <libudev.h>
 #include <string.h>
+<<<<<<< HEAD:lib/inputdev/HIDListenerUdev.cpp
 #include <stdio.h>
+=======
+#include <signal.h>
+>>>>>>> 6ce2472b27211a40e1d78f424f09cf26ba5e3281:src/inputdev/CHIDListenerUdev.cpp
 #include <thread>
 
 namespace boo
@@ -169,6 +173,7 @@ public:
     ~CHIDListenerUdev()
     {
         m_udevRunning = false;
+        pthread_kill(m_udevThread->native_handle(), SIGINT);
         m_udevThread->join();
         delete m_udevThread;
         udev_monitor_unref(m_udevMon);

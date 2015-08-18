@@ -40,10 +40,10 @@ struct SDolphinControllerState
 
 struct IDolphinSmashAdapterCallback
 {
-    virtual void controllerConnected(unsigned idx, EDolphinControllerType type) {}
-    virtual void controllerDisconnected(unsigned idx, EDolphinControllerType type) {}
+    virtual void controllerConnected(unsigned idx, EDolphinControllerType type) {(void)idx;(void)type;}
+    virtual void controllerDisconnected(unsigned idx, EDolphinControllerType type) {(void)idx;(void)type;}
     virtual void controllerUpdate(unsigned idx, EDolphinControllerType type,
-                                  const SDolphinControllerState& state) {}
+                                  const SDolphinControllerState& state) {(void)idx;(void)type;(void)state;}
 };
 
 class CDolphinSmashAdapter final : public CDeviceBase

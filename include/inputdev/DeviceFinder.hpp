@@ -1,7 +1,8 @@
 #ifndef CDEVICEFINDER_HPP
 #define CDEVICEFINDER_HPP
 
-#include <set>
+#include <unordered_set>
+#include <typeindex>
 #include <mutex>
 #include "DeviceToken.hpp"
 #include "IHIDListener.hpp"
@@ -91,7 +92,7 @@ public:
     };
     
     /* Application must specify its interested device-types */
-    CDeviceFinder(std::vector<const char*> types)
+    CDeviceFinder(std::unordered_set<std::type_index> types)
     : m_listener(NULL)
     {
         if (skDevFinder)
@@ -100,12 +101,12 @@ public:
             abort();
         }
         skDevFinder = this;
-        for (const char* typeName : types)
+        for (const std::type_index& typeIdx : types)
         {
             const SDeviceSignature* sigIter = BOO_DEVICE_SIGS;
             while (sigIter->m_name)
             {
-                if (!strcmp(sigIter->m_name, typeName))
+                if (sigIter->m_typeIdx == typeIdx)
                     m_types.push_back(sigIter);
                 ++sigIter;
             }

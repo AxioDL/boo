@@ -33,17 +33,17 @@ void CDeviceBase::closeDevice()
         m_token->_deviceClose();
 }
 
-bool CDeviceBase::sendUSBInterruptTransfer(uint8_t pipe, const uint8_t* data, size_t length)
+bool CDeviceBase::sendUSBInterruptTransfer(const uint8_t* data, size_t length)
 {
     if (m_hidDev)
-        return m_hidDev->_sendUSBInterruptTransfer(pipe, data, length);
+        return m_hidDev->_sendUSBInterruptTransfer(data, length);
     return false;
 }
 
-size_t CDeviceBase::receiveUSBInterruptTransfer(uint8_t pipe, uint8_t* data, size_t length)
+size_t CDeviceBase::receiveUSBInterruptTransfer(uint8_t* data, size_t length)
 {
     if (m_hidDev)
-        return m_hidDev->_receiveUSBInterruptTransfer(pipe, data, length);
+        return m_hidDev->_receiveUSBInterruptTransfer(data, length);
     return false;
 }
 
