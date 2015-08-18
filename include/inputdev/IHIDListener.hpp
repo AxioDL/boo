@@ -3,7 +3,7 @@
 
 #include <unordered_map>
 #include <mutex>
-#include "CDeviceToken.hpp"
+#include "DeviceToken.hpp"
 
 namespace boo
 {

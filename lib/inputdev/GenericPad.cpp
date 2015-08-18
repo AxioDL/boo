@@ -1,5 +1,5 @@
-#include "inputdev/CGenericPad.hpp"
-#include "inputdev/CDeviceToken.hpp"
+#include "inputdev/GenericPad.hpp"
+#include "inputdev/DeviceToken.hpp"
 
 namespace boo
 {

@@ -3,11 +3,11 @@
 
 #include <set>
 #include <mutex>
-#include <stdexcept>
-#include "CDeviceToken.hpp"
+#include "DeviceToken.hpp"
 #include "IHIDListener.hpp"
-#include "SDeviceSignature.hpp"
+#include "DeviceSignature.hpp"
 #include <string.h>
+#include <stdio.h>
 
 #ifdef _WIN32
 #define _WIN32_LEAN_AND_MEAN 1
@@ -95,7 +95,10 @@ public:
     : m_listener(NULL)
     {
         if (skDevFinder)
-            throw std::runtime_error("only one instance of CDeviceFinder may be constructed");
+        {
+            fprintf(stderr, "only one instance of CDeviceFinder may be constructed");
+            abort();
+        }
         skDevFinder = this;
         for (const char* typeName : types)
         {

@@ -1,7 +1,7 @@
 #ifndef CGENERICPAD_HPP
 #define CGENERICPAD_HPP
 
-#include "CDeviceBase.hpp"
+#include "DeviceBase.hpp"
 
 namespace boo
 {

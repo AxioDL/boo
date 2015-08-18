@@ -1,4 +1,4 @@
-#include "CSurface.hpp"
+#include "Surface.hpp"
 
 namespace boo
 {

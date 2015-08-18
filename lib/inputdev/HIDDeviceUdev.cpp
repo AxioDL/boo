@@ -1,10 +1,11 @@
 #include "IHIDDevice.hpp"
-#include "inputdev/CDeviceToken.hpp"
-#include "inputdev/CDeviceBase.hpp"
+#include "inputdev/DeviceToken.hpp"
+#include "inputdev/DeviceBase.hpp"
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 
+#include <stdio.h>
 #include <libudev.h>
 #include <stropts.h>
 #include <linux/usb/ch9.h>
@@ -213,7 +214,10 @@ public:
         else if (dType == CDeviceToken::DEVTYPE_GENERICHID)
             m_thread = new std::thread(_threadProcHID, this);
         else
-            throw std::runtime_error("invalid token supplied to device constructor");
+        {
+            fprintf(stderr, "invalid token supplied to device constructor");
+            abort();
+        }
         m_initCond.wait(lk);
     }
     

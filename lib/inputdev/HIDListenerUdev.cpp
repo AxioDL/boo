@@ -1,7 +1,8 @@
 #include "inputdev/IHIDListener.hpp"
-#include "inputdev/CDeviceFinder.hpp"
+#include "inputdev/DeviceFinder.hpp"
 #include <libudev.h>
 #include <string.h>
+#include <stdio.h>
 #include <thread>
 
 namespace boo
@@ -146,7 +147,10 @@ public:
         /* Setup hotplug events */
         m_udevMon = udev_monitor_new_from_netlink(GetUdev(), "udev");
         if (!m_udevMon)
-            throw std::runtime_error("unable to init udev_monitor");
+        {
+            fprintf(stderr, "unable to init udev_monitor");
+            abort();
+        }
         udev_monitor_filter_add_match_subsystem_devtype(m_udevMon, "usb", "usb_device");
         udev_monitor_filter_add_match_subsystem_devtype(m_udevMon, "bluetooth", "bluetooth_device");
         udev_monitor_filter_update(m_udevMon);

@@ -2,8 +2,8 @@
 #define CDEVICETOKEN
 
 #include <string>
-#include "CDeviceBase.hpp"
-#include "SDeviceSignature.hpp"
+#include "DeviceBase.hpp"
+#include "DeviceSignature.hpp"
 
 namespace boo
 {

@@ -2,7 +2,7 @@
 #define CDOLPHINSMASHADAPTER_HPP
 
 #include <stdint.h>
-#include "CDeviceBase.hpp"
+#include "DeviceBase.hpp"
 
 namespace boo
 {
