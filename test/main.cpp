@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <boo.hpp>
+#include <boo/boo.hpp>
 
 namespace boo
 {
@@ -134,13 +134,13 @@ struct TestApplicationCallback : IApplicationCallback
 
 }
 
-int main(int argc, char** argv)
+int main(int argc, const char** argv)
 {
     boo::TestApplicationCallback appCb;
-    boo::IApplication* app = IApplicationBootstrap(boo::IApplication::PLAT_AUTO,
-                                                   appCb, "rwk", "RWK", argc, argv);
+    std::shared_ptr<boo::IApplication> app =
+            ApplicationBootstrap(boo::IApplication::PLAT_AUTO,
+                                 appCb, "rwk", "RWK", argc, argv);
     app->run();
-    delete app;
     printf("IM DYING!!\n");
     return 0;
 }

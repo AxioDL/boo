@@ -2,7 +2,7 @@
 #error This file may only be included from CApplicationUnix.cpp
 #endif
 
-#include "IApplication.hpp"
+#include "boo/IApplication.hpp"
 
 #include <dbus/dbus.h>
 DBusConnection* registerDBus(const char* appName, bool& isFirst);

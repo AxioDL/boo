@@ -1,1 +1,1 @@
-#include "inputdev/DualshockPad.hpp"
+#include "boo/inputdev/DualshockPad.hpp"

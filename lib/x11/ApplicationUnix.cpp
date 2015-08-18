@@ -6,6 +6,7 @@
 #include "ApplicationXCB.hpp"
 #include "ApplicationWayland.hpp"
 
+#include <memory>
 #include <dbus/dbus.h>
 #include <stdio.h>
 
@@ -47,13 +48,13 @@ namespace boo
 {
 
 IApplication* APP = NULL;
-IApplication* IApplicationBootstrap(IApplication::EPlatformType platform,
-                                    IApplicationCallback& cb,
-                                    const std::string& uniqueName,
-                                    const std::string& friendlyName,
-                                    const std::string& pname,
-                                    const std::vector<std::string>& args,
-                                    bool singleInstance)
+std::shared_ptr<IApplication> ApplicationBootstrap(IApplication::EPlatformType platform,
+                                                   IApplicationCallback& cb,
+                                                   const std::string& uniqueName,
+                                                   const std::string& friendlyName,
+                                                   const std::string& pname,
+                                                   const std::vector<std::string>& args,
+                                                   bool singleInstance)
 {
     if (!APP)
     {
@@ -63,9 +64,9 @@ IApplication* IApplicationBootstrap(IApplication::EPlatformType platform,
                  platform == IApplication::PLAT_AUTO)
             APP = new ApplicationXCB(cb, uniqueName, friendlyName, pname, args, singleInstance);
         else
-            return NULL;
+            return std::shared_ptr<IApplication>();
     }
-    return APP;
+    return std::shared_ptr<IApplication>(APP);
 }
     
 }

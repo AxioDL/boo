@@ -1,5 +1,5 @@
-#include "inputdev/DeviceSignature.hpp"
-#include "inputdev/DolphinSmashAdapter.hpp"
+#include "boo/inputdev/DeviceSignature.hpp"
+#include "boo/inputdev/DolphinSmashAdapter.hpp"
 
 namespace boo
 {

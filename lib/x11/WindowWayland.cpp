@@ -1,5 +1,5 @@
-#include "IWindow.hpp"
-#include "IGraphicsContext.hpp"
+#include "boo/IWindow.hpp"
+#include "boo/IGraphicsContext.hpp"
 
 namespace boo
 {

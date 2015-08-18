@@ -1,5 +1,5 @@
-#include "IGraphicsContext.hpp"
-#include "IWindow.hpp"
+#include "boo/IGraphicsContext.hpp"
+#include "boo/IWindow.hpp"
 
 #include <xcb/xcb.h>
 #include <xcb/glx.h>

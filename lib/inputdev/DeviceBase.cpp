@@ -1,5 +1,5 @@
-#include "inputdev/DeviceBase.hpp"
-#include "inputdev/DeviceToken.hpp"
+#include "boo/inputdev/DeviceBase.hpp"
+#include "boo/inputdev/DeviceToken.hpp"
 #include "IHIDDevice.hpp"
 
 namespace boo

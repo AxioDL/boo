@@ -2,7 +2,7 @@
 #error This file may only be included from CApplicationUnix.cpp
 #endif
 
-#include "IApplication.hpp"
+#include "boo/IApplication.hpp"
 
 #define explicit explicit_c
 #include <xcb/xcb.h>

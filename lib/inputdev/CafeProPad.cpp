@@ -1,1 +1,1 @@
-#include "inputdev/CafeProPad.hpp"
+#include "boo/inputdev/CafeProPad.hpp"

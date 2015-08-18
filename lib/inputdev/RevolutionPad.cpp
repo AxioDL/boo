@@ -1,1 +1,1 @@
-#include "inputdev/RevolutionPad.hpp"
+#include "boo/inputdev/RevolutionPad.hpp"

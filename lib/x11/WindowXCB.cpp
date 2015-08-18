@@ -1,6 +1,6 @@
-#include "IWindow.hpp"
-#include "IGraphicsContext.hpp"
-#include "IApplication.hpp"
+#include "boo/IWindow.hpp"
+#include "boo/IGraphicsContext.hpp"
+#include "boo/IApplication.hpp"
 
 #include <xcb/xcb.h>
 #include <xcb/xcb_event.h>

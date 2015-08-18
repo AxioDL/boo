@@ -1,5 +1,5 @@
-#include "inputdev/IHIDListener.hpp"
-#include "inputdev/DeviceFinder.hpp"
+#include "boo/inputdev/IHIDListener.hpp"
+#include "boo/inputdev/DeviceFinder.hpp"
 #include <libudev.h>
 #include <string.h>
 #include <stdio.h>

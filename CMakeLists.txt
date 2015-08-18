@@ -73,22 +73,25 @@ else()
 
 endif()
 
+set(BOO_SYS_LIBS ${BOO_SYS_LIBS} CACHE PATH "Boo System Libraries" FORCE)
+
 include_directories(include)
 
 add_library(Boo
-            lib/inputdev/CafeProPad.cpp include/inputdev/CafeProPad.hpp
-            lib/inputdev/RevolutionPad.cpp include/inputdev/RevolutionPad.hpp
-            lib/inputdev/DolphinSmashAdapter.cpp include/inputdev/DolphinSmashAdapter.hpp
-            lib/inputdev/DualshockPad.cpp include/inputdev/DualshockPad.hpp
-            lib/inputdev/GenericPad.cpp include/inputdev/GenericPad.hpp
-            lib/inputdev/DeviceBase.cpp include/inputdev/DeviceBase.hpp
-            lib/inputdev/DeviceSignature.cpp include/inputdev/DeviceSignature.hpp
-            include/inputdev/IHIDListener.hpp
+            lib/inputdev/CafeProPad.cpp include/boo/inputdev/CafeProPad.hpp
+            lib/inputdev/RevolutionPad.cpp include/boo/inputdev/RevolutionPad.hpp
+            lib/inputdev/DolphinSmashAdapter.cpp include/boo/inputdev/DolphinSmashAdapter.hpp
+            lib/inputdev/DualshockPad.cpp include/boo/inputdev/DualshockPad.hpp
+            lib/inputdev/GenericPad.cpp include/boo/inputdev/GenericPad.hpp
+            lib/inputdev/DeviceBase.cpp include/boo/inputdev/DeviceBase.hpp
+            lib/inputdev/DeviceSignature.cpp include/boo/inputdev/DeviceSignature.hpp
+            include/boo/inputdev/IHIDListener.hpp
             lib/inputdev/IHIDDevice.hpp
-            include/IGraphicsContext.hpp
-            include/IWindow.hpp
-            include/IApplication.hpp
-            include/boo.hpp
+            include/boo/IGraphicsContext.hpp
+            include/boo/IWindow.hpp
+            include/boo/IApplication.hpp
+            include/boo/boo.hpp
+            InputDeviceClasses.cpp
             ${PLAT_SRCS})
 
 add_subdirectory(test)

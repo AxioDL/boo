@@ -1,4 +1,4 @@
-#include "inputdev/DolphinSmashAdapter.hpp"
+#include "boo/inputdev/DolphinSmashAdapter.hpp"
 #include <stdio.h>
 #include <string.h>
 

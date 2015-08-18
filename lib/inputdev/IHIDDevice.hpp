@@ -1,7 +1,7 @@
 #ifndef IHIDDEVICE_HPP
 #define IHIDDEVICE_HPP
 
-#include "inputdev/DeviceToken.hpp"
+#include "boo/inputdev/DeviceToken.hpp"
 
 namespace boo
 {

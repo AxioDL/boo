@@ -1,6 +1,7 @@
 #ifndef IRUNLOOP_HPP
 #define IRUNLOOP_HPP
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -55,28 +56,30 @@ public:
     
 };
 
-IApplication* IApplicationBootstrap(IApplication::EPlatformType platform,
-                                    IApplicationCallback& cb,
-                                    const std::string& uniqueName,
-                                    const std::string& friendlyName,
-                                    const std::string& pname,
-                                    const std::vector<std::string>& args,
-                                    bool singleInstance=true);
+std::shared_ptr<IApplication>
+ApplicationBootstrap(IApplication::EPlatformType platform,
+                     IApplicationCallback& cb,
+                     const std::string& uniqueName,
+                     const std::string& friendlyName,
+                     const std::string& pname,
+                     const std::vector<std::string>& args,
+                     bool singleInstance=true);
 extern IApplication* APP;
     
-static inline IApplication* IApplicationBootstrap(IApplication::EPlatformType platform,
-                                                  IApplicationCallback& cb,
-                                                  const std::string& uniqueName,
-                                                  const std::string& friendlyName,
-                                                  int argc, char** argv,
-                                                  bool singleInstance=true)
+static inline std::shared_ptr<IApplication>
+ApplicationBootstrap(IApplication::EPlatformType platform,
+                     IApplicationCallback& cb,
+                     const std::string& uniqueName,
+                     const std::string& friendlyName,
+                     int argc, const char** argv,
+                     bool singleInstance=true)
 {
     if (APP)
-        return APP;
+        return std::shared_ptr<IApplication>(APP);
     std::vector<std::string> args;
     for (int i=1 ; i<argc ; ++i)
         args.push_back(argv[i]);
-    return IApplicationBootstrap(platform, cb, uniqueName, friendlyName, argv[0], args, singleInstance);
+    return ApplicationBootstrap(platform, cb, uniqueName, friendlyName, argv[0], args, singleInstance);
 }
     
 }

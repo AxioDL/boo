@@ -1,6 +1,6 @@
 #include "IHIDDevice.hpp"
-#include "inputdev/DeviceToken.hpp"
-#include "inputdev/DeviceBase.hpp"
+#include "boo/inputdev/DeviceToken.hpp"
+#include "boo/inputdev/DeviceBase.hpp"
 #include <thread>
 #include <mutex>
 #include <condition_variable>
