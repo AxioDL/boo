@@ -4,7 +4,7 @@
 namespace boo
 {
 
-class IGFXContext
+class IGraphicsContext
 {
     friend class CWindowCocoa;
     friend class CWindowXCB;
@@ -34,7 +34,7 @@ public:
         PF_RGBAF32_Z24 = 4
     };
     
-    virtual ~IGFXContext() {}
+    virtual ~IGraphicsContext() {}
     
     virtual EGraphicsAPI getAPI() const=0;
     virtual EPixelFormat getPixelFormat() const=0;

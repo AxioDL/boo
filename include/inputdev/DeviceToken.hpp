@@ -8,7 +8,7 @@
 namespace boo
 {
 
-class CDeviceToken
+class DeviceToken
 {
 public:
     enum TDeviceType
@@ -27,10 +27,10 @@ private:
     std::string m_productName;
     std::string m_devPath;
     
-    friend class CDeviceBase;
-    CDeviceBase* m_connectedDev;
+    friend class DeviceBase;
+    DeviceBase* m_connectedDev;
     
-    friend class CDeviceFinder;
+    friend class DeviceFinder;
     inline void _deviceClose()
     {
         if (m_connectedDev)
@@ -40,8 +40,8 @@ private:
 
 public:
 
-    CDeviceToken(const CDeviceToken&) = delete;
-    CDeviceToken(const CDeviceToken&& other)
+    DeviceToken(const DeviceToken&) = delete;
+    DeviceToken(const DeviceToken&& other)
     : m_devType(other.m_devType),
       m_vendorId(other.m_vendorId),
       m_productId(other.m_productId),
@@ -50,7 +50,7 @@ public:
       m_devPath(other.m_devPath),
       m_connectedDev(other.m_connectedDev)
     {}
-    inline CDeviceToken(enum TDeviceType devType, unsigned vid, unsigned pid, const char* vname, const char* pname, const char* path)
+    inline DeviceToken(enum TDeviceType devType, unsigned vid, unsigned pid, const char* vname, const char* pname, const char* path)
     : m_devType(devType),
       m_vendorId(vid),
       m_productId(pid),
@@ -70,16 +70,16 @@ public:
     inline const std::string& getProductName() const {return m_productName;}
     inline const std::string& getDevicePath() const {return m_devPath;}
     inline bool isDeviceOpen() const {return (m_connectedDev != NULL);}
-    inline CDeviceBase* openAndGetDevice()
+    inline DeviceBase* openAndGetDevice()
     {
         if (!m_connectedDev)
-            m_connectedDev = SDeviceSignature::DeviceNew(*this);
+            m_connectedDev = DeviceSignature::DeviceNew(*this);
         return m_connectedDev;
     }
     
-    inline bool operator ==(const CDeviceToken& rhs) const
+    inline bool operator ==(const DeviceToken& rhs) const
     {return m_devPath == rhs.m_devPath;}
-    inline bool operator <(const CDeviceToken& rhs) const
+    inline bool operator <(const DeviceToken& rhs) const
     {return m_devPath < rhs.m_devPath;}
 };
 

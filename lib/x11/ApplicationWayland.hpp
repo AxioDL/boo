@@ -1,4 +1,4 @@
-#ifndef CAPPLICATION_UNIX_CPP
+#ifndef APPLICATION_UNIX_CPP
 #error This file may only be included from CApplicationUnix.cpp
 #endif
 
@@ -12,7 +12,7 @@ namespace boo
     
 IWindow* _CWindowWaylandNew(const std::string& title);
     
-class CApplicationWayland final : public IApplication
+class ApplicationWayland final : public IApplication
 {
     IApplicationCallback& m_callback;
     const std::string m_uniqueName;
@@ -27,7 +27,7 @@ class CApplicationWayland final : public IApplication
     }
     
 public:
-    CApplicationWayland(IApplicationCallback& callback,
+    ApplicationWayland(IApplicationCallback& callback,
                         const std::string& uniqueName,
                         const std::string& friendlyName,
                         const std::string& pname,

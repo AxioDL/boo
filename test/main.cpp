@@ -4,7 +4,7 @@
 namespace boo
 {
 
-class CDolphinSmashAdapterCallback : public IDolphinSmashAdapterCallback
+class DolphinSmashAdapterCallback : public IDolphinSmashAdapterCallback
 {
     void controllerConnected(unsigned idx, EDolphinControllerType)
     {
@@ -15,27 +15,27 @@ class CDolphinSmashAdapterCallback : public IDolphinSmashAdapterCallback
         printf("CONTROLLER %u DISCONNECTED\n", idx);
     }
     void controllerUpdate(unsigned idx, EDolphinControllerType,
-                          const SDolphinControllerState& state)
+                          const DolphinControllerState& state)
     {
         printf("CONTROLLER %u UPDATE %d %d\n", idx, state.m_leftStick[0], state.m_leftStick[1]);
     }
 };
 
-class CTestDeviceFinder : public CDeviceFinder
+class TestDeviceFinder : public DeviceFinder
 {
-    CDolphinSmashAdapter* smashAdapter = NULL;
-    CDolphinSmashAdapterCallback m_cb;
+    DolphinSmashAdapter* smashAdapter = NULL;
+    DolphinSmashAdapterCallback m_cb;
 public:
-    CTestDeviceFinder()
-        : CDeviceFinder({typeid(CDolphinSmashAdapter)})
+    TestDeviceFinder()
+    : DeviceFinder({typeid(DolphinSmashAdapter)})
     {}
-    void deviceConnected(CDeviceToken& tok)
+    void deviceConnected(DeviceToken& tok)
     {
-        smashAdapter = dynamic_cast<CDolphinSmashAdapter*>(tok.openAndGetDevice());
+        smashAdapter = dynamic_cast<DolphinSmashAdapter*>(tok.openAndGetDevice());
         smashAdapter->setCallback(&m_cb);
         smashAdapter->startRumble(0);
     }
-    void deviceDisconnected(CDeviceToken&, CDeviceBase* device)
+    void deviceDisconnected(DeviceToken&, DeviceBase* device)
     {
         if (smashAdapter == device)
         {
@@ -46,7 +46,7 @@ public:
 };
 
 
-struct CTestWindowCallback : public IWindowCallback
+struct CTestWindowCallback : IWindowCallback
 {
 
     void mouseDown(const SWindowCoord& coord, EMouseButton button, EModifierKey mods)
@@ -107,10 +107,10 @@ struct CTestWindowCallback : public IWindowCallback
 };
 
     
-struct CTestApplicationCallback : public IApplicationCallback
+struct TestApplicationCallback : IApplicationCallback
 {
     IWindow* mainWindow = NULL;
-    boo::CTestDeviceFinder devFinder;
+    boo::TestDeviceFinder devFinder;
     CTestWindowCallback windowCallback;
     void appLaunched(IApplication* app)
     {
@@ -123,7 +123,7 @@ struct CTestApplicationCallback : public IApplicationCallback
     {
         delete mainWindow;
     }
-    void appFilesOpen(IApplication*, const std::vector<const std::string>& paths)
+    void appFilesOpen(IApplication*, const std::vector<std::string>& paths)
     {
         fprintf(stderr, "OPENING: ");
         for (const std::string& path : paths)
@@ -136,7 +136,7 @@ struct CTestApplicationCallback : public IApplicationCallback
 
 int main(int argc, char** argv)
 {
-    boo::CTestApplicationCallback appCb;
+    boo::TestApplicationCallback appCb;
     boo::IApplication* app = IApplicationBootstrap(boo::IApplication::PLAT_AUTO,
                                                    appCb, "rwk", "RWK", argc, argv);
     app->run();

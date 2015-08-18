@@ -4,8 +4,8 @@
 #include <string>
 #include <vector>
 
-#include "windowsys/IWindow.hpp"
-#include "inputdev/CDeviceFinder.hpp"
+#include "IWindow.hpp"
+#include "inputdev/DeviceFinder.hpp"
 
 namespace boo
 {
@@ -15,15 +15,15 @@ struct IApplicationCallback
 {
     virtual void appLaunched(IApplication* app) {(void)app;}
     virtual void appQuitting(IApplication* app) {(void)app;}
-    virtual void appFilesOpen(IApplication* app, const std::vector<const std::string>& paths) {(void)app;(void)paths;}
+    virtual void appFilesOpen(IApplication* app, const std::vector<std::string>& paths) {(void)app;(void)paths;}
 };
 
 class IApplication
 {
-    friend class CWindowCocoa;
-    friend class CWindowWayland;
-    friend class CWindowXCB;
-    friend class CWindowWin32;
+    friend class WindowCocoa;
+    friend class WindowWayland;
+    friend class WindowXCB;
+    friend class WindowWin32;
     virtual void _deletedWindow(IWindow* window)=0;
 public:
     virtual ~IApplication() {}
@@ -63,7 +63,6 @@ IApplication* IApplicationBootstrap(IApplication::EPlatformType platform,
                                     const std::vector<std::string>& args,
                                     bool singleInstance=true);
 extern IApplication* APP;
-#define IApplicationInstance() APP
     
 static inline IApplication* IApplicationBootstrap(IApplication::EPlatformType platform,
                                                   IApplicationCallback& cb,

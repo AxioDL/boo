@@ -6,11 +6,11 @@
 namespace boo
 {
 
-class CGenericPad final : public CDeviceBase
+class GenericPad final : public DeviceBase
 {
 public:
-    CGenericPad(CDeviceToken* token);
-    ~CGenericPad();
+    GenericPad(DeviceToken* token);
+    ~GenericPad();
 
     void deviceDisconnected();
 };

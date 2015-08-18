@@ -9,8 +9,8 @@ namespace boo
  * Reference: https://github.com/ToadKing/wii-u-gc-adapter/blob/master/wii-u-gc-adapter.c
  */
 
-CDolphinSmashAdapter::CDolphinSmashAdapter(CDeviceToken* token)
-: CDeviceBase(token),
+DolphinSmashAdapter::DolphinSmashAdapter(DeviceToken* token)
+: DeviceBase(token),
   m_callback(NULL),
   m_knownControllers(0),
   m_rumbleRequest(0),
@@ -18,7 +18,7 @@ CDolphinSmashAdapter::CDolphinSmashAdapter(CDeviceToken* token)
 {
 }
 
-CDolphinSmashAdapter::~CDolphinSmashAdapter()
+DolphinSmashAdapter::~DolphinSmashAdapter()
 {
 }
 
@@ -36,9 +36,9 @@ static inline EDolphinControllerType parseType(unsigned char status)
 }
 
 static inline EDolphinControllerType
-parseState(SDolphinControllerState* stateOut, uint8_t* payload, bool& rumble)
+parseState(DolphinControllerState* stateOut, uint8_t* payload, bool& rumble)
 {
-    memset(stateOut, 0, sizeof(SDolphinControllerState));
+    memset(stateOut, 0, sizeof(DolphinControllerState));
     unsigned char status = payload[0];
     EDolphinControllerType type = parseType(status);
     
@@ -56,13 +56,13 @@ parseState(SDolphinControllerState* stateOut, uint8_t* payload, bool& rumble)
     return type;
 }
 
-void CDolphinSmashAdapter::initialCycle()
+void DolphinSmashAdapter::initialCycle()
 {
     uint8_t handshakePayload[] = {0x13};
     sendUSBInterruptTransfer(handshakePayload, sizeof(handshakePayload));
 }
 
-void CDolphinSmashAdapter::transferCycle()
+void DolphinSmashAdapter::transferCycle()
 {
     uint8_t payload[37];
     size_t recvSz = receiveUSBInterruptTransfer(payload, sizeof(payload));
@@ -78,7 +78,7 @@ void CDolphinSmashAdapter::transferCycle()
     uint8_t rumbleMask = 0;
     for (int i=0 ; i<4 ; i++, controller += 9)
     {
-        SDolphinControllerState state;
+        DolphinControllerState state;
         bool rumble = false;
         EDolphinControllerType type = parseState(&state, controller, rumble);
         if (type && !(m_knownControllers & 1<<i))
@@ -113,13 +113,13 @@ void CDolphinSmashAdapter::transferCycle()
     }
 }
 
-void CDolphinSmashAdapter::finalCycle()
+void DolphinSmashAdapter::finalCycle()
 {
     uint8_t rumbleMessage[5] = {0x11, 0, 0, 0, 0};
     sendUSBInterruptTransfer(rumbleMessage, sizeof(rumbleMessage));
 }
 
-void CDolphinSmashAdapter::deviceDisconnected()
+void DolphinSmashAdapter::deviceDisconnected()
 {
     
 }

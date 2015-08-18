@@ -2,9 +2,9 @@
  * platform interface
  */
 
-#define CAPPLICATION_UNIX_CPP
-#include "CApplicationXCB.hpp"
-#include "CApplicationWayland.hpp"
+#define APPLICATION_UNIX_CPP
+#include "ApplicationXCB.hpp"
+#include "ApplicationWayland.hpp"
 
 #include <dbus/dbus.h>
 #include <stdio.h>
@@ -58,10 +58,10 @@ IApplication* IApplicationBootstrap(IApplication::EPlatformType platform,
     if (!APP)
     {
         if (platform == IApplication::PLAT_WAYLAND)
-            APP = new CApplicationWayland(cb, uniqueName, friendlyName, pname, args, singleInstance);
+            APP = new ApplicationWayland(cb, uniqueName, friendlyName, pname, args, singleInstance);
         else if (platform == IApplication::PLAT_XCB ||
                  platform == IApplication::PLAT_AUTO)
-            APP = new CApplicationXCB(cb, uniqueName, friendlyName, pname, args, singleInstance);
+            APP = new ApplicationXCB(cb, uniqueName, friendlyName, pname, args, singleInstance);
         else
             return NULL;
     }

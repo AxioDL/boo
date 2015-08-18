@@ -1,5 +1,5 @@
-#include "graphicsys/IGFXContext.hpp"
-#include "windowsys/IWindow.hpp"
+#include "IGraphicsContext.hpp"
+#include "IWindow.hpp"
 
 #include <xcb/xcb.h>
 #include <xcb/glx.h>
@@ -12,7 +12,7 @@
 namespace boo
 {
 
-class CGraphicsContextXCB final : public IGFXContext
+struct GraphicsContextXCB : IGraphicsContext
 {
     
     EGraphicsAPI m_api;
@@ -31,7 +31,7 @@ class CGraphicsContextXCB final : public IGFXContext
 public:
     IWindowCallback* m_callback;
     
-    CGraphicsContextXCB(EGraphicsAPI api, IWindow* parentWindow, xcb_connection_t* conn, uint32_t& visualIdOut)
+    GraphicsContextXCB(EGraphicsAPI api, IWindow* parentWindow, xcb_connection_t* conn, uint32_t& visualIdOut)
     : m_api(api),
       m_pf(PF_RGBA8),
       m_parentWindow(parentWindow),
@@ -99,14 +99,14 @@ public:
 
         if (!m_fbconfig)
         {
-            throw std::runtime_error("unable to find suitable pixel format");
+            fprintf(stderr, "unable to find suitable pixel format");
             return;
         }
 
         visualIdOut = m_visualid;
     }
     
-    ~CGraphicsContextXCB()
+    ~GraphicsContextXCB()
     {
         
     }
@@ -143,11 +143,11 @@ public:
     
 };
 
-IGFXContext* _CGraphicsContextXCBNew(IGFXContext::EGraphicsAPI api,
-                                     IWindow* parentWindow, xcb_connection_t* conn,
-                                     uint32_t& visualIdOut)
+IGraphicsContext* _GraphicsContextXCBNew(IGraphicsContext::EGraphicsAPI api,
+                                         IWindow* parentWindow, xcb_connection_t* conn,
+                                         uint32_t& visualIdOut)
 {
-    return new CGraphicsContextXCB(api, parentWindow, conn, visualIdOut);
+    return new GraphicsContextXCB(api, parentWindow, conn, visualIdOut);
 }
     
 }

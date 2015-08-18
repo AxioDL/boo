@@ -2,8 +2,8 @@
 #define BOO_HPP
 
 #include "IApplication.hpp"
-#include "windowsys/IWindow.hpp"
-#include "inputdev/CDeviceFinder.hpp"
-#include "inputdev/CDolphinSmashAdapter.hpp"
+#include "IWindow.hpp"
+#include "inputdev/DeviceFinder.hpp"
+#include "inputdev/DolphinSmashAdapter.hpp"
 
 #endif // BOO_HPP

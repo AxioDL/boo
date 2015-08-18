@@ -30,7 +30,7 @@ enum EDolphinControllerButtons
     DOL_UP     = 1<<15
 };
 
-struct SDolphinControllerState
+struct DolphinControllerState
 {
     uint8_t m_leftStick[2];
     uint8_t m_rightStick[2];
@@ -43,10 +43,10 @@ struct IDolphinSmashAdapterCallback
     virtual void controllerConnected(unsigned idx, EDolphinControllerType type) {(void)idx;(void)type;}
     virtual void controllerDisconnected(unsigned idx, EDolphinControllerType type) {(void)idx;(void)type;}
     virtual void controllerUpdate(unsigned idx, EDolphinControllerType type,
-                                  const SDolphinControllerState& state) {(void)idx;(void)type;(void)state;}
+                                  const DolphinControllerState& state) {(void)idx;(void)type;(void)state;}
 };
 
-class CDolphinSmashAdapter final : public CDeviceBase
+class DolphinSmashAdapter final : public DeviceBase
 {
     IDolphinSmashAdapterCallback* m_callback;
     uint8_t m_knownControllers;
@@ -57,8 +57,8 @@ class CDolphinSmashAdapter final : public CDeviceBase
     void transferCycle();
     void finalCycle();
 public:
-    CDolphinSmashAdapter(CDeviceToken* token);
-    ~CDolphinSmashAdapter();
+    DolphinSmashAdapter(DeviceToken* token);
+    ~DolphinSmashAdapter();
     
     inline void setCallback(IDolphinSmashAdapterCallback* cb)
     {m_callback = cb; m_knownControllers = 0;}

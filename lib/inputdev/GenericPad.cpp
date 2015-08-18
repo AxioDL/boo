@@ -4,18 +4,18 @@
 namespace boo
 {
 
-CGenericPad::CGenericPad(CDeviceToken* token)
- : CDeviceBase(token)
+GenericPad::GenericPad(DeviceToken* token)
+ : DeviceBase(token)
 {
 
 }
 
-CGenericPad::~CGenericPad()
+GenericPad::~GenericPad()
 {
 
 }
 
-void CGenericPad::deviceDisconnected()
+void GenericPad::deviceDisconnected()
 {
 
 }

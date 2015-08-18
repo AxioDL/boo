@@ -2,11 +2,8 @@
 #include "inputdev/DeviceFinder.hpp"
 #include <libudev.h>
 #include <string.h>
-<<<<<<< HEAD:lib/inputdev/HIDListenerUdev.cpp
 #include <stdio.h>
-=======
 #include <signal.h>
->>>>>>> 6ce2472b27211a40e1d78f424f09cf26ba5e3281:src/inputdev/CHIDListenerUdev.cpp
 #include <thread>
 
 namespace boo
@@ -20,16 +17,16 @@ udev* GetUdev()
     return UDEV_INST;
 }
 
-class CHIDListenerUdev final : public IHIDListener
+class HIDListenerUdev final : public IHIDListener
 {
-    CDeviceFinder& m_finder;
+    DeviceFinder& m_finder;
     
     udev_monitor* m_udevMon;
     std::thread* m_udevThread;
     bool m_udevRunning;
     bool m_scanningEnabled;
     
-    static void deviceConnected(CHIDListenerUdev* listener,
+    static void deviceConnected(HIDListenerUdev* listener,
                                 udev_device* device)
     {
         if (!listener->m_scanningEnabled)
@@ -37,11 +34,11 @@ class CHIDListenerUdev final : public IHIDListener
 
         /* Filter to USB/BT */
         const char* dt = udev_device_get_devtype(device);
-        CDeviceToken::TDeviceType type;
+        DeviceToken::TDeviceType type;
         if (!strcmp(dt, "usb_device"))
-            type = CDeviceToken::DEVTYPE_USB;
+            type = DeviceToken::DEVTYPE_USB;
         else if (!strcmp(dt, "bluetooth_device"))
-            type = CDeviceToken::DEVTYPE_BLUETOOTH;
+            type = DeviceToken::DEVTYPE_BLUETOOTH;
         else
             return;
 
@@ -81,13 +78,13 @@ class CHIDListenerUdev final : public IHIDListener
         if (producte)
             product = udev_list_entry_get_value(producte);
 
-        if (!listener->m_finder._insertToken(CDeviceToken(type, vid, pid, manuf, product, devPath)))
+        if (!listener->m_finder._insertToken(DeviceToken(type, vid, pid, manuf, product, devPath)))
         {
             /* Matched-insertion failed; see if generic HID interface is available */
             udev_list_entry* devInterfaces = NULL;
-            if (type == CDeviceToken::DEVTYPE_USB)
+            if (type == DeviceToken::DEVTYPE_USB)
                 devInterfaces = udev_list_entry_get_by_name(attrs, "ID_USB_INTERFACES");
-            else if (type == CDeviceToken::DEVTYPE_BLUETOOTH)
+            else if (type == DeviceToken::DEVTYPE_BLUETOOTH)
                 devInterfaces = udev_list_entry_get_by_name(attrs, "ID_BLUETOOTH_INTERFACES");
             if (devInterfaces)
             {
@@ -104,7 +101,7 @@ class CHIDListenerUdev final : public IHIDListener
                     {
                         const char* hidPath = udev_list_entry_get_name(hidEnt);
                         if (!listener->m_finder._hasToken(hidPath))
-                            listener->m_finder._insertToken(CDeviceToken(CDeviceToken::DEVTYPE_GENERICHID,
+                            listener->m_finder._insertToken(DeviceToken(DeviceToken::DEVTYPE_GENERICHID,
                                                                          vid, pid, manuf, product, hidPath));
                     }
                     udev_enumerate_unref(hidEnum);
@@ -113,14 +110,14 @@ class CHIDListenerUdev final : public IHIDListener
         }
     }
     
-    static void deviceDisconnected(CHIDListenerUdev* listener,
+    static void deviceDisconnected(HIDListenerUdev* listener,
                                    udev_device* device)
     {
         const char* devPath = udev_device_get_syspath(device);
         listener->m_finder._removeToken(devPath);
     }
 
-    static void _udevProc(CHIDListenerUdev* listener)
+    static void _udevProc(HIDListenerUdev* listener)
     {
         udev_monitor_enable_receiving(listener->m_udevMon);
         int fd = udev_monitor_get_fd(listener->m_udevMon);
@@ -144,7 +141,7 @@ class CHIDListenerUdev final : public IHIDListener
     }
 
 public:
-    CHIDListenerUdev(CDeviceFinder& finder)
+    HIDListenerUdev(DeviceFinder& finder)
     : m_finder(finder)
     {
         
@@ -170,7 +167,7 @@ public:
         
     }
     
-    ~CHIDListenerUdev()
+    ~HIDListenerUdev()
     {
         m_udevRunning = false;
         pthread_kill(m_udevThread->native_handle(), SIGINT);
@@ -216,9 +213,9 @@ public:
     
 };
 
-IHIDListener* IHIDListenerNew(CDeviceFinder& finder)
+IHIDListener* IHIDListenerNew(DeviceFinder& finder)
 {
-    return new CHIDListenerUdev(finder);
+    return new HIDListenerUdev(finder);
 }
 
 }

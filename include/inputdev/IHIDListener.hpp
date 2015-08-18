@@ -8,9 +8,9 @@
 namespace boo
 {
 
-typedef std::unordered_map<std::string, CDeviceToken> TDeviceTokens;
+typedef std::unordered_map<std::string, DeviceToken> TDeviceTokens;
 typedef std::pair<TDeviceTokens::iterator, bool> TInsertedDeviceToken;
-class CDeviceFinder;
+class DeviceFinder;
 
 class IHIDListener
 {
@@ -33,7 +33,7 @@ public:
 };
 
 /* Platform-specific constructor */
-IHIDListener* IHIDListenerNew(CDeviceFinder& finder);
+IHIDListener* IHIDListenerNew(DeviceFinder& finder);
 
 }
 

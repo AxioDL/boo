@@ -1,5 +1,5 @@
-#include "windowsys/IWindow.hpp"
-#include "windowsys/IGraphicsContext.hpp"
+#include "IWindow.hpp"
+#include "IGraphicsContext.hpp"
 
 namespace boo
 {
@@ -7,18 +7,14 @@ namespace boo
 IGraphicsContext* _CGraphicsContextWaylandNew(IGraphicsContext::EGraphicsAPI api,
                                               IWindow* parentWindow);
     
-class CWindowWayland final : public IWindow
-{
-    
-    
-public:
-    
-    CWindowWayland(const std::string& title)
+struct WindowWayland : IWindow
+{    
+    WindowWayland(const std::string& title)
     {
         
     }
     
-    ~CWindowWayland()
+    ~WindowWayland()
     {
         
     }
@@ -92,7 +88,7 @@ public:
 
 IWindow* _CWindowWaylandNew(const std::string& title)
 {
-    return new CWindowWayland(title);
+    return new WindowWayland(title);
 }
     
 }

@@ -8,20 +8,20 @@
 namespace boo
 {
 
-class CDeviceBase
+class DeviceBase
 {
-    friend class CDeviceToken;
-    friend class CHIDDeviceIOKit;
-    friend class CHIDDeviceUdev;
-    friend class CHIDDeviceWinUSB;
+    friend class DeviceToken;
+    friend class HIDDeviceIOKit;
+    friend class HIDDeviceUdev;
+    friend class HIDDeviceWinUSB;
 
-    class CDeviceToken* m_token;
+    class DeviceToken* m_token;
     class IHIDDevice* m_hidDev;
     void _deviceDisconnected();
     
 public:
-    CDeviceBase(CDeviceToken* token);
-    virtual ~CDeviceBase();
+    DeviceBase(DeviceToken* token);
+    virtual ~DeviceBase();
     void closeDevice();
     virtual void deviceDisconnected()=0;
     virtual void deviceError(const char* error) {fprintf(stderr, "%s\n", error);}

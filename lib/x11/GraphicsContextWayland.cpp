@@ -1,10 +1,10 @@
-#include "graphicsys/IGFXContext.hpp"
-#include "windowsys/IWindow.hpp"
+#include "IGraphicsContext.hpp"
+#include "IWindow.hpp"
 
 namespace boo
 {
 
-class CGraphicsContextWayland final : public IGFXContext
+struct GraphicsContextWayland : IGraphicsContext
 {
     
     EGraphicsAPI m_api;
@@ -14,13 +14,13 @@ class CGraphicsContextWayland final : public IGFXContext
 public:
     IWindowCallback* m_callback;
     
-    CGraphicsContextWayland(EGraphicsAPI api, IWindow* parentWindow)
+    GraphicsContextWayland(EGraphicsAPI api, IWindow* parentWindow)
     : m_api(api),
       m_pf(PF_RGBA8),
       m_parentWindow(parentWindow)
     {}
     
-    ~CGraphicsContextWayland()
+    ~GraphicsContextWayland()
     {
         
     }
@@ -54,10 +54,10 @@ public:
     
 };
 
-IGFXContext* _CGraphicsContextWaylandNew(IGFXContext::EGraphicsAPI api,
-                                         IWindow* parentWindow)
+IGraphicsContext* _GraphicsContextWaylandNew(IGraphicsContext::EGraphicsAPI api,
+                                             IWindow* parentWindow)
 {
-    return new CGraphicsContextWayland(api, parentWindow);
+    return new GraphicsContextWayland(api, parentWindow);
 }
     
 }

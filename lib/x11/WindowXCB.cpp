@@ -1,5 +1,5 @@
-#include "windowsys/IWindow.hpp"
-#include "graphicsys/IGFXContext.hpp"
+#include "IWindow.hpp"
+#include "IGraphicsContext.hpp"
 #include "IApplication.hpp"
 
 #include <xcb/xcb.h>
@@ -8,6 +8,7 @@
 #include <xcb/xcb_keysyms.h>
 #include <xkbcommon/xkbcommon.h>
 #include <xcb/xinput.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -113,7 +114,7 @@ do {\
     free(reply); \
 } while(0)
 
-struct SXCBAtoms
+struct XCBAtoms
 {
     xcb_atom_t m_wmProtocols = 0;
     xcb_atom_t m_wmDeleteWindow = 0;
@@ -122,7 +123,7 @@ struct SXCBAtoms
     xcb_atom_t m_netwmStateAdd = 0;
     xcb_atom_t m_netwmStateRemove = 0;
     xcb_key_symbols_t* m_keySyms = NULL;
-    SXCBAtoms(xcb_connection_t* conn)
+    XCBAtoms(xcb_connection_t* conn)
     {
         INTERN_ATOM(m_wmProtocols, conn, WM_PROTOCOLS, 1);
         INTERN_ATOM(m_wmDeleteWindow, conn, WM_DELETE_WINDOW, 1);
@@ -133,7 +134,7 @@ struct SXCBAtoms
         m_keySyms = xcb_key_symbols_alloc(conn);
     }
 };
-static SXCBAtoms* S_ATOMS = NULL;
+static XCBAtoms* S_ATOMS = NULL;
 
 static void genFrameDefault(xcb_screen_t* screen, int* xOut, int* yOut, int* wOut, int* hOut)
 {
@@ -145,15 +146,15 @@ static void genFrameDefault(xcb_screen_t* screen, int* xOut, int* yOut, int* wOu
     *hOut = height;
 }
     
-IGFXContext* _CGraphicsContextXCBNew(IGFXContext::EGraphicsAPI api,
-                                     IWindow* parentWindow, xcb_connection_t* conn,
-                                     uint32_t& visualIdOut);
+IGraphicsContext* _GraphicsContextXCBNew(IGraphicsContext::EGraphicsAPI api,
+                                         IWindow* parentWindow, xcb_connection_t* conn,
+                                         uint32_t& visualIdOut);
 
-class CWindowXCB final : public IWindow
+struct WindowXCB : IWindow
 {
     xcb_connection_t* m_xcbConn;
     xcb_window_t m_windowId;
-    IGFXContext* m_gfxCtx;
+    IGraphicsContext* m_gfxCtx;
     IWindowCallback* m_callback;
 
     /* Last known input device id (0xffff if not yet set) */
@@ -172,11 +173,11 @@ class CWindowXCB final : public IWindow
     
 public:
     
-    CWindowXCB(const std::string& title, xcb_connection_t* conn)
+    WindowXCB(const std::string& title, xcb_connection_t* conn)
     : m_xcbConn(conn), m_callback(NULL)
     {
         if (!S_ATOMS)
-            S_ATOMS = new SXCBAtoms(conn);
+            S_ATOMS = new XCBAtoms(conn);
 
         /* Default screen */
         xcb_screen_t* screen = xcb_setup_roots_iterator(xcb_get_setup(m_xcbConn)).data;
@@ -184,7 +185,7 @@ public:
 
         /* Construct graphics context */
         uint32_t visualId;
-        m_gfxCtx = _CGraphicsContextXCBNew(IGFXContext::API_OPENGL_3_3, this, m_xcbConn, visualId);
+        m_gfxCtx = _GraphicsContextXCBNew(IGraphicsContext::API_OPENGL_3_3, this, m_xcbConn, visualId);
 
         /* Create colormap */
         xcb_colormap_t colormap = xcb_generate_id(m_xcbConn);
@@ -264,9 +265,9 @@ public:
         m_gfxCtx->initializeContext();
     }
     
-    ~CWindowXCB()
+    ~WindowXCB()
     {
-        IApplicationInstance()->_deletedWindow(this);
+        APP->_deletedWindow(this);
     }
     
     void setCallback(IWindowCallback* cb)
@@ -763,7 +764,7 @@ public:
 
 IWindow* _CWindowXCBNew(const std::string& title, xcb_connection_t* conn)
 {
-    return new CWindowXCB(title, conn);
+    return new WindowXCB(title, conn);
 }
     
 }

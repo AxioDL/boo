@@ -24,10 +24,10 @@ udev* GetUdev();
  * Reference: http://tali.admingilde.org/linux-docbook/usb/ch07s06.html
  */
 
-class CHIDDeviceUdev final : public IHIDDevice
+class HIDDeviceUdev final : public IHIDDevice
 {
-    CDeviceToken& m_token;
-    CDeviceBase& m_devImp;
+    DeviceToken& m_token;
+    DeviceBase& m_devImp;
 
     int m_devFd = 0;
     unsigned m_usbIntfInPipe = 0;
@@ -74,7 +74,7 @@ class CHIDDeviceUdev final : public IHIDDevice
         return 0;
     }
     
-    static void _threadProcUSBLL(CHIDDeviceUdev* device)
+    static void _threadProcUSBLL(HIDDeviceUdev* device)
     {
         unsigned i;
         char errStr[256];
@@ -149,7 +149,7 @@ class CHIDDeviceUdev final : public IHIDDevice
         
     }
 
-    static void _threadProcBTLL(CHIDDeviceUdev* device)
+    static void _threadProcBTLL(HIDDeviceUdev* device)
     {
         std::unique_lock<std::mutex> lk(device->m_initMutex);
         udev_device* udevDev = udev_device_new_from_syspath(GetUdev(), device->m_devPath.c_str());
@@ -168,7 +168,7 @@ class CHIDDeviceUdev final : public IHIDDevice
         udev_device_unref(udevDev);
     }
     
-    static void _threadProcHID(CHIDDeviceUdev* device)
+    static void _threadProcHID(HIDDeviceUdev* device)
     {
         std::unique_lock<std::mutex> lk(device->m_initMutex);
         udev_device* udevDev = udev_device_new_from_syspath(GetUdev(), device->m_devPath.c_str());
@@ -201,19 +201,19 @@ class CHIDDeviceUdev final : public IHIDDevice
     
 public:
     
-    CHIDDeviceUdev(CDeviceToken& token, CDeviceBase& devImp)
+    HIDDeviceUdev(DeviceToken& token, DeviceBase& devImp)
     : m_token(token),
       m_devImp(devImp),
       m_devPath(token.getDevicePath())
     {
         devImp.m_hidDev = this;
         std::unique_lock<std::mutex> lk(m_initMutex);
-        CDeviceToken::TDeviceType dType = token.getDeviceType();
-        if (dType == CDeviceToken::DEVTYPE_USB)
+        DeviceToken::TDeviceType dType = token.getDeviceType();
+        if (dType == DeviceToken::DEVTYPE_USB)
             m_thread = new std::thread(_threadProcUSBLL, this);
-        else if (dType == CDeviceToken::DEVTYPE_BLUETOOTH)
+        else if (dType == DeviceToken::DEVTYPE_BLUETOOTH)
             m_thread = new std::thread(_threadProcBTLL, this);
-        else if (dType == CDeviceToken::DEVTYPE_GENERICHID)
+        else if (dType == DeviceToken::DEVTYPE_GENERICHID)
             m_thread = new std::thread(_threadProcHID, this);
         else
         {
@@ -223,7 +223,7 @@ public:
         m_initCond.wait(lk);
     }
     
-    ~CHIDDeviceUdev()
+    ~HIDDeviceUdev()
     {
         m_runningTransferLoop = false;
         m_thread->join();
@@ -233,9 +233,9 @@ public:
 
 };
 
-IHIDDevice* IHIDDeviceNew(CDeviceToken& token, CDeviceBase& devImp)
+IHIDDevice* IHIDDeviceNew(DeviceToken& token, DeviceBase& devImp)
 {
-    return new CHIDDeviceUdev(token, devImp);
+    return new HIDDeviceUdev(token, devImp);
 }
 
 }

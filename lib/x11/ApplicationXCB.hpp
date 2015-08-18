@@ -1,4 +1,4 @@
-#ifndef CAPPLICATION_UNIX_CPP
+#ifndef APPLICATION_UNIX_CPP
 #error This file may only be included from CApplicationUnix.cpp
 #endif
 
@@ -115,7 +115,7 @@ static xcb_window_t getWindowOfEvent(xcb_generic_event_t* event, bool& windowEve
     
 IWindow* _CWindowXCBNew(const std::string& title, xcb_connection_t* conn);
     
-class CApplicationXCB final : public IApplication
+class ApplicationXCB final : public IApplication
 {
     IApplicationCallback& m_callback;
     const std::string m_uniqueName;
@@ -139,7 +139,7 @@ class CApplicationXCB final : public IApplication
     }
     
 public:
-    CApplicationXCB(IApplicationCallback& callback,
+    ApplicationXCB(IApplicationCallback& callback,
                     const std::string& uniqueName,
                     const std::string& friendlyName,
                     const std::string& pname,
@@ -217,7 +217,7 @@ public:
 
     }
 
-    ~CApplicationXCB()
+    ~ApplicationXCB()
     {
         xcb_disconnect(m_xcbConn);
     }
@@ -278,7 +278,7 @@ public:
                     if (dbus_message_is_signal(msg, "boo.signal.FileHandling", "Open"))
                     {
                         /* read the parameters */
-                        std::vector<const std::string> paths;
+                        std::vector<std::string> paths;
                         DBusMessageIter iter;
                         dbus_message_iter_init(msg, &iter);
                         while (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_INVALID)

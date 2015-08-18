@@ -8,29 +8,29 @@
 namespace boo
 {
 
-class CDeviceToken;
-class CDeviceBase;
+class DeviceToken;
+class DeviceBase;
 
-struct SDeviceSignature
+struct DeviceSignature
 {
-    typedef std::vector<const SDeviceSignature*> TDeviceSignatureSet;
-    typedef std::function<CDeviceBase*(CDeviceToken*)> TFactoryLambda;
+    typedef std::vector<const DeviceSignature*> TDeviceSignatureSet;
+    typedef std::function<DeviceBase*(DeviceToken*)> TFactoryLambda;
     const char* m_name;
     std::type_index m_typeIdx;
     unsigned m_vid, m_pid;
     TFactoryLambda m_factory;
-    SDeviceSignature() : m_name(NULL), m_typeIdx(typeid(SDeviceSignature)) {} /* Sentinel constructor */
-    SDeviceSignature(const char* name, std::type_index&& typeIdx, unsigned vid, unsigned pid, TFactoryLambda&& factory)
+    DeviceSignature() : m_name(NULL), m_typeIdx(typeid(DeviceSignature)) {} /* Sentinel constructor */
+    DeviceSignature(const char* name, std::type_index&& typeIdx, unsigned vid, unsigned pid, TFactoryLambda&& factory)
         : m_name(name), m_typeIdx(typeIdx), m_vid(vid), m_pid(pid), m_factory(factory) {}
-    static bool DeviceMatchToken(const CDeviceToken& token, const TDeviceSignatureSet& sigSet);
-    static CDeviceBase* DeviceNew(CDeviceToken& token);
+    static bool DeviceMatchToken(const DeviceToken& token, const TDeviceSignatureSet& sigSet);
+    static DeviceBase* DeviceNew(DeviceToken& token);
 };
 
 #define DEVICE_SIG(name, vid, pid) \
-    SDeviceSignature(#name, typeid(name), vid, pid, [](CDeviceToken* tok) -> CDeviceBase* {return new name(tok);})
-#define DEVICE_SIG_SENTINEL() SDeviceSignature()
+    DeviceSignature(#name, typeid(name), vid, pid, [](DeviceToken* tok) -> DeviceBase* {return new name(tok);})
+#define DEVICE_SIG_SENTINEL() DeviceSignature()
 
-extern const SDeviceSignature BOO_DEVICE_SIGS[];
+extern const DeviceSignature BOO_DEVICE_SIGS[];
 
 }
 

@@ -19,20 +19,20 @@
 namespace boo
 {
 
-static class CDeviceFinder* skDevFinder = NULL;
+static class DeviceFinder* skDevFinder = NULL;
 
-class CDeviceFinder
+class DeviceFinder
 {
 public:
-    friend class CHIDListenerIOKit;
-    friend class CHIDListenerUdev;
-    friend class CHIDListenerWinUSB;
-    static inline CDeviceFinder* instance() {return skDevFinder;}
+    friend class HIDListenerIOKit;
+    friend class HIDListenerUdev;
+    friend class HIDListenerWinUSB;
+    static inline DeviceFinder* instance() {return skDevFinder;}
     
 private:
     
     /* Types this finder is interested in (immutable) */
-    SDeviceSignature::TDeviceSignatureSet m_types;
+    DeviceSignature::TDeviceSignatureSet m_types;
     
     /* Platform-specific USB event registration
      * (for auto-scanning, NULL if not registered) */
@@ -51,9 +51,9 @@ private:
             return true;
         return false;
     }
-    inline bool _insertToken(CDeviceToken&& token)
+    inline bool _insertToken(DeviceToken&& token)
     {
-        if (SDeviceSignature::DeviceMatchToken(token, m_types)) {
+        if (DeviceSignature::DeviceMatchToken(token, m_types)) {
             m_tokensLock.lock();
             TInsertedDeviceToken inseredTok =
             m_tokens.insert(std::make_pair(token.getDevicePath(), std::move(token)));
@@ -68,8 +68,8 @@ private:
         auto preCheck = m_tokens.find(path);
         if (preCheck != m_tokens.end())
         {
-            CDeviceToken& tok = preCheck->second;
-            CDeviceBase* dev = tok.m_connectedDev;
+            DeviceToken& tok = preCheck->second;
+            DeviceBase* dev = tok.m_connectedDev;
             tok._deviceClose();
             deviceDisconnected(tok, dev);
             m_tokensLock.lock();
@@ -82,9 +82,9 @@ public:
     
     class CDeviceTokensHandle
     {
-        CDeviceFinder& m_finder;
+        DeviceFinder& m_finder;
     public:
-        inline CDeviceTokensHandle(CDeviceFinder& finder) : m_finder(finder)
+        inline CDeviceTokensHandle(DeviceFinder& finder) : m_finder(finder)
         {m_finder.m_tokensLock.lock();}
         inline ~CDeviceTokensHandle() {m_finder.m_tokensLock.unlock();}
         inline TDeviceTokens::iterator begin() {return m_finder.m_tokens.begin();}
@@ -92,7 +92,7 @@ public:
     };
     
     /* Application must specify its interested device-types */
-    CDeviceFinder(std::unordered_set<std::type_index> types)
+    DeviceFinder(std::unordered_set<std::type_index> types)
     : m_listener(NULL)
     {
         if (skDevFinder)
@@ -103,7 +103,7 @@ public:
         skDevFinder = this;
         for (const std::type_index& typeIdx : types)
         {
-            const SDeviceSignature* sigIter = BOO_DEVICE_SIGS;
+            const DeviceSignature* sigIter = BOO_DEVICE_SIGS;
             while (sigIter->m_name)
             {
                 if (sigIter->m_typeIdx == typeIdx)
@@ -112,7 +112,7 @@ public:
             }
         }
     }
-    ~CDeviceFinder()
+    ~DeviceFinder()
     {
         if (m_listener)
             m_listener->stopScanning();
@@ -121,7 +121,7 @@ public:
     }
     
     /* Get interested device-type mask */
-    inline const SDeviceSignature::TDeviceSignatureSet& getTypes() const {return m_types;}
+    inline const DeviceSignature::TDeviceSignatureSet& getTypes() const {return m_types;}
     
     /* Iterable set of tokens */
     inline CDeviceTokensHandle getTokens() {return CDeviceTokensHandle(*this);}
@@ -154,8 +154,8 @@ public:
         return false;
     }
     
-    virtual void deviceConnected(CDeviceToken&) {}
-    virtual void deviceDisconnected(CDeviceToken&, CDeviceBase*) {}
+    virtual void deviceConnected(DeviceToken&) {}
+    virtual void deviceDisconnected(DeviceToken&, DeviceBase*) {}
 
 #if _WIN32
     /* Windows-specific WM_DEVICECHANGED handler */

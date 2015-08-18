@@ -5,17 +5,17 @@
 namespace boo
 {
 
-CDeviceBase::CDeviceBase(CDeviceToken* token)
+DeviceBase::DeviceBase(DeviceToken* token)
 : m_token(token), m_hidDev(NULL)
 {
 }
 
-CDeviceBase::~CDeviceBase()
+DeviceBase::~DeviceBase()
 {
     delete m_hidDev;
 }
 
-void CDeviceBase::_deviceDisconnected()
+void DeviceBase::_deviceDisconnected()
 {
     deviceDisconnected();
     m_token = NULL;
@@ -27,27 +27,27 @@ void CDeviceBase::_deviceDisconnected()
     }
 }
 
-void CDeviceBase::closeDevice()
+void DeviceBase::closeDevice()
 {
     if (m_token)
         m_token->_deviceClose();
 }
 
-bool CDeviceBase::sendUSBInterruptTransfer(const uint8_t* data, size_t length)
+bool DeviceBase::sendUSBInterruptTransfer(const uint8_t* data, size_t length)
 {
     if (m_hidDev)
         return m_hidDev->_sendUSBInterruptTransfer(data, length);
     return false;
 }
 
-size_t CDeviceBase::receiveUSBInterruptTransfer(uint8_t* data, size_t length)
+size_t DeviceBase::receiveUSBInterruptTransfer(uint8_t* data, size_t length)
 {
     if (m_hidDev)
         return m_hidDev->_receiveUSBInterruptTransfer(data, length);
     return false;
 }
 
-bool CDeviceBase::sendHIDReport(const uint8_t* data, size_t length)
+bool DeviceBase::sendHIDReport(const uint8_t* data, size_t length)
 {
     if (m_hidDev)
         return m_hidDev->_sendHIDReport(data, length);
