@@ -1,49 +1,34 @@
-#define _CRT_SECURE_NO_WARNINGS 1
-
-#if __APPLE__
-#include <CoreFoundation/CoreFoundation.h>
-#else
-#endif
 #include <stdio.h>
-#include <iostream>
-#include <boo.hpp>
-#if _WIN32
-#define _WIN32_LEAN_AND_MEAN 1
-#include <windows.h>
-#include <initguid.h>
-#include <Usbiodef.h>
-#else
-#include <unistd.h>
-#endif
+#include <boo/boo.hpp>
 
 namespace boo
 {
 
-class CDolphinSmashAdapterCallback : public IDolphinSmashAdapterCallback
+class DolphinSmashAdapterCallback : public IDolphinSmashAdapterCallback
 {
-    void controllerConnected(unsigned idx, EDolphinControllerType type)
+    void controllerConnected(unsigned idx, EDolphinControllerType)
     {
         printf("CONTROLLER %u CONNECTED\n", idx);
     }
-    void controllerDisconnected(unsigned idx, EDolphinControllerType type)
+    void controllerDisconnected(unsigned idx, EDolphinControllerType)
     {
         printf("CONTROLLER %u DISCONNECTED\n", idx);
     }
-    void controllerUpdate(unsigned idx, EDolphinControllerType type,
-                          const SDolphinControllerState& state)
+    void controllerUpdate(unsigned idx, EDolphinControllerType,
+                          const DolphinControllerState& state)
     {
         printf("CONTROLLER %u UPDATE %d %d\n", idx, state.m_leftStick[0], state.m_leftStick[1]);
         printf("                     %d %d\n", state.m_rightStick[0], state.m_rightStick[1]);
     }
 };
 
-class CDualshockControllerCallback : public IDualshockControllerCallback
+class DualshockPadCallback : public IDualshockControllerCallback
 {
     void controllerDisconnected()
     {
         printf("CONTROLLER DISCONNECTED\n");
     }
-    void controllerUpdate(const SDualshockControllerState& state)
+    void controllerUpdate(const DualshockControllerState& state)
     {
         static time_t timeTotal;
         static time_t lastTime = 0;
@@ -64,7 +49,6 @@ class CDualshockControllerCallback : public IDualshockControllerCallback
         {
             if (timeDif >= 1) // wait 30 seconds before issuing another rumble event
             {
-                std::cout << "RUMBLE" << std::endl;
                 ctrl->startRumble(DS3_MOTOR_LEFT);
                 ctrl->startRumble(DS3_MOTOR_RIGHT, 100);
                 lastTime = timeTotal;
@@ -80,34 +64,34 @@ class CDualshockControllerCallback : public IDualshockControllerCallback
     }
 };
 
-class CTestDeviceFinder : public CDeviceFinder
+class TestDeviceFinder : public DeviceFinder
 {
-    CDolphinSmashAdapter* smashAdapter = NULL;
-    CDualshockController* ds3 = nullptr;
-    CDolphinSmashAdapterCallback m_cb;
-    CDualshockControllerCallback m_ds3CB;
+
+    DolphinSmashAdapter* smashAdapter = NULL;
+    DualshockPad* ds3 = nullptr;
+    DolphinSmashAdapterCallback m_cb;
+    DualshockPadCallback m_ds3CB;
 public:
-    CTestDeviceFinder()
-        : CDeviceFinder({"CDolphinSmashAdapter",
-                        "CDualshockController"})
+    TestDeviceFinder()
+    : DeviceFinder({typeid(DolphinSmashAdapter)})
     {}
-    void deviceConnected(CDeviceToken& tok)
+    void deviceConnected(DeviceToken& tok)
     {
-        smashAdapter = dynamic_cast<CDolphinSmashAdapter*>(tok.openAndGetDevice());
+        smashAdapter = dynamic_cast<DolphinSmashAdapter*>(tok.openAndGetDevice());
         if (smashAdapter)
         {
             smashAdapter->setCallback(&m_cb);
             smashAdapter->startRumble(0);
             return;
         }
-        ds3 = dynamic_cast<CDualshockController*>(tok.openAndGetDevice());
+        ds3 = dynamic_cast<DualshockPad*>(tok.openAndGetDevice());
         if (ds3)
         {
             ds3->setCallback(&m_ds3CB);
             ds3->setLED(DS3_LED_1);
         }
     }
-    void deviceDisconnected(CDeviceToken&, CDeviceBase* device)
+    void deviceDisconnected(DeviceToken&, DeviceBase* device)
     {
         if (smashAdapter == device)
         {
@@ -122,111 +106,102 @@ public:
     }
 };
 
-}
 
-#if _WIN32
-
-/* This simple 'test' console app needs a full windows
- * message loop for receiving device connection events
- */
-static const DEV_BROADCAST_DEVICEINTERFACE_A HOTPLUG_CONF =
+struct CTestWindowCallback : IWindowCallback
 {
-    sizeof(DEV_BROADCAST_DEVICEINTERFACE_A),
-    DBT_DEVTYP_DEVICEINTERFACE,
-    0,
-    GUID_DEVINTERFACE_USB_DEVICE
+    void mouseDown(const SWindowCoord& coord, EMouseButton button, EModifierKey mods)
+    {
+        fprintf(stderr, "Mouse Down %d (%f,%f)\n", button, coord.norm[0], coord.norm[1]);
+    }
+    void mouseUp(const SWindowCoord& coord, EMouseButton button, EModifierKey mods)
+    {
+        fprintf(stderr, "Mouse Up %d (%f,%f)\n", button, coord.norm[0], coord.norm[1]);
+    }
+    void mouseMove(const SWindowCoord& coord)
+    {
+        //fprintf(stderr, "Mouse Move (%f,%f)\n", coord.norm[0], coord.norm[1]);
+    }
+    void scroll(const SWindowCoord& coord, const SScrollDelta& scroll)
+    {
+        fprintf(stderr, "Mouse Scroll (%f,%f) (%f,%f)\n", coord.norm[0], coord.norm[1], scroll.delta[0], scroll.delta[1]);
+    }
+
+    void touchDown(const STouchCoord& coord, uintptr_t tid)
+    {
+        //fprintf(stderr, "Touch Down %16lX (%f,%f)\n", tid, coord.coord[0], coord.coord[1]);
+    }
+    void touchUp(const STouchCoord& coord, uintptr_t tid)
+    {
+        //fprintf(stderr, "Touch Up %16lX (%f,%f)\n", tid, coord.coord[0], coord.coord[1]);
+    }
+    void touchMove(const STouchCoord& coord, uintptr_t tid)
+    {
+        //fprintf(stderr, "Touch Move %16lX (%f,%f)\n", tid, coord.coord[0], coord.coord[1]);
+    }
+
+    void charKeyDown(unsigned long charCode, EModifierKey mods, bool isRepeat)
+    {
+
+    }
+    void charKeyUp(unsigned long charCode, EModifierKey mods)
+    {
+
+    }
+    void specialKeyDown(ESpecialKey key, EModifierKey mods, bool isRepeat)
+    {
+
+    }
+    void specialKeyUp(ESpecialKey key, EModifierKey mods)
+    {
+
+    }
+    void modKeyDown(EModifierKey mod, bool isRepeat)
+    {
+
+    }
+    void modKeyUp(EModifierKey mod)
+    {
+
+    }
+
 };
 
-LRESULT CALLBACK WindowProc(
-        _In_ HWND   hwnd,
-        _In_ UINT   uMsg,
-        _In_ WPARAM wParam,
-        _In_ LPARAM lParam
-        )
+    
+struct TestApplicationCallback : IApplicationCallback
 {
-    switch (uMsg)
+    IWindow* mainWindow = NULL;
+    boo::TestDeviceFinder devFinder;
+    CTestWindowCallback windowCallback;
+    void appLaunched(IApplication* app)
     {
-        case WM_CREATE:
-            /* Register hotplug notification with windows */
-            RegisterDeviceNotificationA(hwnd, (LPVOID)&HOTPLUG_CONF, DEVICE_NOTIFY_WINDOW_HANDLE);
-            return 0;
-
-        case WM_DEVICECHANGE:
-            return boo::CDeviceFinder::winDevChangedHandler(wParam, lParam);
-
-        default:
-            return DefWindowProc(hwnd, uMsg, wParam, lParam);
+        mainWindow = app->newWindow("YAY!");
+        mainWindow->setCallback(&windowCallback);
+        mainWindow->showWindow();
+        devFinder.startScanning();
     }
-}
-
-int APIENTRY wWinMain(
-        _In_ HINSTANCE hInstance,
-        _In_ HINSTANCE,
-        _In_ LPTSTR,
-        _In_ int
-        )
-{
-    AllocConsole();
-    freopen("CONOUT$", "w", stdout);
-
-    WNDCLASS wndClass =
+    void appQuitting(IApplication*)
     {
-        0,
-        WindowProc,
-        0,
-        0,
-        hInstance,
-        0,
-        0,
-        0,
-        0,
-        L"BooTestWindow"
-    };
-
-    RegisterClassW(&wndClass);
-
-    boo::CTestDeviceFinder finder;
-    finder.startScanning();
-
-    HWND hwnd = CreateWindowW(L"BooTestWindow", L"BooTest", WS_OVERLAPPEDWINDOW,
-                              CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-                              NULL, NULL, hInstance, NULL);
-
-    /* Pump messages */
-    MSG msg = {0};
-    while (GetMessage(&msg, hwnd, 0, 0))
-    {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
+        delete mainWindow;
     }
+    void appFilesOpen(IApplication*, const std::vector<std::string>& paths)
+    {
+        fprintf(stderr, "OPENING: ");
+        for (const std::string& path : paths)
+            fprintf(stderr, "%s ", path.c_str());
+        fprintf(stderr, "\n");
+    }
+};
 
 }
 
-#else
-
-int main(int argc, char** argv)
+int main(int argc, const char** argv)
 {
-
-    boo::CTestDeviceFinder finder;
-    finder.startScanning();
-    
-#if 0
-    boo::IGraphicsContext* ctx = new boo::CGraphicsContext;
-
-    if (ctx->create())
-    {
-    }
-#endif
-    
-#if __APPLE__
-    CFRunLoopRun();
-#endif
-
-    while(1)
-    {
-    }
-    //delete ctx;
+    boo::TestApplicationCallback appCb;
+    std::unique_ptr<boo::IApplication> app =
+            ApplicationBootstrap(boo::IApplication::PLAT_AUTO,
+                                 appCb, "rwk", "RWK", argc, argv);
+    app->run();
+    printf("IM DYING!!\n");
     return 0;
 }
 
-#endif
