@@ -56,7 +56,7 @@ public:
     
 };
 
-std::shared_ptr<IApplication>
+std::unique_ptr<IApplication>
 ApplicationBootstrap(IApplication::EPlatformType platform,
                      IApplicationCallback& cb,
                      const std::string& uniqueName,
@@ -66,7 +66,7 @@ ApplicationBootstrap(IApplication::EPlatformType platform,
                      bool singleInstance=true);
 extern IApplication* APP;
     
-static inline std::shared_ptr<IApplication>
+static inline std::unique_ptr<IApplication>
 ApplicationBootstrap(IApplication::EPlatformType platform,
                      IApplicationCallback& cb,
                      const std::string& uniqueName,
@@ -75,7 +75,7 @@ ApplicationBootstrap(IApplication::EPlatformType platform,
                      bool singleInstance=true)
 {
     if (APP)
-        return std::shared_ptr<IApplication>(APP);
+        return std::unique_ptr<IApplication>();
     std::vector<std::string> args;
     for (int i=1 ; i<argc ; ++i)
         args.push_back(argv[i]);

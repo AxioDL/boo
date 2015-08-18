@@ -137,7 +137,7 @@ struct TestApplicationCallback : IApplicationCallback
 int main(int argc, const char** argv)
 {
     boo::TestApplicationCallback appCb;
-    std::shared_ptr<boo::IApplication> app =
+    std::unique_ptr<boo::IApplication> app =
             ApplicationBootstrap(boo::IApplication::PLAT_AUTO,
                                  appCb, "rwk", "RWK", argc, argv);
     app->run();

@@ -48,7 +48,7 @@ namespace boo
 {
 
 IApplication* APP = NULL;
-std::shared_ptr<IApplication> ApplicationBootstrap(IApplication::EPlatformType platform,
+std::unique_ptr<IApplication> ApplicationBootstrap(IApplication::EPlatformType platform,
                                                    IApplicationCallback& cb,
                                                    const std::string& uniqueName,
                                                    const std::string& friendlyName,
@@ -56,17 +56,16 @@ std::shared_ptr<IApplication> ApplicationBootstrap(IApplication::EPlatformType p
                                                    const std::vector<std::string>& args,
                                                    bool singleInstance)
 {
-    if (!APP)
-    {
-        if (platform == IApplication::PLAT_WAYLAND)
-            APP = new ApplicationWayland(cb, uniqueName, friendlyName, pname, args, singleInstance);
-        else if (platform == IApplication::PLAT_XCB ||
-                 platform == IApplication::PLAT_AUTO)
-            APP = new ApplicationXCB(cb, uniqueName, friendlyName, pname, args, singleInstance);
-        else
-            return std::shared_ptr<IApplication>();
-    }
-    return std::shared_ptr<IApplication>(APP);
+    if (APP)
+        return std::unique_ptr<IApplication>();
+    if (platform == IApplication::PLAT_WAYLAND)
+        APP = new ApplicationWayland(cb, uniqueName, friendlyName, pname, args, singleInstance);
+    else if (platform == IApplication::PLAT_XCB ||
+             platform == IApplication::PLAT_AUTO)
+        APP = new ApplicationXCB(cb, uniqueName, friendlyName, pname, args, singleInstance);
+    else
+        return std::unique_ptr<IApplication>();
+    return std::unique_ptr<IApplication>(APP);
 }
     
 }
