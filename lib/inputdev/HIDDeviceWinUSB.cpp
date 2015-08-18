@@ -180,7 +180,7 @@ class CHIDDeviceWinUSB final : public IHIDDevice
         m_runningTransferLoop = false;
     }
 
-    bool _sendHIDReport(const uint8_t* data, size_t length)
+    bool _sendHIDReport(const uint8_t* data, size_t length, uint16_t message)
     {
         return false;
     }

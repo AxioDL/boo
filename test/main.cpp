@@ -18,13 +18,59 @@ class DolphinSmashAdapterCallback : public IDolphinSmashAdapterCallback
                           const DolphinControllerState& state)
     {
         printf("CONTROLLER %u UPDATE %d %d\n", idx, state.m_leftStick[0], state.m_leftStick[1]);
+        printf("                     %d %d\n", state.m_rightStick[0], state.m_rightStick[1]);
+    }
+};
+
+class DualshockPadCallback : public IDualshockPadCallback
+{
+    void controllerDisconnected()
+    {
+        printf("CONTROLLER DISCONNECTED\n");
+    }
+    void controllerUpdate(const DualshockPadState& state)
+    {
+        static time_t timeTotal;
+        static time_t lastTime = 0;
+        timeTotal = time(NULL);
+        time_t timeDif = timeTotal - lastTime;
+        /*
+        if (timeDif >= .15)
+        {
+            uint8_t led = ctrl->getLED();
+            led *= 2;
+            if (led > 0x10)
+                led = 2;
+            ctrl->setRawLED(led);
+            lastTime = timeTotal;
+        }
+        */
+        if (state.m_psButtonState)
+        {
+            if (timeDif >= 1) // wait 30 seconds before issuing another rumble event
+            {
+                ctrl->startRumble(DS3_MOTOR_LEFT);
+                ctrl->startRumble(DS3_MOTOR_RIGHT, 100);
+                lastTime = timeTotal;
+            }
+        }
+        /*
+        else
+            ctrl->stopRumble(DS3_MOTOR_RIGHT | DS3_MOTOR_LEFT);*/
+
+        printf("CONTROLLER UPDATE %d %d\n", state.m_leftStick[0], state.m_leftStick[1]);
+        printf("                  %d %d\n", state.m_rightStick[0], state.m_rightStick[1]);
+        printf("                  %f %f %f\n", state.accPitch, state.accYaw, state.gyroZ);
     }
 };
 
 class TestDeviceFinder : public DeviceFinder
 {
+
     DolphinSmashAdapter* smashAdapter = NULL;
+    DualshockPad* ds3 = nullptr;
     DolphinSmashAdapterCallback m_cb;
+    DualshockPadCallback m_ds3CB;
 public:
     TestDeviceFinder()
     : DeviceFinder({typeid(DolphinSmashAdapter)})
@@ -32,8 +78,18 @@ public:
     void deviceConnected(DeviceToken& tok)
     {
         smashAdapter = dynamic_cast<DolphinSmashAdapter*>(tok.openAndGetDevice());
-        smashAdapter->setCallback(&m_cb);
-        smashAdapter->startRumble(0);
+        if (smashAdapter)
+        {
+            smashAdapter->setCallback(&m_cb);
+            smashAdapter->startRumble(0);
+            return;
+        }
+        ds3 = dynamic_cast<DualshockPad*>(tok.openAndGetDevice());
+        if (ds3)
+        {
+            ds3->setCallback(&m_ds3CB);
+            ds3->setLED(DS3_LED_1);
+        }
     }
     void deviceDisconnected(DeviceToken&, DeviceBase* device)
     {
@@ -42,13 +98,17 @@ public:
             delete smashAdapter;
             smashAdapter = NULL;
         }
+        if (ds3 == device)
+        {
+            delete ds3;
+            ds3 = nullptr;
+        }
     }
 };
 
 
 struct CTestWindowCallback : IWindowCallback
 {
-
     void mouseDown(const SWindowCoord& coord, EMouseButton button, EModifierKey mods)
     {
         fprintf(stderr, "Mouse Down %d (%f,%f)\n", button, coord.norm[0], coord.norm[1]);

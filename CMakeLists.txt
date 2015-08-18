@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.0)
 project(libBoo)
 
+if (NOT MSVC)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+endif()
+
 if(WIN32)
   list(APPEND PLAT_SRCS 
        lib/win/ApplicationWin32.cpp

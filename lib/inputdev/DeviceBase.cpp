@@ -1,6 +1,7 @@
 #include "boo/inputdev/DeviceBase.hpp"
 #include "boo/inputdev/DeviceToken.hpp"
 #include "IHIDDevice.hpp"
+#include <cstdarg>
 
 namespace boo
 {
@@ -33,6 +34,14 @@ void DeviceBase::closeDevice()
         m_token->_deviceClose();
 }
 
+void DeviceBase::deviceError(const char* error, ...)
+{
+    va_list vl;
+    va_start(vl, error);
+    vfprintf(stderr, error, vl);
+    va_end(vl);
+}
+
 bool DeviceBase::sendUSBInterruptTransfer(const uint8_t* data, size_t length)
 {
     if (m_hidDev)
@@ -47,10 +56,17 @@ size_t DeviceBase::receiveUSBInterruptTransfer(uint8_t* data, size_t length)
     return false;
 }
 
-bool DeviceBase::sendHIDReport(const uint8_t* data, size_t length)
+bool DeviceBase::sendHIDReport(const uint8_t* data, size_t length, uint16_t message)
 {
     if (m_hidDev)
-        return m_hidDev->_sendHIDReport(data, length);
+        return m_hidDev->_sendHIDReport(data, length, message);
+    return false;
+}
+
+size_t DeviceBase::receiveReport(uint8_t* data, size_t length, uint16_t message)
+{
+    if (m_hidDev)
+        return m_hidDev->_recieveReport(data, length, message);
     return false;
 }
 
