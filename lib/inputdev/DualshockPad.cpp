@@ -74,7 +74,7 @@ void DualshockPad::initialCycle()
 
 void DualshockPad::transferCycle()
 {
-    DualshockControllerState state;
+    DualshockPadState state;
     size_t recvSz = receiveUSBInterruptTransfer((uint8_t*)&state, 49);
     if (recvSz != 49)
         return;

@@ -22,13 +22,13 @@ class DolphinSmashAdapterCallback : public IDolphinSmashAdapterCallback
     }
 };
 
-class DualshockPadCallback : public IDualshockControllerCallback
+class DualshockPadCallback : public IDualshockPadCallback
 {
     void controllerDisconnected()
     {
         printf("CONTROLLER DISCONNECTED\n");
     }
-    void controllerUpdate(const DualshockControllerState& state)
+    void controllerUpdate(const DualshockPadState& state)
     {
         static time_t timeTotal;
         static time_t lastTime = 0;
