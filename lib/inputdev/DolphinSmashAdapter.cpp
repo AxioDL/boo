@@ -102,12 +102,8 @@ void DolphinSmashAdapter::transferCycle()
     {
         uint8_t rumbleMessage[5] = {0x11};
         for (int i=0 ; i<4 ; ++i)
-        {
-            if (rumbleReq & 1<<i)
-                rumbleMessage[i+1] = 1;
-            else
-                rumbleMessage[i+1] = 0;
-        }
+            rumbleMessage[i+1] = (rumbleReq & 1<<i);
+
         sendUSBInterruptTransfer(rumbleMessage, sizeof(rumbleMessage));
         m_rumbleState = rumbleReq;
     }
