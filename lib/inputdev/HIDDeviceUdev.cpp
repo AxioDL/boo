@@ -83,8 +83,8 @@ class HIDDeviceUdev final : public IHIDDevice
 
         /* Get device file */
         const char* dp = udev_device_get_devnode(udevDev);
-        device->m_devFd = open(dp, O_RDWR);
-        if (device->m_devFd < 0)
+        int fd = open(dp, O_RDWR);
+        if (fd < 0)
         {
             snprintf(errStr, 256, "Unable to open %s@%s: %s\n",
                      device->m_token.getProductName().c_str(), dp, strerror(errno));
@@ -94,24 +94,25 @@ class HIDDeviceUdev final : public IHIDDevice
             udev_device_unref(udevDev);
             return;
         }
+        device->m_devFd = fd;
         usb_device_descriptor devDesc = {};
-        read(device->m_devFd, &devDesc, 1);
-        read(device->m_devFd, &devDesc.bDescriptorType, devDesc.bLength-1);
+        read(fd, &devDesc, 1);
+        read(fd, &devDesc.bDescriptorType, devDesc.bLength-1);
         if (devDesc.bNumConfigurations)
         {
             usb_config_descriptor confDesc = {};
-            read(device->m_devFd, &confDesc, 1);
-            read(device->m_devFd, &confDesc.bDescriptorType, confDesc.bLength-1);
+            read(fd, &confDesc, 1);
+            read(fd, &confDesc.bDescriptorType, confDesc.bLength-1);
             if (confDesc.bNumInterfaces)
             {
                 usb_interface_descriptor intfDesc = {};
-                read(device->m_devFd, &intfDesc, 1);
-                read(device->m_devFd, &intfDesc.bDescriptorType, intfDesc.bLength-1);
+                read(fd, &intfDesc, 1);
+                read(fd, &intfDesc.bDescriptorType, intfDesc.bLength-1);
                 for (i=0 ; i<intfDesc.bNumEndpoints+1 ; ++i)
                 {
                     usb_endpoint_descriptor endpDesc = {};
-                    read(device->m_devFd, &endpDesc, 1);
-                    read(device->m_devFd, &endpDesc.bDescriptorType, endpDesc.bLength-1);
+                    read(fd, &endpDesc, 1);
+                    read(fd, &endpDesc.bDescriptorType, endpDesc.bLength-1);
                     if ((endpDesc.bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) == USB_ENDPOINT_XFER_INT)
                     {
                         if ((endpDesc.bEndpointAddress & USB_ENDPOINT_DIR_MASK) == USB_DIR_IN)
@@ -129,7 +130,7 @@ class HIDDeviceUdev final : public IHIDDevice
             USBDEVFS_DISCONNECT,
             NULL
         };
-        ioctl(device->m_devFd, USBDEVFS_IOCTL, &disconnectReq);
+        ioctl(fd, USBDEVFS_IOCTL, &disconnectReq);
         
         /* Return control to main thread */
         device->m_runningTransferLoop = true;
@@ -143,7 +144,7 @@ class HIDDeviceUdev final : public IHIDDevice
         device->m_devImp.finalCycle();
 
         /* Cleanup */
-        close(device->m_devFd);
+        close(fd);
         device->m_devFd = 0;
         udev_device_unref(udevDev);
         
