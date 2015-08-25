@@ -73,11 +73,11 @@ else()
   endif()
 
   include_directories(${DBUS_INCLUDE_DIR} ${DBUS_ARCH_INCLUDE_DIR})
-  list(APPEND BOO_SYS_LIBS xcb xcb-glx xcb-xinput xcb-xkb xcb-keysyms xkbcommon xkbcommon-x11 ${DBUS_LIBRARY} udev pthread)
+  list(APPEND _BOO_SYS_LIBS xcb xcb-glx xcb-xinput xcb-xkb xcb-keysyms xkbcommon xkbcommon-x11 ${DBUS_LIBRARY} udev pthread)
 
 endif()
 
-set(BOO_SYS_LIBS ${BOO_SYS_LIBS} CACHE PATH "Boo System Libraries" FORCE)
+set(BOO_SYS_LIBS ${_BOO_SYS_LIBS} CACHE PATH "Boo System Libraries" FORCE)
 
 include_directories(include)
 
