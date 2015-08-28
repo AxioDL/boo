@@ -8,6 +8,9 @@
 #include <xcb/xcb_keysyms.h>
 #include <xkbcommon/xkbcommon.h>
 #include <xcb/xinput.h>
+#include <xcb/glx.h>
+#include <GL/glx.h>
+#include <GL/glcorearb.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -25,6 +28,10 @@
 namespace boo
 {
 
+extern PFNGLXGETVIDEOSYNCSGIPROC FglXGetVideoSyncSGI;
+extern PFNGLXWAITVIDEOSYNCSGIPROC FglXWaitVideoSyncSGI;
+
+extern int XCB_GLX_EVENT_BASE;
 extern int XINPUT_OPCODE;
 
 static inline double fp3232val(xcb_input_fp3232_t* val)
@@ -146,16 +153,141 @@ static void genFrameDefault(xcb_screen_t* screen, int* xOut, int* yOut, int* wOu
     *hOut = height;
 }
     
-IGraphicsContext* _GraphicsContextXCBNew(IGraphicsContext::EGraphicsAPI api,
-                                         IWindow* parentWindow, xcb_connection_t* conn,
-                                         uint32_t& visualIdOut);
+struct GraphicsContextXCB : IGraphicsContext
+{
+    EGraphicsAPI m_api;
+    EPixelFormat m_pf;
+    IWindow* m_parentWindow;
+    xcb_connection_t* m_xcbConn;
+
+    xcb_glx_fbconfig_t m_fbconfig = 0;
+    xcb_visualid_t m_visualid = 0;
+    xcb_glx_window_t m_glxWindow = 0;
+    xcb_glx_context_t m_glxCtx = 0;
+    xcb_glx_context_tag_t m_glxCtxTag = 0;
+
+public:
+    IWindowCallback* m_callback;
+
+    GraphicsContextXCB(EGraphicsAPI api, IWindow* parentWindow, xcb_connection_t* conn, uint32_t& visualIdOut)
+    : m_api(api),
+      m_pf(PF_RGBA8),
+      m_parentWindow(parentWindow),
+      m_xcbConn(conn)
+    {
+
+        /* WTF freedesktop?? Fix this awful API and your nonexistant docs */
+        xcb_glx_get_fb_configs_reply_t* fbconfigs =
+        xcb_glx_get_fb_configs_reply(m_xcbConn, xcb_glx_get_fb_configs(m_xcbConn, 0), NULL);
+        struct conf_prop
+        {
+            uint32_t key;
+            uint32_t val;
+        }* props = (struct conf_prop*)xcb_glx_get_fb_configs_property_list(fbconfigs);
+
+        for (uint32_t i=0 ; i<fbconfigs->num_FB_configs ; ++i)
+        {
+            struct conf_prop* configProps = &props[fbconfigs->num_properties * i];
+            uint32_t fbconfId, visualId, depthSize, colorSize, doubleBuffer;
+            for (uint32_t j=0 ; j<fbconfigs->num_properties ; ++j)
+            {
+                struct conf_prop* prop = &configProps[j];
+                if (prop->key == GLX_FBCONFIG_ID)
+                    fbconfId = prop->val;
+                if (prop->key == GLX_VISUAL_ID)
+                    visualId = prop->val;
+                else if (prop->key == GLX_DEPTH_SIZE)
+                    depthSize = prop->val;
+                else if (prop->key == GLX_BUFFER_SIZE)
+                    colorSize = prop->val;
+                else if (prop->key == GLX_DOUBLEBUFFER)
+                    doubleBuffer = prop->val;
+            }
+
+            /* Double-buffer only */
+            if (!doubleBuffer)
+                continue;
+
+            if (m_pf == PF_RGBA8 && colorSize >= 32)
+            {
+                m_fbconfig = fbconfId;
+                m_visualid = visualId;
+                break;
+            }
+            else if (m_pf == PF_RGBA8_Z24 && colorSize >= 32 && depthSize >= 24)
+            {
+                m_fbconfig = fbconfId;
+                m_visualid = visualId;
+                break;
+            }
+            else if (m_pf == PF_RGBAF32 && colorSize >= 128)
+            {
+                m_fbconfig = fbconfId;
+                m_visualid = visualId;
+                break;
+            }
+            else if (m_pf == PF_RGBAF32_Z24 && colorSize >= 128 && depthSize >= 24)
+            {
+                m_fbconfig = fbconfId;
+                m_visualid = visualId;
+                break;
+            }
+        }
+        free(fbconfigs);
+
+        if (!m_fbconfig)
+        {
+            fprintf(stderr, "unable to find suitable pixel format");
+            return;
+        }
+
+        visualIdOut = m_visualid;
+    }
+
+    ~GraphicsContextXCB()
+    {
+
+    }
+
+    void _setCallback(IWindowCallback* cb)
+    {
+        m_callback = cb;
+    }
+
+    EGraphicsAPI getAPI() const
+    {
+        return m_api;
+    }
+
+    EPixelFormat getPixelFormat() const
+    {
+        return m_pf;
+    }
+
+    void setPixelFormat(EPixelFormat pf)
+    {
+        if (pf > PF_RGBAF32_Z24)
+            return;
+        m_pf = pf;
+    }
+
+    void initializeContext()
+    {
+        m_glxWindow = xcb_generate_id(m_xcbConn);
+        xcb_glx_create_window(m_xcbConn, 0, m_fbconfig,
+                              m_parentWindow->getPlatformHandle(),
+                              m_glxWindow, 0, NULL);
+    }
+
+};
 
 struct WindowXCB : IWindow
 {
     xcb_connection_t* m_xcbConn;
-    xcb_window_t m_windowId;
-    IGraphicsContext* m_gfxCtx;
     IWindowCallback* m_callback;
+    xcb_window_t m_windowId;
+    GraphicsContextXCB m_gfxCtx;
+    uint32_t m_visualId;
 
     /* Last known input device id (0xffff if not yet set) */
     xcb_input_device_id_t m_lastInputID = 0xffff;
@@ -174,7 +306,7 @@ struct WindowXCB : IWindow
 public:
     
     WindowXCB(const std::string& title, xcb_connection_t* conn)
-    : m_xcbConn(conn), m_callback(NULL)
+    : m_xcbConn(conn), m_callback(NULL), m_gfxCtx(IGraphicsContext::API_OPENGL_3_3, this, m_xcbConn, m_visualId)
     {
         if (!S_ATOMS)
             S_ATOMS = new XCBAtoms(conn);
@@ -183,14 +315,10 @@ public:
         xcb_screen_t* screen = xcb_setup_roots_iterator(xcb_get_setup(m_xcbConn)).data;
         m_pixelFactor = screen->width_in_pixels / (float)screen->width_in_millimeters / REF_DPMM;
 
-        /* Construct graphics context */
-        uint32_t visualId;
-        m_gfxCtx = _GraphicsContextXCBNew(IGraphicsContext::API_OPENGL_3_3, this, m_xcbConn, visualId);
-
         /* Create colormap */
         xcb_colormap_t colormap = xcb_generate_id(m_xcbConn);
         xcb_create_colormap(m_xcbConn, XCB_COLORMAP_ALLOC_NONE,
-                            colormap, screen->root, visualId);
+                            colormap, screen->root, m_visualId);
 
         /* Create window */
         int x, y, w, h;
@@ -208,9 +336,10 @@ public:
         m_windowId = xcb_generate_id(conn);
         xcb_create_window(m_xcbConn, XCB_COPY_FROM_PARENT, m_windowId, screen->root,
                           x, y, w, h, 10,
-                          XCB_WINDOW_CLASS_INPUT_OUTPUT, visualId,
+                          XCB_WINDOW_CLASS_INPUT_OUTPUT, m_visualId,
                           XCB_CW_BORDER_PIXEL | XCB_CW_EVENT_MASK | XCB_CW_COLORMAP,
                           valueMasks);
+        
 
         /* The XInput 2.1 extension enables per-pixel smooth scrolling trackpads */
         xcb_generic_error_t* xiErr = NULL;
@@ -233,7 +362,7 @@ public:
             };
             xcb_input_xi_select_events(m_xcbConn, m_windowId, 1, &masks.mask);
         }
-        free(xiReply);
+        free(xiReply);        
 
         /* Register netwm extension atom for window closing */
 #if 0
@@ -262,7 +391,7 @@ public:
         xcb_map_window(m_xcbConn, m_windowId);
         xcb_flush(m_xcbConn);
 
-        m_gfxCtx->initializeContext();
+        m_gfxCtx.initializeContext();
     }
     
     ~WindowXCB()
@@ -381,6 +510,12 @@ public:
                        XCB_EVENT_MASK_STRUCTURE_NOTIFY |
                        XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT,
                        (const char*)&fsEvent);
+    }
+
+    void waitForRetrace()
+    {
+        unsigned int sync;
+        FglXWaitVideoSyncSGI(1, 0, &sync);
     }
 
     uintptr_t getPlatformHandle() const

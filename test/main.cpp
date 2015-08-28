@@ -200,7 +200,6 @@ int main(int argc, const char** argv)
     std::unique_ptr<boo::IApplication> app =
             ApplicationBootstrap(boo::IApplication::PLAT_AUTO,
                                  appCb, "rwk", "RWK", argc, argv);
-    app->run();
     printf("IM DYING!!\n");
     return 0;
 }

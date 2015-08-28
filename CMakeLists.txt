@@ -27,7 +27,6 @@ else()
        lib/x11/ApplicationWayland.hpp
        lib/x11/WindowXCB.cpp
        lib/x11/WindowWayland.cpp
-       lib/x11/GraphicsContextXCB.cpp
        lib/x11/GraphicsContextWayland.cpp
        lib/inputdev/HIDListenerUdev.cpp
        lib/inputdev/HIDDeviceUdev.cpp)
@@ -73,7 +72,7 @@ else()
   endif()
 
   include_directories(${DBUS_INCLUDE_DIR} ${DBUS_ARCH_INCLUDE_DIR})
-  list(APPEND _BOO_SYS_LIBS xcb xcb-glx xcb-xinput xcb-xkb xcb-keysyms xkbcommon xkbcommon-x11 ${DBUS_LIBRARY} udev pthread)
+  list(APPEND _BOO_SYS_LIBS xcb xcb-glx xcb-xinput xcb-xkb xcb-keysyms xkbcommon xkbcommon-x11 GL ${DBUS_LIBRARY} udev pthread)
 
 endif()
 

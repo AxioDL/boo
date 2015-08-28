@@ -14,9 +14,8 @@ class IApplication;
 
 struct IApplicationCallback
 {
-    virtual void appLaunched(IApplication* app) {(void)app;}
-    virtual void appQuitting(IApplication* app) {(void)app;}
-    virtual void appFilesOpen(IApplication* app, const std::vector<std::string>& paths) {(void)app;(void)paths;}
+    virtual void appQuitting(IApplication*) {}
+    virtual void appFilesOpen(IApplication*, const std::vector<std::string>&) {}
 };
 
 class IApplication
@@ -44,8 +43,7 @@ public:
     };
     virtual EPlatformType getPlatformType() const=0;
     
-    virtual void run()=0;
-    virtual void quit()=0;
+    virtual void pump()=0;
     virtual const std::string& getUniqueName() const=0;
     virtual const std::string& getFriendlyName() const=0;
     virtual const std::string& getProcessName() const=0;

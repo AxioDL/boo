@@ -1,8 +1,15 @@
 #include "boo/IWindow.hpp"
 #include "boo/IGraphicsContext.hpp"
 
+#include <X11/Xlib.h>
+#include <GL/glx.h>
+#include <GL/glxext.h>
+
 namespace boo
 {
+
+extern PFNGLXGETVIDEOSYNCSGIPROC FglXGetVideoSyncSGI;
+extern PFNGLXWAITVIDEOSYNCSGIPROC FglXWaitVideoSyncSGI;
     
 IGraphicsContext* _CGraphicsContextWaylandNew(IGraphicsContext::EGraphicsAPI api,
                                               IWindow* parentWindow);
@@ -72,6 +79,12 @@ struct WindowWayland : IWindow
     void setFullscreen(bool fs)
     {
         
+    }
+
+    void waitForRetrace()
+    {
+        unsigned int sync;
+        FglXWaitVideoSyncSGI(1, 0, &sync);
     }
 
     uintptr_t getPlatformHandle() const

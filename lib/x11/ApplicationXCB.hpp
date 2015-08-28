@@ -10,7 +10,12 @@
 #include <xkbcommon/xkbcommon-x11.h>
 #include <xcb/xkb.h>
 #include <xcb/xinput.h>
+#include <xcb/glx.h>
 #undef explicit
+
+#include <X11/Xlib.h>
+#include <GL/glx.h>
+#include <GL/glxext.h>
 
 #include <dbus/dbus.h>
 DBusConnection* registerDBus(const char* appName, bool& isFirst);
@@ -20,6 +25,10 @@ DBusConnection* registerDBus(const char* appName, bool& isFirst);
 namespace boo
 {
 
+PFNGLXGETVIDEOSYNCSGIPROC FglXGetVideoSyncSGI = nullptr;
+PFNGLXWAITVIDEOSYNCSGIPROC FglXWaitVideoSyncSGI = nullptr;
+
+int XCB_GLX_EVENT_BASE = 0;
 int XINPUT_OPCODE = 0;
 
 static xcb_window_t getWindowOfEvent(xcb_generic_event_t* event, bool& windowEvent)
@@ -131,7 +140,7 @@ class ApplicationXCB final : public IApplication
     std::unordered_map<xcb_window_t, IWindow*> m_windows;
 
     xcb_connection_t* m_xcbConn = NULL;
-    bool m_running;
+    int m_xcbFd, m_dbusFd, m_maxFd;
     
     void _deletedWindow(IWindow* window)
     {
@@ -198,6 +207,13 @@ public:
         /* Open X connection */
         m_xcbConn = xcb_connect(NULL, NULL);
 
+        /* GLX extension data */
+        const xcb_query_extension_reply_t* glxExtData =
+        xcb_get_extension_data(m_xcbConn, &xcb_glx_id);
+        XCB_GLX_EVENT_BASE = glxExtData->first_event;
+        FglXGetVideoSyncSGI = PFNGLXGETVIDEOSYNCSGIPROC(glXGetProcAddress((GLubyte*)"glXGetVideoSyncSGI"));
+        FglXWaitVideoSyncSGI = PFNGLXWAITVIDEOSYNCSGIPROC(glXGetProcAddress((GLubyte*)"glXWaitVideoSyncSGI"));
+
         /* The xkb extension requests that the X server does not
          * send repeated keydown events when a key is held */
         xkb_x11_setup_xkb_extension(m_xcbConn,
@@ -212,9 +228,14 @@ public:
         /* Xinput major opcode */
         const xcb_query_extension_reply_t* xiReply =
         xcb_get_extension_data(m_xcbConn, &xcb_input_id);
-        if (xiReply)
-            XINPUT_OPCODE = xiReply->major_opcode;
+        XINPUT_OPCODE = xiReply->major_opcode;
 
+        /* Get file descriptors of xcb and dbus interfaces */
+        m_xcbFd = xcb_get_file_descriptor(m_xcbConn);
+        dbus_connection_get_unix_fd(m_dbus, &m_dbusFd);
+        m_maxFd = MAX(m_xcbFd, m_dbusFd);
+
+        xcb_flush(m_xcbConn);
     }
 
     ~ApplicationXCB()
@@ -227,35 +248,23 @@ public:
         return PLAT_XCB;
     }
     
-    void run()
+    void pump()
     {
         if (!m_xcbConn)
             return;
 
         xcb_generic_event_t* event;
-        m_running = true;
-        m_callback.appLaunched(this);
-        xcb_flush(m_xcbConn);
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(m_xcbFd, &fds);
+        FD_SET(m_dbusFd, &fds);
+        select(m_maxFd+1, &fds, NULL, NULL, NULL);
 
-        int xcbFd = xcb_get_file_descriptor(m_xcbConn);
-        int dbusFd;
-        dbus_connection_get_unix_fd(m_dbus, &dbusFd);
-        int maxFd = MAX(xcbFd, dbusFd);
-
-        while (m_running)
+        if (FD_ISSET(m_xcbFd, &fds))
         {
-            fd_set fds;
-            FD_ZERO(&fds);
-            FD_SET(xcbFd, &fds);
-            FD_SET(dbusFd, &fds);
-            select(maxFd+1, &fds, NULL, NULL, NULL);
-
-            if (FD_ISSET(xcbFd, &fds))
+            event = xcb_poll_for_event(m_xcbConn);
+            if (event)
             {
-                event = xcb_poll_for_event(m_xcbConn);
-                if (!event)
-                    break;
-
                 bool windowEvent;
                 xcb_window_t evWindow = getWindowOfEvent(event, windowEvent);
                 //fprintf(stderr, "EVENT %d\n", XCB_EVENT_RESPONSE_TYPE(event));
@@ -267,40 +276,33 @@ public:
                 }
                 free(event);
             }
-
-            if (FD_ISSET(dbusFd, &fds))
-            {
-                DBusMessage* msg;
-                dbus_connection_read_write(m_dbus, 0);
-                while ((msg = dbus_connection_pop_message(m_dbus)))
-                {
-                    /* check if the message is a signal from the correct interface and with the correct name */
-                    if (dbus_message_is_signal(msg, "boo.signal.FileHandling", "Open"))
-                    {
-                        /* read the parameters */
-                        std::vector<std::string> paths;
-                        DBusMessageIter iter;
-                        dbus_message_iter_init(msg, &iter);
-                        while (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_INVALID)
-                        {
-                            const char* argVal;
-                            dbus_message_iter_get_basic(&iter, &argVal);
-                            paths.push_back(argVal);
-                            dbus_message_iter_next(&iter);
-                        }
-                        m_callback.appFilesOpen(this, paths);
-                    }
-                    dbus_message_unref(msg);
-                }
-            }
         }
 
-        m_callback.appQuitting(this);
-    }
-
-    void quit()
-    {
-        m_running = false;
+        if (FD_ISSET(m_dbusFd, &fds))
+        {
+            DBusMessage* msg;
+            dbus_connection_read_write(m_dbus, 0);
+            while ((msg = dbus_connection_pop_message(m_dbus)))
+            {
+                /* check if the message is a signal from the correct interface and with the correct name */
+                if (dbus_message_is_signal(msg, "boo.signal.FileHandling", "Open"))
+                {
+                    /* read the parameters */
+                    std::vector<std::string> paths;
+                    DBusMessageIter iter;
+                    dbus_message_iter_init(msg, &iter);
+                    while (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_INVALID)
+                    {
+                        const char* argVal;
+                        dbus_message_iter_get_basic(&iter, &argVal);
+                        paths.push_back(argVal);
+                        dbus_message_iter_next(&iter);
+                    }
+                    m_callback.appFilesOpen(this, paths);
+                }
+                dbus_message_unref(msg);
+            }
+        }
     }
 
     const std::string& getUniqueName() const

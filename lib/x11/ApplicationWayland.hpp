@@ -46,14 +46,9 @@ public:
         return PLAT_WAYLAND;
     }
     
-    void run()
+    void pump()
     {
         
-    }
-
-    void quit()
-    {
-
     }
 
     const std::string& getUniqueName() const
