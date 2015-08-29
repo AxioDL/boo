@@ -32,26 +32,38 @@ enum EDolphinControllerButtons
 
 struct DolphinControllerState
 {
-    uint8_t m_leftStick[2];
-    uint8_t m_rightStick[2];
-    uint8_t m_analogTriggers[2];
-    uint16_t m_btns;
+    int8_t m_leftStick[2] = {0};
+    int8_t m_rightStick[2] = {0};
+    uint8_t m_analogTriggers[2] = {0};
+    uint16_t m_btns = 0;
+    void reset()
+    {
+        m_leftStick[0] = 0;
+        m_leftStick[1] = 0;
+        m_rightStick[0] = 0;
+        m_rightStick[1] = 0;
+        m_analogTriggers[0] = 0;
+        m_analogTriggers[1] = 0;
+        m_btns = 0;
+    }
+    void clamp();
 };
 
 struct IDolphinSmashAdapterCallback
 {
     virtual void controllerConnected(unsigned idx, EDolphinControllerType type) {(void)idx;(void)type;}
-    virtual void controllerDisconnected(unsigned idx, EDolphinControllerType type) {(void)idx;(void)type;}
+    virtual void controllerDisconnected(unsigned idx) {(void)idx;}
     virtual void controllerUpdate(unsigned idx, EDolphinControllerType type,
                                   const DolphinControllerState& state) {(void)idx;(void)type;(void)state;}
 };
 
 class DolphinSmashAdapter final : public DeviceBase
 {
-    IDolphinSmashAdapterCallback* m_callback;
-    uint8_t m_knownControllers;
-    uint8_t m_rumbleRequest;
-    uint8_t m_rumbleState;
+    IDolphinSmashAdapterCallback* m_callback = nullptr;
+    uint8_t m_knownControllers = 0;
+    uint8_t m_rumbleRequest = 0;
+    bool m_hardStop[4] = {false};
+    uint8_t m_rumbleState = 0;
     void deviceDisconnected();
     void initialCycle();
     void transferCycle();
@@ -60,10 +72,12 @@ public:
     DolphinSmashAdapter(DeviceToken* token);
     ~DolphinSmashAdapter();
     
-    inline void setCallback(IDolphinSmashAdapterCallback* cb)
+    void setCallback(IDolphinSmashAdapterCallback* cb)
     {m_callback = cb; m_knownControllers = 0;}
-    inline void startRumble(unsigned idx) {if (idx >= 4) return; m_rumbleRequest |= 1<<idx;}
-    inline void stopRumble(unsigned idx) {if (idx >= 4) return; m_rumbleRequest &= ~(1<<idx);}
+    void startRumble(unsigned idx)
+    {if (idx >= 4) return; m_rumbleRequest |= 1<<idx;}
+    void stopRumble(unsigned idx, bool hard=false)
+    {if (idx >= 4) return; m_rumbleRequest &= ~(1<<idx); m_hardStop[idx] = hard;}
 };
 
 }

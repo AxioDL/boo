@@ -35,6 +35,12 @@ public:
     {
         double delta[2];
         bool isFine; /* Use system-scale fine-scroll (for scrollable-trackpads) */
+
+        SScrollDelta operator+(const SScrollDelta& other)
+        {return {{delta[0] + other.delta[0], delta[1] + other.delta[1]}, isFine || other.isFine};}
+        SScrollDelta& operator+=(const SScrollDelta& other)
+        {delta[0] += other.delta[0]; delta[1] += other.delta[1]; isFine |= other.isFine; return *this;}
+        void zeroOut() {delta[0] = 0.0; delta[1] = 0.0;}
     };
     
     enum ESpecialKey

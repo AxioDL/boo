@@ -10,11 +10,7 @@ namespace boo
  */
 
 DolphinSmashAdapter::DolphinSmashAdapter(DeviceToken* token)
-: DeviceBase(token),
-  m_callback(NULL),
-  m_knownControllers(0),
-  m_rumbleRequest(0),
-  m_rumbleState(0)
+: DeviceBase(token)
 {
 }
 
@@ -89,7 +85,7 @@ void DolphinSmashAdapter::transferCycle()
         else if (!type && (m_knownControllers & 1<<i))
         {
             m_knownControllers &= ~(1<<i);
-            m_callback->controllerDisconnected(i, type);
+            m_callback->controllerDisconnected(i);
         }
         if (m_knownControllers & 1<<i)
             m_callback->controllerUpdate(i, type, state);
@@ -102,7 +98,14 @@ void DolphinSmashAdapter::transferCycle()
     {
         uint8_t rumbleMessage[5] = {0x11};
         for (int i=0 ; i<4 ; ++i)
-            rumbleMessage[i+1] = (rumbleReq & 1<<i);
+        {
+            if (rumbleReq & 1<<i)
+                rumbleMessage[i+1] = 1;
+            else if (m_hardStop[i])
+                rumbleMessage[i+1] = 2;
+            else
+                rumbleMessage[i+1] = 0;
+        }
 
         sendUSBInterruptTransfer(rumbleMessage, sizeof(rumbleMessage));
         m_rumbleState = rumbleReq;
@@ -117,7 +120,129 @@ void DolphinSmashAdapter::finalCycle()
 
 void DolphinSmashAdapter::deviceDisconnected()
 {
-    
+    if (!m_callback)
+        return;
+    for (int i=0 ; i<4 ; i++)
+    {
+        if (m_knownControllers & 1<<i)
+        {
+            m_knownControllers &= ~(1<<i);
+            m_callback->controllerDisconnected(i);
+        }
+    }
+}
+
+/* The following code is derived from pad.c in libogc
+ *
+ *  Copyright (C) 2004 - 2009
+ *  Michael Wiedenbauer (shagkur)
+ *  Dave Murphy (WinterMute)
+ *
+ * This software is provided 'as-is', without any express or implied
+ * warranty.  In no event will the authors be held liable for any
+ * damages arising from the use of this software.
+ *
+ * Permission is granted to anyone to use this software for any
+ * purpose, including commercial applications, and to alter it and
+ * redistribute it freely, subject to the following restrictions:
+ *
+ * 1. The origin of this software must not be misrepresented; you
+ *    must not claim that you wrote the original software. If you use
+ *    this software in a product, an acknowledgment in the product
+ *    documentation would be appreciated but is not required.
+ * 2. Altered source versions must be plainly marked as such, and
+ *    must not be misrepresented as being the original software.
+ * 3. This notice may not be removed or altered from any source
+ *    distribution.
+ */
+
+static uint8_t pad_clampregion[8] = {30, 180, 15, 72, 40, 15, 59, 31};
+
+static void pad_clampstick(int8_t& px, int8_t& py, int8_t max, int8_t xy, int8_t min)
+{
+    int32_t x, y, signX, signY, d;
+
+    x = px;
+    y = py;
+
+    if (x >= 0)
+        signX = 1;
+    else
+    {
+        signX = -1;
+        x = -x;
+    }
+
+    if (y >= 0)
+        signY = 1;
+    else
+    {
+        signY = -1;
+        y = -y;
+    }
+
+    if (x <= min)
+        x = 0;
+    else
+        x -= min;
+
+    if (y <= min)
+        y = 0;
+    else
+        y -= min;
+
+    if (x || y)
+    {
+        int32_t xx, yy, maxy;
+
+        xx = x * xy;
+        yy = y * xy;
+        maxy = max * xy;
+        if (yy <= xx)
+        {
+            d = (x * xy + (y * (max - xy)));
+            if (maxy < d)
+            {
+                x *= maxy / d;
+                y *= maxy / d;
+            }
+        }
+        else
+        {
+            d = (y * xy + (x * (max - xy)));
+            if (maxy < d)
+            {
+                x *= maxy / d;
+                y *= maxy / d;
+            }
+        }
+        px = int8_t(x * signX);
+        py = int8_t(y * signY);
+    }
+    else
+        px = py = 0;
+}
+
+static void pad_clamptrigger(uint8_t& trigger)
+{
+    uint8_t min, max;
+
+    min = pad_clampregion[0];
+    max = pad_clampregion[1];
+    if (min > trigger)
+        trigger = 0;
+    else if (max < trigger)
+        trigger = max - min;
+    else
+        trigger -= min;
+}
+
+void DolphinControllerState::clamp()
+{
+    pad_clampstick(m_leftStick[0], m_leftStick[1], pad_clampregion[3], pad_clampregion[4], pad_clampregion[2]);
+    pad_clampstick(m_rightStick[0], m_rightStick[1], pad_clampregion[6], pad_clampregion[7], pad_clampregion[5]);
+    pad_clamptrigger(m_analogTriggers[0]);
+    pad_clamptrigger(m_analogTriggers[1]);
 }
 
 }
