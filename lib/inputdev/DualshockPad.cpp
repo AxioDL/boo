@@ -1,9 +1,17 @@
 #include "boo/inputdev/DualshockPad.hpp"
+#define _USE_MATH_DEFINES
 #include <math.h>
 #include <iostream>
 #include <stdio.h>
-#include <endian.h>
 #include <memory.h>
+
+#ifdef _WIN32
+static inline uint16_t bswap16(uint16_t val) {return _byteswap_ushort(val);}
+#elif __GNUC__
+static inline uint16_t bswap16(uint16_t val) {return __builtin_bswap16(val); }
+#else
+static inline uint16_t bswap16(uint16_t val) {return __builtin_byteswap(val);}
+#endif
 
 #define RAD_TO_DEG (180.0/M_PI)
 
@@ -80,9 +88,9 @@ void DualshockPad::transferCycle()
         return;
 
     for (int i = 0; i < 3; i++)
-        state.m_accelerometer[i] = be16toh(state.m_accelerometer[i]);
+        state.m_accelerometer[i] = bswap16(state.m_accelerometer[i]);
 
-    state.m_gyrometerZ = be16toh(state.m_gyrometerZ);
+    state.m_gyrometerZ = bswap16(state.m_gyrometerZ);
     if (m_callback)
         m_callback->controllerUpdate(state);
 

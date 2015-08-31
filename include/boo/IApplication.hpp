@@ -1,5 +1,5 @@
-#ifndef IRUNLOOP_HPP
-#define IRUNLOOP_HPP
+#ifndef IAPPLICATION_HPP
+#define IAPPLICATION_HPP
 
 #include <memory>
 #include <string>
@@ -15,7 +15,7 @@ class IApplication;
 struct IApplicationCallback
 {
     virtual void appQuitting(IApplication*) {}
-    virtual void appFilesOpen(IApplication*, const std::vector<std::string>&) {}
+    virtual void appFilesOpen(IApplication*, const std::vector<SystemString>&) {}
 };
 
 class IApplication
@@ -44,37 +44,37 @@ public:
     virtual EPlatformType getPlatformType() const=0;
     
     virtual void pump()=0;
-    virtual const std::string& getUniqueName() const=0;
-    virtual const std::string& getFriendlyName() const=0;
-    virtual const std::string& getProcessName() const=0;
-    virtual const std::vector<std::string>& getArgs() const=0;
+    virtual const SystemString& getUniqueName() const=0;
+    virtual const SystemString& getFriendlyName() const=0;
+    virtual const SystemString& getProcessName() const=0;
+    virtual const std::vector<SystemString>& getArgs() const=0;
     
     /* Constructors/initializers for sub-objects */
-    virtual IWindow* newWindow(const std::string& title)=0;
+    virtual IWindow* newWindow(const SystemString& title)=0;
     
 };
 
 std::unique_ptr<IApplication>
 ApplicationBootstrap(IApplication::EPlatformType platform,
                      IApplicationCallback& cb,
-                     const std::string& uniqueName,
-                     const std::string& friendlyName,
-                     const std::string& pname,
-                     const std::vector<std::string>& args,
+                     const SystemString& uniqueName,
+                     const SystemString& friendlyName,
+                     const SystemString& pname,
+                     const std::vector<SystemString>& args,
                      bool singleInstance=true);
 extern IApplication* APP;
     
 static inline std::unique_ptr<IApplication>
 ApplicationBootstrap(IApplication::EPlatformType platform,
                      IApplicationCallback& cb,
-                     const std::string& uniqueName,
-                     const std::string& friendlyName,
-                     int argc, const char** argv,
+                     const SystemString& uniqueName,
+                     const SystemString& friendlyName,
+                     int argc, const SystemChar** argv,
                      bool singleInstance=true)
 {
     if (APP)
         return std::unique_ptr<IApplication>();
-    std::vector<std::string> args;
+    std::vector<SystemString> args;
     for (int i=1 ; i<argc ; ++i)
         args.push_back(argv[i]);
     return ApplicationBootstrap(platform, cb, uniqueName, friendlyName, argv[0], args, singleInstance);
@@ -82,4 +82,4 @@ ApplicationBootstrap(IApplication::EPlatformType platform,
     
 }
 
-#endif // IRUNLOOP_HPP
+#endif // IAPPLICATION_HPP

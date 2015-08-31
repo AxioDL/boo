@@ -9,9 +9,9 @@ if(WIN32)
   list(APPEND PLAT_SRCS 
        lib/win/ApplicationWin32.cpp
        lib/win/WindowWin32.cpp
-       lib/win/GraphicsContextWin32.cpp
        lib/inputdev/HIDListenerWinUSB.cpp
        lib/inputdev/HIDDeviceWinUSB.cpp)
+  list(APPEND _BOO_SYS_LIBS Winusb)
 elseif(APPLE)
   list(APPEND PLAT_SRCS 
        lib/mac/ApplicationCocoa.mm
@@ -93,6 +93,7 @@ add_library(Boo
             include/boo/IGraphicsContext.hpp
             include/boo/IWindow.hpp
             include/boo/IApplication.hpp
+            include/boo/System.hpp
             include/boo/boo.hpp
             InputDeviceClasses.cpp
             ${PLAT_SRCS})

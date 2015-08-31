@@ -174,7 +174,7 @@ struct TestApplicationCallback : IApplicationCallback
     CTestWindowCallback windowCallback;
     void appLaunched(IApplication* app)
     {
-        mainWindow = app->newWindow("YAY!");
+        mainWindow = app->newWindow(_S("YAY!"));
         mainWindow->setCallback(&windowCallback);
         mainWindow->showWindow();
         devFinder.startScanning();
@@ -183,23 +183,33 @@ struct TestApplicationCallback : IApplicationCallback
     {
         delete mainWindow;
     }
-    void appFilesOpen(IApplication*, const std::vector<std::string>& paths)
+    void appFilesOpen(IApplication*, const std::vector<SystemString>& paths)
     {
         fprintf(stderr, "OPENING: ");
-        for (const std::string& path : paths)
+        for (const SystemString& path : paths)
+        {
+#if _WIN32
+            fwprintf(stderr, L"%s ", path.c_str());
+#else
             fprintf(stderr, "%s ", path.c_str());
+#endif
+        }
         fprintf(stderr, "\n");
     }
 };
 
 }
 
+#ifdef _WIN32
+int wmain(int argc, const wchar_t** argv)
+#else
 int main(int argc, const char** argv)
+#endif
 {
     boo::TestApplicationCallback appCb;
     std::unique_ptr<boo::IApplication> app =
             ApplicationBootstrap(boo::IApplication::PLAT_AUTO,
-                                 appCb, "rwk", "RWK", argc, argv);
+                                 appCb, _S("rwk"), _S("RWK"), argc, argv);
     printf("IM DYING!!\n");
     return 0;
 }
