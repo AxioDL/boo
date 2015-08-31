@@ -7,6 +7,8 @@
 
 #ifdef _WIN32
 static inline uint16_t bswap16(uint16_t val) {return _byteswap_ushort(val);}
+#elif __GNUC__
+static inline uint16_t bswap16(uint16_t val) {return __builtin_bswap16(val); }
 #else
 static inline uint16_t bswap16(uint16_t val) {return __builtin_byteswap(val);}
 #endif
