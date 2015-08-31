@@ -1,41 +1,47 @@
 #define _CRT_SECURE_NO_WARNINGS 1 /* STFU MSVC */
-#define _WIN32_LEAN_AND_MEAN 1
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN 1
+#endif
 #include <windows.h>
+#include <shellapi.h>
 #include <initguid.h>
 #include <Usbiodef.h>
 
 #include <unordered_map>
 
-#include "IRunLoop.hpp"
-#include "inputdev/CDeviceFinder.hpp"
+#include "boo/IApplication.hpp"
+#include "boo/inputdev/DeviceFinder.hpp"
 
 namespace boo
 {
     
-IWindow* _CWindowWin32New(const std::string& title);
+IWindow* _WindowWin32New(const SystemString& title);
 
-class CApplicationWin32 final : public IApplication
+class ApplicationWin32 final : public IApplication
 {
     const IApplicationCallback& m_callback;
-    const std::string m_friendlyName;
-    const std::string m_pname;
-    const std::vector<std::string> m_args;
+    const SystemString m_uniqueName;
+    const SystemString m_friendlyName;
+    const SystemString m_pname;
+    const std::vector<SystemString> m_args;
     std::unordered_map<HWND, IWindow*> m_allWindows;
     bool m_singleInstance;
     
     void _deletedWindow(IWindow* window)
     {
-        m_allWindows.erase(window);
+        m_allWindows.erase(HWND(window->getPlatformHandle()));
     }
     
 public:
     
-    CApplicationWin32(const IApplicationCallback& callback,
-                      const std::string& friendlyName,
-                      const std::string& pname,
-                      const std::vector<std::string>& args,
-                      bool singleInstance)
+    ApplicationWin32(const IApplicationCallback& callback,
+                     const SystemString& uniqueName,
+                     const SystemString& friendlyName,
+                     const SystemString& pname,
+                     const std::vector<SystemString>& args,
+                     bool singleInstance)
     : m_callback(callback),
+      m_uniqueName(uniqueName),
       m_friendlyName(friendlyName),
       m_pname(pname),
       m_args(args),
@@ -57,14 +63,14 @@ public:
                 return 0;
                 
             case WM_DEVICECHANGE:
-                return CDeviceFinder::winDevChangedHandler(wParam, lParam);
+                return DeviceFinder::winDevChangedHandler(wParam, lParam);
                 
             default:
                 return DefWindowProc(hwnd, uMsg, wParam, lParam);
         }
     }
     
-    void run()
+    void pump()
     {
         /* Pump messages */
         MSG msg = {0};
@@ -75,40 +81,53 @@ public:
         }
     }
     
-    const std::string& getProcessName() const
+    const SystemString& getUniqueName() const
+    {
+        return m_uniqueName;
+    }
+
+    const SystemString& getFriendlyName() const
+    {
+        return m_friendlyName;
+    }
+
+    const SystemString& getProcessName() const
     {
         return m_pname;
     }
     
-    const std::vector<std::string>& getArgs() const
+    const std::vector<SystemString>& getArgs() const
     {
         return m_args;
     }
     
-    IWindow* newWindow(const std::string& title)
+    IWindow* newWindow(const SystemString& title)
     {
-        IWindow* window = _CWindowWin32New(title);
-        HWND hwnd = window->getPlatformHandle();
+        IWindow* window = _WindowWin32New(title);
+        HWND hwnd = HWND(window->getPlatformHandle());
         m_allWindows[hwnd] = window;
+        return window;
     }
 };
     
 IApplication* APP = NULL;
-IApplication* IApplicationBootstrap(IApplication::EPlatformType platform,
-                                    IApplicationCallback& cb,
-                                    const std::string& friendlyName,
-                                    const std::string& pname,
-                                    const std::vector<std::string>& args,
-                                    bool singleInstance)
+std::unique_ptr<IApplication>
+ApplicationBootstrap(IApplication::EPlatformType platform,
+                     IApplicationCallback& cb,
+                     const SystemString& uniqueName,
+                     const SystemString& friendlyName,
+                     const SystemString& pname,
+                     const std::vector<SystemString>& args,
+                     bool singleInstance)
 {
     if (!APP)
     {
         if (platform != IApplication::PLAT_WIN32 &&
             platform != IApplication::PLAT_AUTO)
             return NULL;
-        APP = new CApplicationWin32(cb, friendlyName, pname, args, singleInstance);
+        APP = new ApplicationWin32(cb, uniqueName, friendlyName, pname, args, singleInstance);
     }
-    return APP;
+    return std::unique_ptr<IApplication>(APP);
 }
 
 }
@@ -123,16 +142,17 @@ static const DEV_BROADCAST_DEVICEINTERFACE_A HOTPLUG_CONF =
 static bool HOTPLUG_REGISTERED = false;
 static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    if (!HOTPLUG_REGISTERED && hwnd == WM_CREATE)
+    if (!HOTPLUG_REGISTERED && uMsg == WM_CREATE)
     {
         /* Register hotplug notification with windows */
         RegisterDeviceNotificationA(hwnd, (LPVOID)&HOTPLUG_CONF, DEVICE_NOTIFY_WINDOW_HANDLE);
         HOTPLUG_REGISTERED = true;
     }
-    return IRunLoopInstance()->winHwndHandler(hwnd, uMsg, wParam, lParam);
+    return static_cast<boo::ApplicationWin32*>(boo::APP)->winHwndHandler(hwnd, uMsg, wParam, lParam);
 }
 
-int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPCWSTR lpCmdLine, int)
+int wmain(int argc, wchar_t** argv);
+int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int)
 {
 #if DEBUG
     /* Debug console */
@@ -161,6 +181,6 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPCWSTR lpCmdLine, int)
     LPWSTR* argv = CommandLineToArgvW(lpCmdLine, &argc);
     
     /* Call into the 'proper' entry point */
-    return main(argc, argv);
+    return wmain(argc, argv);
     
 }

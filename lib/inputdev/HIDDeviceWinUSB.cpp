@@ -1,14 +1,16 @@
 #define _CRT_SECURE_NO_WARNINGS 1 /* STFU MSVC */
 #include "IHIDDevice.hpp"
-#include "inputdev/CDeviceToken.hpp"
-#include "inputdev/CDeviceBase.hpp"
+#include "boo/inputdev/DeviceToken.hpp"
+#include "boo/inputdev/DeviceBase.hpp"
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <string.h>
 #include <stdio.h>
 
-#define _WIN32_LEAN_AND_MEAN 1
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN 1
+#endif
 #include <windows.h>
 #include <winusb.h>
 #include <usb100.h>
@@ -17,10 +19,10 @@
 namespace boo
 {
 
-class CHIDDeviceWinUSB final : public IHIDDevice
+class HIDDeviceWinUSB final : public IHIDDevice
 {
-    CDeviceToken& m_token;
-    CDeviceBase& m_devImp;
+    DeviceToken& m_token;
+    DeviceBase& m_devImp;
 
     HANDLE m_devHandle = 0;
     WINUSB_INTERFACE_HANDLE m_usbHandle = NULL;
@@ -60,7 +62,7 @@ class CHIDDeviceWinUSB final : public IHIDDevice
         return 0;
     }
 
-    static void _threadProcUSBLL(CHIDDeviceWinUSB* device)
+    static void _threadProcUSBLL(HIDDeviceWinUSB* device)
     {
         unsigned i;
         char errStr[256];
@@ -141,7 +143,7 @@ class CHIDDeviceWinUSB final : public IHIDDevice
 
     }
 
-    static void _threadProcBTLL(CHIDDeviceWinUSB* device)
+    static void _threadProcBTLL(HIDDeviceWinUSB* device)
     {
         std::unique_lock<std::mutex> lk(device->m_initMutex);
 
@@ -158,7 +160,7 @@ class CHIDDeviceWinUSB final : public IHIDDevice
 
     }
 
-    static void _threadProcHID(CHIDDeviceWinUSB* device)
+    static void _threadProcHID(HIDDeviceWinUSB* device)
     {
         std::unique_lock<std::mutex> lk(device->m_initMutex);
 
@@ -187,26 +189,26 @@ class CHIDDeviceWinUSB final : public IHIDDevice
 
 public:
 
-    CHIDDeviceWinUSB(CDeviceToken& token, CDeviceBase& devImp)
+    HIDDeviceWinUSB(DeviceToken& token, DeviceBase& devImp)
     : m_token(token),
       m_devImp(devImp),
       m_devPath(token.getDevicePath())
     {
         devImp.m_hidDev = this;
         std::unique_lock<std::mutex> lk(m_initMutex);
-        CDeviceToken::TDeviceType dType = token.getDeviceType();
-        if (dType == CDeviceToken::DEVTYPE_USB)
+        DeviceToken::TDeviceType dType = token.getDeviceType();
+        if (dType == DeviceToken::DEVTYPE_USB)
             m_thread = new std::thread(_threadProcUSBLL, this);
-        else if (dType == CDeviceToken::DEVTYPE_BLUETOOTH)
+        else if (dType == DeviceToken::DEVTYPE_BLUETOOTH)
             m_thread = new std::thread(_threadProcBTLL, this);
-        else if (dType == CDeviceToken::DEVTYPE_GENERICHID)
+        else if (dType == DeviceToken::DEVTYPE_GENERICHID)
             m_thread = new std::thread(_threadProcHID, this);
         else
             throw std::runtime_error("invalid token supplied to device constructor");
         m_initCond.wait(lk);
     }
 
-    ~CHIDDeviceWinUSB()
+    ~HIDDeviceWinUSB()
     {
         m_runningTransferLoop = false;
         m_thread->join();
@@ -216,9 +218,9 @@ public:
 
 };
 
-IHIDDevice* IHIDDeviceNew(CDeviceToken& token, CDeviceBase& devImp)
+IHIDDevice* IHIDDeviceNew(DeviceToken& token, DeviceBase& devImp)
 {
-    return new CHIDDeviceWinUSB(token, devImp);
+    return new HIDDeviceWinUSB(token, devImp);
 }
 
 }

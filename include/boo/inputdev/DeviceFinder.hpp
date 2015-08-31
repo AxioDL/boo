@@ -11,7 +11,9 @@
 #include <stdio.h>
 
 #ifdef _WIN32
-#define _WIN32_LEAN_AND_MEAN 1
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN 1
+#endif
 #include <windows.h>
 #include <Dbt.h>
 #endif
@@ -163,7 +165,7 @@ public:
     {
         PDEV_BROADCAST_HDR dbh = (PDEV_BROADCAST_HDR)lParam;
         PDEV_BROADCAST_DEVICEINTERFACE dbhi = (PDEV_BROADCAST_DEVICEINTERFACE)lParam;
-        CDeviceFinder* finder = instance();
+        DeviceFinder* finder = instance();
         if (!finder)
             return 0;
 

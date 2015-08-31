@@ -1,10 +1,12 @@
 #define _CRT_SECURE_NO_WARNINGS 1 /* STFU MSVC */
-#include "inputdev/IHIDListener.hpp"
-#include "inputdev/CDeviceFinder.hpp"
+#include "boo/inputdev/IHIDListener.hpp"
+#include "boo/inputdev/DeviceFinder.hpp"
 #include <string.h>
 #include <thread>
 
-#define _WIN32_LEAN_AND_MEAN 1
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN 1
+#endif
 #include <windows.h>
 
 #include <initguid.h>
@@ -16,9 +18,9 @@
 namespace boo
 {
 
-class CHIDListenerWinUSB final : public IHIDListener
+class HIDListenerWinUSB final : public IHIDListener
 {
-    CDeviceFinder& m_finder;
+    DeviceFinder& m_finder;
 
     bool m_scanningEnabled;
 
@@ -140,9 +142,9 @@ class CHIDListenerWinUSB final : public IHIDListener
 
             /* Whew!! that's a single device enumerated!! */
             if (!m_finder._hasToken(DeviceInterfaceDetailData.wtf.DevicePath))
-                m_finder._insertToken(CDeviceToken(CDeviceToken::DEVTYPE_USB,
-                                                   vid, pid, manuf, product,
-                                                   DeviceInterfaceDetailData.wtf.DevicePath));
+                m_finder._insertToken(DeviceToken(DeviceToken::DEVTYPE_USB,
+                                                  vid, pid, manuf, product,
+                                                  DeviceInterfaceDetailData.wtf.DevicePath));
 
         }
 
@@ -151,14 +153,14 @@ class CHIDListenerWinUSB final : public IHIDListener
     }
 
 public:
-    CHIDListenerWinUSB(CDeviceFinder& finder)
+    HIDListenerWinUSB(DeviceFinder& finder)
     : m_finder(finder)
     {
         /* Initial HID Device Add */
         _pollDevices(NULL);
     }
 
-    ~CHIDListenerWinUSB()
+    ~HIDListenerWinUSB()
     {}
 
     /* Automatic device scanning */
@@ -201,9 +203,9 @@ public:
 
 };
 
-IHIDListener* IHIDListenerNew(CDeviceFinder& finder)
+IHIDListener* IHIDListenerNew(DeviceFinder& finder)
 {
-    return new CHIDListenerWinUSB(finder);
+    return new HIDListenerWinUSB(finder);
 }
 
 }

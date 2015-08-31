@@ -1,7 +1,7 @@
 #ifndef IWINDOW_HPP
 #define IWINDOW_HPP
 
-#include <string>
+#include "System.hpp"
 
 namespace boo
 {
@@ -123,8 +123,8 @@ public:
     virtual void showWindow()=0;
     virtual void hideWindow()=0;
     
-    virtual std::string getTitle()=0;
-    virtual void setTitle(const std::string& title)=0;
+    virtual SystemString getTitle()=0;
+    virtual void setTitle(const SystemString& title)=0;
 
     virtual void setWindowFrameDefault()=0;
     virtual void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const=0;
