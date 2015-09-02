@@ -17,9 +17,12 @@ elseif(APPLE)
        lib/mac/ApplicationCocoa.mm
        lib/mac/WindowCocoa.mm
        lib/mac/GLViewCocoa.mm
-       lib/mac/GraphicsContextCocoa.cpp
        lib/inputdev/HIDListenerIOKit.cpp
        lib/inputdev/HIDDeviceIOKit.cpp)
+  find_library(APPKIT_LIBRARY AppKit)
+  find_library(IOKIT_LIBRARY IOKit)
+  find_library(OPENGL_LIBRARY OpenGL)
+  list(APPEND _BOO_SYS_LIBS ${APPKIT_LIBRARY} ${IOKIT_LIBRARY} ${OPENGL_LIBRARY})
 else()
   list(APPEND PLAT_SRCS 
        lib/x11/ApplicationUnix.cpp

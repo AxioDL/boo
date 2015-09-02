@@ -6,8 +6,8 @@ namespace boo
 
 class IGraphicsContext
 {
-    friend class CWindowCocoa;
-    friend class CWindowXCB;
+    friend class WindowCocoa;
+    friend class WindowXCB;
     virtual void _setCallback(class IWindowCallback* cb) {(void)cb;}
 
 public:

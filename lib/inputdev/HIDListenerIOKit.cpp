@@ -1,5 +1,5 @@
-#include "IHIDListener.hpp"
-#include "inputdev/CDeviceFinder.hpp"
+#include "boo/inputdev/IHIDListener.hpp"
+#include "boo/inputdev/DeviceFinder.hpp"
 #include <CoreFoundation/CoreFoundation.h>
 #include <IOKit/hid/IOHIDLib.h>
 #include <IOKit/IOKitLib.h>
@@ -52,16 +52,16 @@ static bool getUSBStringDescriptor(IOUSBDeviceInterface182** usbDevice, UInt8 id
     return true;
 }
 
-class CHIDListenerIOKit final : public IHIDListener
+class HIDListenerIOKit : public IHIDListener
 {
-    CDeviceFinder& m_finder;
+    DeviceFinder& m_finder;
     
     CFRunLoopRef m_listenerRunLoop;
     IONotificationPortRef m_llPort;
     io_iterator_t m_llAddNotif, m_llRemoveNotif;
     bool m_scanningEnabled;
     
-    static void devicesConnectedUSBLL(CHIDListenerIOKit* listener,
+    static void devicesConnectedUSBLL(HIDListenerIOKit* listener,
                                       io_iterator_t      iterator)
     {
         io_object_t obj;
@@ -83,14 +83,20 @@ class CHIDListenerIOKit final : public IHIDListener
             IOReturn err;
             err = IOCreatePlugInInterfaceForService(obj, kIOUSBDeviceUserClientTypeID, kIOCFPlugInInterfaceID, &devServ, &score);
             if (err != kIOReturnSuccess)
-                throw std::runtime_error("unable to open IOKit plugin interface");
+            {
+                fprintf(stderr, "unable to open IOKit plugin interface\n");
+                return;
+            }
             
             IOUSBDeviceInterface182 **dev;
             err = (*devServ)->QueryInterface(devServ,
                                              CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID182),
                                              (LPVOID*)&dev);
             if (err != kIOReturnSuccess)
-                throw std::runtime_error("unable to open IOKit device interface");
+            {
+                fprintf(stderr, "unable to open IOKit device interface\n");
+                return;
+            }
             
             UInt16 vid, pid;
             (*dev)->GetDeviceVendor(dev, &vid);
@@ -105,8 +111,8 @@ class CHIDListenerIOKit final : public IHIDListener
             getUSBStringDescriptor(dev, vstridx, vstr);
             getUSBStringDescriptor(dev, pstridx, pstr);
 
-            if (!listener->m_finder._insertToken(CDeviceToken(CDeviceToken::DEVTYPE_USB,
-                                                              vid, pid, vstr, pstr, devPath)))
+            if (!listener->m_finder._insertToken(DeviceToken(DeviceToken::DEVTYPE_USB,
+                                                             vid, pid, vstr, pstr, devPath)))
             {
                 /* Matched-insertion failed; see if generic HID interface is available */
                 /* TODO: Do */
@@ -120,7 +126,7 @@ class CHIDListenerIOKit final : public IHIDListener
         
     }
     
-    static void devicesDisconnectedUSBLL(CHIDListenerIOKit* listener,
+    static void devicesDisconnectedUSBLL(HIDListenerIOKit* listener,
                                          io_iterator_t      iterator)
     {
         if (CFRunLoopGetCurrent() != listener->m_listenerRunLoop)
@@ -144,7 +150,7 @@ class CHIDListenerIOKit final : public IHIDListener
     }
 
 public:
-    CHIDListenerIOKit(CDeviceFinder& finder)
+    HIDListenerIOKit(DeviceFinder& finder)
     : m_finder(finder)
     {
         
@@ -174,7 +180,7 @@ public:
         
     }
     
-    ~CHIDListenerIOKit()
+    ~HIDListenerIOKit()
     {
         CFRunLoopRemoveSource(m_listenerRunLoop, IONotificationPortGetRunLoopSource(m_llPort), kCFRunLoopDefaultMode);
         IOObjectRelease(m_llAddNotif);
@@ -209,9 +215,9 @@ public:
     
 };
 
-IHIDListener* IHIDListenerNew(CDeviceFinder& finder)
+IHIDListener* IHIDListenerNew(DeviceFinder& finder)
 {
-    return new CHIDListenerIOKit(finder);
+    return new HIDListenerIOKit(finder);
 }
 
 }

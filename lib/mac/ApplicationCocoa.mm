@@ -1,6 +1,6 @@
 #include <AppKit/AppKit.h>
 
-#include "IApplication.hpp"
+#include "boo/IApplication.hpp"
 
 @interface AppDelegate : NSObject <NSApplicationDelegate>
 {
@@ -21,17 +21,27 @@
 - (void)applicationDidFinishLaunching:(NSNotification*)notification
 {
     (void)notification;
-    callback->appLaunched(boo::IApplicationInstance());
+    callback->appMain(boo::APP);
 }
 - (void)applicationWillTerminate:(NSNotification*)notification
 {
     (void)notification;
-    callback->appQuitting(boo::IApplicationInstance());
+    callback->appQuitting(boo::APP);
 }
 - (BOOL)application:(NSApplication*)sender openFile:(NSString*)filename
 {
-    (void)sender;
-    return callback->appFileOpen(boo::IApplicationInstance(), [filename UTF8String]);
+    std::vector<boo::SystemString> strVec;
+    strVec.push_back(boo::SystemString([filename UTF8String]));
+    callback->appFilesOpen(boo::APP, strVec);
+    return true;
+}
+- (void)application:(NSApplication*)sender openFiles:(NSArray*)filenames
+{
+    std::vector<boo::SystemString> strVec;
+    strVec.reserve([filenames count]);
+    for (NSString* str in filenames)
+        strVec.push_back(boo::SystemString([str UTF8String]));
+    callback->appFilesOpen(boo::APP, strVec);
 }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
     (void)sender;
@@ -62,14 +72,15 @@
 namespace boo
 {
     
-IWindow* _CWindowCocoaNew(const std::string& title);
+IWindow* _WindowCocoaNew(const SystemString& title);
     
-class CApplicationCocoa final : public IApplication
+class ApplicationCocoa : public IApplication
 {
     IApplicationCallback& m_callback;
-    const std::string m_friendlyName;
-    const std::string m_pname;
-    const std::vector<std::string> m_args;
+    const SystemString m_uniqueName;
+    const SystemString m_friendlyName;
+    const SystemString m_pname;
+    const std::vector<SystemString> m_args;
     
     NSPanel* aboutPanel;
     
@@ -79,22 +90,16 @@ class CApplicationCocoa final : public IApplication
     }
 
 public:
-    CApplicationCocoa(IApplicationCallback& callback,
-                      const std::string& friendlyName,
-                      const std::string& pname,
-                      const std::vector<std::string>& args)
+    ApplicationCocoa(IApplicationCallback& callback,
+                     const SystemString& uniqueName,
+                     const SystemString& friendlyName,
+                     const SystemString& pname,
+                     const std::vector<SystemString>& args)
     : m_callback(callback),
+      m_uniqueName(uniqueName),
       m_friendlyName(friendlyName),
       m_pname(pname),
       m_args(args)
-    {}
-    
-    EPlatformType getPlatformType() const
-    {
-        return PLAT_COCOA;
-    }
-    
-    void run()
     {
         @autoreleasepool
         {
@@ -141,42 +146,64 @@ public:
         }
     }
     
+    EPlatformType getPlatformType() const
+    {
+        return PLAT_COCOA;
+    }
+    
+    void pump()
+    {
+
+    }
+    
     void quit()
     {
         [NSApp terminate:nil];
     }
     
-    const std::string& getProcessName() const
+    const SystemString& getUniqueName() const
+    {
+        return m_uniqueName;
+    }
+    
+    const SystemString& getFriendlyName() const
+    {
+        return m_friendlyName;
+    }
+    
+    const SystemString& getProcessName() const
     {
         return m_pname;
     }
     
-    const std::vector<std::string>& getArgs() const
+    const std::vector<SystemString>& getArgs() const
     {
         return m_args;
     }
     
     IWindow* newWindow(const std::string& title)
     {
-        return _CWindowCocoaNew(title);
+        return _WindowCocoaNew(title);
     }
 };
 
 IApplication* APP = NULL;
-IApplication* IApplicationBootstrap(IApplication::EPlatformType platform,
-                                    IApplicationCallback& cb,
-                                    const std::string& friendlyName,
-                                    const std::string& pname,
-                                    const std::vector<std::string>& args)
+std::unique_ptr<IApplication> ApplicationBootstrap(IApplication::EPlatformType platform,
+                                                   IApplicationCallback& cb,
+                                                   const SystemString& uniqueName,
+                                                   const SystemString& friendlyName,
+                                                   const SystemString& pname,
+                                                   const std::vector<SystemString>& args,
+                                                   bool singleInstance)
 {
     if (!APP)
     {
         if (platform != IApplication::PLAT_COCOA &&
             platform != IApplication::PLAT_AUTO)
             return NULL;
-        APP = new CApplicationCocoa(cb, friendlyName, pname, args);
+        APP = new ApplicationCocoa(cb, uniqueName, friendlyName, pname, args);
     }
-    return APP;
+    return std::unique_ptr<IApplication>(APP);
 }
     
 }

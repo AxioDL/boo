@@ -1,6 +1,6 @@
 #include "IHIDDevice.hpp"
-#include "inputdev/CDeviceToken.hpp"
-#include "inputdev/CDeviceBase.hpp"
+#include "boo/inputdev/DeviceToken.hpp"
+#include "boo/inputdev/DeviceBase.hpp"
 #include <IOKit/hid/IOHIDLib.h>
 #include <IOKit/usb/IOUSBLib.h>
 #include <IOKit/IOCFPlugIn.h>
@@ -9,10 +9,10 @@
 namespace boo
 {
 
-class CHIDDeviceIOKit final : public IHIDDevice
+class HIDDeviceIOKit : public IHIDDevice
 {
-    CDeviceToken& m_token;
-    CDeviceBase& m_devImp;
+    DeviceToken& m_token;
+    DeviceBase& m_devImp;
 
     IOUSBInterfaceInterface** m_usbIntf = NULL;
     uint8_t m_usbIntfInPipe = 0;
@@ -47,7 +47,7 @@ class CHIDDeviceIOKit final : public IHIDDevice
         return 0;
     }
     
-    static void _threadProcUSBLL(CHIDDeviceIOKit* device)
+    static void _threadProcUSBLL(HIDDeviceIOKit* device)
     {
         char thrName[128];
         snprintf(thrName, 128, "%s Transfer Thread", device->m_token.getProductName().c_str());
@@ -174,7 +174,7 @@ class CHIDDeviceIOKit final : public IHIDDevice
         
     }
     
-    static void _threadProcBTLL(CHIDDeviceIOKit* device)
+    static void _threadProcBTLL(HIDDeviceIOKit* device)
     {
         std::unique_lock<std::mutex> lk(device->m_initMutex);
         
@@ -191,7 +191,7 @@ class CHIDDeviceIOKit final : public IHIDDevice
         
     }
     
-    static void _threadProcHID(CHIDDeviceIOKit* device)
+    static void _threadProcHID(HIDDeviceIOKit* device)
     {
         std::unique_lock<std::mutex> lk(device->m_initMutex);
         
@@ -219,26 +219,29 @@ class CHIDDeviceIOKit final : public IHIDDevice
     
 public:
     
-    CHIDDeviceIOKit(CDeviceToken& token, CDeviceBase& devImp)
+    HIDDeviceIOKit(DeviceToken& token, DeviceBase& devImp)
     : m_token(token),
       m_devImp(devImp),
       m_devPath(token.getDevicePath())
     {
         devImp.m_hidDev = this;
         std::unique_lock<std::mutex> lk(m_initMutex);
-        CDeviceToken::TDeviceType dType = token.getDeviceType();
-        if (dType == CDeviceToken::DEVTYPE_USB)
+        DeviceToken::TDeviceType dType = token.getDeviceType();
+        if (dType == DeviceToken::DEVTYPE_USB)
             m_thread = new std::thread(_threadProcUSBLL, this);
-        else if (dType == CDeviceToken::DEVTYPE_BLUETOOTH)
+        else if (dType == DeviceToken::DEVTYPE_BLUETOOTH)
             m_thread = new std::thread(_threadProcBTLL, this);
-        else if (dType == CDeviceToken::DEVTYPE_GENERICHID)
+        else if (dType == DeviceToken::DEVTYPE_GENERICHID)
             m_thread = new std::thread(_threadProcHID, this);
         else
-            throw std::runtime_error("invalid token supplied to device constructor");
+        {
+            fprintf(stderr, "invalid token supplied to device constructor\n");
+            return;
+        }
         m_initCond.wait(lk);
     }
     
-    ~CHIDDeviceIOKit()
+    ~HIDDeviceIOKit()
     {
         m_runningTransferLoop = false;
         m_thread->join();
@@ -248,9 +251,9 @@ public:
 
 };
 
-IHIDDevice* IHIDDeviceNew(CDeviceToken& token, CDeviceBase& devImp)
+IHIDDevice* IHIDDeviceNew(DeviceToken& token, DeviceBase& devImp)
 {
-    return new CHIDDeviceIOKit(token, devImp);
+    return new HIDDeviceIOKit(token, devImp);
 }
 
 }
