@@ -237,7 +237,7 @@ IGraphicsContext* _CGraphicsContextCocoaNew(IGraphicsContext::EGraphicsAPI api,
     return YES;
 }
 
-static inline boo::IWindowCallback::EModifierKey getMod(NSEventModifierFlags flags)
+static inline boo::IWindowCallback::EModifierKey getMod(NSUInteger flags)
 {
     int ret = boo::IWindowCallback::MKEY_NONE;
     if (flags & NSControlKeyMask)
