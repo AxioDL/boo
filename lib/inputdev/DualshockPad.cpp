@@ -7,9 +7,9 @@
 
 #ifdef _WIN32
 static inline uint16_t bswap16(uint16_t val) {return _byteswap_ushort(val);}
-#elif __GNUC__
+#elif __GNUC__ && !defined(__FreeBSD__)
 static inline uint16_t bswap16(uint16_t val) {return __builtin_bswap16(val); }
-#else
+#elif !defined(__FreeBSD__)
 static inline uint16_t bswap16(uint16_t val) {return __builtin_byteswap(val);}
 #endif
 
