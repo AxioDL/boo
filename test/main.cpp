@@ -172,7 +172,7 @@ struct TestApplicationCallback : IApplicationCallback
     IWindow* mainWindow = NULL;
     boo::TestDeviceFinder devFinder;
     CTestWindowCallback windowCallback;
-    void appLaunched(IApplication* app)
+    void appMain(IApplication* app)
     {
         mainWindow = app->newWindow(_S("YAY!"));
         mainWindow->setCallback(&windowCallback);
@@ -210,6 +210,10 @@ int main(int argc, const char** argv)
     std::unique_ptr<boo::IApplication> app =
             ApplicationBootstrap(boo::IApplication::PLAT_AUTO,
                                  appCb, _S("rwk"), _S("RWK"), argc, argv);
+    while (true)
+    {
+        app->pump();
+    }
     printf("IM DYING!!\n");
     return 0;
 }
