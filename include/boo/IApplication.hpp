@@ -44,7 +44,7 @@ public:
     };
     virtual EPlatformType getPlatformType() const=0;
     
-    virtual void pump()=0;
+    virtual int run()=0;
     virtual const SystemString& getUniqueName() const=0;
     virtual const SystemString& getFriendlyName() const=0;
     virtual const SystemString& getProcessName() const=0;

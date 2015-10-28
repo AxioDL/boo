@@ -210,11 +210,8 @@ int main(int argc, const char** argv)
     std::unique_ptr<boo::IApplication> app =
             ApplicationBootstrap(boo::IApplication::PLAT_AUTO,
                                  appCb, _S("rwk"), _S("RWK"), argc, argv);
-    while (true)
-    {
-        app->pump();
-    }
+    int ret = app->run();
     printf("IM DYING!!\n");
-    return 0;
+    return ret;
 }
 

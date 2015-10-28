@@ -51,6 +51,10 @@ public:
     {
         
     }
+
+    void makeCurrent()
+    {
+    }
     
 };
 

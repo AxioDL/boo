@@ -10,7 +10,7 @@
 #include <dbus/dbus.h>
 #include <stdio.h>
 
-DBusConnection* registerDBus(const char* appName, bool& isFirst)
+DBusConnection* RegisterDBus(const char* appName, bool& isFirst)
 {
     isFirst = true;
     DBusError err = {};

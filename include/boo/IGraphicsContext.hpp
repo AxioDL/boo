@@ -40,7 +40,8 @@ public:
     virtual EPixelFormat getPixelFormat() const=0;
     virtual void setPixelFormat(EPixelFormat pf)=0;
     virtual void initializeContext()=0;
-    
+    virtual void makeCurrent()=0;
+
 };
     
 }

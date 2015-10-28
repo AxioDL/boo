@@ -11,8 +11,8 @@ namespace boo
 extern PFNGLXGETVIDEOSYNCSGIPROC FglXGetVideoSyncSGI;
 extern PFNGLXWAITVIDEOSYNCSGIPROC FglXWaitVideoSyncSGI;
     
-IGraphicsContext* _CGraphicsContextWaylandNew(IGraphicsContext::EGraphicsAPI api,
-                                              IWindow* parentWindow);
+IGraphicsContext* _GraphicsContextWaylandNew(IGraphicsContext::EGraphicsAPI api,
+                                             IWindow* parentWindow);
     
 struct WindowWayland : IWindow
 {    
@@ -99,7 +99,7 @@ struct WindowWayland : IWindow
     
 };
 
-IWindow* _CWindowWaylandNew(const std::string& title)
+IWindow* _WindowWaylandNew(const std::string& title)
 {
     return new WindowWayland(title);
 }

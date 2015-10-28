@@ -18,7 +18,7 @@
 #include <GL/glxext.h>
 
 #include <dbus/dbus.h>
-DBusConnection* registerDBus(const char* appName, bool& isFirst);
+DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
 
 #include <sys/param.h>
 
@@ -31,7 +31,7 @@ PFNGLXWAITVIDEOSYNCSGIPROC FglXWaitVideoSyncSGI = nullptr;
 int XCB_GLX_EVENT_BASE = 0;
 int XINPUT_OPCODE = 0;
 
-static xcb_window_t getWindowOfEvent(xcb_generic_event_t* event, bool& windowEvent)
+static xcb_window_t GetWindowOfEvent(xcb_generic_event_t* event, bool& windowEvent)
 {
     switch (XCB_EVENT_RESPONSE_TYPE(event))
     {
@@ -122,7 +122,7 @@ static xcb_window_t getWindowOfEvent(xcb_generic_event_t* event, bool& windowEve
     return 0;
 }
     
-IWindow* _CWindowXCBNew(const std::string& title, xcb_connection_t* conn);
+IWindow* _WindowXCBNew(const std::string& title, xcb_connection_t* conn);
     
 class ApplicationXCB final : public IApplication
 {
@@ -163,7 +163,7 @@ public:
     {
         /* DBus single instance registration */
         bool isFirst;
-        m_dbus = registerDBus(uniqueName.c_str(), isFirst);
+        m_dbus = RegisterDBus(uniqueName.c_str(), isFirst);
         if (m_singleInstance)
         {
             if (!isFirst)
@@ -248,10 +248,10 @@ public:
         return PLAT_XCB;
     }
     
-    void pump()
+    int run()
     {
         if (!m_xcbConn)
-            return;
+            return 1;
 
         xcb_generic_event_t* event;
         fd_set fds;
@@ -266,7 +266,7 @@ public:
             if (event)
             {
                 bool windowEvent;
-                xcb_window_t evWindow = getWindowOfEvent(event, windowEvent);
+                xcb_window_t evWindow = GetWindowOfEvent(event, windowEvent);
                 //fprintf(stderr, "EVENT %d\n", XCB_EVENT_RESPONSE_TYPE(event));
                 if (windowEvent)
                 {
@@ -327,7 +327,7 @@ public:
     
     IWindow* newWindow(const std::string& title)
     {
-        IWindow* newWindow = _CWindowXCBNew(title, m_xcbConn);
+        IWindow* newWindow = _WindowXCBNew(title, m_xcbConn);
         m_windows[(xcb_window_t)newWindow->getPlatformHandle()] = newWindow;
         return newWindow;
     }

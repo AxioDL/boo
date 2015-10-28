@@ -5,12 +5,12 @@
 #include "boo/IApplication.hpp"
 
 #include <dbus/dbus.h>
-DBusConnection* registerDBus(const char* appName, bool& isFirst);
+DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
 
 namespace boo
 {
     
-IWindow* _CWindowWaylandNew(const std::string& title);
+IWindow* _WindowWaylandNew(const std::string& title);
     
 class ApplicationWayland final : public IApplication
 {
@@ -46,7 +46,7 @@ public:
         return PLAT_WAYLAND;
     }
     
-    void pump()
+    int run()
     {
         
     }
@@ -73,7 +73,7 @@ public:
     
     IWindow* newWindow(const std::string& title)
     {
-        return _CWindowWaylandNew(title);
+        return _WindowWaylandNew(title);
     }
 };
     

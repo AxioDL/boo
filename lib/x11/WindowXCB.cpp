@@ -169,13 +169,13 @@ struct GraphicsContextXCB : IGraphicsContext
 public:
     IWindowCallback* m_callback;
 
-    GraphicsContextXCB(EGraphicsAPI api, IWindow* parentWindow, xcb_connection_t* conn, uint32_t& visualIdOut)
+    GraphicsContextXCB(EGraphicsAPI api, IWindow* parentWindow,
+                       xcb_connection_t* conn, uint32_t& visualIdOut)
     : m_api(api),
       m_pf(PF_RGBA8),
       m_parentWindow(parentWindow),
       m_xcbConn(conn)
     {
-
         /* WTF freedesktop?? Fix this awful API and your nonexistant docs */
         xcb_glx_get_fb_configs_reply_t* fbconfigs =
         xcb_glx_get_fb_configs_reply(m_xcbConn, xcb_glx_get_fb_configs(m_xcbConn, 0), NULL);
@@ -246,7 +246,10 @@ public:
 
     ~GraphicsContextXCB()
     {
-
+        if (m_glxCtx)
+            xcb_glx_destroy_context(m_xcbConn, m_glxCtx);
+        if (m_glxWindow)
+            xcb_glx_delete_window(m_xcbConn, m_glxWindow);
     }
 
     void _setCallback(IWindowCallback* cb)
@@ -277,6 +280,17 @@ public:
         xcb_glx_create_window(m_xcbConn, 0, m_fbconfig,
                               m_parentWindow->getPlatformHandle(),
                               m_glxWindow, 0, NULL);
+        m_glxCtx = xcb_generate_id(m_xcbConn);
+        xcb_glx_create_context(m_xcbConn, m_glxCtx, m_visualid, 0, 0, 1);
+    }
+
+    void makeCurrent()
+    {
+        xcb_generic_error_t* err = nullptr;
+        xcb_glx_make_context_current_reply_t* reply =
+        xcb_glx_make_context_current_reply(m_xcbConn,
+        xcb_glx_make_context_current(m_xcbConn, 0, m_glxWindow, m_glxWindow, m_glxCtx), &err);
+        free(reply);
     }
 
 };
@@ -285,6 +299,7 @@ struct WindowXCB : IWindow
 {
     xcb_connection_t* m_xcbConn;
     IWindowCallback* m_callback;
+    xcb_colormap_t m_colormapId;
     xcb_window_t m_windowId;
     GraphicsContextXCB m_gfxCtx;
     uint32_t m_visualId;
@@ -316,9 +331,9 @@ public:
         m_pixelFactor = screen->width_in_pixels / (float)screen->width_in_millimeters / REF_DPMM;
 
         /* Create colormap */
-        xcb_colormap_t colormap = xcb_generate_id(m_xcbConn);
+        m_colormapId = xcb_generate_id(m_xcbConn);
         xcb_create_colormap(m_xcbConn, XCB_COLORMAP_ALLOC_NONE,
-                            colormap, screen->root, m_visualId);
+                            m_colormapId, screen->root, m_visualId);
 
         /* Create window */
         int x, y, w, h;
@@ -330,7 +345,7 @@ public:
             XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE |
             XCB_EVENT_MASK_POINTER_MOTION | XCB_EVENT_MASK_EXPOSURE |
             XCB_EVENT_MASK_STRUCTURE_NOTIFY,
-            colormap,
+            m_colormapId,
             XCB_NONE
         };
         m_windowId = xcb_generate_id(conn);
@@ -388,7 +403,7 @@ public:
                             strlen(c_title), c_title);
 
         /* Initialize context */
-        xcb_map_window(m_xcbConn, m_windowId);
+        //xcb_map_window(m_xcbConn, m_windowId);
         xcb_flush(m_xcbConn);
 
         m_gfxCtx.initializeContext();
@@ -396,6 +411,9 @@ public:
     
     ~WindowXCB()
     {
+        xcb_unmap_window(m_xcbConn, m_windowId);
+        xcb_destroy_window(m_xcbConn, m_windowId);
+        xcb_free_colormap(m_xcbConn, m_colormapId);
         APP->_deletedWindow(this);
     }
     
@@ -623,8 +641,8 @@ public:
             {
                 int specialKey;
                 int modifierKey;
-                wchar_t charCode = translateKeysym(xcb_key_press_lookup_keysym(S_ATOMS->m_keySyms, ev, 0),
-                                                   specialKey, modifierKey);
+                uint32_t charCode = translateKeysym(xcb_key_press_lookup_keysym(S_ATOMS->m_keySyms, ev, 0),
+                                                    specialKey, modifierKey);
                 int modifierMask = translateModifiers(ev->state);
                 if (charCode)
                     m_callback->charKeyDown(charCode,
@@ -644,8 +662,8 @@ public:
             {
                 int specialKey;
                 int modifierKey;
-                wchar_t charCode = translateKeysym(xcb_key_release_lookup_keysym(S_ATOMS->m_keySyms, ev, 0),
-                                                   specialKey, modifierKey);
+                uint32_t charCode = translateKeysym(xcb_key_release_lookup_keysym(S_ATOMS->m_keySyms, ev, 0),
+                                                    specialKey, modifierKey);
                 int modifierMask = translateModifiers(ev->state);
                 if (charCode)
                     m_callback->charKeyUp(charCode,
@@ -897,7 +915,7 @@ public:
     
 };
 
-IWindow* _CWindowXCBNew(const std::string& title, xcb_connection_t* conn)
+IWindow* _WindowXCBNew(const std::string& title, xcb_connection_t* conn)
 {
     return new WindowXCB(title, conn);
 }
