@@ -71,9 +71,9 @@ public:
         return m_args;
     }
     
-    IWindow* newWindow(const std::string& title)
+    std::unique_ptr<IWindow> newWindow(const std::string& title)
     {
-        return _WindowWaylandNew(title);
+        return std::unique_ptr<IWindow>(_WindowWaylandNew(title));
     }
 };
     

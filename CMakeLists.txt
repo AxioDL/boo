@@ -10,7 +10,10 @@ if(WIN32)
        lib/win/ApplicationWin32.cpp
        lib/win/WindowWin32.cpp
        lib/inputdev/HIDListenerWinUSB.cpp
-       lib/inputdev/HIDDeviceWinUSB.cpp)
+       lib/inputdev/HIDDeviceWinUSB.cpp
+       lib/graphicsdev/D3D11.cpp
+       lib/graphicsdev/D3D12.cpp
+       lib/graphicsdev/GLES3.cpp)
   list(APPEND _BOO_SYS_LIBS Winusb)
 elseif(APPLE)
   list(APPEND PLAT_SRCS 
@@ -18,7 +21,8 @@ elseif(APPLE)
        lib/mac/WindowCocoa.mm
        lib/mac/GLViewCocoa.mm
        lib/inputdev/HIDListenerIOKit.cpp
-       lib/inputdev/HIDDeviceIOKit.cpp)
+       lib/inputdev/HIDDeviceIOKit.cpp
+       lib/graphicsdev/GLES3.cpp)
   find_library(APPKIT_LIBRARY AppKit)
   find_library(IOKIT_LIBRARY IOKit)
   find_library(OPENGL_LIBRARY OpenGL)
@@ -30,9 +34,9 @@ else()
        lib/x11/ApplicationWayland.hpp
        lib/x11/WindowXCB.cpp
        lib/x11/WindowWayland.cpp
-       lib/x11/GraphicsContextWayland.cpp
        lib/inputdev/HIDListenerUdev.cpp
-       lib/inputdev/HIDDeviceUdev.cpp)
+       lib/inputdev/HIDDeviceUdev.cpp
+       lib/graphicsdev/GLES3.cpp)
 
   find_package(PkgConfig)
   if(PKG_CONFIG_FOUND)
@@ -94,6 +98,12 @@ add_library(Boo
             include/boo/inputdev/IHIDListener.hpp
             lib/inputdev/IHIDDevice.hpp
             include/boo/IGraphicsContext.hpp
+            include/boo/graphicsdev/IGraphicsDataFactory.hpp
+            include/boo/graphicsdev/IGraphicsCommandQueue.hpp
+            include/boo/graphicsdev/GLES3.hpp
+            include/boo/graphicsdev/D3D11.hpp
+            include/boo/graphicsdev/D3D12.hpp
+            include/boo/graphicsdev/Metal.hpp
             include/boo/IWindow.hpp
             include/boo/IApplication.hpp
             include/boo/System.hpp

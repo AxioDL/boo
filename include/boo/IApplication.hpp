@@ -14,7 +14,7 @@ class IApplication;
 
 struct IApplicationCallback
 {
-    virtual void appMain(IApplication*) {}
+    virtual int appMain(IApplication*) {}
     virtual void appQuitting(IApplication*) {}
     virtual void appFilesOpen(IApplication*, const std::vector<SystemString>&) {}
 };
@@ -51,7 +51,7 @@ public:
     virtual const std::vector<SystemString>& getArgs() const=0;
     
     /* Constructors/initializers for sub-objects */
-    virtual IWindow* newWindow(const SystemString& title)=0;
+    virtual std::unique_ptr<IWindow> newWindow(const SystemString& title)=0;
     
 };
 

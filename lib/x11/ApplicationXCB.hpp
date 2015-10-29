@@ -21,6 +21,7 @@
 DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
 
 #include <sys/param.h>
+#include <thread>
 
 namespace boo
 {
@@ -253,56 +254,69 @@ public:
         if (!m_xcbConn)
             return 1;
 
-        xcb_generic_event_t* event;
-        fd_set fds;
-        FD_ZERO(&fds);
-        FD_SET(m_xcbFd, &fds);
-        FD_SET(m_dbusFd, &fds);
-        select(m_maxFd+1, &fds, NULL, NULL, NULL);
+        /* Spawn client thread */
+        int clientReturn = 0;
+        std::thread clientThread([&]()
+        {clientReturn = m_callback.appMain(this);});
 
-        if (FD_ISSET(m_xcbFd, &fds))
+        /* Begin application event loop */
+        while (true)
         {
-            event = xcb_poll_for_event(m_xcbConn);
-            if (event)
-            {
-                bool windowEvent;
-                xcb_window_t evWindow = GetWindowOfEvent(event, windowEvent);
-                //fprintf(stderr, "EVENT %d\n", XCB_EVENT_RESPONSE_TYPE(event));
-                if (windowEvent)
-                {
-                    auto window = m_windows.find(evWindow);
-                    if (window != m_windows.end())
-                        window->second->_incomingEvent(event);
-                }
-                free(event);
-            }
-        }
+            xcb_generic_event_t* event;
+            fd_set fds;
+            FD_ZERO(&fds);
+            FD_SET(m_xcbFd, &fds);
+            FD_SET(m_dbusFd, &fds);
+            select(m_maxFd+1, &fds, NULL, NULL, NULL);
 
-        if (FD_ISSET(m_dbusFd, &fds))
-        {
-            DBusMessage* msg;
-            dbus_connection_read_write(m_dbus, 0);
-            while ((msg = dbus_connection_pop_message(m_dbus)))
+            if (FD_ISSET(m_xcbFd, &fds))
             {
-                /* check if the message is a signal from the correct interface and with the correct name */
-                if (dbus_message_is_signal(msg, "boo.signal.FileHandling", "Open"))
+                event = xcb_poll_for_event(m_xcbConn);
+                if (event)
                 {
-                    /* read the parameters */
-                    std::vector<std::string> paths;
-                    DBusMessageIter iter;
-                    dbus_message_iter_init(msg, &iter);
-                    while (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_INVALID)
+                    bool windowEvent;
+                    xcb_window_t evWindow = GetWindowOfEvent(event, windowEvent);
+                    //fprintf(stderr, "EVENT %d\n", XCB_EVENT_RESPONSE_TYPE(event));
+                    if (windowEvent)
                     {
-                        const char* argVal;
-                        dbus_message_iter_get_basic(&iter, &argVal);
-                        paths.push_back(argVal);
-                        dbus_message_iter_next(&iter);
+                        auto window = m_windows.find(evWindow);
+                        if (window != m_windows.end())
+                            window->second->_incomingEvent(event);
                     }
-                    m_callback.appFilesOpen(this, paths);
+                    free(event);
                 }
-                dbus_message_unref(msg);
+            }
+
+            if (FD_ISSET(m_dbusFd, &fds))
+            {
+                DBusMessage* msg;
+                dbus_connection_read_write(m_dbus, 0);
+                while ((msg = dbus_connection_pop_message(m_dbus)))
+                {
+                    /* check if the message is a signal from the correct interface and with the correct name */
+                    if (dbus_message_is_signal(msg, "boo.signal.FileHandling", "Open"))
+                    {
+                        /* read the parameters */
+                        std::vector<std::string> paths;
+                        DBusMessageIter iter;
+                        dbus_message_iter_init(msg, &iter);
+                        while (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_INVALID)
+                        {
+                            const char* argVal;
+                            dbus_message_iter_get_basic(&iter, &argVal);
+                            paths.push_back(argVal);
+                            dbus_message_iter_next(&iter);
+                        }
+                        m_callback.appFilesOpen(this, paths);
+                    }
+                    dbus_message_unref(msg);
+                }
             }
         }
+
+        m_callback.appQuitting(this);
+        clientThread.join();
+        return clientReturn;
     }
 
     const std::string& getUniqueName() const
@@ -325,11 +339,11 @@ public:
         return m_args;
     }
     
-    IWindow* newWindow(const std::string& title)
+    std::unique_ptr<IWindow> newWindow(const std::string& title)
     {
         IWindow* newWindow = _WindowXCBNew(title, m_xcbConn);
         m_windows[(xcb_window_t)newWindow->getPlatformHandle()] = newWindow;
-        return newWindow;
+        return std::unique_ptr<IWindow>(newWindow);
     }
 };
     

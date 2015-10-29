@@ -1,8 +1,13 @@
 #ifndef IGFXCONTEXT_HPP
 #define IGFXCONTEXT_HPP
 
+#include <memory>
+#include <stdint.h>
+
 namespace boo
 {
+struct IGraphicsCommandQueue;
+struct IGraphicsDataFactory;
 
 class IGraphicsContext
 {
@@ -41,6 +46,9 @@ public:
     virtual void setPixelFormat(EPixelFormat pf)=0;
     virtual void initializeContext()=0;
     virtual void makeCurrent()=0;
+
+    virtual std::unique_ptr<IGraphicsCommandQueue> createCommandQueue()=0;
+    virtual std::unique_ptr<IGraphicsDataFactory> createDataFactory()=0;
 
 };
     

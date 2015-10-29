@@ -1,6 +1,7 @@
 #include "boo/IWindow.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include "boo/IApplication.hpp"
+#include "boo/graphicsdev/GLES3.hpp"
 
 #include <xcb/xcb.h>
 #include <xcb/xcb_event.h>
@@ -27,6 +28,7 @@
 
 namespace boo
 {
+IGraphicsCommandQueue* _NewGLES3CommandQueue(IGraphicsContext& parent);
 
 extern PFNGLXGETVIDEOSYNCSGIPROC FglXGetVideoSyncSGI;
 extern PFNGLXWAITVIDEOSYNCSGIPROC FglXWaitVideoSyncSGI;
@@ -293,6 +295,16 @@ public:
         free(reply);
     }
 
+    std::unique_ptr<IGraphicsCommandQueue> createCommandQueue()
+    {
+        return std::unique_ptr<IGraphicsCommandQueue>(_NewGLES3CommandQueue(*this));
+    }
+
+    std::unique_ptr<IGraphicsDataFactory> createDataFactory()
+    {
+        return std::unique_ptr<IGraphicsDataFactory>(new struct GLES3DataFactory());
+    }
+
 };
 
 struct WindowXCB : IWindow
@@ -425,6 +437,7 @@ public:
     void showWindow()
     {
         xcb_map_window(m_xcbConn, m_windowId);
+        m_gfxCtx.makeCurrent();
         xcb_flush(m_xcbConn);
     }
     
@@ -530,10 +543,11 @@ public:
                        (const char*)&fsEvent);
     }
 
-    void waitForRetrace()
+    size_t waitForRetrace(size_t count)
     {
         unsigned int sync;
         FglXWaitVideoSyncSGI(1, 0, &sync);
+        return 0;
     }
 
     uintptr_t getPlatformHandle() const

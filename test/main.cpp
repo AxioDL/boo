@@ -169,19 +169,29 @@ struct CTestWindowCallback : IWindowCallback
     
 struct TestApplicationCallback : IApplicationCallback
 {
-    IWindow* mainWindow = NULL;
+    std::unique_ptr<IWindow> mainWindow;
     boo::TestDeviceFinder devFinder;
     CTestWindowCallback windowCallback;
-    void appMain(IApplication* app)
+    bool running = true;
+    int appMain(IApplication* app)
     {
         mainWindow = app->newWindow(_S("YAY!"));
         mainWindow->setCallback(&windowCallback);
         mainWindow->showWindow();
         devFinder.startScanning();
+
+        size_t retraceCount = 0;
+        while (running)
+        {
+            retraceCount = mainWindow->waitForRetrace(retraceCount);
+
+        }
+
+        return 0;
     }
     void appQuitting(IApplication*)
     {
-        delete mainWindow;
+        running = false;
     }
     void appFilesOpen(IApplication*, const std::vector<SystemString>& paths)
     {
