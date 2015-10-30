@@ -48,7 +48,7 @@ public:
     
     int run()
     {
-        
+        return 0;
     }
 
     const std::string& getUniqueName() const

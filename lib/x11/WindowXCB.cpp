@@ -28,7 +28,7 @@
 
 namespace boo
 {
-IGraphicsCommandQueue* _NewGLES3CommandQueue(IGraphicsContext& parent);
+IGraphicsCommandQueue* _NewGLES3CommandQueue(IGraphicsContext* parent);
 
 extern PFNGLXGETVIDEOSYNCSGIPROC FglXGetVideoSyncSGI;
 extern PFNGLXWAITVIDEOSYNCSGIPROC FglXWaitVideoSyncSGI;
@@ -168,6 +168,10 @@ struct GraphicsContextXCB : IGraphicsContext
     xcb_glx_context_t m_glxCtx = 0;
     xcb_glx_context_tag_t m_glxCtxTag = 0;
 
+    IGraphicsCommandQueue* m_commandQueue = nullptr;
+    IGraphicsDataFactory* m_dataFactory = nullptr;
+    xcb_glx_context_t m_loadCtx = 0;
+
 public:
     IWindowCallback* m_callback;
 
@@ -252,6 +256,8 @@ public:
             xcb_glx_destroy_context(m_xcbConn, m_glxCtx);
         if (m_glxWindow)
             xcb_glx_delete_window(m_xcbConn, m_glxWindow);
+        if (m_loadCtx)
+            xcb_glx_destroy_context(m_xcbConn, m_loadCtx);
     }
 
     void _setCallback(IWindowCallback* cb)
@@ -295,14 +301,33 @@ public:
         free(reply);
     }
 
-    std::unique_ptr<IGraphicsCommandQueue> createCommandQueue()
+    IGraphicsCommandQueue* getCommandQueue()
     {
-        return std::unique_ptr<IGraphicsCommandQueue>(_NewGLES3CommandQueue(*this));
+        if (!m_commandQueue)
+            m_commandQueue = _NewGLES3CommandQueue(this);
+        return m_commandQueue;
     }
 
-    std::unique_ptr<IGraphicsDataFactory> createDataFactory()
+    IGraphicsDataFactory* getDataFactory()
     {
-        return std::unique_ptr<IGraphicsDataFactory>(new struct GLES3DataFactory());
+        if (!m_dataFactory)
+            m_dataFactory = new struct GLES3DataFactory(this);
+        return m_dataFactory;
+    }
+
+    IGraphicsDataFactory* getLoadContextDataFactory()
+    {
+        if (!m_loadCtx)
+        {
+            m_loadCtx = xcb_generate_id(m_xcbConn);
+            xcb_glx_create_context(m_xcbConn, m_loadCtx, m_visualid, 0, m_glxCtx, 1);
+            xcb_generic_error_t* err = nullptr;
+            xcb_glx_make_context_current_reply_t* reply =
+            xcb_glx_make_context_current_reply(m_xcbConn,
+            xcb_glx_make_context_current(m_xcbConn, 0, m_glxWindow, m_glxWindow, m_loadCtx), &err);
+            free(reply);
+        }
+        return getDataFactory();
     }
 
 };

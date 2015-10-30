@@ -14,7 +14,7 @@ class IApplication;
 
 struct IApplicationCallback
 {
-    virtual int appMain(IApplication*) {}
+    virtual int appMain(IApplication*) {return 0;}
     virtual void appQuitting(IApplication*) {}
     virtual void appFilesOpen(IApplication*, const std::vector<SystemString>&) {}
 };

@@ -47,8 +47,11 @@ public:
     virtual void initializeContext()=0;
     virtual void makeCurrent()=0;
 
-    virtual std::unique_ptr<IGraphicsCommandQueue> createCommandQueue()=0;
-    virtual std::unique_ptr<IGraphicsDataFactory> createDataFactory()=0;
+    virtual IGraphicsCommandQueue* getCommandQueue()=0;
+    virtual IGraphicsDataFactory* getDataFactory()=0;
+
+    /* Creates a new context on current thread!! Call from client loading thread */
+    virtual IGraphicsDataFactory* getLoadContextDataFactory()=0;
 
 };
     

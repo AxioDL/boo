@@ -10,6 +10,9 @@ namespace boo
 struct IGraphicsBuffer
 {
     bool dynamic() const {return m_dynamic;}
+    virtual void bindVertex() const=0;
+    virtual void bindIndex() const=0;
+    virtual void bindUniform(size_t idx) const=0;
 protected:
     bool m_dynamic;
     IGraphicsBuffer(bool dynamic) : m_dynamic(dynamic) {}
@@ -35,6 +38,7 @@ protected:
 struct ITexture
 {
     bool dynamic() const {return m_dynamic;}
+    virtual void bind(size_t idx) const=0;
 protected:
     bool m_dynamic;
     ITexture(bool dynamic) : m_dynamic(dynamic) {}
@@ -56,6 +60,11 @@ struct ITextureD : ITexture
 protected:
     ITextureD() : ITexture(true) {}
 };
+
+/** Opaque token for representing the data layout of a vertex
+ *  in a VBO. Also able to reference buffers for platforms like
+ *  OpenGL that cache object refs */
+struct IVertexFormat {};
 
 /** Opaque token for referencing a complete graphics pipeline state necessary
  *  to rasterize geometry (shaders and blending modes mainly) */
@@ -104,6 +113,18 @@ struct IGraphicsDataFactory
     virtual IGraphicsBufferD*
     newDynamicBuffer(BufferUse use)=0;
 
+    enum TextureFormat
+    {
+        TextureFormatRGBA8,
+        TextureFormatDXT1,
+        TextureFormatPVRTC4
+    };
+    virtual const ITextureS*
+    newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                     const void* data, size_t sz)=0;
+    virtual ITextureD*
+    newDynamicTexture(size_t width, size_t height, TextureFormat fmt)=0;
+
     struct VertexElementDescriptor
     {
         const IGraphicsBuffer* vertBuffer = nullptr;
@@ -117,18 +138,8 @@ struct IGraphicsDataFactory
             VertexSemanticWeight
         } semantic;
     };
-
-    enum TextureFormat
-    {
-        TextureFormatRGBA8,
-        TextureFormatDXT1,
-        TextureFormatPVRTC4
-    };
-    virtual const ITextureS*
-    newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                     const void* data, size_t sz)=0;
-    virtual ITextureD*
-    newDynamicTexture(size_t width, size_t height, TextureFormat fmt)=0;
+    virtual const IVertexFormat*
+    newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)=0;
 
     enum BlendFactor
     {
@@ -146,7 +157,9 @@ struct IGraphicsDataFactory
 
     virtual const IShaderDataBinding*
     newShaderDataBinding(const IShaderPipeline* pipeline,
-                         size_t bufCount, const IGraphicsBuffer** bufs,
+                         const IVertexFormat* vtxFormat,
+                         const IGraphicsBuffer* vbo, const IGraphicsBuffer* ebo,
+                         size_t ubufCount, const IGraphicsBuffer** ubufs,
                          size_t texCount, const ITexture** texs)=0;
 
     virtual void reset()=0;
