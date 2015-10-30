@@ -123,7 +123,8 @@ static xcb_window_t GetWindowOfEvent(xcb_generic_event_t* event, bool& windowEve
     return 0;
 }
     
-IWindow* _WindowXCBNew(const std::string& title, xcb_connection_t* conn);
+IWindow* _WindowXCBNew(const std::string& title, xcb_connection_t* conn,
+                       xcb_glx_context_t lastCtx);
     
 class ApplicationXCB final : public IApplication
 {
@@ -341,10 +342,18 @@ public:
     
     std::unique_ptr<IWindow> newWindow(const std::string& title)
     {
-        IWindow* newWindow = _WindowXCBNew(title, m_xcbConn);
+        IWindow* newWindow = _WindowXCBNew(title, m_xcbConn, m_lastGlxCtx);
         m_windows[(xcb_window_t)newWindow->getPlatformHandle()] = newWindow;
         return std::unique_ptr<IWindow>(newWindow);
     }
+
+    /* Last GLX context */
+    xcb_glx_context_t m_lastGlxCtx = 0;
 };
+
+void _XCBUpdateLastGlxCtx(xcb_glx_context_t lastGlxCtx)
+{
+    static_cast<ApplicationXCB*>(APP)->m_lastGlxCtx = lastGlxCtx;
+}
     
 }

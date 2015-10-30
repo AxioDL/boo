@@ -5,6 +5,8 @@
 
 namespace boo
 {
+struct IGraphicsCommandQueue;
+struct IGraphicsDataFactory;
     
 class IWindowCallback
 {
@@ -146,6 +148,12 @@ public:
         TOUCH_TRACKPAD = 2
     };
     virtual ETouchType getTouchType() const=0;
+
+    virtual IGraphicsCommandQueue* getCommandQueue()=0;
+    virtual IGraphicsDataFactory* getDataFactory()=0;
+
+    /* Creates a new context on current thread!! Call from client loading thread */
+    virtual IGraphicsDataFactory* getLoadContextDataFactory()=0;
     
 };
     

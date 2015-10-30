@@ -5,6 +5,12 @@ if (NOT MSVC)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
 endif()
 
+if (NOT TARGET LogVisor)
+    add_subdirectory(LogVisor)
+    set(LOG_VISOR_INCLUDE_DIR LogVisor/include)
+endif()
+include_directories(include ${LOG_VISOR_INCLUDE_DIR})
+
 if(WIN32)
   list(APPEND PLAT_SRCS 
        lib/win/ApplicationWin32.cpp

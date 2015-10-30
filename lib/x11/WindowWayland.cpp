@@ -63,11 +63,29 @@ public:
     {
     }
 
+    IGraphicsCommandQueue* getCommandQueue()
+    {
+        return nullptr;
+    }
+
+    IGraphicsDataFactory* getDataFactory()
+    {
+        return nullptr;
+    }
+
+    IGraphicsDataFactory* getLoadContextDataFactory()
+    {
+        return nullptr;
+    }
+
 };
     
 struct WindowWayland : IWindow
 {    
+    GraphicsContextWayland m_gfxCtx;
+
     WindowWayland(const std::string& title)
+    : m_gfxCtx(IGraphicsContext::API_OPENGL_3_3, this)
     {
         
     }
@@ -149,6 +167,22 @@ struct WindowWayland : IWindow
         
     }
     
+
+    IGraphicsCommandQueue* getCommandQueue()
+    {
+        return m_gfxCtx.getCommandQueue();
+    }
+
+    IGraphicsDataFactory* getDataFactory()
+    {
+        return m_gfxCtx.getDataFactory();
+    }
+
+    IGraphicsDataFactory* getLoadContextDataFactory()
+    {
+        return m_gfxCtx.getLoadContextDataFactory();
+    }
+
 };
 
 IWindow* _WindowWaylandNew(const std::string& title)

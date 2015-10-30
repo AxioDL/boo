@@ -1,5 +1,9 @@
 #include <stdio.h>
 #include <boo/boo.hpp>
+#include <boo/graphicsdev/GLES3.hpp>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 
 namespace boo
 {
@@ -165,7 +169,6 @@ struct CTestWindowCallback : IWindowCallback
     }
 
 };
-
     
 struct TestApplicationCallback : IApplicationCallback
 {
@@ -173,6 +176,98 @@ struct TestApplicationCallback : IApplicationCallback
     boo::TestDeviceFinder devFinder;
     CTestWindowCallback windowCallback;
     bool running = true;
+
+    const IShaderDataBinding* m_binding = nullptr;
+    std::mutex m_mt;
+    std::condition_variable m_cv;
+
+    static void LoaderProc(TestApplicationCallback* self)
+    {
+        GLES3DataFactory* factory =
+        dynamic_cast<GLES3DataFactory*>(self->mainWindow->getLoadContextDataFactory());
+
+        /* Make Tri-strip VBO */
+        struct Vert
+        {
+            float pos[3];
+            float uv[2];
+        };
+        static const Vert quad[4] =
+        {
+            {{1.0,1.0},{1.0,1.0}},
+            {{-1.0,1.0},{0.0,1.0}},
+            {{1.0,-1.0},{1.0,0.0}},
+            {{-1.0,-1.0},{0.0,0.0}}
+        };
+        const IGraphicsBuffer* vbo =
+        factory->newStaticBuffer(BufferUseVertex, quad, sizeof(quad));
+
+        /* Make vertex format */
+        const VertexElementDescriptor descs[2] =
+        {
+            {vbo, nullptr, VertexSemanticPosition},
+            {vbo, nullptr, VertexSemanticUV}
+        };
+        const IVertexFormat* vfmt = factory->newVertexFormat(2, descs);
+
+        /* Make ramp texture */
+        using Pixel = uint8_t[4];
+        static Pixel tex[256][256];
+        for (int i=0 ; i<256 ; ++i)
+            for (int j=0 ; j<256 ; ++j)
+            {
+                tex[i][j][0] = i;
+                tex[i][j][1] = j;
+                tex[i][j][2] = 0;
+                tex[i][j][3] = 0xff;
+            }
+        const ITexture* texture =
+        factory->newStaticTexture(256, 256, 1, TextureFormatRGBA8, tex, 256*256*4);
+
+        /* Make shader pipeline */
+        static const char* VS =
+        "#version 300\n"
+        "layout(location=0) in vec3 in_pos;\n"
+        "layout(location=1) in vec2 in_uv;\n"
+        "out vec2 out_uv;\n"
+        "void main()\n"
+        "{\n"
+        "    gl_Position = in_pos;\n"
+        "    out_uv = in_uv;\n"
+        "}\n";
+
+        static const char* FS =
+        "#version 300\n"
+        "layout(binding=0) uniform sampler2D tex;\n"
+        "layout(location=0) out vec4 out_frag;\n"
+        "in vec2 out_uv;\n"
+        "void main()\n"
+        "{\n"
+        "    out_frag = texture(tex, out_uv);\n"
+        "}\n";
+
+        const IShaderPipeline* pipeline =
+        factory->newShaderPipeline(VS, FS, BlendFactorOne, BlendFactorZero, true, true, false);
+
+        /* Make shader data binding */
+        self->m_binding =
+        factory->newShaderDataBinding(pipeline, vfmt, vbo, nullptr, 0, nullptr, 1, &texture);
+
+        /* Commit objects */
+        std::unique_ptr<IGraphicsData> data = factory->commit();
+
+        /* Wait for exit */
+        while (self->running)
+        {
+            {
+                std::unique_lock<std::mutex> lk(self->m_mt);
+                self->m_cv.wait(lk);
+                if (!self->running)
+                    break;
+            }
+        }
+    }
+
     int appMain(IApplication* app)
     {
         mainWindow = app->newWindow(_S("YAY!"));
@@ -180,13 +275,25 @@ struct TestApplicationCallback : IApplicationCallback
         mainWindow->showWindow();
         devFinder.startScanning();
 
+        IGraphicsCommandQueue* gfxQ = mainWindow->getCommandQueue();
+        std::thread loaderThread(LoaderProc, this);
+
         size_t retraceCount = 0;
         while (running)
         {
             retraceCount = mainWindow->waitForRetrace(retraceCount);
-
+            if (m_binding)
+            {
+                gfxQ->setDrawPrimitive(PrimitiveTriStrips);
+                gfxQ->clearTarget();
+                gfxQ->setShaderDataBinding(m_binding);
+                gfxQ->draw(0, 4);
+                gfxQ->execute();
+            }
         }
 
+        m_cv.notify_one();
+        loaderThread.join();
         return 0;
     }
     void appQuitting(IApplication*)

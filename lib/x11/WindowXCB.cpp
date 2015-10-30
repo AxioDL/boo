@@ -29,6 +29,7 @@
 namespace boo
 {
 IGraphicsCommandQueue* _NewGLES3CommandQueue(IGraphicsContext* parent);
+void _XCBUpdateLastGlxCtx(xcb_glx_context_t lastGlxCtx);
 
 extern PFNGLXGETVIDEOSYNCSGIPROC FglXGetVideoSyncSGI;
 extern PFNGLXWAITVIDEOSYNCSGIPROC FglXWaitVideoSyncSGI;
@@ -161,6 +162,7 @@ struct GraphicsContextXCB : IGraphicsContext
     EPixelFormat m_pf;
     IWindow* m_parentWindow;
     xcb_connection_t* m_xcbConn;
+    xcb_glx_context_t m_lastCtx = 0;
 
     xcb_glx_fbconfig_t m_fbconfig = 0;
     xcb_visualid_t m_visualid = 0;
@@ -289,7 +291,8 @@ public:
                               m_parentWindow->getPlatformHandle(),
                               m_glxWindow, 0, NULL);
         m_glxCtx = xcb_generate_id(m_xcbConn);
-        xcb_glx_create_context(m_xcbConn, m_glxCtx, m_visualid, 0, 0, 1);
+        xcb_glx_create_context(m_xcbConn, m_glxCtx, m_visualid, 0, m_lastCtx, 1);
+        _XCBUpdateLastGlxCtx(m_glxCtx);
     }
 
     void makeCurrent()
@@ -357,7 +360,7 @@ struct WindowXCB : IWindow
     
 public:
     
-    WindowXCB(const std::string& title, xcb_connection_t* conn)
+    WindowXCB(const std::string& title, xcb_connection_t* conn, xcb_glx_context_t lastCtx)
     : m_xcbConn(conn), m_callback(NULL), m_gfxCtx(IGraphicsContext::API_OPENGL_3_3, this, m_xcbConn, m_visualId)
     {
         if (!S_ATOMS)
@@ -952,11 +955,27 @@ public:
         return m_touchType;
     }
     
+    IGraphicsCommandQueue* getCommandQueue()
+    {
+        return m_gfxCtx.getCommandQueue();
+    }
+
+    IGraphicsDataFactory* getDataFactory()
+    {
+        return m_gfxCtx.getDataFactory();
+    }
+
+    IGraphicsDataFactory* getLoadContextDataFactory()
+    {
+        return m_gfxCtx.getLoadContextDataFactory();
+    }
+
 };
 
-IWindow* _WindowXCBNew(const std::string& title, xcb_connection_t* conn)
+IWindow* _WindowXCBNew(const std::string& title, xcb_connection_t* conn,
+                       xcb_glx_context_t lastCtx)
 {
-    return new WindowXCB(title, conn);
+    return new WindowXCB(title, conn, lastCtx);
 }
     
 }

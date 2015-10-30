@@ -1,14 +1,16 @@
 #include "boo/graphicsdev/GLES3.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include <GLES3/gl3ext.h>
-#include <stdio.h>
 #include <vector>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 
+#include <LogVisor/LogVisor.hpp>
+
 namespace boo
 {
+static LogVisor::LogModule Log("boo::GLES3");
 
 struct GLES3Data : IGraphicsData
 {
@@ -35,7 +37,7 @@ class GLES3GraphicsBufferS : IGraphicsBufferS
     friend struct GLES3CommandQueue;
     GLuint m_buf;
     GLenum m_target;
-    GLES3GraphicsBufferS(IGraphicsDataFactory::BufferUse use, const void* data, size_t sz)
+    GLES3GraphicsBufferS(BufferUse use, const void* data, size_t sz)
     {
         m_target = USE_TABLE[use];
         glGenBuffers(1, &m_buf);
@@ -62,7 +64,7 @@ class GLES3GraphicsBufferD : IGraphicsBufferD
     GLenum m_target;
     void* m_mappedBuf = nullptr;
     size_t m_mappedSize = 0;
-    GLES3GraphicsBufferD(GLES3CommandQueue* q, IGraphicsDataFactory::BufferUse use)
+    GLES3GraphicsBufferD(GLES3CommandQueue* q, BufferUse use)
     : m_q(q)
     {
         m_target = USE_TABLE[use];
@@ -93,13 +95,12 @@ class GLES3TextureS : ITextureS
     friend class GLES3DataFactory;
     GLuint m_tex;
     GLES3TextureS(size_t width, size_t height, size_t mips,
-                  IGraphicsDataFactory::TextureFormat fmt,
-                  const void* data, size_t sz)
+                  TextureFormat fmt, const void* data, size_t sz)
     {
         const uint8_t* dataIt = static_cast<const uint8_t*>(data);
         glGenTextures(1, &m_tex);
         glBindTexture(GL_TEXTURE_2D, m_tex);
-        if (fmt == IGraphicsDataFactory::TextureFormatRGBA8)
+        if (fmt == TextureFormatRGBA8)
         {
             for (size_t i=0 ; i<mips ; ++i)
             {
@@ -131,8 +132,7 @@ class GLES3TextureD : ITextureD
     size_t m_mappedSize = 0;
     size_t m_width = 0;
     size_t m_height = 0;
-    GLES3TextureD(GLES3CommandQueue* q, size_t width, size_t height,
-                  IGraphicsDataFactory::TextureFormat fmt);
+    GLES3TextureD(GLES3CommandQueue* q, size_t width, size_t height, TextureFormat fmt);
 public:
     ~GLES3TextureD();
 
@@ -166,7 +166,7 @@ public:
 
 const ITextureS*
 GLES3DataFactory::newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                               const void* data, size_t sz)
+                                   const void* data, size_t sz)
 {
     GLES3TextureS* retval = new GLES3TextureS(width, height, mips, fmt, data, sz);
     static_cast<GLES3Data*>(m_deferredData.get())->m_STexs.emplace_back(retval);
@@ -281,7 +281,7 @@ const IShaderPipeline* GLES3DataFactory::newShaderPipeline
     GLES3ShaderPipeline shader;
     if (!shader.initObjects())
     {
-        fprintf(stderr, "unable to create shader objects\n");
+        Log.report(LogVisor::Error, "unable to create shader objects\n");
         return nullptr;
     }
     shader.m_sfactor = BLEND_FACTOR_TABLE[srcFac];
@@ -300,7 +300,7 @@ const IShaderPipeline* GLES3DataFactory::newShaderPipeline
         glGetShaderiv(shader.m_vert, GL_INFO_LOG_LENGTH, &logLen);
         char* log = (char*)malloc(logLen);
         glGetShaderInfoLog(shader.m_vert, logLen, nullptr, log);
-        fprintf(stderr, "unable to compile vert source\n%s\n%s\n", log, vertSource);
+        Log.report(LogVisor::Error, "unable to compile vert source\n%s\n%s\n", log, vertSource);
         free(log);
         return nullptr;
     }
@@ -314,7 +314,7 @@ const IShaderPipeline* GLES3DataFactory::newShaderPipeline
         glGetShaderiv(shader.m_frag, GL_INFO_LOG_LENGTH, &logLen);
         char* log = (char*)malloc(logLen);
         glGetShaderInfoLog(shader.m_frag, logLen, nullptr, log);
-        fprintf(stderr, "unable to compile frag source\n%s\n%s\n", log, fragSource);
+        Log.report(LogVisor::Error, "unable to compile frag source\n%s\n%s\n", log, fragSource);
         free(log);
         return nullptr;
     }
@@ -327,7 +327,7 @@ const IShaderPipeline* GLES3DataFactory::newShaderPipeline
         glGetProgramiv(shader.m_prog, GL_INFO_LOG_LENGTH, &logLen);
         char* log = (char*)malloc(logLen);
         glGetProgramInfoLog(shader.m_prog, logLen, nullptr, log);
-        fprintf(stderr, "unable to link shader program\n%s\n", log);
+        Log.report(LogVisor::Error, "unable to link shader program\n%s\n", log);
         free(log);
         return nullptr;
     }
@@ -342,9 +342,9 @@ struct GLES3VertexFormat : IVertexFormat
     GLES3CommandQueue* m_q;
     GLuint m_vao = 0;
     size_t m_elementCount;
-    std::unique_ptr<GLES3DataFactory::VertexElementDescriptor[]> m_elements;
+    std::unique_ptr<VertexElementDescriptor[]> m_elements;
     GLES3VertexFormat(GLES3CommandQueue* q, size_t elementCount,
-                      const GLES3DataFactory::VertexElementDescriptor* elements);
+                      const VertexElementDescriptor* elements);
     ~GLES3VertexFormat();
     void bind() const {glBindVertexArray(m_vao);}
 };
@@ -468,7 +468,7 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
             const ITextureD* target;
             float rgba[4];
             GLbitfield flags;
-            Primitive prim;
+            GLenum prim;
             struct
             {
                 size_t start;
@@ -500,7 +500,7 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
         size_t stride = 0;
         for (size_t i=0 ; i<fmt->m_elementCount ; ++i)
         {
-            const IGraphicsDataFactory::VertexElementDescriptor* desc = &fmt->m_elements[i];
+            const VertexElementDescriptor* desc = &fmt->m_elements[i];
             stride += SEMANTIC_SIZE_TABLE[desc->semantic];
         }
 
@@ -510,7 +510,7 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
         const IGraphicsBuffer* lastEBO = nullptr;
         for (size_t i=0 ; i<fmt->m_elementCount ; ++i)
         {
-            const IGraphicsDataFactory::VertexElementDescriptor* desc = &fmt->m_elements[i];
+            const VertexElementDescriptor* desc = &fmt->m_elements[i];
             if (desc->vertBuffer != lastVBO)
             {
                 lastVBO = desc->vertBuffer;
@@ -589,10 +589,7 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
                     glClear(cmd.flags);
                     break;
                 case Command::OpSetDrawPrimitive:
-                    if (cmd.prim == PrimitiveTriangles)
-                        prim = GL_TRIANGLES;
-                    else if (cmd.prim == TrimitiveTriStrips)
-                        prim = GL_TRIANGLE_STRIP;
+                    prim = cmd.prim;
                     break;
                 case Command::OpDraw:
                     glDrawArrays(prim, cmd.start, cmd.count);
@@ -661,7 +658,10 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::OpSetDrawPrimitive);
-        cmds.back().prim = prim;
+        if (prim == PrimitiveTriangles)
+            cmds.back().prim = GL_TRIANGLES;
+        else if (prim == PrimitiveTriStrips)
+            cmds.back().prim = GL_TRIANGLE_STRIP;
     }
     void draw(size_t start, size_t count)
     {
@@ -772,8 +772,7 @@ GLES3DataFactory::newDynamicBuffer(BufferUse use)
     return retval;
 }
 
-GLES3TextureD::GLES3TextureD(GLES3CommandQueue* q, size_t width, size_t height,
-                             IGraphicsDataFactory::TextureFormat fmt)
+GLES3TextureD::GLES3TextureD(GLES3CommandQueue* q, size_t width, size_t height, TextureFormat fmt)
 : m_q(q)
 {
     m_width = width;
@@ -797,10 +796,10 @@ GLES3DataFactory::newDynamicTexture(size_t width, size_t height, TextureFormat f
 }
 
 GLES3VertexFormat::GLES3VertexFormat(GLES3CommandQueue* q, size_t elementCount,
-                                     const GLES3DataFactory::VertexElementDescriptor* elements)
+                                     const VertexElementDescriptor* elements)
 : m_q(q),
   m_elementCount(elementCount),
-  m_elements(new GLES3DataFactory::VertexElementDescriptor[elementCount])
+  m_elements(new VertexElementDescriptor[elementCount])
 {
     for (size_t i=0 ; i<elementCount ; ++i)
         m_elements[i] = elements[i];
