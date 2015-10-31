@@ -390,25 +390,20 @@ public:
         XFree(visualList);
 
         /* Create colormap */
-        m_colormapId = XCreateColormap(m_xDisp, m_windowId, selectedVisual, AllocNone);
+        m_colormapId = XCreateColormap(m_xDisp, screen->root, selectedVisual, AllocNone);
 
         /* Create window */
         int x, y, w, h;
         genFrameDefault(screen, &x, &y, &w, &h);
-        XSetWindowAttributes valueMasks[] =
-        {
-            0,
-            KeyPressMask | KeyReleaseMask |
-            ButtonPressMask | ButtonReleaseMask |
-            PointerMotionMask | ExposureMask |
-            StructureNotifyMask,
-            m_colormapId,
-            0
-        };
+        XSetWindowAttributes swa;
+        swa.colormap = m_colormapId;
+        swa.border_pixmap = None;
+        swa.event_mask = KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask | ExposureMask | StructureNotifyMask;
+
         m_windowId = XCreateWindow(display, screen->root, x, y, w, h, 10,
                                    CopyFromParent, CopyFromParent, selectedVisual,
-                                   CWBorderPixel | CWEventMask | CWColormap, valueMasks);
-        
+                                   CWBorderPixel | CWEventMask | CWColormap, &swa);
+
 
         /* The XInput 2.1 extension enables per-pixel smooth scrolling trackpads */
         XIEventMask mask = {XIAllMasterDevices, XIMaskLen(XI_LASTEVENT)};
