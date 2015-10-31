@@ -31,6 +31,7 @@ struct IGraphicsCommandQueue
     virtual void drawInstances(size_t start, size_t count, size_t instCount)=0;
     virtual void drawInstancesIndexed(size_t start, size_t count, size_t instCount)=0;
 
+    virtual void present()=0;
     virtual void execute()=0;
 };
 

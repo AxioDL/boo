@@ -1,48 +1,41 @@
 #include "boo/IWindow.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include "boo/IApplication.hpp"
-#include "boo/graphicsdev/GLES3.hpp"
+#include "boo/graphicsdev/GL.hpp"
 
-#include <xcb/xcb.h>
-#include <xcb/xcb_event.h>
-#include <xcb/xproto.h>
-#include <xcb/xcb_keysyms.h>
-#include <xkbcommon/xkbcommon.h>
-#include <xcb/xinput.h>
-#include <xcb/glx.h>
-#include <GL/glx.h>
-#include <GL/glcorearb.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 
+#include <GL/glx.h>
+
 #define XK_MISCELLANY
 #define XK_XKB_KEYS
 #define XK_LATIN1
 #include <X11/keysymdef.h>
+#include <xkbcommon/xkbcommon.h>
+#include <X11/extensions/XInput2.h>
+#include <X11/Xatom.h>
 
 #define REF_DPMM 3.7824 /* 96 DPI */
 #define FS_ATOM "_NET_WM_STATE_FULLSCREEN"
 
+#include <LogVisor/LogVisor.hpp>
+
 namespace boo
 {
+static LogVisor::LogModule Log("boo::WindowXCB");
 IGraphicsCommandQueue* _NewGLES3CommandQueue(IGraphicsContext* parent);
-void _XCBUpdateLastGlxCtx(xcb_glx_context_t lastGlxCtx);
+void _XCBUpdateLastGlxCtx(GLXContext lastGlxCtx);
+void GLXExtensionCheck();
+void GLXWaitForVSync();
+void GLXEnableVSync(Display* disp, GLXWindow drawable);
 
-extern PFNGLXGETVIDEOSYNCSGIPROC FglXGetVideoSyncSGI;
-extern PFNGLXWAITVIDEOSYNCSGIPROC FglXWaitVideoSyncSGI;
-
-extern int XCB_GLX_EVENT_BASE;
 extern int XINPUT_OPCODE;
 
-static inline double fp3232val(xcb_input_fp3232_t* val)
-{
-    return val->integral + val->frac / (double)UINT_MAX;
-}
-
-static uint32_t translateKeysym(xcb_keysym_t sym, int& specialSym, int& modifierSym)
+static uint32_t translateKeysym(KeySym sym, int& specialSym, int& modifierSym)
 {
     specialSym = IWindowCallback::KEY_NONE;
     modifierSym = IWindowCallback::MKEY_NONE;
@@ -88,11 +81,11 @@ static uint32_t translateKeysym(xcb_keysym_t sym, int& specialSym, int& modifier
 static int translateModifiers(unsigned state)
 {
     int retval = 0;
-    if (state & XCB_MOD_MASK_SHIFT)
+    if (state & ShiftMask)
         retval |= IWindowCallback::MKEY_SHIFT;
-    if (state & XCB_MOD_MASK_CONTROL)
+    if (state & ControlMask)
         retval |= IWindowCallback::MKEY_CTRL;
-    if (state & XCB_MOD_MASK_1)
+    if (state & Mod1Mask)
         retval |= IWindowCallback::MKEY_ALT;
     return retval;
 }
@@ -114,44 +107,34 @@ IWindowCallback::BUTTON_AUX2;
     return retval;
 }
 
-#define INTERN_ATOM(var, conn, name, if_exists) \
-do {\
-    xcb_intern_atom_cookie_t cookie = \
-    xcb_intern_atom(conn, if_exists, sizeof(#name), #name); \
-    xcb_intern_atom_reply_t* reply = \
-    xcb_intern_atom_reply(conn, cookie, NULL); \
-    var = reply->atom; \
-    free(reply); \
-} while(0)
-
 struct XCBAtoms
 {
-    xcb_atom_t m_wmProtocols = 0;
-    xcb_atom_t m_wmDeleteWindow = 0;
-    xcb_atom_t m_netwmState = 0;
-    xcb_atom_t m_netwmStateFullscreen = 0;
-    xcb_atom_t m_netwmStateAdd = 0;
-    xcb_atom_t m_netwmStateRemove = 0;
-    xcb_key_symbols_t* m_keySyms = NULL;
-    XCBAtoms(xcb_connection_t* conn)
+    Atom m_wmProtocols = 0;
+    Atom m_wmDeleteWindow = 0;
+    Atom m_netwmState = 0;
+    Atom m_netwmStateFullscreen = 0;
+    Atom m_netwmStateAdd = 0;
+    Atom m_netwmStateRemove = 0;
+    //xcb_key_symbols_t* m_keySyms = NULL;
+    XCBAtoms(Display* disp)
     {
-        INTERN_ATOM(m_wmProtocols, conn, WM_PROTOCOLS, 1);
-        INTERN_ATOM(m_wmDeleteWindow, conn, WM_DELETE_WINDOW, 1);
-        INTERN_ATOM(m_netwmState, conn, _NET_WM_STATE, 0);
-        INTERN_ATOM(m_netwmStateFullscreen, conn, _NET_WM_STATE_FULLSCREEN, 0);
-        INTERN_ATOM(m_netwmStateAdd, conn, _NET_WM_STATE_ADD, 0);
-        INTERN_ATOM(m_netwmStateRemove, conn, _NET_WM_STATE_REMOVE, 0);
-        m_keySyms = xcb_key_symbols_alloc(conn);
+        m_wmProtocols = XInternAtom(disp, "WM_PROTOCOLS", True);
+        m_wmDeleteWindow = XInternAtom(disp, "WM_DELETE_WINDOW", True);
+        m_netwmState = XInternAtom(disp, "_NET_WM_STATE", False);
+        m_netwmStateFullscreen = XInternAtom(disp, "_NET_WM_STATE_FULLSCREEN", False);
+        m_netwmStateAdd = XInternAtom(disp, "_NET_WM_STATE_ADD", False);
+        m_netwmStateRemove = XInternAtom(disp, "_NET_WM_STATE_REMOVE", False);
+        //m_keySyms = xcb_key_symbols_alloc(conn);
     }
 };
 static XCBAtoms* S_ATOMS = NULL;
 
-static void genFrameDefault(xcb_screen_t* screen, int* xOut, int* yOut, int* wOut, int* hOut)
+static void genFrameDefault(Screen* screen, int* xOut, int* yOut, int* wOut, int* hOut)
 {
-    float width = screen->width_in_pixels * 2.0 / 3.0;
-    float height = screen->height_in_pixels * 2.0 / 3.0;
-    *xOut = (screen->width_in_pixels - width) / 2.0;
-    *yOut = (screen->height_in_pixels - height) / 2.0;
+    float width = screen->width * 2.0 / 3.0;
+    float height = screen->height * 2.0 / 3.0;
+    *xOut = (screen->width - width) / 2.0;
+    *yOut = (screen->height - height) / 2.0;
     *wOut = width;
     *hOut = height;
 }
@@ -161,56 +144,49 @@ struct GraphicsContextXCB : IGraphicsContext
     EGraphicsAPI m_api;
     EPixelFormat m_pf;
     IWindow* m_parentWindow;
-    xcb_connection_t* m_xcbConn;
-    xcb_glx_context_t m_lastCtx = 0;
+    Display* m_xDisp = nullptr;
+    GLXContext m_lastCtx = 0;
 
-    xcb_glx_fbconfig_t m_fbconfig = 0;
-    xcb_visualid_t m_visualid = 0;
-    xcb_glx_window_t m_glxWindow = 0;
-    xcb_glx_context_t m_glxCtx = 0;
-    xcb_glx_context_tag_t m_glxCtxTag = 0;
+    GLXFBConfig m_fbconfig = 0;
+    int m_visualid = 0;
+    GLXWindow m_glxWindow = 0;
+    GLXContext m_glxCtx = 0;
+    GLXContext m_timerCtx = 0;
 
     IGraphicsCommandQueue* m_commandQueue = nullptr;
     IGraphicsDataFactory* m_dataFactory = nullptr;
-    xcb_glx_context_t m_loadCtx = 0;
+    GLXContext m_loadCtx = 0;
 
 public:
     IWindowCallback* m_callback;
 
     GraphicsContextXCB(EGraphicsAPI api, IWindow* parentWindow,
-                       xcb_connection_t* conn, uint32_t& visualIdOut)
+                       Display* display, int defaultScreen,
+                       GLXContext lastCtx, uint32_t& visualIdOut)
     : m_api(api),
-      m_pf(PF_RGBA8),
+      m_pf(PF_RGBA8_Z24),
       m_parentWindow(parentWindow),
-      m_xcbConn(conn)
+      m_xDisp(display),
+      m_lastCtx(lastCtx)
     {
-        /* WTF freedesktop?? Fix this awful API and your nonexistant docs */
-        xcb_glx_get_fb_configs_reply_t* fbconfigs =
-        xcb_glx_get_fb_configs_reply(m_xcbConn, xcb_glx_get_fb_configs(m_xcbConn, 0), NULL);
-        struct conf_prop
+        /* Query framebuffer configurations */
+        GLXFBConfig* fbConfigs = nullptr;
+        int numFBConfigs = 0;
+        fbConfigs = glXGetFBConfigs(display, defaultScreen, &numFBConfigs);
+        if (!fbConfigs || numFBConfigs == 0)
         {
-            uint32_t key;
-            uint32_t val;
-        }* props = (struct conf_prop*)xcb_glx_get_fb_configs_property_list(fbconfigs);
+            Log.report(LogVisor::FatalError, "glXGetFBConfigs failed");
+            return;
+        }
 
-        for (uint32_t i=0 ; i<fbconfigs->num_FB_configs ; ++i)
+        for (int i=0 ; i<numFBConfigs ; ++i)
         {
-            struct conf_prop* configProps = &props[fbconfigs->num_properties * i];
-            uint32_t fbconfId, visualId, depthSize, colorSize, doubleBuffer;
-            for (uint32_t j=0 ; j<fbconfigs->num_properties ; ++j)
-            {
-                struct conf_prop* prop = &configProps[j];
-                if (prop->key == GLX_FBCONFIG_ID)
-                    fbconfId = prop->val;
-                if (prop->key == GLX_VISUAL_ID)
-                    visualId = prop->val;
-                else if (prop->key == GLX_DEPTH_SIZE)
-                    depthSize = prop->val;
-                else if (prop->key == GLX_BUFFER_SIZE)
-                    colorSize = prop->val;
-                else if (prop->key == GLX_DOUBLEBUFFER)
-                    doubleBuffer = prop->val;
-            }
+            GLXFBConfig config = fbConfigs[i];
+            int visualId, depthSize, colorSize, doubleBuffer;
+            glXGetFBConfigAttrib(display, config, GLX_VISUAL_ID, &visualId);
+            glXGetFBConfigAttrib(display, config, GLX_DEPTH_SIZE, &depthSize);
+            glXGetFBConfigAttrib(display, config, GLX_BUFFER_SIZE, &colorSize);
+            glXGetFBConfigAttrib(display, config, GLX_DOUBLEBUFFER, &doubleBuffer);
 
             /* Double-buffer only */
             if (!doubleBuffer)
@@ -218,34 +194,34 @@ public:
 
             if (m_pf == PF_RGBA8 && colorSize >= 32)
             {
-                m_fbconfig = fbconfId;
+                m_fbconfig = config;
                 m_visualid = visualId;
                 break;
             }
             else if (m_pf == PF_RGBA8_Z24 && colorSize >= 32 && depthSize >= 24)
             {
-                m_fbconfig = fbconfId;
+                m_fbconfig = config;
                 m_visualid = visualId;
                 break;
             }
             else if (m_pf == PF_RGBAF32 && colorSize >= 128)
             {
-                m_fbconfig = fbconfId;
+                m_fbconfig = config;
                 m_visualid = visualId;
                 break;
             }
             else if (m_pf == PF_RGBAF32_Z24 && colorSize >= 128 && depthSize >= 24)
             {
-                m_fbconfig = fbconfId;
+                m_fbconfig = config;
                 m_visualid = visualId;
                 break;
             }
         }
-        free(fbconfigs);
+        XFree(fbConfigs);
 
         if (!m_fbconfig)
         {
-            fprintf(stderr, "unable to find suitable pixel format");
+            Log.report(LogVisor::FatalError, "unable to find suitable pixel format");
             return;
         }
 
@@ -255,11 +231,13 @@ public:
     ~GraphicsContextXCB()
     {
         if (m_glxCtx)
-            xcb_glx_destroy_context(m_xcbConn, m_glxCtx);
+            glXDestroyContext(m_xDisp, m_glxCtx);
         if (m_glxWindow)
-            xcb_glx_delete_window(m_xcbConn, m_glxWindow);
+            glXDestroyWindow(m_xDisp, m_glxWindow);
         if (m_loadCtx)
-            xcb_glx_destroy_context(m_xcbConn, m_loadCtx);
+            glXDestroyContext(m_xDisp, m_loadCtx);
+        if (m_timerCtx)
+            glXDestroyContext(m_xDisp, m_timerCtx);
     }
 
     void _setCallback(IWindowCallback* cb)
@@ -286,22 +264,30 @@ public:
 
     void initializeContext()
     {
-        m_glxWindow = xcb_generate_id(m_xcbConn);
-        xcb_glx_create_window(m_xcbConn, 0, m_fbconfig,
-                              m_parentWindow->getPlatformHandle(),
-                              m_glxWindow, 0, NULL);
-        m_glxCtx = xcb_generate_id(m_xcbConn);
-        xcb_glx_create_context(m_xcbConn, m_glxCtx, m_visualid, 0, m_lastCtx, 1);
+        m_glxCtx = glXCreateNewContext(m_xDisp, m_fbconfig, GLX_RGBA_TYPE, m_lastCtx, True);
+        if (!m_glxCtx)
+            Log.report(LogVisor::FatalError, "unable to make new GLX context");
+        m_glxWindow = glXCreateWindow(m_xDisp, m_fbconfig, m_parentWindow->getPlatformHandle(), nullptr);
+        if (!m_glxWindow)
+            Log.report(LogVisor::FatalError, "unable to make new GLX window");
         _XCBUpdateLastGlxCtx(m_glxCtx);
+
+        /* Make additional shared context for vsync timing */
+        m_timerCtx = glXCreateNewContext(m_xDisp, m_fbconfig, GLX_RGBA_TYPE, m_glxCtx, True);
+        if (!m_timerCtx)
+            Log.report(LogVisor::FatalError, "unable to make new timer GLX context");
     }
 
     void makeCurrent()
     {
-        xcb_generic_error_t* err = nullptr;
-        xcb_glx_make_context_current_reply_t* reply =
-        xcb_glx_make_context_current_reply(m_xcbConn,
-        xcb_glx_make_context_current(m_xcbConn, 0, m_glxWindow, m_glxWindow, m_glxCtx), &err);
-        free(reply);
+        if (!glXMakeContextCurrent(m_xDisp, m_glxWindow, m_glxWindow, m_glxCtx))
+            Log.report(LogVisor::FatalError, "unable to make GLX context current");
+    }
+
+    void postInit()
+    {
+        GLXExtensionCheck();
+        GLXEnableVSync(m_xDisp, m_glxWindow);
     }
 
     IGraphicsCommandQueue* getCommandQueue()
@@ -322,30 +308,43 @@ public:
     {
         if (!m_loadCtx)
         {
-            m_loadCtx = xcb_generate_id(m_xcbConn);
-            xcb_glx_create_context(m_xcbConn, m_loadCtx, m_visualid, 0, m_glxCtx, 1);
-            xcb_generic_error_t* err = nullptr;
-            xcb_glx_make_context_current_reply_t* reply =
-            xcb_glx_make_context_current_reply(m_xcbConn,
-            xcb_glx_make_context_current(m_xcbConn, 0, m_glxWindow, m_glxWindow, m_loadCtx), &err);
-            free(reply);
+            m_loadCtx = glXCreateNewContext(m_xDisp, m_fbconfig, GLX_RGBA_TYPE, m_glxCtx, True);
+            if (!m_loadCtx)
+                Log.report(LogVisor::FatalError, "unable to make load GLX context");
+            if (!glXMakeContextCurrent(m_xDisp, m_glxWindow, m_glxWindow, m_loadCtx))
+                Log.report(LogVisor::FatalError, "unable to make load GLX context current");
         }
         return getDataFactory();
+    }
+
+    void present()
+    {
+        glXSwapBuffers(m_xDisp, m_glxWindow);
+    }
+
+    bool m_timerBound = false;
+    void bindTimerContext()
+    {
+        if (m_timerBound)
+            return;
+        if (!glXMakeContextCurrent(m_xDisp, m_glxWindow, m_glxWindow, m_timerCtx))
+            Log.report(LogVisor::FatalError, "unable to make timer GLX context current");
+        m_timerBound = true;
     }
 
 };
 
 struct WindowXCB : IWindow
 {
-    xcb_connection_t* m_xcbConn;
+    Display* m_xDisp;
     IWindowCallback* m_callback;
-    xcb_colormap_t m_colormapId;
-    xcb_window_t m_windowId;
+    Colormap m_colormapId;
+    Window m_windowId;
     GraphicsContextXCB m_gfxCtx;
     uint32_t m_visualId;
 
     /* Last known input device id (0xffff if not yet set) */
-    xcb_input_device_id_t m_lastInputID = 0xffff;
+    int m_lastInputID = 0xffff;
     ETouchType m_touchType = TOUCH_NONE;
 
     /* Scroll valuators */
@@ -360,64 +359,68 @@ struct WindowXCB : IWindow
     
 public:
     
-    WindowXCB(const std::string& title, xcb_connection_t* conn, xcb_glx_context_t lastCtx)
-    : m_xcbConn(conn), m_callback(NULL), m_gfxCtx(IGraphicsContext::API_OPENGL_3_3, this, m_xcbConn, m_visualId)
+    WindowXCB(const std::string& title,
+              Display* display, int defaultScreen,
+              GLXContext lastCtx)
+    : m_xDisp(display), m_callback(nullptr),
+      m_gfxCtx(IGraphicsContext::API_OPENGL_3_3,
+               this, display, defaultScreen,
+               lastCtx, m_visualId)
     {
         if (!S_ATOMS)
-            S_ATOMS = new XCBAtoms(conn);
+            S_ATOMS = new XCBAtoms(display);
 
         /* Default screen */
-        xcb_screen_t* screen = xcb_setup_roots_iterator(xcb_get_setup(m_xcbConn)).data;
-        m_pixelFactor = screen->width_in_pixels / (float)screen->width_in_millimeters / REF_DPMM;
+        Screen* screen = ScreenOfDisplay(display, defaultScreen);
+        m_pixelFactor = screen->width / (float)screen->mwidth / REF_DPMM;
+
+        XVisualInfo visTemplate;
+        visTemplate.screen = defaultScreen;
+        int numVisuals;
+        XVisualInfo* visualList = XGetVisualInfo(display, VisualScreenMask, &visTemplate, &numVisuals);
+        Visual* selectedVisual = nullptr;
+        for (int i=0 ; i<numVisuals ; ++i)
+        {
+            if (visualList[i].visualid == m_visualId)
+            {
+                selectedVisual = visualList[i].visual;
+                break;
+            }
+        }
+        XFree(visualList);
 
         /* Create colormap */
-        m_colormapId = xcb_generate_id(m_xcbConn);
-        xcb_create_colormap(m_xcbConn, XCB_COLORMAP_ALLOC_NONE,
-                            m_colormapId, screen->root, m_visualId);
+        m_colormapId = XCreateColormap(m_xDisp, m_windowId, selectedVisual, AllocNone);
 
         /* Create window */
         int x, y, w, h;
         genFrameDefault(screen, &x, &y, &w, &h);
-        uint32_t valueMasks[] =
+        XSetWindowAttributes valueMasks[] =
         {
-            XCB_NONE,
-            XCB_EVENT_MASK_KEY_PRESS | XCB_EVENT_MASK_KEY_RELEASE |
-            XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE |
-            XCB_EVENT_MASK_POINTER_MOTION | XCB_EVENT_MASK_EXPOSURE |
-            XCB_EVENT_MASK_STRUCTURE_NOTIFY,
+            0,
+            KeyPressMask | KeyReleaseMask |
+            ButtonPressMask | ButtonReleaseMask |
+            PointerMotionMask | ExposureMask |
+            StructureNotifyMask,
             m_colormapId,
-            XCB_NONE
+            0
         };
-        m_windowId = xcb_generate_id(conn);
-        xcb_create_window(m_xcbConn, XCB_COPY_FROM_PARENT, m_windowId, screen->root,
-                          x, y, w, h, 10,
-                          XCB_WINDOW_CLASS_INPUT_OUTPUT, m_visualId,
-                          XCB_CW_BORDER_PIXEL | XCB_CW_EVENT_MASK | XCB_CW_COLORMAP,
-                          valueMasks);
+        m_windowId = XCreateWindow(display, screen->root, x, y, w, h, 10,
+                                   CopyFromParent, CopyFromParent, selectedVisual,
+                                   CWBorderPixel | CWEventMask | CWColormap, valueMasks);
         
 
         /* The XInput 2.1 extension enables per-pixel smooth scrolling trackpads */
-        xcb_generic_error_t* xiErr = NULL;
-        xcb_input_xi_query_version_reply_t* xiReply =
-        xcb_input_xi_query_version_reply(m_xcbConn,
-        xcb_input_xi_query_version(m_xcbConn, 2, 1), &xiErr);
-        if (!xiErr)
-        {
-            struct
-            {
-                xcb_input_event_mask_t mask;
-                uint32_t maskVal;
-            } masks =
-            {
-                {XCB_INPUT_DEVICE_ALL_MASTER, 1},
-                XCB_INPUT_XI_EVENT_MASK_MOTION |
-                XCB_INPUT_XI_EVENT_MASK_TOUCH_BEGIN |
-                XCB_INPUT_XI_EVENT_MASK_TOUCH_UPDATE |
-                XCB_INPUT_XI_EVENT_MASK_TOUCH_END
-            };
-            xcb_input_xi_select_events(m_xcbConn, m_windowId, 1, &masks.mask);
-        }
-        free(xiReply);        
+        XIEventMask mask = {XIAllMasterDevices, XIMaskLen(XI_LASTEVENT)};
+        mask.mask = (unsigned char*)malloc(mask.mask_len);
+        memset(mask.mask, 0, mask.mask_len);
+        XISetMask(mask.mask, XI_Motion);
+        XISetMask(mask.mask, XI_TouchBegin);
+        XISetMask(mask.mask, XI_TouchUpdate);
+        XISetMask(mask.mask, XI_TouchEnd);
+        XISelectEvents(m_xDisp, m_windowId, &mask, 1);
+        free(mask.mask);
+
 
         /* Register netwm extension atom for window closing */
 #if 0
@@ -432,28 +435,24 @@ public:
 #endif
 
         /* Set the title of the window */
-        const char* c_title = title.c_str();
-        xcb_change_property(m_xcbConn, XCB_PROP_MODE_REPLACE, m_windowId,
-                            XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8,
-                            strlen(c_title), c_title);
+        const unsigned char* c_title = (unsigned char*)title.c_str();
+        XChangeProperty(m_xDisp, m_windowId, XA_WM_NAME, XA_STRING, 8, PropModeReplace, c_title, title.length());
 
         /* Set the title of the window icon */
-        xcb_change_property(m_xcbConn, XCB_PROP_MODE_REPLACE, m_windowId,
-                            XCB_ATOM_WM_ICON_NAME, XCB_ATOM_STRING, 8,
-                            strlen(c_title), c_title);
+        XChangeProperty(m_xDisp, m_windowId, XA_WM_ICON_NAME, XA_STRING, 8, PropModeReplace, c_title, title.length());
 
         /* Initialize context */
-        //xcb_map_window(m_xcbConn, m_windowId);
-        xcb_flush(m_xcbConn);
+        XMapWindow(m_xDisp, m_windowId);
+        XFlush(m_xDisp);
 
         m_gfxCtx.initializeContext();
     }
     
     ~WindowXCB()
     {
-        xcb_unmap_window(m_xcbConn, m_windowId);
-        xcb_destroy_window(m_xcbConn, m_windowId);
-        xcb_free_colormap(m_xcbConn, m_colormapId);
+        XUnmapWindow(m_xDisp, m_windowId);
+        XDestroyWindow(m_xDisp, m_windowId);
+        XFreeColormap(m_xDisp, m_colormapId);
         APP->_deletedWindow(this);
     }
     
@@ -464,48 +463,43 @@ public:
     
     void showWindow()
     {
-        xcb_map_window(m_xcbConn, m_windowId);
-        m_gfxCtx.makeCurrent();
-        xcb_flush(m_xcbConn);
+        XMapWindow(m_xDisp, m_windowId);
+        XFlush(m_xDisp);
     }
     
     void hideWindow()
     {
-        xcb_unmap_window(m_xcbConn, m_windowId);
-        xcb_flush(m_xcbConn);
+        XUnmapWindow(m_xDisp, m_windowId);
+        XFlush(m_xDisp);
     }
     
     std::string getTitle()
     {
-        xcb_get_property_cookie_t cookie =
-        xcb_get_property(m_xcbConn, 0, m_windowId, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 0, 64);
-        xcb_get_property_reply_t* reply =
-        xcb_get_property_reply(m_xcbConn, cookie, NULL);
-        std::string retval((const char*)xcb_get_property_value(reply));
-        free(reply);
-        return retval;
+        unsigned char* string = nullptr;
+        if (XGetWindowProperty(m_xDisp, m_windowId, XA_WM_NAME, 0, 65536, False,
+                               XA_STRING, nullptr, nullptr, nullptr, nullptr, &string))
+        {
+            std::string retval((const char*)string);
+            XFree(string);
+            return retval;
+        }
+        return std::string();
     }
     
     void setTitle(const std::string& title)
     {
-        const char* c_title = title.c_str();
-        xcb_change_property(m_xcbConn, XCB_PROP_MODE_REPLACE, m_windowId,
-                            XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8,
-                            strlen(c_title), c_title);
+        const unsigned char* c_title = (unsigned char*)title.c_str();
+        XChangeProperty(m_xDisp, m_windowId, XA_WM_NAME, XA_STRING, 8,
+                        PropModeReplace, c_title, title.length());
     }
     
     void setWindowFrameDefault()
     {
         int x, y, w, h;
-        xcb_screen_t* screen = xcb_setup_roots_iterator(xcb_get_setup(m_xcbConn)).data;
+        Screen* screen = DefaultScreenOfDisplay(m_xDisp);
         genFrameDefault(screen, &x, &y, &w, &h);
-        uint32_t values[] = {(uint32_t)x, (uint32_t)y, (uint32_t)w, (uint32_t)h};
-        xcb_configure_window(m_xcbConn, m_windowId,
-                             XCB_CONFIG_WINDOW_X |
-                             XCB_CONFIG_WINDOW_Y |
-                             XCB_CONFIG_WINDOW_WIDTH |
-                             XCB_CONFIG_WINDOW_HEIGHT,
-                             values);
+        XWindowChanges values = {(int)x, (int)y, (int)w, (int)h};
+        XConfigureWindow(m_xDisp, m_windowId, CWX|CWY|CWWidth|CWHeight, &values);
     }
     
     void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const
@@ -518,13 +512,8 @@ public:
     
     void setWindowFrame(float x, float y, float w, float h)
     {
-        uint32_t values[] = {(uint32_t)x, (uint32_t)y, (uint32_t)w, (uint32_t)h};
-        xcb_configure_window(m_xcbConn, m_windowId,
-                             XCB_CONFIG_WINDOW_X |
-                             XCB_CONFIG_WINDOW_Y |
-                             XCB_CONFIG_WINDOW_WIDTH |
-                             XCB_CONFIG_WINDOW_HEIGHT,
-                             values);
+        XWindowChanges values = {(int)x, (int)y, (int)w, (int)h};
+        XConfigureWindow(m_xDisp, m_windowId, CWX|CWY|CWWidth|CWHeight, &values);
     }
     
     float getVirtualPixelFactor() const
@@ -534,48 +523,48 @@ public:
     
     bool isFullscreen() const
     {
-        xcb_get_property_cookie_t cookie =
-        xcb_get_property(m_xcbConn, 0, m_windowId, S_ATOMS->m_netwmState, XCB_ATOM_ATOM, 0, 32);
-        xcb_get_property_reply_t* reply =
-        xcb_get_property_reply(m_xcbConn, cookie, NULL);
-        char* props = (char*)xcb_get_property_value(reply);
-        char fullscreen = false;
-        for (unsigned i=0 ; i<reply->length/4 ; ++i)
+        unsigned long nitems;
+        Atom* vals = nullptr;
+        bool fullscreen = false;
+        if (XGetWindowProperty(m_xDisp, m_windowId, S_ATOMS->m_netwmState, 0, 65536, False,
+                               XA_ATOM, nullptr, nullptr, &nitems, nullptr, (unsigned char**)&vals))
         {
-            if ((xcb_atom_t)props[i] == S_ATOMS->m_netwmStateFullscreen)
+            for (int i=0 ; i<nitems ; ++i)
             {
-                fullscreen = true;
-                break;
+                if (vals[i] == S_ATOMS->m_netwmStateFullscreen)
+                {
+                    fullscreen = true;
+                    break;
+                }
             }
+            XFree(vals);
+            return fullscreen;
         }
-        free(reply);
-        return fullscreen;
+        return false;
     }
     
     void setFullscreen(bool fs)
     {
-        xcb_client_message_event_t fsEvent =
+        XClientMessageEvent fsEvent =
         {
-            XCB_CLIENT_MESSAGE,
-            32,
+            ClientMessage,
             0,
+            True,
+            m_xDisp,
             m_windowId,
             S_ATOMS->m_netwmState,
-            {}
+            32
         };
-        fsEvent.data.data32[0] = fs ? S_ATOMS->m_netwmStateAdd : S_ATOMS->m_netwmStateRemove;
-        fsEvent.data.data32[1] = S_ATOMS->m_netwmStateFullscreen;
-        xcb_send_event(m_xcbConn, 0, m_windowId,
-                       XCB_EVENT_MASK_STRUCTURE_NOTIFY |
-                       XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT,
-                       (const char*)&fsEvent);
+        fsEvent.data.l[0] = fs ? S_ATOMS->m_netwmStateAdd : S_ATOMS->m_netwmStateRemove;
+        fsEvent.data.l[1] = S_ATOMS->m_netwmStateFullscreen;
+        XSendEvent(m_xDisp, m_windowId, False,
+                   StructureNotifyMask | SubstructureRedirectMask, (XEvent*)&fsEvent);
     }
 
-    size_t waitForRetrace(size_t count)
+    void waitForRetrace()
     {
-        unsigned int sync;
-        FglXWaitVideoSyncSGI(1, 0, &sync);
-        return 0;
+        m_gfxCtx.bindTimerContext();
+        GLXWaitForVSync();
     }
 
     uintptr_t getPlatformHandle() const
@@ -583,109 +572,103 @@ public:
         return (uintptr_t)m_windowId;
     }
 
-    void _pointingDeviceChanged(xcb_input_device_id_t deviceId)
+    void _pointingDeviceChanged(int deviceId)
     {
-        xcb_input_xi_query_device_reply_t* reply =
-        xcb_input_xi_query_device_reply(m_xcbConn, xcb_input_xi_query_device(m_xcbConn, deviceId), NULL);
+        int nDevices;
+        XIDeviceInfo* devices = XIQueryDevice(m_xDisp, deviceId, &nDevices);
 
-        xcb_input_xi_device_info_iterator_t infoIter = xcb_input_xi_query_device_infos_iterator(reply);
-        while (infoIter.rem)
+        for (int i=0 ; i<nDevices ; ++i)
         {
+            XIDeviceInfo* device = &devices[i];
+
             /* First iterate classes for scrollables */
-            xcb_input_device_class_iterator_t classIter =
-            xcb_input_xi_device_info_classes_iterator(infoIter.data);
             int hScroll = -1;
             int vScroll = -1;
             m_hScrollLast = 0.0;
             m_vScrollLast = 0.0;
             m_hScrollValuator = -1;
             m_vScrollValuator = -1;
-            while (classIter.rem)
+            for (int j=0 ; j<device->num_classes ; ++j)
             {
-                if (classIter.data->type == XCB_INPUT_DEVICE_CLASS_TYPE_SCROLL)
+                XIAnyClassInfo* dclass = device->classes[j];
+                if (dclass->type == XIScrollClass)
                 {
-                    xcb_input_scroll_class_t* scrollClass = (xcb_input_scroll_class_t*)classIter.data;
-                    if (scrollClass->scroll_type == XCB_INPUT_SCROLL_TYPE_VERTICAL)
+                    XIScrollClassInfo* scrollClass = (XIScrollClassInfo*)dclass;
+                    if (scrollClass->scroll_type == XIScrollTypeVertical)
                         vScroll = scrollClass->number;
-                    else if (scrollClass->scroll_type == XCB_INPUT_SCROLL_TYPE_HORIZONTAL)
+                    else if (scrollClass->scroll_type == XIScrollTypeHorizontal)
                         hScroll = scrollClass->number;
                 }
-                xcb_input_device_class_next(&classIter);
             }
 
             /* Next iterate for touch and scroll valuators */
-            classIter = xcb_input_xi_device_info_classes_iterator(infoIter.data);
-            while (classIter.rem)
+            for (int j=0 ; j<device->num_classes ; ++j)
             {
-                if (classIter.data->type == XCB_INPUT_DEVICE_CLASS_TYPE_VALUATOR)
+                XIAnyClassInfo* dclass = device->classes[j];
+                if (dclass->type == XIValuatorClass)
                 {
-                    xcb_input_valuator_class_t* valClass = (xcb_input_valuator_class_t*)classIter.data;
+                    XIValuatorClassInfo* valClass = (XIValuatorClassInfo*)dclass;
                     if (valClass->number == vScroll)
                     {
-                        m_vScrollLast = fp3232val(&valClass->value);
+                        m_vScrollLast = valClass->value;
                         m_vScrollValuator = vScroll;
                     }
                     else if (valClass->number == hScroll)
                     {
-                        m_hScrollLast = fp3232val(&valClass->value);
+                        m_hScrollLast = valClass->value;
                         m_hScrollValuator = hScroll;
                     }
                 }
-                else if (classIter.data->type == XCB_INPUT_DEVICE_CLASS_TYPE_TOUCH)
+                else if (dclass->type == XITouchClass)
                 {
-                    xcb_input_touch_class_t* touchClass = (xcb_input_touch_class_t*)classIter.data;
-                    if (touchClass->mode == XCB_INPUT_TOUCH_MODE_DIRECT)
+                    XITouchClassInfo* touchClass = (XITouchClassInfo*)dclass;
+                    if (touchClass->mode == XIDirectTouch)
                         m_touchType = TOUCH_DISPLAY;
-                    else if (touchClass->mode == XCB_INPUT_TOUCH_MODE_DEPENDENT)
+                    else if (touchClass->mode == XIDependentTouch)
                         m_touchType = TOUCH_TRACKPAD;
                     else
                         m_touchType = TOUCH_NONE;
                 }
-                xcb_input_device_class_next(&classIter);
             }
-            xcb_input_xi_device_info_next(&infoIter);
         }
 
-        free(reply);
+        XIFreeDeviceInfo(devices);
         m_lastInputID = deviceId;
     }
 
     void _incomingEvent(void* e)
     {
-        xcb_generic_event_t* event = (xcb_generic_event_t*)e;
-        switch (XCB_EVENT_RESPONSE_TYPE(event))
+        XEvent* event = (XEvent*)e;
+        switch (event->type)
         {
-        case XCB_EXPOSE:
+        case Expose:
         {
-            xcb_expose_event_t* ev = (xcb_expose_event_t*)event;
-            m_wx = ev->x;
-            m_wy = ev->y;
-            m_ww = ev->width;
-            m_wh = ev->height;
+            m_wx = event->xexpose.x;
+            m_wy = event->xexpose.y;
+            m_ww = event->xexpose.width;
+            m_wh = event->xexpose.height;
             return;
         }
-        case XCB_CONFIGURE_NOTIFY:
+        case ConfigureNotify:
         {
-            xcb_configure_notify_event_t* ev = (xcb_configure_notify_event_t*)event;
-            if (ev->width && ev->height)
+            if (event->xconfigure.width && event->xconfigure.height)
             {
-                m_wx = ev->x;
-                m_wy = ev->y;
-                m_ww = ev->width;
-                m_wh = ev->height;
+                m_wx = event->xconfigure.x;
+                m_wy = event->xconfigure.y;
+                m_ww = event->xconfigure.width;
+                m_wh = event->xconfigure.height;
             }
             return;
         }
-        case XCB_KEY_PRESS:
+        case KeyPress:
         {
-            xcb_key_press_event_t* ev = (xcb_key_press_event_t*)event;
             if (m_callback)
             {
                 int specialKey;
                 int modifierKey;
-                uint32_t charCode = translateKeysym(xcb_key_press_lookup_keysym(S_ATOMS->m_keySyms, ev, 0),
+                uint32_t charCode = translateKeysym(XLookupKeysym(&event->xkey, 0),
                                                     specialKey, modifierKey);
-                int modifierMask = translateModifiers(ev->state);
+                int modifierMask = translateModifiers(event->xkey.state);
                 if (charCode)
                     m_callback->charKeyDown(charCode,
                                             (IWindowCallback::EModifierKey)modifierMask, false);
@@ -697,16 +680,15 @@ public:
             }
             return;
         }
-        case XCB_KEY_RELEASE:
+        case KeyRelease:
         {
-            xcb_key_release_event_t* ev = (xcb_key_release_event_t*)event;
             if (m_callback)
             {
                 int specialKey;
                 int modifierKey;
-                uint32_t charCode = translateKeysym(xcb_key_release_lookup_keysym(S_ATOMS->m_keySyms, ev, 0),
+                uint32_t charCode = translateKeysym(XLookupKeysym(&event->xkey, 0),
                                                     specialKey, modifierKey);
-                int modifierMask = translateModifiers(ev->state);
+                int modifierMask = translateModifiers(event->xkey.state);
                 if (charCode)
                     m_callback->charKeyUp(charCode,
                                           (IWindowCallback::EModifierKey)modifierMask);
@@ -718,67 +700,65 @@ public:
             }
             return;
         }
-        case XCB_BUTTON_PRESS:
+        case ButtonPress:
         {
-            xcb_button_press_event_t* ev = (xcb_button_press_event_t*)event;
             if (m_callback)
             {
-                int button = translateButton(ev->detail);
+                int button = translateButton(event->xbutton.button);
                 if (button)
                 {
-                    int modifierMask = translateModifiers(ev->state);
+                    int modifierMask = translateModifiers(event->xbutton.state);
                     IWindowCallback::SWindowCoord coord =
                     {
-                        {(unsigned)ev->event_x, (unsigned)ev->event_y},
-                        {(unsigned)(ev->event_x / m_pixelFactor), (unsigned)(ev->event_y / m_pixelFactor)},
-                        {ev->event_x / (float)m_ww, ev->event_y / (float)m_wh}
+                        {(unsigned)event->xbutton.x, (unsigned)event->xbutton.y},
+                        {(unsigned)(event->xbutton.x / m_pixelFactor), (unsigned)(event->xbutton.y / m_pixelFactor)},
+                        {event->xbutton.x / (float)m_ww, event->xbutton.y / (float)m_wh}
                     };
                     m_callback->mouseDown(coord, (IWindowCallback::EMouseButton)button,
                                           (IWindowCallback::EModifierKey)modifierMask);
                 }
 
                 /* Also handle legacy scroll events here */
-                if (ev->detail >= 4 && ev->detail <= 7 &&
+                if (event->xbutton.button >= 4 && event->xbutton.button <= 7 &&
                     m_hScrollValuator == -1 && m_vScrollValuator == -1)
                 {
                     IWindowCallback::SWindowCoord coord =
                     {
-                        {(unsigned)ev->event_x, (unsigned)ev->event_y},
-                        {(unsigned)(ev->event_x / m_pixelFactor), (unsigned)(ev->event_y / m_pixelFactor)},
-                        {ev->event_x / (float)m_ww, ev->event_y / (float)m_wh}
+                        {(unsigned)event->xbutton.x, (unsigned)event->xbutton.y},
+                        {(unsigned)(event->xbutton.x / m_pixelFactor), (unsigned)(event->xbutton.y / m_pixelFactor)},
+                        {event->xbutton.x / (float)m_ww, event->xbutton.y / (float)m_wh}
                     };
                     IWindowCallback::SScrollDelta scrollDelta =
                     {
                         {0.0, 0.0},
                         false
                     };
-                    if (ev->detail == 4)
+                    if (event->xbutton.button == 4)
                         scrollDelta.delta[1] = 1.0;
-                    else if (ev->detail == 5)
+                    else if (event->xbutton.button == 5)
                         scrollDelta.delta[1] = -1.0;
-                    else if (ev->detail == 6)
+                    else if (event->xbutton.button == 6)
                         scrollDelta.delta[0] = 1.0;
-                    else if (ev->detail == 7)
+                    else if (event->xbutton.button == 7)
                         scrollDelta.delta[0] = -1.0;
                     m_callback->scroll(coord, scrollDelta);
                 }
             }
             return;
         }
-        case XCB_BUTTON_RELEASE:
+        case ButtonRelease:
         {
-            xcb_button_release_event_t* ev = (xcb_button_release_event_t*)event;
             if (m_callback)
             {
-                int button = translateButton(ev->detail);
+                int button = translateButton(event->xbutton.button);
                 if (button)
                 {
-                    int modifierMask = translateModifiers(ev->state);
+                    int modifierMask = translateModifiers(event->xbutton.state);
                     IWindowCallback::SWindowCoord coord =
                     {
-                        {(unsigned)ev->event_x, (unsigned)ev->event_y},
-                        {(unsigned)(ev->event_x / m_pixelFactor), (unsigned)(ev->event_y / m_pixelFactor)},
-                        {ev->event_x / (float)m_ww, ev->event_y / (float)m_wh}
+                        {(unsigned)event->xbutton.x, (unsigned)event->xbutton.y},
+                        {(unsigned)(event->xbutton.x / m_pixelFactor), (unsigned)(event->xbutton.y / m_pixelFactor)},
+                        {event->xbutton.x / (float)m_ww, event->xbutton.y / (float)m_wh}
                     };
                     m_callback->mouseUp(coord, (IWindowCallback::EMouseButton)button,
                                         (IWindowCallback::EModifierKey)modifierMask);
@@ -786,51 +766,47 @@ public:
             }
             return;
         }
-        case XCB_MOTION_NOTIFY:
+        case MotionNotify:
         {
-            xcb_motion_notify_event_t* ev = (xcb_motion_notify_event_t*)event;
             if (m_callback)
             {
                 IWindowCallback::SWindowCoord coord =
                 {
-                    {(unsigned)ev->event_x, (unsigned)ev->event_y},
-                    {(unsigned)(ev->event_x / m_pixelFactor), (unsigned)(ev->event_y / m_pixelFactor)},
-                    {ev->event_x / (float)m_ww, ev->event_y / (float)m_wh}
+                    {(unsigned)event->xmotion.x, (unsigned)event->xmotion.y},
+                    {(unsigned)(event->xmotion.x / m_pixelFactor), (unsigned)(event->xmotion.y / m_pixelFactor)},
+                    {event->xmotion.x / (float)m_ww, event->xmotion.y / (float)m_wh}
                 };
                 m_callback->mouseMove(coord);
             }
             return;
         }
-        case XCB_GE_GENERIC:
+        case GenericEvent:
         {
-            xcb_ge_event_t* gev = (xcb_ge_event_t*)event;
-            if (gev->pad0 == XINPUT_OPCODE)
+            if (event->xgeneric.extension == XINPUT_OPCODE)
             {
-                switch (gev->event_type)
+                switch (event->xgeneric.evtype)
                 {
-                case XCB_INPUT_MOTION:
+                case XI_Motion:
                 {
-                    xcb_input_motion_event_t* ev = (xcb_input_motion_event_t*)event;
+                    XIDeviceEvent* ev = (XIDeviceEvent*)event;
                     if (m_lastInputID != ev->deviceid)
                         _pointingDeviceChanged(ev->deviceid);
 
-                    uint32_t* valuators = (uint32_t*)(((char*)ev) + sizeof(xcb_input_motion_event_t) + sizeof(uint32_t) * ev->buttons_len);
-                    xcb_input_fp3232_t* valuatorVals = (xcb_input_fp3232_t*)(((char*)valuators) + sizeof(uint32_t) * ev->valuators_len);
                     int cv = 0;
                     double newScroll[2] = {m_hScrollLast, m_vScrollLast};
                     bool didScroll = false;
-                    for (int i=0 ; i<32 ; ++i)
+                    for (int i=0 ; i<ev->valuators.mask_len*8 ; ++i)
                     {
-                        if (valuators[0] & (1<<i))
+                        if (XIMaskIsSet(ev->valuators.mask, i))
                         {
                             if (i == m_hScrollValuator)
                             {
-                                newScroll[0] = fp3232val(&valuatorVals[cv]);
+                                newScroll[0] = ev->valuators.values[cv];
                                 didScroll = true;
                             }
                             else if (i == m_vScrollValuator)
                             {
-                                newScroll[1] = fp3232val(&valuatorVals[cv]);
+                                newScroll[1] = ev->valuators.values[cv];
                                 didScroll = true;
                             }
                             ++cv;
@@ -848,8 +824,8 @@ public:
 
                     if (m_callback && didScroll)
                     {
-                        unsigned event_x = ev->event_x >> 16;
-                        unsigned event_y = ev->event_y >> 16;
+                        unsigned event_x = unsigned(ev->event_x) >> 16;
+                        unsigned event_y = unsigned(ev->event_y) >> 16;
                         IWindowCallback::SWindowCoord coord =
                         {
                             {event_x, event_y},
@@ -860,21 +836,19 @@ public:
                     }
                     return;
                 }
-                case XCB_INPUT_TOUCH_BEGIN:
+                case XI_TouchBegin:
                 {
-                    xcb_input_touch_begin_event_t* ev = (xcb_input_touch_begin_event_t*)event;
+                    XIDeviceEvent* ev = (XIDeviceEvent*)event;
                     if (m_lastInputID != ev->deviceid)
                         _pointingDeviceChanged(ev->deviceid);
 
-                    uint32_t* valuators = (uint32_t*)(((char*)ev) + sizeof(xcb_input_motion_event_t) + sizeof(uint32_t) * ev->buttons_len);
-                    xcb_input_fp3232_t* valuatorVals = (xcb_input_fp3232_t*)(((char*)valuators) + sizeof(uint32_t) * ev->valuators_len);
                     int cv = 0;
                     double vals[32] = {};
-                    for (int i=0 ; i<32 ; ++i)
+                    for (int i=0 ; i<ev->valuators.mask_len*8 && i<32 ; ++i)
                     {
-                        if (valuators[0] & (1<<i))
+                        if (XIMaskIsSet(ev->valuators.mask, i))
                         {
-                            vals[i] = fp3232val(&valuatorVals[cv]);
+                            vals[i] = ev->valuators.values[cv];
                             ++cv;
                         }
                     }
@@ -888,21 +862,19 @@ public:
                         m_callback->touchDown(coord, ev->detail);
                     return;
                 }
-                case XCB_INPUT_TOUCH_UPDATE:
+                case XI_TouchUpdate:
                 {
-                    xcb_input_touch_update_event_t* ev = (xcb_input_touch_update_event_t*)event;
+                    XIDeviceEvent* ev = (XIDeviceEvent*)event;
                     if (m_lastInputID != ev->deviceid)
                         _pointingDeviceChanged(ev->deviceid);
 
-                    uint32_t* valuators = (uint32_t*)(((char*)ev) + sizeof(xcb_input_motion_event_t) + sizeof(uint32_t) * ev->buttons_len);
-                    xcb_input_fp3232_t* valuatorVals = (xcb_input_fp3232_t*)(((char*)valuators) + sizeof(uint32_t) * ev->valuators_len);
                     int cv = 0;
                     double vals[32] = {};
-                    for (int i=0 ; i<32 ; ++i)
+                    for (int i=0 ; i<ev->valuators.mask_len*8 && i<32 ; ++i)
                     {
-                        if (valuators[0] & (1<<i))
+                        if (XIMaskIsSet(ev->valuators.mask, i))
                         {
-                            vals[i] = fp3232val(&valuatorVals[cv]);
+                            vals[i] = ev->valuators.values[cv];
                             ++cv;
                         }
                     }
@@ -916,21 +888,19 @@ public:
                         m_callback->touchMove(coord, ev->detail);
                     return;
                 }
-                case XCB_INPUT_TOUCH_END:
+                case XI_TouchEnd:
                 {
-                    xcb_input_touch_end_event_t* ev = (xcb_input_touch_end_event_t*)event;
+                    XIDeviceEvent* ev = (XIDeviceEvent*)event;
                     if (m_lastInputID != ev->deviceid)
                         _pointingDeviceChanged(ev->deviceid);
 
-                    uint32_t* valuators = (uint32_t*)(((char*)ev) + sizeof(xcb_input_motion_event_t) + sizeof(uint32_t) * ev->buttons_len);
-                    xcb_input_fp3232_t* valuatorVals = (xcb_input_fp3232_t*)(((char*)valuators) + sizeof(uint32_t) * ev->valuators_len);
                     int cv = 0;
                     double vals[32] = {};
-                    for (int i=0 ; i<32 ; ++i)
+                    for (int i=0 ; i<ev->valuators.mask_len*8 && i<32 ; ++i)
                     {
-                        if (valuators[0] & (1<<i))
+                        if (XIMaskIsSet(ev->valuators.mask, i))
                         {
-                            vals[i] = fp3232val(&valuatorVals[cv]);
+                            vals[i] = ev->valuators.values[cv];
                             ++cv;
                         }
                     }
@@ -972,10 +942,11 @@ public:
 
 };
 
-IWindow* _WindowXCBNew(const std::string& title, xcb_connection_t* conn,
-                       xcb_glx_context_t lastCtx)
+IWindow* _WindowXCBNew(const std::string& title,
+                       Display* display, int defaultScreen,
+                       GLXContext lastCtx)
 {
-    return new WindowXCB(title, conn, lastCtx);
+    return new WindowXCB(title, display, defaultScreen, lastCtx);
 }
     
 }

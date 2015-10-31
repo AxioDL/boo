@@ -4,114 +4,83 @@
 
 #include "boo/IApplication.hpp"
 
-#define explicit explicit_c
-#include <xcb/xcb.h>
-#include <xcb/xcb_event.h>
-#include <xkbcommon/xkbcommon-x11.h>
-#include <xcb/xkb.h>
-#include <xcb/xinput.h>
-#include <xcb/glx.h>
-#undef explicit
-
 #include <X11/Xlib.h>
+#include <X11/XKBlib.h>
+#include <X11/extensions/XInput2.h>
 #include <GL/glx.h>
 #include <GL/glxext.h>
 
 #include <dbus/dbus.h>
 DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
 
+#include <LogVisor/LogVisor.hpp>
+
 #include <sys/param.h>
 #include <thread>
 
 namespace boo
 {
-
-PFNGLXGETVIDEOSYNCSGIPROC FglXGetVideoSyncSGI = nullptr;
-PFNGLXWAITVIDEOSYNCSGIPROC FglXWaitVideoSyncSGI = nullptr;
+static LogVisor::LogModule Log("boo::ApplicationXCB");
 
 int XCB_GLX_EVENT_BASE = 0;
 int XINPUT_OPCODE = 0;
 
-static xcb_window_t GetWindowOfEvent(xcb_generic_event_t* event, bool& windowEvent)
+static Window GetWindowOfEvent(XEvent* event, bool& windowEvent)
 {
-    switch (XCB_EVENT_RESPONSE_TYPE(event))
+    switch (event->type)
     {
-    case XCB_CLIENT_MESSAGE:
+    case ClientMessage:
     {
-        xcb_client_message_event_t* ev = (xcb_client_message_event_t*)event;
         windowEvent = true;
-        return ev->window;
+        return event->xclient.window;
     }
-    case XCB_EXPOSE:
+    case Expose:
     {
-        xcb_expose_event_t* ev = (xcb_expose_event_t*)event;
         windowEvent = true;
-        return ev->window;
+        return event->xexpose.window;
     }
-    case XCB_CONFIGURE_NOTIFY:
+    case ConfigureNotify:
     {
-        xcb_configure_notify_event_t* ev = (xcb_configure_notify_event_t*)event;
         windowEvent = true;
-        return ev->window;
+        return event->xconfigure.window;
     }
-    case XCB_KEY_PRESS:
+    case KeyPress:
     {
-        xcb_key_press_event_t* ev = (xcb_key_press_event_t*)event;
         windowEvent = true;
-        return ev->event;
+        return event->xkey.window;
     }
-    case XCB_KEY_RELEASE:
+    case KeyRelease:
     {
-        xcb_key_release_event_t* ev = (xcb_key_release_event_t*)event;
         windowEvent = true;
-        return ev->event;
+        return event->xkey.window;
     }
-    case XCB_BUTTON_PRESS:
+    case ButtonPress:
     {
-        xcb_button_press_event_t* ev = (xcb_button_press_event_t*)event;
         windowEvent = true;
-        return ev->event;
+        return event->xbutton.window;
     }
-    case XCB_BUTTON_RELEASE:
+    case ButtonRelease:
     {
-        xcb_button_release_event_t* ev = (xcb_button_release_event_t*)event;
         windowEvent = true;
-        return ev->event;
+        return event->xbutton.window;;
     }
-    case XCB_MOTION_NOTIFY:
+    case MotionNotify:
     {
-        xcb_motion_notify_event_t* ev = (xcb_motion_notify_event_t*)event;
         windowEvent = true;
-        return ev->event;
+        return event->xmotion.window;
     }
-    case XCB_GE_GENERIC:
+    case GenericEvent:
     {
-        xcb_ge_event_t* gev = (xcb_ge_event_t*)event;
-        if (gev->pad0 == XINPUT_OPCODE)
+        if (event->xgeneric.extension == XINPUT_OPCODE)
         {
-            switch (gev->event_type)
+            switch (event->xgeneric.evtype)
             {
-            case XCB_INPUT_MOTION:
+            case XI_Motion:
+            case XI_TouchBegin:
+            case XI_TouchUpdate:
+            case XI_TouchEnd:
             {
-                xcb_input_motion_event_t* ev = (xcb_input_motion_event_t*)event;
-                windowEvent = true;
-                return ev->event;
-            }
-            case XCB_INPUT_TOUCH_BEGIN:
-            {
-                xcb_input_touch_begin_event_t* ev = (xcb_input_touch_begin_event_t*)event;
-                windowEvent = true;
-                return ev->event;
-            }
-            case XCB_INPUT_TOUCH_UPDATE:
-            {
-                xcb_input_touch_update_event_t* ev = (xcb_input_touch_update_event_t*)event;
-                windowEvent = true;
-                return ev->event;
-            }
-            case XCB_INPUT_TOUCH_END:
-            {
-                xcb_input_touch_end_event_t* ev = (xcb_input_touch_end_event_t*)event;
+                XIDeviceEvent* ev = (XIDeviceEvent*)event;
                 windowEvent = true;
                 return ev->event;
             }
@@ -123,8 +92,9 @@ static xcb_window_t GetWindowOfEvent(xcb_generic_event_t* event, bool& windowEve
     return 0;
 }
     
-IWindow* _WindowXCBNew(const std::string& title, xcb_connection_t* conn,
-                       xcb_glx_context_t lastCtx);
+IWindow* _WindowXCBNew(const std::string& title,
+                       Display* display, int defaultScreen,
+                       GLXContext lastCtx);
     
 class ApplicationXCB final : public IApplication
 {
@@ -136,17 +106,18 @@ class ApplicationXCB final : public IApplication
 
     /* DBus single-instance */
     bool m_singleInstance;
-    DBusConnection* m_dbus = NULL;
+    DBusConnection* m_dbus = nullptr;
 
     /* All windows */
-    std::unordered_map<xcb_window_t, IWindow*> m_windows;
+    std::unordered_map<Window, IWindow*> m_windows;
 
-    xcb_connection_t* m_xcbConn = NULL;
+    Display* m_xDisp = nullptr;
+    int m_xDefaultScreen = 0;
     int m_xcbFd, m_dbusFd, m_maxFd;
     
     void _deletedWindow(IWindow* window)
     {
-        m_windows.erase((xcb_window_t)window->getPlatformHandle());
+        m_windows.erase((Window)window->getPlatformHandle());
     }
     
 public:
@@ -206,43 +177,39 @@ public:
             }
         }
 
-        /* Open X connection */
-        m_xcbConn = xcb_connect(NULL, NULL);
+        if (!XInitThreads())
+        {
+            Log.report(LogVisor::FatalError, "X doesn't support multithreading");
+            return;
+        }
 
-        /* GLX extension data */
-        const xcb_query_extension_reply_t* glxExtData =
-        xcb_get_extension_data(m_xcbConn, &xcb_glx_id);
-        XCB_GLX_EVENT_BASE = glxExtData->first_event;
-        FglXGetVideoSyncSGI = PFNGLXGETVIDEOSYNCSGIPROC(glXGetProcAddress((GLubyte*)"glXGetVideoSyncSGI"));
-        FglXWaitVideoSyncSGI = PFNGLXWAITVIDEOSYNCSGIPROC(glXGetProcAddress((GLubyte*)"glXWaitVideoSyncSGI"));
+        /* Open Xlib Display */
+        m_xDisp = XOpenDisplay(0);
+        if (!m_xDisp)
+        {
+            Log.report(LogVisor::FatalError, "Can't open X display");
+            return;
+        }
+
+        m_xDefaultScreen = DefaultScreen(m_xDisp);
+
 
         /* The xkb extension requests that the X server does not
          * send repeated keydown events when a key is held */
-        xkb_x11_setup_xkb_extension(m_xcbConn,
-                                    XKB_X11_MIN_MAJOR_XKB_VERSION,
-                                    XKB_X11_MIN_MINOR_XKB_VERSION,
-                                    XKB_X11_SETUP_XKB_EXTENSION_NO_FLAGS,
-                                    NULL, NULL, NULL, NULL);
-        xcb_xkb_per_client_flags(m_xcbConn, XCB_XKB_ID_USE_CORE_KBD,
-                                 XCB_XKB_PER_CLIENT_FLAG_DETECTABLE_AUTO_REPEAT,
-                                 XCB_XKB_PER_CLIENT_FLAG_DETECTABLE_AUTO_REPEAT, 0, 0, 0);
-
-        /* Xinput major opcode */
-        const xcb_query_extension_reply_t* xiReply =
-        xcb_get_extension_data(m_xcbConn, &xcb_input_id);
-        XINPUT_OPCODE = xiReply->major_opcode;
+        XkbQueryExtension(m_xDisp, &XINPUT_OPCODE, nullptr, nullptr, nullptr, nullptr);
+        XkbSetDetectableAutoRepeat(m_xDisp, True, nullptr);
 
         /* Get file descriptors of xcb and dbus interfaces */
-        m_xcbFd = xcb_get_file_descriptor(m_xcbConn);
+        m_xcbFd = ConnectionNumber(m_xDisp);
         dbus_connection_get_unix_fd(m_dbus, &m_dbusFd);
         m_maxFd = MAX(m_xcbFd, m_dbusFd);
 
-        xcb_flush(m_xcbConn);
+        XFlush(m_xDisp);
     }
 
     ~ApplicationXCB()
     {
-        xcb_disconnect(m_xcbConn);
+        XCloseDisplay(m_xDisp);
     }
     
     EPlatformType getPlatformType() const
@@ -252,7 +219,7 @@ public:
     
     int run()
     {
-        if (!m_xcbConn)
+        if (!m_xDisp)
             return 1;
 
         /* Spawn client thread */
@@ -263,7 +230,6 @@ public:
         /* Begin application event loop */
         while (true)
         {
-            xcb_generic_event_t* event;
             fd_set fds;
             FD_ZERO(&fds);
             FD_SET(m_xcbFd, &fds);
@@ -272,19 +238,19 @@ public:
 
             if (FD_ISSET(m_xcbFd, &fds))
             {
-                event = xcb_poll_for_event(m_xcbConn);
-                if (event)
+                while (XPending(m_xDisp))
                 {
+                    XEvent event;
+                    XNextEvent(m_xDisp, &event);
                     bool windowEvent;
-                    xcb_window_t evWindow = GetWindowOfEvent(event, windowEvent);
+                    Window evWindow = GetWindowOfEvent(&event, windowEvent);
                     //fprintf(stderr, "EVENT %d\n", XCB_EVENT_RESPONSE_TYPE(event));
                     if (windowEvent)
                     {
                         auto window = m_windows.find(evWindow);
                         if (window != m_windows.end())
-                            window->second->_incomingEvent(event);
+                            window->second->_incomingEvent(&event);
                     }
-                    free(event);
                 }
             }
 
@@ -342,16 +308,16 @@ public:
     
     std::unique_ptr<IWindow> newWindow(const std::string& title)
     {
-        IWindow* newWindow = _WindowXCBNew(title, m_xcbConn, m_lastGlxCtx);
-        m_windows[(xcb_window_t)newWindow->getPlatformHandle()] = newWindow;
+        IWindow* newWindow = _WindowXCBNew(title, m_xDisp, m_xDefaultScreen, m_lastGlxCtx);
+        m_windows[(Window)newWindow->getPlatformHandle()] = newWindow;
         return std::unique_ptr<IWindow>(newWindow);
     }
 
     /* Last GLX context */
-    xcb_glx_context_t m_lastGlxCtx = 0;
+    GLXContext m_lastGlxCtx = nullptr;
 };
 
-void _XCBUpdateLastGlxCtx(xcb_glx_context_t lastGlxCtx)
+void _XCBUpdateLastGlxCtx(GLXContext lastGlxCtx)
 {
     static_cast<ApplicationXCB*>(APP)->m_lastGlxCtx = lastGlxCtx;
 }

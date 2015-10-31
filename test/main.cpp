@@ -1,9 +1,11 @@
 #include <stdio.h>
+#include <math.h>
 #include <boo/boo.hpp>
-#include <boo/graphicsdev/GLES3.hpp>
+#include <boo/graphicsdev/GL.hpp>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <LogVisor/LogVisor.hpp>
 
 namespace boo
 {
@@ -226,19 +228,20 @@ struct TestApplicationCallback : IApplicationCallback
 
         /* Make shader pipeline */
         static const char* VS =
-        "#version 300\n"
+        "#version 300 es\n"
         "layout(location=0) in vec3 in_pos;\n"
         "layout(location=1) in vec2 in_uv;\n"
         "out vec2 out_uv;\n"
         "void main()\n"
         "{\n"
-        "    gl_Position = in_pos;\n"
+        "    gl_Position = vec4(in_pos, 1.0);\n"
         "    out_uv = in_uv;\n"
         "}\n";
 
         static const char* FS =
-        "#version 300\n"
-        "layout(binding=0) uniform sampler2D tex;\n"
+        "#version 300 es\n"
+        "precision highp float;\n"
+        "uniform sampler2D tex;\n"
         "layout(location=0) out vec4 out_frag;\n"
         "in vec2 out_uv;\n"
         "void main()\n"
@@ -246,8 +249,10 @@ struct TestApplicationCallback : IApplicationCallback
         "    out_frag = texture(tex, out_uv);\n"
         "}\n";
 
+        static const char* TexNames[] = {"tex"};
+
         const IShaderPipeline* pipeline =
-        factory->newShaderPipeline(VS, FS, BlendFactorOne, BlendFactorZero, true, true, false);
+        factory->newShaderPipeline(VS, FS, 1, TexNames, BlendFactorOne, BlendFactorZero, true, true, false);
 
         /* Make shader data binding */
         self->m_binding =
@@ -278,18 +283,23 @@ struct TestApplicationCallback : IApplicationCallback
         IGraphicsCommandQueue* gfxQ = mainWindow->getCommandQueue();
         std::thread loaderThread(LoaderProc, this);
 
-        size_t retraceCount = 0;
+        size_t frameIdx = 0;
         while (running)
         {
-            retraceCount = mainWindow->waitForRetrace(retraceCount);
+            mainWindow->waitForRetrace();
+            float rgba[] = {sinf(frameIdx / 60.0), cosf(frameIdx / 60.0), 0.0, 1.0};
+            gfxQ->setClearColor(rgba);
+            gfxQ->clearTarget();
             if (m_binding)
             {
                 gfxQ->setDrawPrimitive(PrimitiveTriStrips);
-                gfxQ->clearTarget();
                 gfxQ->setShaderDataBinding(m_binding);
                 gfxQ->draw(0, 4);
-                gfxQ->execute();
             }
+            gfxQ->present();
+            gfxQ->execute();
+
+            fprintf(stderr, "%zu\n", frameIdx++);
         }
 
         m_cv.notify_one();
@@ -323,6 +333,7 @@ int wmain(int argc, const wchar_t** argv)
 int main(int argc, const char** argv)
 #endif
 {
+    LogVisor::RegisterConsoleLogger();
     boo::TestApplicationCallback appCb;
     std::unique_ptr<boo::IApplication> app =
             ApplicationBootstrap(boo::IApplication::PLAT_AUTO,

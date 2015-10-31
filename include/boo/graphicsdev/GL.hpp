@@ -4,7 +4,7 @@
 #include "IGraphicsDataFactory.hpp"
 #include "IGraphicsCommandQueue.hpp"
 #include "boo/IGraphicsContext.hpp"
-#include <GLES3/gl3.h>
+#include "glew.h"
 #include <vector>
 
 namespace boo
@@ -30,6 +30,7 @@ public:
     const IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
 
     const IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
+                                             size_t texCount, const char** texNames,
                                              BlendFactor srcFac, BlendFactor dstFac,
                                              bool depthTest, bool depthWrite, bool backfaceCulling);
 

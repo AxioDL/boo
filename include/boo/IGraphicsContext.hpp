@@ -46,6 +46,8 @@ public:
     virtual void setPixelFormat(EPixelFormat pf)=0;
     virtual void initializeContext()=0;
     virtual void makeCurrent()=0;
+    virtual void postInit()=0;
+    virtual void present()=0;
 
     virtual IGraphicsCommandQueue* getCommandQueue()=0;
     virtual IGraphicsDataFactory* getDataFactory()=0;

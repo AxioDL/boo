@@ -1,6 +1,5 @@
-#include "boo/graphicsdev/GLES3.hpp"
+#include "boo/graphicsdev/GL.hpp"
 #include "boo/IGraphicsContext.hpp"
-#include <GLES3/gl3ext.h>
 #include <vector>
 #include <thread>
 #include <mutex>
@@ -10,7 +9,7 @@
 
 namespace boo
 {
-static LogVisor::LogModule Log("boo::GLES3");
+static LogVisor::LogModule Log("boo::GL");
 
 struct GLES3Data : IGraphicsData
 {
@@ -247,7 +246,6 @@ public:
             glEnable(GL_DEPTH_TEST);
         else
             glDisable(GL_DEPTH_TEST);
-
         glDepthMask(m_depthWrite);
 
         if (m_backfaceCulling)
@@ -275,6 +273,7 @@ static const GLenum BLEND_FACTOR_TABLE[] =
 
 const IShaderPipeline* GLES3DataFactory::newShaderPipeline
 (const char* vertSource, const char* fragSource,
+ size_t texCount, const char** texNames,
  BlendFactor srcFac, BlendFactor dstFac,
  bool depthTest, bool depthWrite, bool backfaceCulling)
 {
@@ -330,6 +329,14 @@ const IShaderPipeline* GLES3DataFactory::newShaderPipeline
         Log.report(LogVisor::Error, "unable to link shader program\n%s\n", log);
         free(log);
         return nullptr;
+    }
+
+    glUseProgram(shader.m_prog);
+    for (size_t i=0 ; i<texCount ; ++i)
+    {
+        GLint loc;
+        if ((loc = glGetUniformLocation(shader.m_prog, texNames[i])) >= 0)
+            glUniform1i(loc, i);
     }
 
     GLES3ShaderPipeline* retval = new GLES3ShaderPipeline(std::move(shader));
@@ -460,7 +467,8 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
             OpDraw,
             OpDrawIndexed,
             OpDrawInstances,
-            OpDrawInstancesIndexed
+            OpDrawInstancesIndexed,
+            OpPresent
         } m_op;
         union
         {
@@ -483,9 +491,12 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
     size_t m_completeBuf = 0;
     size_t m_drawBuf = 0;
     bool m_running = true;
-    std::thread m_thr;
+
     std::mutex m_mt;
     std::condition_variable m_cv;
+    std::unique_lock<std::mutex> m_initlk;
+    std::condition_variable m_initcv;
+    std::thread m_thr;
 
     /* These members are locked for multithreaded access */
     std::vector<GLES3VertexFormat*> m_pendingFmtAdds;
@@ -537,7 +548,14 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
 
     static void RenderingWorker(GLES3CommandQueue* self)
     {
-        self->m_parent->makeCurrent();
+        {
+            std::unique_lock<std::mutex> lk(self->m_mt);
+            self->m_parent->makeCurrent();
+            if (glewInit() != GLEW_OK)
+                Log.report(LogVisor::FatalError, "unable to init glew");
+            self->m_parent->postInit();
+        }
+        self->m_initcv.notify_one();
         while (self->m_running)
         {
             {
@@ -603,6 +621,9 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
                 case Command::OpDrawInstancesIndexed:
                     glDrawElementsInstanced(prim, cmd.count, GL_UNSIGNED_INT, (void*)cmd.start, cmd.instCount);
                     break;
+                case Command::OpPresent:
+                    self->m_parent->present();
+                    break;
                 default: break;
                 }
             }
@@ -612,7 +633,12 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
 
     GLES3CommandQueue(IGraphicsContext* parent)
     : m_parent(parent),
-      m_thr(RenderingWorker, this) {}
+      m_initlk(m_mt),
+      m_thr(RenderingWorker, this)
+    {
+        m_initcv.wait(m_initlk);
+        m_initlk.unlock();
+    }
 
     ~GLES3CommandQueue()
     {
@@ -694,6 +720,12 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
         cmds.back().instCount = instCount;
     }
 
+    void present()
+    {
+        std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
+        cmds.emplace_back(Command::OpPresent);
+    }
+
     void addVertexFormat(GLES3VertexFormat* fmt)
     {
         std::unique_lock<std::mutex> lk(m_mt);
@@ -717,7 +749,6 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
         std::unique_lock<std::mutex> lk(m_mt);
         m_pendingFboDels.push_back(tex->m_fbo);
     }
-
 
     void execute()
     {

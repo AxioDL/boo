@@ -19,7 +19,8 @@ if(WIN32)
        lib/inputdev/HIDDeviceWinUSB.cpp
        lib/graphicsdev/D3D11.cpp
        lib/graphicsdev/D3D12.cpp
-       lib/graphicsdev/GLES3.cpp)
+       lib/graphicsdev/GL.cpp
+       lib/graphicsdev/glew.c)
   list(APPEND _BOO_SYS_LIBS Winusb)
 elseif(APPLE)
   list(APPEND PLAT_SRCS 
@@ -28,7 +29,8 @@ elseif(APPLE)
        lib/mac/GLViewCocoa.mm
        lib/inputdev/HIDListenerIOKit.cpp
        lib/inputdev/HIDDeviceIOKit.cpp
-       lib/graphicsdev/GLES3.cpp)
+       lib/graphicsdev/GL.cpp
+       lib/graphicsdev/glew.c)
   find_library(APPKIT_LIBRARY AppKit)
   find_library(IOKIT_LIBRARY IOKit)
   find_library(OPENGL_LIBRARY OpenGL)
@@ -42,7 +44,9 @@ else()
        lib/x11/WindowWayland.cpp
        lib/inputdev/HIDListenerUdev.cpp
        lib/inputdev/HIDDeviceUdev.cpp
-       lib/graphicsdev/GLES3.cpp)
+       lib/graphicsdev/GL.cpp
+       lib/graphicsdev/GLX.cpp
+       lib/graphicsdev/glew.c)
 
   find_package(PkgConfig)
   if(PKG_CONFIG_FOUND)
@@ -85,8 +89,13 @@ else()
   endif()
 
   include_directories(${DBUS_INCLUDE_DIR} ${DBUS_ARCH_INCLUDE_DIR})
-  list(APPEND _BOO_SYS_LIBS xcb xcb-glx xcb-xinput xcb-xkb xcb-keysyms xkbcommon xkbcommon-x11 GL ${DBUS_LIBRARY} udev pthread)
+  list(APPEND _BOO_SYS_LIBS X11 Xi xkbcommon xkbcommon-x11 GL ${DBUS_LIBRARY} udev pthread)
 
+endif()
+
+# For some reason, clang takes forever if glew.c is not built with -Os
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+  set_source_files_properties(lib/graphicsdev/glew.c PROPERTIES COMPILE_FLAGS -Os)
 endif()
 
 set(BOO_SYS_LIBS ${_BOO_SYS_LIBS} CACHE PATH "Boo System Libraries" FORCE)
@@ -106,7 +115,7 @@ add_library(Boo
             include/boo/IGraphicsContext.hpp
             include/boo/graphicsdev/IGraphicsDataFactory.hpp
             include/boo/graphicsdev/IGraphicsCommandQueue.hpp
-            include/boo/graphicsdev/GLES3.hpp
+            include/boo/graphicsdev/GL.hpp
             include/boo/graphicsdev/D3D11.hpp
             include/boo/graphicsdev/D3D12.hpp
             include/boo/graphicsdev/Metal.hpp

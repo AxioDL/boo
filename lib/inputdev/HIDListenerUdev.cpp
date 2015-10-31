@@ -90,8 +90,7 @@ class HIDListenerUdev final : public IHIDListener
             {
                 const char* interfacesStr = udev_list_entry_get_value(devInterfaces);
                 if (strstr(interfacesStr, ":030104") || /* HID / GenericDesktop / Joystick */
-                    strstr(interfacesStr, ":030105") || /* HID / GenericDesktop / Gamepad */
-                    strstr(interfacesStr, ":090000"))   /* HID / Sony / Dualshock */
+                    strstr(interfacesStr, ":030105"))   /* HID / GenericDesktop / Gamepad */
                 {
                     udev_enumerate* hidEnum = udev_enumerate_new(UDEV_INST);
                     udev_enumerate_add_match_parent(hidEnum, device);

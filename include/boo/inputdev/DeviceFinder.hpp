@@ -55,7 +55,8 @@ private:
     }
     inline bool _insertToken(DeviceToken&& token)
     {
-        if (DeviceSignature::DeviceMatchToken(token, m_types)) {
+        if (DeviceSignature::DeviceMatchToken(token, m_types))
+        {
             m_tokensLock.lock();
             TInsertedDeviceToken inseredTok =
             m_tokens.insert(std::make_pair(token.getDevicePath(), std::move(token)));

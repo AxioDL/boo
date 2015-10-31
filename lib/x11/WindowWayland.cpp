@@ -2,14 +2,9 @@
 #include "boo/IGraphicsContext.hpp"
 
 #include <X11/Xlib.h>
-#include <GL/glx.h>
-#include <GL/glxext.h>
 
 namespace boo
 {
-
-extern PFNGLXGETVIDEOSYNCSGIPROC FglXGetVideoSyncSGI;
-extern PFNGLXWAITVIDEOSYNCSGIPROC FglXWaitVideoSyncSGI;
     
 struct GraphicsContextWayland : IGraphicsContext
 {
@@ -63,6 +58,10 @@ public:
     {
     }
 
+    void postInit()
+    {
+    }
+
     IGraphicsCommandQueue* getCommandQueue()
     {
         return nullptr;
@@ -76,6 +75,10 @@ public:
     IGraphicsDataFactory* getLoadContextDataFactory()
     {
         return nullptr;
+    }
+
+    void present()
+    {
     }
 
 };
@@ -150,11 +153,8 @@ struct WindowWayland : IWindow
         
     }
 
-    size_t waitForRetrace(size_t count)
+    void waitForRetrace()
     {
-        unsigned int sync;
-        FglXWaitVideoSyncSGI(1, 0, &sync);
-        return 0;
     }
 
     uintptr_t getPlatformHandle() const

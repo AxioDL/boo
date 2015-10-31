@@ -136,7 +136,7 @@ public:
     virtual bool isFullscreen() const=0;
     virtual void setFullscreen(bool fs)=0;
 
-    virtual size_t waitForRetrace(size_t lastCount)=0;
+    virtual void waitForRetrace()=0;
     
     virtual uintptr_t getPlatformHandle() const=0;
     virtual void _incomingEvent(void* event) {(void)event;}
