@@ -278,12 +278,14 @@ struct TestApplicationCallback : IApplicationCallback
         mainWindow = app->newWindow(_S("YAY!"));
         mainWindow->setCallback(&windowCallback);
         mainWindow->showWindow();
+        mainWindow->setFullscreen(true);
         devFinder.startScanning();
 
         IGraphicsCommandQueue* gfxQ = mainWindow->getCommandQueue();
         std::thread loaderThread(LoaderProc, this);
 
         size_t frameIdx = 0;
+        size_t lastCheck = 0;
         while (running)
         {
             mainWindow->waitForRetrace();
@@ -300,6 +302,12 @@ struct TestApplicationCallback : IApplicationCallback
             gfxQ->execute();
 
             fprintf(stderr, "%zu\n", frameIdx++);
+
+            if ((frameIdx - lastCheck) > 100)
+            {
+                lastCheck = frameIdx;
+                mainWindow->setFullscreen(!mainWindow->isFullscreen());
+            }
         }
 
         m_cv.notify_one();

@@ -519,10 +519,13 @@ public:
     bool isFullscreen() const
     {
         unsigned long nitems;
+        Atom     actualType;
+        int      actualFormat;
+        unsigned long     bytes;
         Atom* vals = nullptr;
         bool fullscreen = false;
-        if (XGetWindowProperty(m_xDisp, m_windowId, S_ATOMS->m_netwmState, 0, 65536, False,
-                               XA_ATOM, nullptr, nullptr, &nitems, nullptr, (unsigned char**)&vals))
+        if (XGetWindowProperty(m_xDisp, m_windowId, XInternAtom(m_xDisp, "_NET_WM_STATE", True), 0, ~0l, False,
+                               XA_ATOM, &actualType, &actualFormat, &nitems, &bytes, (unsigned char**)&vals) == Success)
         {
             for (int i=0 ; i<nitems ; ++i)
             {
@@ -540,18 +543,14 @@ public:
     
     void setFullscreen(bool fs)
     {
-        XClientMessageEvent fsEvent =
-        {
-            ClientMessage,
-            0,
-            True,
-            m_xDisp,
-            m_windowId,
-            S_ATOMS->m_netwmState,
-            32
-        };
-        fsEvent.data.l[0] = fs ? S_ATOMS->m_netwmStateAdd : S_ATOMS->m_netwmStateRemove;
-        fsEvent.data.l[1] = S_ATOMS->m_netwmStateFullscreen;
+        XEvent fsEvent;
+        fsEvent.type = ClientMessage;
+        fsEvent.xclient.window = m_windowId;
+        fsEvent.xclient.message_type = XInternAtom(m_xDisp, "_NET_WM_STATE", False);
+        fsEvent.xclient.format = 32;
+        fsEvent.xclient.data.l[0] = fs;
+        fsEvent.xclient.data.l[1] = XInternAtom(m_xDisp, "_NET_WM_STATE_FULLSCREEN", False);
+        fsEvent.xclient.data.l[2] = 0;
         XSendEvent(m_xDisp, m_windowId, False,
                    StructureNotifyMask | SubstructureRedirectMask, (XEvent*)&fsEvent);
     }
