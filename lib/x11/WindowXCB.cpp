@@ -24,6 +24,17 @@
 
 #include <LogVisor/LogVisor.hpp>
 
+typedef GLXContext (*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
+glXCreateContextAttribsARBProc glXCreateContextAttribsARB = 0;
+static const int ContextAttribs[] =
+{
+    GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
+    GLX_CONTEXT_MINOR_VERSION_ARB, 3,
+    //GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_DEBUG_BIT_ARB,
+    //GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
+    None
+};
+
 namespace boo
 {
 static LogVisor::LogModule Log("boo::WindowXCB");
@@ -115,7 +126,7 @@ struct XCBAtoms
     Atom m_netwmStateFullscreen = 0;
     Atom m_netwmStateAdd = 0;
     Atom m_netwmStateRemove = 0;
-    //xcb_key_symbols_t* m_keySyms = NULL;
+    Atom m_motifWmHints = 0;
     XCBAtoms(Display* disp)
     {
         m_wmProtocols = XInternAtom(disp, "WM_PROTOCOLS", True);
@@ -124,19 +135,19 @@ struct XCBAtoms
         m_netwmStateFullscreen = XInternAtom(disp, "_NET_WM_STATE_FULLSCREEN", False);
         m_netwmStateAdd = XInternAtom(disp, "_NET_WM_STATE_ADD", False);
         m_netwmStateRemove = XInternAtom(disp, "_NET_WM_STATE_REMOVE", False);
-        //m_keySyms = xcb_key_symbols_alloc(conn);
+        m_motifWmHints = XInternAtom(disp, "_MOTIF_WM_HINTS", True);
     }
 };
 static XCBAtoms* S_ATOMS = NULL;
 
-static void genFrameDefault(Screen* screen, int* xOut, int* yOut, int* wOut, int* hOut)
+static void genFrameDefault(Screen* screen, int& xOut, int& yOut, int& wOut, int& hOut)
 {
     float width = screen->width * 2.0 / 3.0;
     float height = screen->height * 2.0 / 3.0;
-    *xOut = (screen->width - width) / 2.0;
-    *yOut = (screen->height - height) / 2.0;
-    *wOut = width;
-    *hOut = height;
+    xOut = (screen->width - width) / 2.0;
+    yOut = (screen->height - height) / 2.0;
+    wOut = width;
+    hOut = height;
 }
     
 struct GraphicsContextXCB : IGraphicsContext
@@ -264,7 +275,9 @@ public:
 
     void initializeContext()
     {
-        m_glxCtx = glXCreateNewContext(m_xDisp, m_fbconfig, GLX_RGBA_TYPE, m_lastCtx, True);
+        glXCreateContextAttribsARB = (glXCreateContextAttribsARBProc)
+                   glXGetProcAddressARB((const GLubyte*)"glXCreateContextAttribsARB");
+        m_glxCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_lastCtx, True, ContextAttribs);
         if (!m_glxCtx)
             Log.report(LogVisor::FatalError, "unable to make new GLX context");
         m_glxWindow = glXCreateWindow(m_xDisp, m_fbconfig, m_parentWindow->getPlatformHandle(), nullptr);
@@ -273,7 +286,7 @@ public:
         _XCBUpdateLastGlxCtx(m_glxCtx);
 
         /* Make additional shared context for vsync timing */
-        m_timerCtx = glXCreateNewContext(m_xDisp, m_fbconfig, GLX_RGBA_TYPE, m_glxCtx, True);
+        m_timerCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribs);
         if (!m_timerCtx)
             Log.report(LogVisor::FatalError, "unable to make new timer GLX context");
     }
@@ -284,10 +297,34 @@ public:
             Log.report(LogVisor::FatalError, "unable to make GLX context current");
     }
 
+    typedef void (*DEBUGPROC)(GLenum source,
+                              GLenum type,
+                              GLuint id,
+                              GLenum severity,
+                              GLsizei length,
+                              const GLchar* message,
+                              void* userParam);
+
+    static void DebugCb(GLenum source,
+                        GLenum type,
+                        GLuint id,
+                        GLenum severity,
+                        GLsizei length,
+                        const GLchar* message,
+                        void* userParam)
+    {
+        fprintf(stderr, "%s\n", message);
+    }
+    typedef void(*glDebugMessageCallbackPROC)(DEBUGPROC callback​, void* userParam​);
+
     void postInit()
     {
         GLXExtensionCheck();
         GLXEnableVSync(m_xDisp, m_glxWindow);
+
+        glDebugMessageCallbackPROC glDebugMessageCb = (glDebugMessageCallbackPROC)
+        glXGetProcAddressARB((const GLubyte*)"glDebugMessageCallback​");
+        glDebugMessageCb(DebugCb, nullptr);
     }
 
     IGraphicsCommandQueue* getCommandQueue()
@@ -308,7 +345,7 @@ public:
     {
         if (!m_loadCtx)
         {
-            m_loadCtx = glXCreateNewContext(m_xDisp, m_fbconfig, GLX_RGBA_TYPE, m_glxCtx, True);
+            m_loadCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribs);
             if (!m_loadCtx)
                 Log.report(LogVisor::FatalError, "unable to make load GLX context");
             if (!glXMakeContextCurrent(m_xDisp, m_glxWindow, m_glxWindow, m_loadCtx))
@@ -394,7 +431,7 @@ public:
 
         /* Create window */
         int x, y, w, h;
-        genFrameDefault(screen, &x, &y, &w, &h);
+        genFrameDefault(screen, x, y, w, h);
         XSetWindowAttributes swa;
         swa.colormap = m_colormapId;
         swa.border_pixmap = None;
@@ -470,9 +507,13 @@ public:
     
     std::string getTitle()
     {
+        unsigned long nitems;
+        Atom     actualType;
+        int      actualFormat;
+        unsigned long     bytes;
         unsigned char* string = nullptr;
-        if (XGetWindowProperty(m_xDisp, m_windowId, XA_WM_NAME, 0, 65536, False,
-                               XA_STRING, nullptr, nullptr, nullptr, nullptr, &string))
+        if (XGetWindowProperty(m_xDisp, m_windowId, XA_WM_NAME, 0, ~0l, False,
+                               XA_STRING, &actualType, &actualFormat, &nitems, &bytes, &string) == Success)
         {
             std::string retval((const char*)string);
             XFree(string);
@@ -492,22 +533,40 @@ public:
     {
         int x, y, w, h;
         Screen* screen = DefaultScreenOfDisplay(m_xDisp);
-        genFrameDefault(screen, &x, &y, &w, &h);
+        genFrameDefault(screen, x, y, w, h);
         XWindowChanges values = {(int)x, (int)y, (int)w, (int)h};
         XConfigureWindow(m_xDisp, m_windowId, CWX|CWY|CWWidth|CWHeight, &values);
     }
     
     void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const
     {
-        xOut = m_wx;
-        yOut = m_wy;
-        wOut = m_ww;
-        hOut = m_wh;
+        XWindowAttributes attrs;
+        XGetWindowAttributes(m_xDisp, m_windowId, &attrs);
+        xOut = attrs.x;
+        yOut = attrs.y;
+        wOut = attrs.width;
+        hOut = attrs.height;
+    }
+
+    void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const
+    {
+        XWindowAttributes attrs;
+        XGetWindowAttributes(m_xDisp, m_windowId, &attrs);
+        xOut = attrs.x;
+        yOut = attrs.y;
+        wOut = attrs.width;
+        hOut = attrs.height;
     }
     
     void setWindowFrame(float x, float y, float w, float h)
     {
         XWindowChanges values = {(int)x, (int)y, (int)w, (int)h};
+        XConfigureWindow(m_xDisp, m_windowId, CWX|CWY|CWWidth|CWHeight, &values);
+    }
+
+    void setWindowFrame(int x, int y, int w, int h)
+    {
+        XWindowChanges values = {x, y, w, h};
         XConfigureWindow(m_xDisp, m_windowId, CWX|CWY|CWWidth|CWHeight, &values);
     }
     
@@ -516,8 +575,13 @@ public:
         return m_pixelFactor;
     }
     
+    bool m_inFs = false;
+    int m_origFrame[4];
+    uint32_t m_decoBits;
+
     bool isFullscreen() const
     {
+#if 0
         unsigned long nitems;
         Atom     actualType;
         int      actualFormat;
@@ -539,10 +603,22 @@ public:
             return fullscreen;
         }
         return false;
+#endif
+        return m_inFs;
     }
     
+    struct FSHints
+    {
+        uint32_t flags;
+        uint32_t functions;
+        uint32_t decorations;
+        int32_t inputMode;
+        uint32_t status;
+    };
+
     void setFullscreen(bool fs)
     {
+#if 0
         XEvent fsEvent;
         fsEvent.type = ClientMessage;
         fsEvent.xclient.window = m_windowId;
@@ -553,6 +629,54 @@ public:
         fsEvent.xclient.data.l[2] = 0;
         XSendEvent(m_xDisp, m_windowId, False,
                    StructureNotifyMask | SubstructureRedirectMask, (XEvent*)&fsEvent);
+#endif
+        if (!m_inFs)
+        {
+            if (!fs)
+                return;
+
+            XSetWindowAttributes attrs = {};
+            attrs.override_redirect = True;
+            //XChangeWindowAttributes(m_xDisp, m_windowId, CWOverrideRedirect, &attrs);
+
+            FSHints hints = {};
+            hints.flags = 2;
+            hints.decorations = 1;
+            XChangeProperty(m_xDisp, m_windowId, S_ATOMS->m_motifWmHints, S_ATOMS->m_motifWmHints, 32,
+                            PropModeReplace, (unsigned char*)&hints, 5);
+
+            getWindowFrame(m_origFrame[0], m_origFrame[1], m_origFrame[2], m_origFrame[3]);
+            Screen* screen = DefaultScreenOfDisplay(m_xDisp);
+            if (m_origFrame[2] < 1 || m_origFrame[3] < 1)
+                genFrameDefault(screen, m_origFrame[0], m_origFrame[1], m_origFrame[2], m_origFrame[3]);
+            fprintf(stderr, "= %d %d %d %d\n", m_origFrame[0], m_origFrame[1], m_origFrame[2], m_origFrame[3]);
+            fprintf(stderr, "%d %d %d %d\n", 0, 0, screen->width, screen->height);
+            setWindowFrame(0, 0, screen->width, screen->height);
+
+            m_inFs = true;
+            fprintf(stderr, "FULLSCREEN\n");
+        }
+        else
+        {
+            if (fs)
+                return;
+
+            fprintf(stderr, "%d %d %d %d\n", m_origFrame[0], m_origFrame[1], m_origFrame[2], m_origFrame[3]);
+            setWindowFrame(m_origFrame[0], m_origFrame[1], m_origFrame[2], m_origFrame[3]);
+
+            XSetWindowAttributes attrs = {};
+            attrs.override_redirect = False;
+            //XChangeWindowAttributes(m_xDisp, m_windowId, CWOverrideRedirect, &attrs);
+
+            FSHints hints = {};
+            hints.flags = 2;
+            hints.decorations = 1;
+            XChangeProperty(m_xDisp, m_windowId, S_ATOMS->m_motifWmHints, S_ATOMS->m_motifWmHints, 32,
+                            PropModeReplace, (unsigned char*)&hints, 5);
+
+            m_inFs = false;
+            fprintf(stderr, "WINDOWED\n");
+        }
     }
 
     void waitForRetrace()

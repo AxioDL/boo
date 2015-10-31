@@ -228,7 +228,7 @@ struct TestApplicationCallback : IApplicationCallback
 
         /* Make shader pipeline */
         static const char* VS =
-        "#version 300 es\n"
+        "#version 330\n"
         "layout(location=0) in vec3 in_pos;\n"
         "layout(location=1) in vec2 in_uv;\n"
         "out vec2 out_uv;\n"
@@ -239,7 +239,7 @@ struct TestApplicationCallback : IApplicationCallback
         "}\n";
 
         static const char* FS =
-        "#version 300 es\n"
+        "#version 330\n"
         "precision highp float;\n"
         "uniform sampler2D tex;\n"
         "layout(location=0) out vec4 out_frag;\n"
@@ -278,7 +278,7 @@ struct TestApplicationCallback : IApplicationCallback
         mainWindow = app->newWindow(_S("YAY!"));
         mainWindow->setCallback(&windowCallback);
         mainWindow->showWindow();
-        mainWindow->setFullscreen(true);
+        //mainWindow->setFullscreen(true);
         devFinder.startScanning();
 
         IGraphicsCommandQueue* gfxQ = mainWindow->getCommandQueue();
@@ -301,12 +301,13 @@ struct TestApplicationCallback : IApplicationCallback
             gfxQ->present();
             gfxQ->execute();
 
-            fprintf(stderr, "%zu\n", frameIdx++);
+            //fprintf(stderr, "%zu\n", frameIdx++);
+            ++frameIdx;
 
             if ((frameIdx - lastCheck) > 100)
             {
                 lastCheck = frameIdx;
-                mainWindow->setFullscreen(!mainWindow->isFullscreen());
+                //mainWindow->setFullscreen(!mainWindow->isFullscreen());
             }
         }
 

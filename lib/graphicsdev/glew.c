@@ -3947,11 +3947,13 @@ static GLboolean _glewInit_GL_VERSION_3_2 (GLEW_CONTEXT_ARG_DEF_INIT)
 
 #ifdef GL_VERSION_3_3
 
+static GLboolean _glewInit_GL_ARB_vertex_array_object (GLEW_CONTEXT_ARG_DEF_INIT);
 static GLboolean _glewInit_GL_VERSION_3_3 (GLEW_CONTEXT_ARG_DEF_INIT)
 {
   GLboolean r = GL_FALSE;
 
   r = ((glVertexAttribDivisor = (PFNGLVERTEXATTRIBDIVISORPROC)glewGetProcAddress((const GLubyte*)"glVertexAttribDivisor")) == NULL) || r;
+   _glewInit_GL_ARB_vertex_array_object();
 
   return r;
 }
