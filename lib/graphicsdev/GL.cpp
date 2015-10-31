@@ -494,8 +494,9 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
 
     std::mutex m_mt;
     std::condition_variable m_cv;
-    std::unique_lock<std::mutex> m_initlk;
+    std::mutex m_initmt;
     std::condition_variable m_initcv;
+    std::unique_lock<std::mutex> m_initlk;
     std::thread m_thr;
 
     /* These members are locked for multithreaded access */
@@ -549,7 +550,7 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
     static void RenderingWorker(GLES3CommandQueue* self)
     {
         {
-            std::unique_lock<std::mutex> lk(self->m_mt);
+            std::unique_lock<std::mutex> lk(self->m_initmt);
             self->m_parent->makeCurrent();
             if (glewInit() != GLEW_OK)
                 Log.report(LogVisor::FatalError, "unable to init glew");
@@ -633,7 +634,7 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
 
     GLES3CommandQueue(IGraphicsContext* parent)
     : m_parent(parent),
-      m_initlk(m_mt),
+      m_initlk(m_initmt),
       m_thr(RenderingWorker, this)
     {
         m_initcv.wait(m_initlk);
