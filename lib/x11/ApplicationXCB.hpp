@@ -306,11 +306,11 @@ public:
         return m_args;
     }
     
-    std::unique_ptr<IWindow> newWindow(const std::string& title)
+    IWindow* newWindow(const std::string& title)
     {
         IWindow* newWindow = _WindowXCBNew(title, m_xDisp, m_xDefaultScreen, m_lastGlxCtx);
         m_windows[(Window)newWindow->getPlatformHandle()] = newWindow;
-        return std::unique_ptr<IWindow>(newWindow);
+        return newWindow;
     }
 
     /* Last GLX context */

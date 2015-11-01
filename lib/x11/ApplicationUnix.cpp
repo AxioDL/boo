@@ -48,24 +48,24 @@ namespace boo
 {
 
 IApplication* APP = NULL;
-std::unique_ptr<IApplication> ApplicationBootstrap(IApplication::EPlatformType platform,
-                                                   IApplicationCallback& cb,
-                                                   const std::string& uniqueName,
-                                                   const std::string& friendlyName,
-                                                   const std::string& pname,
-                                                   const std::vector<std::string>& args,
-                                                   bool singleInstance)
+int ApplicationRun(IApplication::EPlatformType platform,
+                   IApplicationCallback& cb,
+                   const std::string& uniqueName,
+                   const std::string& friendlyName,
+                   const std::string& pname,
+                   const std::vector<std::string>& args,
+                   bool singleInstance)
 {
     if (APP)
-        return std::unique_ptr<IApplication>();
+        return 1;
     if (platform == IApplication::PLAT_WAYLAND)
         APP = new ApplicationWayland(cb, uniqueName, friendlyName, pname, args, singleInstance);
     else if (platform == IApplication::PLAT_XCB ||
              platform == IApplication::PLAT_AUTO)
         APP = new ApplicationXCB(cb, uniqueName, friendlyName, pname, args, singleInstance);
     else
-        return std::unique_ptr<IApplication>();
-    return std::unique_ptr<IApplication>(APP);
+        return 1;
+    return APP->run();
 }
     
 }
