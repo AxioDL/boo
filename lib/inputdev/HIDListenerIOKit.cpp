@@ -182,7 +182,7 @@ public:
     
     ~HIDListenerIOKit()
     {
-        CFRunLoopRemoveSource(m_listenerRunLoop, IONotificationPortGetRunLoopSource(m_llPort), kCFRunLoopDefaultMode);
+        //CFRunLoopRemoveSource(m_listenerRunLoop, IONotificationPortGetRunLoopSource(m_llPort), kCFRunLoopDefaultMode);
         IOObjectRelease(m_llAddNotif);
         IOObjectRelease(m_llRemoveNotif);
         IONotificationPortDestroy(m_llPort);

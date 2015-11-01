@@ -1,9 +1,11 @@
+#include "boo/graphicsdev/GL.hpp"
 #import <AppKit/AppKit.h>
-#include <OpenGL/OpenGL.h>
-#include <OpenGL/gl3.h>
+#import <CoreVideo/CVDisplayLink.h>
 #include "boo/IApplication.hpp"
 #include "boo/IWindow.hpp"
 #include "boo/IGraphicsContext.hpp"
+
+#include <LogVisor/LogVisor.hpp>
 
 namespace boo {class WindowCocoa;}
 @interface WindowCocoaInternal : NSWindow
@@ -81,32 +83,42 @@ namespace boo {class GraphicsContextCocoa;}
     
 namespace boo
 {
-    
+static LogVisor::LogModule Log("boo::WindowCocoa");
+IGraphicsCommandQueue* _NewGLES3CommandQueue(IGraphicsContext* parent);
+void _CocoaUpdateLastGLCtx(NSOpenGLContext* lastGLCtx);
+
 class GraphicsContextCocoa : public IGraphicsContext
 {
     
     EGraphicsAPI m_api;
     EPixelFormat m_pf;
     IWindow* m_parentWindow;
-    GraphicsContextCocoaInternal* m_nsContext;
-    NSOpenGLContext* m_nsShareContext;
+    GraphicsContextCocoaInternal* m_nsContext = nullptr;
+    
+    IGraphicsCommandQueue* m_commandQueue = nullptr;
+    IGraphicsDataFactory* m_dataFactory = nullptr;
+    NSOpenGLContext* m_loadCtx = nullptr;
+    CVDisplayLinkRef m_dispLink = nullptr;
     
 public:
-    IWindowCallback* m_callback;
+    NSOpenGLContext* m_lastCtx = nullptr;
+    IWindowCallback* m_callback = nullptr;
     
-    GraphicsContextCocoa(EGraphicsAPI api, IWindow* parentWindow)
+    GraphicsContextCocoa(EGraphicsAPI api, IWindow* parentWindow, NSOpenGLContext* lastGLCtx)
     : m_api(api),
     m_pf(PF_RGBA8),
     m_parentWindow(parentWindow),
-    m_nsContext(NULL),
-    m_nsShareContext(NULL),
-    m_callback(NULL)
+    m_lastCtx(lastGLCtx)
     {}
     
     ~GraphicsContextCocoa()
     {
+        delete m_dataFactory;
+        delete m_commandQueue;
         [m_nsContext release];
-        [m_nsShareContext release];
+        [m_loadCtx release];
+        CVDisplayLinkStop(m_dispLink);
+        CVDisplayLinkRelease(m_dispLink);
     }
     
     void _setCallback(IWindowCallback* cb)
@@ -131,58 +143,83 @@ public:
         m_pf = pf;
     }
     
-    void initializeContext()
+    std::mutex m_dlmt;
+    std::condition_variable m_dlcv;
+    
+    static CVReturn DLCallback(CVDisplayLinkRef CV_NONNULL displayLink,
+                               const CVTimeStamp * CV_NONNULL inNow,
+                               const CVTimeStamp * CV_NONNULL inOutputTime,
+                               CVOptionFlags flagsIn,
+                               CVOptionFlags * CV_NONNULL flagsOut,
+                               GraphicsContextCocoa* CV_NULLABLE ctx)
     {
-        if (m_nsShareContext)
-            return;
-        m_nsContext = [[GraphicsContextCocoaInternal alloc] initWithBooContext:this];
-        [(NSWindow*)m_parentWindow->getPlatformHandle() setContentView:m_nsContext];
+        ctx->m_dlcv.notify_one();
+        return kCVReturnSuccess;
     }
     
-    IGraphicsContext* makeShareContext() const
+    void waitForRetrace()
     {
-        NSOpenGLContext* nsctx;
-        if (m_nsContext)
-        {
-            nsctx = [[NSOpenGLContext alloc] initWithFormat:[m_nsContext pixelFormat]
-                                               shareContext:[m_nsContext openGLContext]];
-        }
-        else if (m_nsShareContext)
-        {
-            nsctx = [[NSOpenGLContext alloc] initWithFormat:[m_nsShareContext pixelFormat]
-                                               shareContext:m_nsShareContext];
-        }
-        else
-            return NULL;
-        if (!nsctx)
-            return NULL;
-        GraphicsContextCocoa* newCtx = new GraphicsContextCocoa(m_api, NULL);
-        newCtx->m_nsShareContext = nsctx;
-        return newCtx;
+        std::unique_lock<std::mutex> lk(m_dlmt);
+        m_dlcv.wait(lk);
+    }
+    
+    void initializeContext()
+    {
+        m_nsContext = [[GraphicsContextCocoaInternal alloc] initWithBooContext:this];
+        if (!m_nsContext)
+            Log.report(LogVisor::FatalError, "unable to make new NSOpenGLView");
+        [(NSWindow*)m_parentWindow->getPlatformHandle() setContentView:m_nsContext];
+        CVDisplayLinkCreateWithActiveCGDisplays(&m_dispLink);
+        CVDisplayLinkSetOutputCallback(m_dispLink, (CVDisplayLinkOutputCallback)DLCallback, this);
+        CVDisplayLinkStart(m_dispLink);
     }
     
     void makeCurrent()
     {
-        if (m_nsContext)
-            [[m_nsContext openGLContext] makeCurrentContext];
-        else if (m_nsShareContext)
-            [m_nsShareContext makeCurrentContext];
+        [[m_nsContext openGLContext] makeCurrentContext];
     }
     
-    void clearCurrent()
+    void postInit()
     {
-        [NSOpenGLContext clearCurrentContext];
     }
     
-    void swapBuffer()
+    IGraphicsCommandQueue* getCommandQueue()
+    {
+        if (!m_commandQueue)
+            m_commandQueue = _NewGLES3CommandQueue(this);
+        return m_commandQueue;
+    }
+    
+    IGraphicsDataFactory* getDataFactory()
+    {
+        if (!m_dataFactory)
+            m_dataFactory = new GLES3DataFactory(this);
+        return m_dataFactory;
+    }
+    
+    IGraphicsDataFactory* getLoadContextDataFactory()
+    {
+        if (!m_loadCtx)
+        {
+            NSOpenGLPixelFormat* nspf = [[NSOpenGLPixelFormat alloc] initWithAttributes:PF_TABLE[m_pf]];
+            m_loadCtx = [[NSOpenGLContext alloc] initWithFormat:nspf shareContext:[m_nsContext openGLContext]];
+            [nspf release];
+            if (!m_loadCtx)
+                Log.report(LogVisor::FatalError, "unable to make load NSOpenGLContext");
+            [m_loadCtx makeCurrentContext];
+        }
+        return getDataFactory();
+    }
+    
+    void present()
     {
         [[m_nsContext openGLContext] flushBuffer];
     }
     
 };
 
-IGraphicsContext* _CGraphicsContextCocoaNew(IGraphicsContext::EGraphicsAPI api,
-                                            IWindow* parentWindow)
+IGraphicsContext* _GraphicsContextCocoaNew(IGraphicsContext::EGraphicsAPI api,
+                                           IWindow* parentWindow, NSOpenGLContext* lastGLCtx)
 {
     if (api != IGraphicsContext::API_OPENGL_3_3 && api != IGraphicsContext::API_OPENGL_4_2)
         return NULL;
@@ -215,7 +252,7 @@ IGraphicsContext* _CGraphicsContextCocoaNew(IGraphicsContext::EGraphicsAPI api,
         if (api == IGraphicsContext::API_OPENGL_4_2)
             return NULL;
     
-    return new GraphicsContextCocoa(api, parentWindow);
+    return new GraphicsContextCocoa(api, parentWindow, lastGLCtx);
 }
     
 }
@@ -228,6 +265,12 @@ IGraphicsContext* _CGraphicsContextCocoaNew(IGraphicsContext::EGraphicsAPI api,
     boo::IGraphicsContext::EPixelFormat pf = bctx->getPixelFormat();
     NSOpenGLPixelFormat* nspf = [[NSOpenGLPixelFormat alloc] initWithAttributes:PF_TABLE[pf]];
     self = [self initWithFrame:NSMakeRect(0, 0, 100, 100) pixelFormat:nspf];
+    if (bctx->m_lastCtx)
+    {
+        NSOpenGLContext* sharedCtx = [[NSOpenGLContext alloc] initWithFormat:nspf shareContext:bctx->m_lastCtx];
+        [self setOpenGLContext:sharedCtx];
+        [sharedCtx setView:self];
+    }
     [nspf release];
     return self;
 }
@@ -660,23 +703,26 @@ class WindowCocoa : public IWindow
 
 public:
 
-    WindowCocoa(const std::string& title)
+    WindowCocoa(const std::string& title, NSOpenGLContext* lastGLCtx)
     {
-        m_nsWindow = [[WindowCocoaInternal alloc] initWithBooWindow:this title:title];
-        m_gfxCtx = _CGraphicsContextCocoaNew(IGraphicsContext::API_OPENGL_3_3, this);
-        m_gfxCtx->initializeContext();
+        dispatch_sync(dispatch_get_main_queue(),
+        ^{
+            m_nsWindow = [[WindowCocoaInternal alloc] initWithBooWindow:this title:title];
+            m_gfxCtx = _GraphicsContextCocoaNew(IGraphicsContext::API_OPENGL_3_3, this, lastGLCtx);
+            m_gfxCtx->initializeContext();
+        });
     }
     
     void _clearWindow()
     {
-        m_nsWindow = NULL;
+        m_nsWindow = nullptr;
     }
     
     ~WindowCocoa()
     {
         [m_nsWindow orderOut:nil];
-        [m_nsWindow release];
         delete m_gfxCtx;
+        [m_nsWindow release];
         APP->_deletedWindow(this);
     }
     
@@ -687,12 +733,18 @@ public:
     
     void showWindow()
     {
-        [m_nsWindow makeKeyAndOrderFront:nil];
+        dispatch_sync(dispatch_get_main_queue(),
+        ^{
+            [m_nsWindow makeKeyAndOrderFront:nil];
+        });
     }
     
     void hideWindow()
     {
-        [m_nsWindow orderOut:nil];
+        dispatch_sync(dispatch_get_main_queue(),
+        ^{
+            [m_nsWindow orderOut:nil];
+        });
     }
     
     std::string getTitle()
@@ -702,16 +754,22 @@ public:
     
     void setTitle(const std::string& title)
     {
-        [m_nsWindow setTitle:[[NSString stringWithUTF8String:title.c_str()] autorelease]];
+        dispatch_sync(dispatch_get_main_queue(),
+        ^{
+            [m_nsWindow setTitle:[[NSString stringWithUTF8String:title.c_str()] autorelease]];
+        });
     }
     
     void setWindowFrameDefault()
     {
-        NSScreen* mainScreen = [NSScreen mainScreen];
-        NSRect scrFrame = mainScreen.frame;
-        float x_off = scrFrame.size.width / 3.0;
-        float y_off = scrFrame.size.height / 3.0;
-        [m_nsWindow setFrame:NSMakeRect(x_off, y_off, x_off * 2.0, y_off * 2.0) display:NO];
+        dispatch_sync(dispatch_get_main_queue(),
+        ^{
+            NSScreen* mainScreen = [NSScreen mainScreen];
+            NSRect scrFrame = mainScreen.frame;
+            float x_off = scrFrame.size.width / 3.0;
+            float y_off = scrFrame.size.height / 3.0;
+            [m_nsWindow setFrame:NSMakeRect(x_off, y_off, x_off * 2.0, y_off * 2.0) display:NO];
+        });
     }
     
     void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const
@@ -725,8 +783,11 @@ public:
     
     void setWindowFrame(float x, float y, float w, float h)
     {
-        NSRect wFrame = NSMakeRect(x, y, w, h);
-        [m_nsWindow setFrame:wFrame display:NO];
+        dispatch_sync(dispatch_get_main_queue(),
+        ^{
+            NSRect wFrame = NSMakeRect(x, y, w, h);
+            [m_nsWindow setFrame:wFrame display:NO];
+        });
     }
     
     float getVirtualPixelFactor() const
@@ -742,7 +803,10 @@ public:
     void setFullscreen(bool fs)
     {
         if ((fs && !isFullscreen()) || (!fs && isFullscreen()))
-            [m_nsWindow toggleFullScreen:nil];
+            dispatch_sync(dispatch_get_main_queue(),
+            ^{
+                [m_nsWindow toggleFullScreen:nil];
+            });
     }
     
     ETouchType getTouchType() const
@@ -752,7 +816,7 @@ public:
     
     void waitForRetrace()
     {
-        
+        static_cast<GraphicsContextCocoa*>(m_gfxCtx)->waitForRetrace();
     }
     
     uintptr_t getPlatformHandle() const
@@ -760,11 +824,26 @@ public:
         return (uintptr_t)m_nsWindow;
     }
     
+    IGraphicsCommandQueue* getCommandQueue()
+    {
+        return m_gfxCtx->getCommandQueue();
+    }
+    
+    IGraphicsDataFactory* getDataFactory()
+    {
+        return m_gfxCtx->getDataFactory();
+    }
+    
+    IGraphicsDataFactory* getLoadContextDataFactory()
+    {
+        return m_gfxCtx->getLoadContextDataFactory();
+    }
+    
 };
     
-IWindow* _WindowCocoaNew(const SystemString& title)
+IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx)
 {
-    return new WindowCocoa(title);
+    return new WindowCocoa(title, lastGLCtx);
 }
     
 }

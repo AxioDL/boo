@@ -115,7 +115,6 @@ struct IShaderDataBinding {};
  *  resource batch. */
 struct IGraphicsData
 {
-    virtual ~IGraphicsData() {}
 };
 
 /** Used by platform shader pipeline constructors */
@@ -173,7 +172,9 @@ struct IGraphicsDataFactory
                          size_t texCount, const ITexture** texs)=0;
 
     virtual void reset()=0;
-    virtual std::unique_ptr<IGraphicsData> commit()=0;
+    virtual IGraphicsData* commit()=0;
+    virtual void destroyData(IGraphicsData*)=0;
+    virtual void destroyAllData()=0;
 };
 
 }

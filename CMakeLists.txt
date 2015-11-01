@@ -34,7 +34,8 @@ elseif(APPLE)
   find_library(APPKIT_LIBRARY AppKit)
   find_library(IOKIT_LIBRARY IOKit)
   find_library(OPENGL_LIBRARY OpenGL)
-  list(APPEND _BOO_SYS_LIBS ${APPKIT_LIBRARY} ${IOKIT_LIBRARY} ${OPENGL_LIBRARY})
+  find_library(COREVIDEO_LIBRARY CoreVideo)
+  list(APPEND _BOO_SYS_LIBS ${APPKIT_LIBRARY} ${IOKIT_LIBRARY} ${OPENGL_LIBRARY} ${COREVIDEO_LIBRARY})
 else()
   list(APPEND PLAT_SRCS 
        lib/x11/ApplicationUnix.cpp

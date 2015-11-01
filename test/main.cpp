@@ -174,7 +174,7 @@ struct CTestWindowCallback : IWindowCallback
     
 struct TestApplicationCallback : IApplicationCallback
 {
-    std::unique_ptr<IWindow> mainWindow;
+    IWindow* mainWindow;
     boo::TestDeviceFinder devFinder;
     CTestWindowCallback windowCallback;
     bool running = true;
@@ -196,10 +196,10 @@ struct TestApplicationCallback : IApplicationCallback
         };
         static const Vert quad[4] =
         {
-            {{1.0,1.0},{1.0,1.0}},
-            {{-1.0,1.0},{0.0,1.0}},
-            {{1.0,-1.0},{1.0,0.0}},
-            {{-1.0,-1.0},{0.0,0.0}}
+            {{0.5,0.5},{1.0,1.0}},
+            {{-0.5,0.5},{0.0,1.0}},
+            {{0.5,-0.5},{1.0,0.0}},
+            {{-0.5,-0.5},{0.0,0.0}}
         };
         const IGraphicsBuffer* vbo =
         factory->newStaticBuffer(BufferUseVertex, quad, sizeof(quad));
@@ -241,15 +241,15 @@ struct TestApplicationCallback : IApplicationCallback
         static const char* FS =
         "#version 330\n"
         "precision highp float;\n"
-        "uniform sampler2D tex;\n"
+        "uniform sampler2D smplr;\n"
         "layout(location=0) out vec4 out_frag;\n"
         "in vec2 out_uv;\n"
         "void main()\n"
         "{\n"
-        "    out_frag = texture(tex, out_uv);\n"
+        "    out_frag = texture(smplr, out_uv);\n"
         "}\n";
 
-        static const char* TexNames[] = {"tex"};
+        static const char* TexNames[] = {"smplr"};
 
         const IShaderPipeline* pipeline =
         factory->newShaderPipeline(VS, FS, 1, TexNames, BlendFactorOne, BlendFactorZero, true, true, false);
@@ -259,7 +259,7 @@ struct TestApplicationCallback : IApplicationCallback
         factory->newShaderDataBinding(pipeline, vfmt, vbo, nullptr, 0, nullptr, 1, &texture);
 
         /* Commit objects */
-        std::unique_ptr<IGraphicsData> data = factory->commit();
+        IGraphicsData* data = factory->commit();
 
         /* Wait for exit */
         while (self->running)
@@ -301,7 +301,7 @@ struct TestApplicationCallback : IApplicationCallback
             gfxQ->present();
             gfxQ->execute();
 
-            //fprintf(stderr, "%zu\n", frameIdx++);
+            fprintf(stderr, "%zu\n", frameIdx);
             ++frameIdx;
 
             if ((frameIdx - lastCheck) > 100)
@@ -344,10 +344,8 @@ int main(int argc, const char** argv)
 {
     LogVisor::RegisterConsoleLogger();
     boo::TestApplicationCallback appCb;
-    std::unique_ptr<boo::IApplication> app =
-            ApplicationBootstrap(boo::IApplication::PLAT_AUTO,
-                                 appCb, _S("rwk"), _S("RWK"), argc, argv);
-    int ret = app->run();
+    int ret = ApplicationRun(boo::IApplication::PLAT_AUTO,
+                             appCb, _S("rwk"), _S("RWK"), argc, argv);
     printf("IM DYING!!\n");
     return ret;
 }

@@ -6,6 +6,7 @@
 #include "boo/IGraphicsContext.hpp"
 #include "glew.h"
 #include <vector>
+#include <unordered_set>
 
 namespace boo
 {
@@ -13,9 +14,11 @@ namespace boo
 class GLES3DataFactory : public IGraphicsDataFactory
 {
     IGraphicsContext* m_parent;
-    std::unique_ptr<IGraphicsData> m_deferredData;
+    IGraphicsData* m_deferredData = nullptr;
+    std::unordered_set<IGraphicsData*> m_committedData;
 public:
     GLES3DataFactory(IGraphicsContext* parent);
+    ~GLES3DataFactory() {}
 
     Platform platform() const {return PlatformOGLES3;}
     const char* platformName() const {return "OpenGL ES 3.0";}
@@ -42,7 +45,9 @@ public:
                          size_t texCount, const ITexture** texs);
 
     void reset();
-    std::unique_ptr<IGraphicsData> commit();
+    IGraphicsData* commit();
+    void destroyData(IGraphicsData*);
+    void destroyAllData();
 };
 
 }

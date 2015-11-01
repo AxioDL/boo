@@ -14,8 +14,8 @@ class IApplication;
 
 struct IApplicationCallback
 {
-    virtual int appMain(IApplication*) {return 0;}
-    virtual void appQuitting(IApplication*) {}
+    virtual int appMain(IApplication*)=0;
+    virtual void appQuitting(IApplication*)=0;
     virtual void appFilesOpen(IApplication*, const std::vector<SystemString>&) {}
 };
 
@@ -51,34 +51,34 @@ public:
     virtual const std::vector<SystemString>& getArgs() const=0;
     
     /* Constructors/initializers for sub-objects */
-    virtual std::unique_ptr<IWindow> newWindow(const SystemString& title)=0;
+    virtual IWindow* newWindow(const SystemString& title)=0;
     
 };
 
-std::unique_ptr<IApplication>
-ApplicationBootstrap(IApplication::EPlatformType platform,
-                     IApplicationCallback& cb,
-                     const SystemString& uniqueName,
-                     const SystemString& friendlyName,
-                     const SystemString& pname,
-                     const std::vector<SystemString>& args,
-                     bool singleInstance=true);
+int
+ApplicationRun(IApplication::EPlatformType platform,
+               IApplicationCallback& cb,
+               const SystemString& uniqueName,
+               const SystemString& friendlyName,
+               const SystemString& pname,
+               const std::vector<SystemString>& args,
+               bool singleInstance=true);
 extern IApplication* APP;
     
-static inline std::unique_ptr<IApplication>
-ApplicationBootstrap(IApplication::EPlatformType platform,
-                     IApplicationCallback& cb,
-                     const SystemString& uniqueName,
-                     const SystemString& friendlyName,
-                     int argc, const SystemChar** argv,
-                     bool singleInstance=true)
+static inline int
+ApplicationRun(IApplication::EPlatformType platform,
+               IApplicationCallback& cb,
+               const SystemString& uniqueName,
+               const SystemString& friendlyName,
+               int argc, const SystemChar** argv,
+               bool singleInstance=true)
 {
     if (APP)
-        return std::unique_ptr<IApplication>();
+        return 1;
     std::vector<SystemString> args;
     for (int i=1 ; i<argc ; ++i)
         args.push_back(argv[i]);
-    return ApplicationBootstrap(platform, cb, uniqueName, friendlyName, argv[0], args, singleInstance);
+    return ApplicationRun(platform, cb, uniqueName, friendlyName, argv[0], args, singleInstance);
 }
     
 }
