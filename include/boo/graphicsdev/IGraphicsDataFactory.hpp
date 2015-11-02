@@ -147,21 +147,21 @@ struct IGraphicsDataFactory
     virtual Platform platform() const=0;
     virtual const char* platformName() const=0;
 
-    virtual const IGraphicsBufferS*
+    virtual IGraphicsBufferS*
     newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)=0;
     virtual IGraphicsBufferD*
     newDynamicBuffer(BufferUse use, size_t stride, size_t count)=0;
 
-    virtual const ITextureS*
+    virtual ITextureS*
     newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                      const void* data, size_t sz)=0;
     virtual ITextureD*
     newDynamicTexture(size_t width, size_t height, TextureFormat fmt)=0;
 
-    virtual const IVertexFormat*
+    virtual IVertexFormat*
     newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)=0;
 
-    virtual const IShaderDataBinding*
+    virtual IShaderDataBinding*
     newShaderDataBinding(IShaderPipeline* pipeline,
                          IVertexFormat* vtxFormat,
                          IGraphicsBuffer* vbo, IGraphicsBuffer* ebo,

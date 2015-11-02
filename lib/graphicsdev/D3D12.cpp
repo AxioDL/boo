@@ -141,7 +141,7 @@ public:
     }
 };
 
-const IGraphicsBufferS*
+IGraphicsBufferS*
 D3D12DataFactory::newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
 {
     D3D12GraphicsBufferS* retval = new D3D12GraphicsBufferS(use, m_ctx, data, stride, count);
@@ -246,7 +246,7 @@ public:
     }
 };
 
-const ITextureS*
+ITextureS*
 D3D12DataFactory::newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                                    const void* data, size_t sz)
 {
@@ -360,7 +360,7 @@ public:
     D3D12ShaderPipeline(const D3D12ShaderPipeline&) = delete;
 };
 
-const IShaderPipeline* D3D12DataFactory::newShaderPipeline
+IShaderPipeline* D3D12DataFactory::newShaderPipeline
 (const char* vertSource, const char* fragSource,
  ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,
  const IVertexFormat* vtxFmt,
@@ -520,7 +520,7 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
     }
 };
 
-const IShaderDataBinding*
+IShaderDataBinding*
 D3D12DataFactory::newShaderDataBinding(IShaderPipeline* pipeline,
                                        IVertexFormat* vtxFormat,
                                        IGraphicsBuffer* vbuf, IGraphicsBuffer* ibuf,
@@ -800,7 +800,7 @@ D3D12DataFactory::newDynamicTexture(size_t width, size_t height, TextureFormat f
     return retval;
 }
 
-const IVertexFormat* D3D12DataFactory::newVertexFormat
+IVertexFormat* D3D12DataFactory::newVertexFormat
 (size_t elementCount, const VertexElementDescriptor* elements)
 {
     D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent->getCommandQueue());

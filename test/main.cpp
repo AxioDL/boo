@@ -115,6 +115,9 @@ public:
 
 struct CTestWindowCallback : IWindowCallback
 {
+    void resized(const SWindowRect& rect)
+    { fprintf(stderr, "Resized %d, %d (%d, %d)\n", rect.size[0], rect.size[1], rect.location[0], rect.location[1]); }
+
     void mouseDown(const SWindowCoord& coord, EMouseButton button, EModifierKey mods)
     {
         fprintf(stderr, "Mouse Down %d (%f,%f)\n", button, coord.norm[0], coord.norm[1]);
@@ -125,7 +128,7 @@ struct CTestWindowCallback : IWindowCallback
     }
     void mouseMove(const SWindowCoord& coord)
     {
-        //fprintf(stderr, "Mouse Move (%f,%f)\n", coord.norm[0], coord.norm[1]);
+        fprintf(stderr, "Mouse Move (%f,%f)\n", coord.norm[0], coord.norm[1]);
     }
     void scroll(const SWindowCoord& coord, const SScrollDelta& scroll)
     {
@@ -201,16 +204,16 @@ struct TestApplicationCallback : IApplicationCallback
             {{0.5,-0.5},{1.0,0.0}},
             {{-0.5,-0.5},{0.0,0.0}}
         };
-        const IGraphicsBuffer* vbo =
-        factory->newStaticBuffer(BufferUseVertex, quad, sizeof(quad));
+        IGraphicsBuffer* vbo =
+        factory->newStaticBuffer(BufferUseVertex, quad, sizeof(quad), 4);
 
         /* Make vertex format */
-        const VertexElementDescriptor descs[2] =
+        VertexElementDescriptor descs[2] =
         {
             {vbo, nullptr, VertexSemanticPosition},
             {vbo, nullptr, VertexSemanticUV}
         };
-        const IVertexFormat* vfmt = factory->newVertexFormat(2, descs);
+        IVertexFormat* vfmt = factory->newVertexFormat(2, descs);
 
         /* Make ramp texture */
         using Pixel = uint8_t[4];
@@ -223,7 +226,7 @@ struct TestApplicationCallback : IApplicationCallback
                 tex[i][j][2] = 0;
                 tex[i][j][3] = 0xff;
             }
-        const ITexture* texture =
+        ITexture* texture =
         factory->newStaticTexture(256, 256, 1, TextureFormatRGBA8, tex, 256*256*4);
 
         /* Make shader pipeline */
@@ -251,7 +254,7 @@ struct TestApplicationCallback : IApplicationCallback
 
         static const char* TexNames[] = {"smplr"};
 
-        const IShaderPipeline* pipeline =
+        IShaderPipeline* pipeline =
         factory->newShaderPipeline(VS, FS, 1, TexNames, BlendFactorOne, BlendFactorZero, true, true, false);
 
         /* Make shader data binding */
@@ -301,7 +304,7 @@ struct TestApplicationCallback : IApplicationCallback
             gfxQ->present();
             gfxQ->execute();
 
-            fprintf(stderr, "%zu\n", frameIdx);
+            //fprintf(stderr, "%zu\n", frameIdx);
             ++frameIdx;
 
             if ((frameIdx - lastCheck) > 100)

@@ -28,22 +28,22 @@ public:
     Platform platform() const {return PlatformD3D12;}
     const char* platformName() const {return "Direct 3D 12";}
 
-    const IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
+    IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
     IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count);
 
-    const ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
+    ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                                       const void* data, size_t sz);
     ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
 
-    const IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
+    IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
 
-    const IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
+    IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
                                              ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,
                                              const IVertexFormat* vtxFmt,
                                              BlendFactor srcFac, BlendFactor dstFac,
                                              bool depthTest, bool depthWrite, bool backfaceCulling);
 
-    const IShaderDataBinding*
+    IShaderDataBinding*
     newShaderDataBinding(IShaderPipeline* pipeline,
                          IVertexFormat* vtxFormat,
                          IGraphicsBuffer* vbo, IGraphicsBuffer* ebo,

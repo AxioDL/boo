@@ -30,7 +30,7 @@ static const GLenum USE_TABLE[] =
     GL_UNIFORM_BUFFER
 };
 
-class GLES3GraphicsBufferS : IGraphicsBufferS
+class GLES3GraphicsBufferS : public IGraphicsBufferS
 {
     friend class GLES3DataFactory;
     friend struct GLES3CommandQueue;
@@ -54,7 +54,7 @@ public:
     {glBindBufferBase(GL_UNIFORM_BUFFER, idx, m_buf);}
 };
 
-class GLES3GraphicsBufferD : IGraphicsBufferD
+class GLES3GraphicsBufferD : public IGraphicsBufferD
 {
     friend class GLES3DataFactory;
     friend struct GLES3CommandQueue;
@@ -81,15 +81,15 @@ public:
     void bindUniform(size_t idx) const;
 };
 
-const IGraphicsBufferS*
-GLES3DataFactory::newStaticBuffer(BufferUse use, const void* data, size_t sz)
+IGraphicsBufferS*
+GLES3DataFactory::newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
 {
-    GLES3GraphicsBufferS* retval = new GLES3GraphicsBufferS(use, data, sz);
+    GLES3GraphicsBufferS* retval = new GLES3GraphicsBufferS(use, data, stride * count);
     static_cast<GLES3Data*>(m_deferredData)->m_SBufs.emplace_back(retval);
     return retval;
 }
 
-class GLES3TextureS : ITextureS
+class GLES3TextureS : public ITextureS
 {
     friend class GLES3DataFactory;
     GLuint m_tex;
@@ -125,7 +125,7 @@ public:
     }
 };
 
-class GLES3TextureD : ITextureD
+class GLES3TextureD : public ITextureD
 {
     friend class GLES3DataFactory;
     friend struct GLES3CommandQueue;
@@ -168,7 +168,7 @@ public:
     }
 };
 
-const ITextureS*
+ITextureS*
 GLES3DataFactory::newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                                    const void* data, size_t sz)
 {
@@ -276,7 +276,7 @@ static const GLenum BLEND_FACTOR_TABLE[] =
     GL_ONE_MINUS_DST_ALPHA
 };
 
-const IShaderPipeline* GLES3DataFactory::newShaderPipeline
+IShaderPipeline* GLES3DataFactory::newShaderPipeline
 (const char* vertSource, const char* fragSource,
  size_t texCount, const char** texNames,
  BlendFactor srcFac, BlendFactor dstFac,
@@ -368,19 +368,19 @@ struct GLES3ShaderDataBinding : IShaderDataBinding
     const GLES3ShaderPipeline* m_pipeline;
     const GLES3VertexFormat* m_vtxFormat;
     size_t m_ubufCount;
-    std::unique_ptr<const IGraphicsBuffer*[]> m_ubufs;
+    std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
     size_t m_texCount;
-    std::unique_ptr<const ITexture*[]> m_texs;
-    GLES3ShaderDataBinding(const IShaderPipeline* pipeline,
-                           const IVertexFormat* vtxFormat,
-                           size_t ubufCount, const IGraphicsBuffer** ubufs,
-                           size_t texCount, const ITexture** texs)
-    : m_pipeline(static_cast<const GLES3ShaderPipeline*>(pipeline)),
-      m_vtxFormat(static_cast<const GLES3VertexFormat*>(vtxFormat)),
+    std::unique_ptr<ITexture*[]> m_texs;
+    GLES3ShaderDataBinding(IShaderPipeline* pipeline,
+                           IVertexFormat* vtxFormat,
+                           size_t ubufCount, IGraphicsBuffer** ubufs,
+                           size_t texCount, ITexture** texs)
+    : m_pipeline(static_cast<GLES3ShaderPipeline*>(pipeline)),
+      m_vtxFormat(static_cast<GLES3VertexFormat*>(vtxFormat)),
       m_ubufCount(ubufCount),
-      m_ubufs(new const IGraphicsBuffer*[ubufCount]),
+      m_ubufs(new IGraphicsBuffer*[ubufCount]),
       m_texCount(texCount),
-      m_texs(new const ITexture*[texCount])
+      m_texs(new ITexture*[texCount])
     {
         for (size_t i=0 ; i<ubufCount ; ++i)
             m_ubufs[i] = ubufs[i];
@@ -393,20 +393,28 @@ struct GLES3ShaderDataBinding : IShaderDataBinding
         m_vtxFormat->bind();
         for (size_t i=0 ; i<m_ubufCount ; ++i)
         {
-            m_ubufs[i]->bindUniform(i);
+            if (m_ubufs[i]->dynamic())
+                static_cast<GLES3GraphicsBufferD*>(m_ubufs[i])->bindUniform(i);
+            else
+                static_cast<GLES3GraphicsBufferD*>(m_ubufs[i])->bindUniform(i);
             glUniformBlockBinding(prog, i, i);
         }
         for (size_t i=0 ; i<m_texCount ; ++i)
-            m_texs[i]->bind(i);
+        {
+            if (m_texs[i]->dynamic())
+                static_cast<GLES3TextureD*>(m_texs[i])->bind(i);
+            else
+                static_cast<GLES3TextureS*>(m_texs[i])->bind(i);
+        }
     }
 };
 
-const IShaderDataBinding*
-GLES3DataFactory::newShaderDataBinding(const IShaderPipeline* pipeline,
-                                       const IVertexFormat* vtxFormat,
-                                       const IGraphicsBuffer*, const IGraphicsBuffer*,
-                                       size_t ubufCount, const IGraphicsBuffer** ubufs,
-                                       size_t texCount, const ITexture** texs)
+IShaderDataBinding*
+GLES3DataFactory::newShaderDataBinding(IShaderPipeline* pipeline,
+                                       IVertexFormat* vtxFormat,
+                                       IGraphicsBuffer*, IGraphicsBuffer*,
+                                       size_t ubufCount, IGraphicsBuffer** ubufs,
+                                       size_t texCount, ITexture** texs)
 {
     GLES3ShaderDataBinding* retval =
     new GLES3ShaderDataBinding(pipeline, vtxFormat, ubufCount, ubufs, texCount, texs);
@@ -549,12 +557,18 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
             if (desc->vertBuffer != lastVBO)
             {
                 lastVBO = desc->vertBuffer;
-                lastVBO->bindVertex();
+                if (lastVBO->dynamic())
+                    static_cast<const GLES3GraphicsBufferD*>(lastVBO)->bindVertex();
+                else
+                    static_cast<const GLES3GraphicsBufferS*>(lastVBO)->bindVertex();
             }
             if (desc->indexBuffer != lastEBO)
             {
                 lastEBO = desc->indexBuffer;
-                lastEBO->bindIndex();
+                if (lastEBO->dynamic())
+                    static_cast<const GLES3GraphicsBufferD*>(lastEBO)->bindIndex();
+                else
+                    static_cast<const GLES3GraphicsBufferS*>(lastEBO)->bindIndex();
             }
             glEnableVertexAttribArray(i);
             glVertexAttribPointer(i, SEMANTIC_COUNT_TABLE[desc->semantic],
@@ -820,7 +834,7 @@ void GLES3GraphicsBufferD::bindUniform(size_t idx) const
 {glBindBufferBase(GL_UNIFORM_BUFFER, idx, m_bufs[m_q->m_drawBuf]);}
 
 IGraphicsBufferD*
-GLES3DataFactory::newDynamicBuffer(BufferUse use)
+GLES3DataFactory::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
 {
     GLES3CommandQueue* q = static_cast<GLES3CommandQueue*>(m_parent->getCommandQueue());
     GLES3GraphicsBufferD* retval = new GLES3GraphicsBufferD(q, use);
@@ -863,7 +877,7 @@ GLES3VertexFormat::GLES3VertexFormat(GLES3CommandQueue* q, size_t elementCount,
 }
 GLES3VertexFormat::~GLES3VertexFormat() {m_q->delVertexFormat(this);}
 
-const IVertexFormat* GLES3DataFactory::newVertexFormat
+IVertexFormat* GLES3DataFactory::newVertexFormat
 (size_t elementCount, const VertexElementDescriptor* elements)
 {
     GLES3CommandQueue* q = static_cast<GLES3CommandQueue*>(m_parent->getCommandQueue());

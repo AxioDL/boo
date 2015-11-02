@@ -315,16 +315,12 @@ public:
     {
         fprintf(stderr, "%s\n", message);
     }
-    typedef void(*glDebugMessageCallbackPROC)(DEBUGPROC callback​, void* userParam​);
+    typedef void(*glDebugMessageCallbackPROC)(DEBUGPROC callback, void* userParam);
 
     void postInit()
     {
         GLXExtensionCheck();
         GLXEnableVSync(m_xDisp, m_glxWindow);
-
-        glDebugMessageCallbackPROC glDebugMessageCb = (glDebugMessageCallbackPROC)
-        glXGetProcAddressARB((const GLubyte*)"glDebugMessageCallback​");
-        glDebugMessageCb(DebugCb, nullptr);
     }
 
     IGraphicsCommandQueue* getCommandQueue()
@@ -337,7 +333,7 @@ public:
     IGraphicsDataFactory* getDataFactory()
     {
         if (!m_dataFactory)
-            m_dataFactory = new struct GLES3DataFactory(this);
+            m_dataFactory = new class GLES3DataFactory(this);
         return m_dataFactory;
     }
 
@@ -446,7 +442,7 @@ public:
         XIEventMask mask = {XIAllMasterDevices, XIMaskLen(XI_LASTEVENT)};
         mask.mask = (unsigned char*)malloc(mask.mask_len);
         memset(mask.mask, 0, mask.mask_len);
-        XISetMask(mask.mask, XI_Motion);
+        /* XISetMask(mask.mask, XI_Motion); Can't do this without losing mouse move events :( */
         XISetMask(mask.mask, XI_TouchBegin);
         XISetMask(mask.mask, XI_TouchUpdate);
         XISetMask(mask.mask, XI_TouchEnd);
@@ -765,6 +761,12 @@ public:
             m_wy = event->xexpose.y;
             m_ww = event->xexpose.width;
             m_wh = event->xexpose.height;
+            if (m_callback)
+            {
+                IWindowCallback::SWindowRect rect =
+                { {m_wx, m_wy}, {m_ww, m_wh} };
+                m_callback->resized(rect);
+            }
             return;
         }
         case ConfigureNotify:
@@ -775,6 +777,13 @@ public:
                 m_wy = event->xconfigure.y;
                 m_ww = event->xconfigure.width;
                 m_wh = event->xconfigure.height;
+
+                if (m_callback)
+                {
+                    IWindowCallback::SWindowRect rect =
+                    { {m_wx, m_wy}, {m_ww, m_wh} };
+                    m_callback->resized(rect);
+                }
             }
             return;
         }
@@ -822,6 +831,7 @@ public:
         {
             if (m_callback)
             {
+                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
                 int button = translateButton(event->xbutton.button);
                 if (button)
                 {
@@ -830,7 +840,7 @@ public:
                     {
                         {(unsigned)event->xbutton.x, (unsigned)event->xbutton.y},
                         {(unsigned)(event->xbutton.x / m_pixelFactor), (unsigned)(event->xbutton.y / m_pixelFactor)},
-                        {event->xbutton.x / (float)m_ww, event->xbutton.y / (float)m_wh}
+                        {float(event->xbutton.x) / float(m_ww), float(event->xbutton.y) / float(m_wh)}
                     };
                     m_callback->mouseDown(coord, (IWindowCallback::EMouseButton)button,
                                           (IWindowCallback::EModifierKey)modifierMask);
@@ -844,7 +854,7 @@ public:
                     {
                         {(unsigned)event->xbutton.x, (unsigned)event->xbutton.y},
                         {(unsigned)(event->xbutton.x / m_pixelFactor), (unsigned)(event->xbutton.y / m_pixelFactor)},
-                        {event->xbutton.x / (float)m_ww, event->xbutton.y / (float)m_wh}
+                        {(float)event->xbutton.x / (float)m_ww, (float)event->xbutton.y / (float)m_wh}
                     };
                     IWindowCallback::SScrollDelta scrollDelta =
                     {
@@ -868,6 +878,7 @@ public:
         {
             if (m_callback)
             {
+                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
                 int button = translateButton(event->xbutton.button);
                 if (button)
                 {
@@ -888,6 +899,7 @@ public:
         {
             if (m_callback)
             {
+                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
                 IWindowCallback::SWindowCoord coord =
                 {
                     {(unsigned)event->xmotion.x, (unsigned)event->xmotion.y},
@@ -902,10 +914,13 @@ public:
         {
             if (event->xgeneric.extension == XINPUT_OPCODE)
             {
+                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
                 switch (event->xgeneric.evtype)
                 {
                 case XI_Motion:
                 {
+                    fprintf(stderr, "motion\n");
+
                     XIDeviceEvent* ev = (XIDeviceEvent*)event;
                     if (m_lastInputID != ev->deviceid)
                         _pointingDeviceChanged(ev->deviceid);

@@ -21,6 +21,12 @@ public:
         BUTTON_AUX2      = 5
     };
     
+    struct SWindowRect
+    {
+        int location[2];
+        int size[2];
+    };
+
     struct SWindowCoord
     {
         unsigned pixel[2];
@@ -84,6 +90,8 @@ public:
         MKEY_COMMAND = 1<<4
     };
     
+    virtual void resized(const SWindowRect& rect)
+    {(void)rect;}
     virtual void mouseDown(const SWindowCoord& coord, EMouseButton button, EModifierKey mods)
     {(void)coord;(void)button;(void)mods;}
     virtual void mouseUp(const SWindowCoord& coord, EMouseButton button, EModifierKey mods)

@@ -11,6 +11,15 @@ if (NOT TARGET LogVisor)
 endif()
 include_directories(include ${LOG_VISOR_INCLUDE_DIR})
 
+if(NOT GEKKO AND NOT CAFE)
+list(APPEND PLAT_SRCS
+    lib/graphicsdev/GL.cpp
+    lib/graphicsdev/glew.c)
+
+list(APPEND PLAT_HDRS
+    include/boo/graphicsdev/GL.hpp)
+endif()
+
 if(WIN32)
   list(APPEND PLAT_SRCS 
        lib/win/ApplicationWin32.cpp
@@ -18,9 +27,12 @@ if(WIN32)
        lib/inputdev/HIDListenerWinUSB.cpp
        lib/inputdev/HIDDeviceWinUSB.cpp
        lib/graphicsdev/D3D11.cpp
-       lib/graphicsdev/D3D12.cpp
-       lib/graphicsdev/GL.cpp
-       lib/graphicsdev/glew.c)
+       lib/graphicsdev/D3D12.cpp)
+
+  list(APPEND PLAT_HDRS
+        include/boo/graphicsdev/D3D11.hpp
+        include/boo/graphicsdev/D3D12.hpp)
+
   list(APPEND _BOO_SYS_LIBS Winusb)
 elseif(APPLE)
   list(APPEND PLAT_SRCS 
@@ -28,15 +40,17 @@ elseif(APPLE)
        lib/mac/WindowCocoa.mm
        lib/mac/GLViewCocoa.mm
        lib/inputdev/HIDListenerIOKit.cpp
-       lib/inputdev/HIDDeviceIOKit.cpp
-       lib/graphicsdev/GL.cpp
-       lib/graphicsdev/glew.c)
+       lib/inputdev/HIDDeviceIOKit.cpp)
+
+  list(APPEND PLAT_HDRS
+       include/boo/graphicsdev/Metal.hpp)
+
   find_library(APPKIT_LIBRARY AppKit)
   find_library(IOKIT_LIBRARY IOKit)
   find_library(OPENGL_LIBRARY OpenGL)
   find_library(COREVIDEO_LIBRARY CoreVideo)
   list(APPEND _BOO_SYS_LIBS ${APPKIT_LIBRARY} ${IOKIT_LIBRARY} ${OPENGL_LIBRARY} ${COREVIDEO_LIBRARY})
-else()
+else(NOT GEKKO)
   list(APPEND PLAT_SRCS 
        lib/x11/ApplicationUnix.cpp
        lib/x11/ApplicationXCB.hpp
@@ -48,6 +62,8 @@ else()
        lib/graphicsdev/GL.cpp
        lib/graphicsdev/GLX.cpp
        lib/graphicsdev/glew.c)
+
+#    list(APPEND PLAT_HDRS )
 
   find_package(PkgConfig)
   if(PKG_CONFIG_FOUND)
@@ -116,15 +132,12 @@ add_library(Boo
             include/boo/IGraphicsContext.hpp
             include/boo/graphicsdev/IGraphicsDataFactory.hpp
             include/boo/graphicsdev/IGraphicsCommandQueue.hpp
-            include/boo/graphicsdev/GL.hpp
-            include/boo/graphicsdev/D3D11.hpp
-            include/boo/graphicsdev/D3D12.hpp
-            include/boo/graphicsdev/Metal.hpp
             include/boo/IWindow.hpp
             include/boo/IApplication.hpp
             include/boo/System.hpp
             include/boo/boo.hpp
             InputDeviceClasses.cpp
-            ${PLAT_SRCS})
+            ${PLAT_SRCS}
+            ${PLAT_HDRS})
 
 add_subdirectory(test)
