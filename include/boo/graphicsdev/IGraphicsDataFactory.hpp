@@ -10,9 +10,6 @@ namespace boo
 struct IGraphicsBuffer
 {
     bool dynamic() const {return m_dynamic;}
-    virtual void bindVertex() const=0;
-    virtual void bindIndex() const=0;
-    virtual void bindUniform(size_t idx) const=0;
 protected:
     bool m_dynamic;
     IGraphicsBuffer(bool dynamic) : m_dynamic(dynamic) {}
@@ -47,7 +44,6 @@ enum BufferUse
 struct ITexture
 {
     bool dynamic() const {return m_dynamic;}
-    virtual void bind(size_t idx) const=0;
 protected:
     bool m_dynamic;
     ITexture(bool dynamic) : m_dynamic(dynamic) {}
@@ -99,6 +95,7 @@ struct VertexElementDescriptor
     const IGraphicsBuffer* vertBuffer = nullptr;
     const IGraphicsBuffer* indexBuffer = nullptr;
     VertexSemantic semantic;
+    int semanticIdx = 0;
 };
 
 /** Opaque token for referencing a complete graphics pipeline state necessary
@@ -151,9 +148,9 @@ struct IGraphicsDataFactory
     virtual const char* platformName() const=0;
 
     virtual const IGraphicsBufferS*
-    newStaticBuffer(BufferUse use, const void* data, size_t sz)=0;
+    newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)=0;
     virtual IGraphicsBufferD*
-    newDynamicBuffer(BufferUse use)=0;
+    newDynamicBuffer(BufferUse use, size_t stride, size_t count)=0;
 
     virtual const ITextureS*
     newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
@@ -165,11 +162,11 @@ struct IGraphicsDataFactory
     newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)=0;
 
     virtual const IShaderDataBinding*
-    newShaderDataBinding(const IShaderPipeline* pipeline,
-                         const IVertexFormat* vtxFormat,
-                         const IGraphicsBuffer* vbo, const IGraphicsBuffer* ebo,
-                         size_t ubufCount, const IGraphicsBuffer** ubufs,
-                         size_t texCount, const ITexture** texs)=0;
+    newShaderDataBinding(IShaderPipeline* pipeline,
+                         IVertexFormat* vtxFormat,
+                         IGraphicsBuffer* vbo, IGraphicsBuffer* ebo,
+                         size_t ubufCount, IGraphicsBuffer** ubufs,
+                         size_t texCount, ITexture** texs)=0;
 
     virtual void reset()=0;
     virtual IGraphicsData* commit()=0;
