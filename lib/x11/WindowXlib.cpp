@@ -39,7 +39,7 @@ namespace boo
 {
 static LogVisor::LogModule Log("boo::WindowXCB");
 IGraphicsCommandQueue* _NewGLES3CommandQueue(IGraphicsContext* parent);
-void _XCBUpdateLastGlxCtx(GLXContext lastGlxCtx);
+void _XlibUpdateLastGlxCtx(GLXContext lastGlxCtx);
 void GLXExtensionCheck();
 void GLXWaitForVSync();
 void GLXEnableVSync(Display* disp, GLXWindow drawable);
@@ -150,7 +150,7 @@ static void genFrameDefault(Screen* screen, int& xOut, int& yOut, int& wOut, int
     hOut = height;
 }
     
-struct GraphicsContextXCB : IGraphicsContext
+struct GraphicsContextGLX : IGraphicsContext
 {
     EGraphicsAPI m_api;
     EPixelFormat m_pf;
@@ -171,7 +171,7 @@ struct GraphicsContextXCB : IGraphicsContext
 public:
     IWindowCallback* m_callback;
 
-    GraphicsContextXCB(EGraphicsAPI api, IWindow* parentWindow,
+    GraphicsContextGLX(EGraphicsAPI api, IWindow* parentWindow,
                        Display* display, int defaultScreen,
                        GLXContext lastCtx, uint32_t& visualIdOut)
     : m_api(api),
@@ -239,7 +239,7 @@ public:
         visualIdOut = m_visualid;
     }
 
-    ~GraphicsContextXCB()
+    ~GraphicsContextGLX()
     {
         if (m_glxCtx)
             glXDestroyContext(m_xDisp, m_glxCtx);
@@ -283,7 +283,7 @@ public:
         m_glxWindow = glXCreateWindow(m_xDisp, m_fbconfig, m_parentWindow->getPlatformHandle(), nullptr);
         if (!m_glxWindow)
             Log.report(LogVisor::FatalError, "unable to make new GLX window");
-        _XCBUpdateLastGlxCtx(m_glxCtx);
+        _XlibUpdateLastGlxCtx(m_glxCtx);
 
         /* Make additional shared context for vsync timing */
         m_timerCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribs);
@@ -333,7 +333,7 @@ public:
     IGraphicsDataFactory* getDataFactory()
     {
         if (!m_dataFactory)
-            m_dataFactory = new class GLES3DataFactory(this);
+            m_dataFactory = new class GLDataFactory(this);
         return m_dataFactory;
     }
 
@@ -367,13 +367,13 @@ public:
 
 };
 
-struct WindowXCB : IWindow
+struct WindowXlib : IWindow
 {
     Display* m_xDisp;
     IWindowCallback* m_callback;
     Colormap m_colormapId;
     Window m_windowId;
-    GraphicsContextXCB m_gfxCtx;
+    GraphicsContextGLX m_gfxCtx;
     uint32_t m_visualId;
 
     /* Last known input device id (0xffff if not yet set) */
@@ -392,7 +392,7 @@ struct WindowXCB : IWindow
     
 public:
     
-    WindowXCB(const std::string& title,
+    WindowXlib(const std::string& title,
               Display* display, int defaultScreen,
               GLXContext lastCtx)
     : m_xDisp(display), m_callback(nullptr),
@@ -476,7 +476,7 @@ public:
         m_gfxCtx.initializeContext();
     }
     
-    ~WindowXCB()
+    ~WindowXlib()
     {
         XUnmapWindow(m_xDisp, m_windowId);
         XDestroyWindow(m_xDisp, m_windowId);
@@ -1075,11 +1075,11 @@ public:
 
 };
 
-IWindow* _WindowXCBNew(const std::string& title,
+IWindow* _WindowXlibNew(const std::string& title,
                        Display* display, int defaultScreen,
                        GLXContext lastCtx)
 {
-    return new WindowXCB(title, display, defaultScreen, lastCtx);
+    return new WindowXlib(title, display, defaultScreen, lastCtx);
 }
     
 }

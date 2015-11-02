@@ -11,14 +11,14 @@ namespace boo
 {
 static LogVisor::LogModule Log("boo::GL");
 
-struct GLES3Data : IGraphicsData
+struct GLData : IGraphicsData
 {
-    std::vector<std::unique_ptr<class GLES3ShaderPipeline>> m_SPs;
+    std::vector<std::unique_ptr<class GLShaderPipeline>> m_SPs;
     std::vector<std::unique_ptr<struct GLES3ShaderDataBinding>> m_SBinds;
-    std::vector<std::unique_ptr<class GLES3GraphicsBufferS>> m_SBufs;
-    std::vector<std::unique_ptr<class GLES3GraphicsBufferD>> m_DBufs;
-    std::vector<std::unique_ptr<class GLES3TextureS>> m_STexs;
-    std::vector<std::unique_ptr<class GLES3TextureD>> m_DTexs;
+    std::vector<std::unique_ptr<class GLGraphicsBufferS>> m_SBufs;
+    std::vector<std::unique_ptr<class GLGraphicsBufferD>> m_DBufs;
+    std::vector<std::unique_ptr<class GLTextureS>> m_STexs;
+    std::vector<std::unique_ptr<class GLTextureD>> m_DTexs;
     std::vector<std::unique_ptr<struct GLES3VertexFormat>> m_VFmts;
 };
 
@@ -30,13 +30,13 @@ static const GLenum USE_TABLE[] =
     GL_UNIFORM_BUFFER
 };
 
-class GLES3GraphicsBufferS : public IGraphicsBufferS
+class GLGraphicsBufferS : public IGraphicsBufferS
 {
-    friend class GLES3DataFactory;
-    friend struct GLES3CommandQueue;
+    friend class GLDataFactory;
+    friend struct GLCommandQueue;
     GLuint m_buf;
     GLenum m_target;
-    GLES3GraphicsBufferS(BufferUse use, const void* data, size_t sz)
+    GLGraphicsBufferS(BufferUse use, const void* data, size_t sz)
     {
         m_target = USE_TABLE[use];
         glGenBuffers(1, &m_buf);
@@ -44,7 +44,7 @@ class GLES3GraphicsBufferS : public IGraphicsBufferS
         glBufferData(m_target, sz, data, GL_STATIC_DRAW);
     }
 public:
-    ~GLES3GraphicsBufferS() {glDeleteBuffers(1, &m_buf);}
+    ~GLGraphicsBufferS() {glDeleteBuffers(1, &m_buf);}
 
     void bindVertex() const
     {glBindBuffer(GL_ARRAY_BUFFER, m_buf);}
@@ -54,23 +54,23 @@ public:
     {glBindBufferBase(GL_UNIFORM_BUFFER, idx, m_buf);}
 };
 
-class GLES3GraphicsBufferD : public IGraphicsBufferD
+class GLGraphicsBufferD : public IGraphicsBufferD
 {
-    friend class GLES3DataFactory;
-    friend struct GLES3CommandQueue;
-    struct GLES3CommandQueue* m_q;
+    friend class GLDataFactory;
+    friend struct GLCommandQueue;
+    struct GLCommandQueue* m_q;
     GLuint m_bufs[3];
     GLenum m_target;
     void* m_mappedBuf = nullptr;
     size_t m_mappedSize = 0;
-    GLES3GraphicsBufferD(GLES3CommandQueue* q, BufferUse use)
+    GLGraphicsBufferD(GLCommandQueue* q, BufferUse use)
     : m_q(q)
     {
         m_target = USE_TABLE[use];
         glGenBuffers(3, m_bufs);
     }
 public:
-    ~GLES3GraphicsBufferD() {glDeleteBuffers(3, m_bufs);}
+    ~GLGraphicsBufferD() {glDeleteBuffers(3, m_bufs);}
 
     void load(const void* data, size_t sz);
     void* map(size_t sz);
@@ -82,18 +82,18 @@ public:
 };
 
 IGraphicsBufferS*
-GLES3DataFactory::newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
+GLDataFactory::newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
 {
-    GLES3GraphicsBufferS* retval = new GLES3GraphicsBufferS(use, data, stride * count);
-    static_cast<GLES3Data*>(m_deferredData)->m_SBufs.emplace_back(retval);
+    GLGraphicsBufferS* retval = new GLGraphicsBufferS(use, data, stride * count);
+    static_cast<GLData*>(m_deferredData)->m_SBufs.emplace_back(retval);
     return retval;
 }
 
-class GLES3TextureS : public ITextureS
+class GLTextureS : public ITextureS
 {
-    friend class GLES3DataFactory;
+    friend class GLDataFactory;
     GLuint m_tex;
-    GLES3TextureS(size_t width, size_t height, size_t mips,
+    GLTextureS(size_t width, size_t height, size_t mips,
                   TextureFormat fmt, const void* data, size_t sz)
     {
         const uint8_t* dataIt = static_cast<const uint8_t*>(data);
@@ -116,7 +116,7 @@ class GLES3TextureS : public ITextureS
         }
     }
 public:
-    ~GLES3TextureS() {glDeleteTextures(1, &m_tex);}
+    ~GLTextureS() {glDeleteTextures(1, &m_tex);}
 
     void bind(size_t idx) const
     {
@@ -125,20 +125,20 @@ public:
     }
 };
 
-class GLES3TextureD : public ITextureD
+class GLTextureD : public ITextureD
 {
-    friend class GLES3DataFactory;
-    friend struct GLES3CommandQueue;
-    struct GLES3CommandQueue* m_q;
+    friend class GLDataFactory;
+    friend struct GLCommandQueue;
+    struct GLCommandQueue* m_q;
     GLuint m_texs[2];
     GLuint m_fbo = 0;
     void* m_mappedBuf = nullptr;
     size_t m_mappedSize = 0;
     size_t m_width = 0;
     size_t m_height = 0;
-    GLES3TextureD(GLES3CommandQueue* q, size_t width, size_t height, TextureFormat fmt);
+    GLTextureD(GLCommandQueue* q, size_t width, size_t height, TextureFormat fmt);
 public:
-    ~GLES3TextureD();
+    ~GLTextureD();
 
     void load(const void* data, size_t sz)
     {
@@ -169,17 +169,17 @@ public:
 };
 
 ITextureS*
-GLES3DataFactory::newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
+GLDataFactory::newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                                    const void* data, size_t sz)
 {
-    GLES3TextureS* retval = new GLES3TextureS(width, height, mips, fmt, data, sz);
-    static_cast<GLES3Data*>(m_deferredData)->m_STexs.emplace_back(retval);
+    GLTextureS* retval = new GLTextureS(width, height, mips, fmt, data, sz);
+    static_cast<GLData*>(m_deferredData)->m_STexs.emplace_back(retval);
     return retval;
 }
 
-class GLES3ShaderPipeline : public IShaderPipeline
+class GLShaderPipeline : public IShaderPipeline
 {
-    friend class GLES3DataFactory;
+    friend class GLDataFactory;
     GLuint m_vert = 0;
     GLuint m_frag = 0;
     GLuint m_prog = 0;
@@ -217,13 +217,13 @@ class GLES3ShaderPipeline : public IShaderPipeline
         if (m_prog)
             glDeleteProgram(m_prog);
     }
-    GLES3ShaderPipeline() = default;
+    GLShaderPipeline() = default;
 public:
     operator bool() const {return m_prog != 0;}
-    ~GLES3ShaderPipeline() {clearObjects();}
-    GLES3ShaderPipeline& operator=(const GLES3ShaderPipeline&) = delete;
-    GLES3ShaderPipeline(const GLES3ShaderPipeline&) = delete;
-    GLES3ShaderPipeline& operator=(GLES3ShaderPipeline&& other)
+    ~GLShaderPipeline() {clearObjects();}
+    GLShaderPipeline& operator=(const GLShaderPipeline&) = delete;
+    GLShaderPipeline(const GLShaderPipeline&) = delete;
+    GLShaderPipeline& operator=(GLShaderPipeline&& other)
     {
         m_vert = other.m_vert;
         other.m_vert = 0;
@@ -233,7 +233,7 @@ public:
         other.m_prog = 0;
         return *this;
     }
-    GLES3ShaderPipeline(GLES3ShaderPipeline&& other) {*this = std::move(other);}
+    GLShaderPipeline(GLShaderPipeline&& other) {*this = std::move(other);}
 
     GLuint bind() const
     {
@@ -276,13 +276,13 @@ static const GLenum BLEND_FACTOR_TABLE[] =
     GL_ONE_MINUS_DST_ALPHA
 };
 
-IShaderPipeline* GLES3DataFactory::newShaderPipeline
+IShaderPipeline* GLDataFactory::newShaderPipeline
 (const char* vertSource, const char* fragSource,
  size_t texCount, const char** texNames,
  BlendFactor srcFac, BlendFactor dstFac,
  bool depthTest, bool depthWrite, bool backfaceCulling)
 {
-    GLES3ShaderPipeline shader;
+    GLShaderPipeline shader;
     if (!shader.initObjects())
     {
         Log.report(LogVisor::Error, "unable to create shader objects\n");
@@ -346,18 +346,18 @@ IShaderPipeline* GLES3DataFactory::newShaderPipeline
             Log.report(LogVisor::FatalError, "unable to find sampler variable '%s'", texNames[i]);
     }
 
-    GLES3ShaderPipeline* retval = new GLES3ShaderPipeline(std::move(shader));
-    static_cast<GLES3Data*>(m_deferredData)->m_SPs.emplace_back(retval);
+    GLShaderPipeline* retval = new GLShaderPipeline(std::move(shader));
+    static_cast<GLData*>(m_deferredData)->m_SPs.emplace_back(retval);
     return retval;
 }
 
 struct GLES3VertexFormat : IVertexFormat
 {
-    GLES3CommandQueue* m_q;
+    GLCommandQueue* m_q;
     GLuint m_vao = 0;
     size_t m_elementCount;
     std::unique_ptr<VertexElementDescriptor[]> m_elements;
-    GLES3VertexFormat(GLES3CommandQueue* q, size_t elementCount,
+    GLES3VertexFormat(GLCommandQueue* q, size_t elementCount,
                       const VertexElementDescriptor* elements);
     ~GLES3VertexFormat();
     void bind() const {glBindVertexArray(m_vao);}
@@ -365,7 +365,7 @@ struct GLES3VertexFormat : IVertexFormat
 
 struct GLES3ShaderDataBinding : IShaderDataBinding
 {
-    const GLES3ShaderPipeline* m_pipeline;
+    const GLShaderPipeline* m_pipeline;
     const GLES3VertexFormat* m_vtxFormat;
     size_t m_ubufCount;
     std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
@@ -375,7 +375,7 @@ struct GLES3ShaderDataBinding : IShaderDataBinding
                            IVertexFormat* vtxFormat,
                            size_t ubufCount, IGraphicsBuffer** ubufs,
                            size_t texCount, ITexture** texs)
-    : m_pipeline(static_cast<GLES3ShaderPipeline*>(pipeline)),
+    : m_pipeline(static_cast<GLShaderPipeline*>(pipeline)),
       m_vtxFormat(static_cast<GLES3VertexFormat*>(vtxFormat)),
       m_ubufCount(ubufCount),
       m_ubufs(new IGraphicsBuffer*[ubufCount]),
@@ -394,23 +394,23 @@ struct GLES3ShaderDataBinding : IShaderDataBinding
         for (size_t i=0 ; i<m_ubufCount ; ++i)
         {
             if (m_ubufs[i]->dynamic())
-                static_cast<GLES3GraphicsBufferD*>(m_ubufs[i])->bindUniform(i);
+                static_cast<GLGraphicsBufferD*>(m_ubufs[i])->bindUniform(i);
             else
-                static_cast<GLES3GraphicsBufferD*>(m_ubufs[i])->bindUniform(i);
+                static_cast<GLGraphicsBufferD*>(m_ubufs[i])->bindUniform(i);
             glUniformBlockBinding(prog, i, i);
         }
         for (size_t i=0 ; i<m_texCount ; ++i)
         {
             if (m_texs[i]->dynamic())
-                static_cast<GLES3TextureD*>(m_texs[i])->bind(i);
+                static_cast<GLTextureD*>(m_texs[i])->bind(i);
             else
-                static_cast<GLES3TextureS*>(m_texs[i])->bind(i);
+                static_cast<GLTextureS*>(m_texs[i])->bind(i);
         }
     }
 };
 
 IShaderDataBinding*
-GLES3DataFactory::newShaderDataBinding(IShaderPipeline* pipeline,
+GLDataFactory::newShaderDataBinding(IShaderPipeline* pipeline,
                                        IVertexFormat* vtxFormat,
                                        IGraphicsBuffer*, IGraphicsBuffer*,
                                        size_t ubufCount, IGraphicsBuffer** ubufs,
@@ -418,38 +418,38 @@ GLES3DataFactory::newShaderDataBinding(IShaderPipeline* pipeline,
 {
     GLES3ShaderDataBinding* retval =
     new GLES3ShaderDataBinding(pipeline, vtxFormat, ubufCount, ubufs, texCount, texs);
-    static_cast<GLES3Data*>(m_deferredData)->m_SBinds.emplace_back(retval);
+    static_cast<GLData*>(m_deferredData)->m_SBinds.emplace_back(retval);
     return retval;
 }
 
-GLES3DataFactory::GLES3DataFactory(IGraphicsContext* parent)
-: m_parent(parent), m_deferredData(new struct GLES3Data()) {}
+GLDataFactory::GLDataFactory(IGraphicsContext* parent)
+: m_parent(parent), m_deferredData(new struct GLData()) {}
 
-void GLES3DataFactory::reset()
+void GLDataFactory::reset()
 {
-    delete static_cast<GLES3Data*>(m_deferredData);
-    m_deferredData = new struct GLES3Data();
+    delete static_cast<GLData*>(m_deferredData);
+    m_deferredData = new struct GLData();
 }
 
-IGraphicsData* GLES3DataFactory::commit()
+IGraphicsData* GLDataFactory::commit()
 {
     IGraphicsData* retval = m_deferredData;
-    m_deferredData = new struct GLES3Data();
+    m_deferredData = new struct GLData();
     m_committedData.insert(retval);
     return retval;
 }
     
-void GLES3DataFactory::destroyData(IGraphicsData* d)
+void GLDataFactory::destroyData(IGraphicsData* d)
 {
-    GLES3Data* data = static_cast<GLES3Data*>(d);
+    GLData* data = static_cast<GLData*>(d);
     m_committedData.erase(data);
     delete data;
 }
 
-void GLES3DataFactory::destroyAllData()
+void GLDataFactory::destroyAllData()
 {
     for (IGraphicsData* data : m_committedData)
-        delete static_cast<GLES3Data*>(data);
+        delete static_cast<GLData*>(data);
     m_committedData.clear();
 }
 
@@ -480,7 +480,7 @@ static const GLenum SEMANTIC_TYPE_TABLE[] =
     GL_FLOAT
 };
 
-struct GLES3CommandQueue : IGraphicsCommandQueue
+struct GLCommandQueue : IGraphicsCommandQueue
 {
     Platform platform() const {return IGraphicsDataFactory::PlatformOGLES3;}
     const char* platformName() const {return "OpenGL ES 3.0";}
@@ -533,7 +533,7 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
     /* These members are locked for multithreaded access */
     std::vector<GLES3VertexFormat*> m_pendingFmtAdds;
     std::vector<GLuint> m_pendingFmtDels;
-    std::vector<GLES3TextureD*> m_pendingFboAdds;
+    std::vector<GLTextureD*> m_pendingFboAdds;
     std::vector<GLuint> m_pendingFboDels;
 
     static void ConfigureVertexFormat(GLES3VertexFormat* fmt)
@@ -558,17 +558,17 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
             {
                 lastVBO = desc->vertBuffer;
                 if (lastVBO->dynamic())
-                    static_cast<const GLES3GraphicsBufferD*>(lastVBO)->bindVertex();
+                    static_cast<const GLGraphicsBufferD*>(lastVBO)->bindVertex();
                 else
-                    static_cast<const GLES3GraphicsBufferS*>(lastVBO)->bindVertex();
+                    static_cast<const GLGraphicsBufferS*>(lastVBO)->bindVertex();
             }
             if (desc->indexBuffer != lastEBO)
             {
                 lastEBO = desc->indexBuffer;
                 if (lastEBO->dynamic())
-                    static_cast<const GLES3GraphicsBufferD*>(lastEBO)->bindIndex();
+                    static_cast<const GLGraphicsBufferD*>(lastEBO)->bindIndex();
                 else
-                    static_cast<const GLES3GraphicsBufferS*>(lastEBO)->bindIndex();
+                    static_cast<const GLGraphicsBufferS*>(lastEBO)->bindIndex();
             }
             glEnableVertexAttribArray(i);
             glVertexAttribPointer(i, SEMANTIC_COUNT_TABLE[desc->semantic],
@@ -577,7 +577,7 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
         }
     }
 
-    static void ConfigureFBO(GLES3TextureD* tex)
+    static void ConfigureFBO(GLTextureD* tex)
     {
         glGenFramebuffers(1, &tex->m_fbo);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex->m_fbo);
@@ -585,7 +585,7 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex->m_texs[1], 0);
     }
 
-    static void RenderingWorker(GLES3CommandQueue* self)
+    static void RenderingWorker(GLCommandQueue* self)
     {
         {
             std::unique_lock<std::mutex> lk(self->m_initmt);
@@ -615,7 +615,7 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
                 self->m_pendingFmtDels.clear();
 
                 if (self->m_pendingFboAdds.size())
-                    for (GLES3TextureD* tex : self->m_pendingFboAdds)
+                    for (GLTextureD* tex : self->m_pendingFboAdds)
                         ConfigureFBO(tex);
                 self->m_pendingFboAdds.clear();
 
@@ -635,7 +635,7 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
                     break;
                 case Command::OpSetRenderTarget:
                 {
-                    const GLES3TextureD* tex = static_cast<const GLES3TextureD*>(cmd.target);
+                    const GLTextureD* tex = static_cast<const GLTextureD*>(cmd.target);
                     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex->m_fbo);
                     break;
                 }
@@ -670,7 +670,7 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
         }
     }
 
-    GLES3CommandQueue(IGraphicsContext* parent)
+    GLCommandQueue(IGraphicsContext* parent)
     : m_parent(parent),
       m_initlk(m_initmt),
       m_thr(RenderingWorker, this)
@@ -679,7 +679,7 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
         m_initlk.unlock();
     }
 
-    ~GLES3CommandQueue()
+    ~GLCommandQueue()
     {
         m_running = false;
         m_cv.notify_one();
@@ -777,13 +777,13 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
         m_pendingFmtDels.push_back(fmt->m_vao);
     }
 
-    void addFBO(GLES3TextureD* tex)
+    void addFBO(GLTextureD* tex)
     {
         std::unique_lock<std::mutex> lk(m_mt);
         m_pendingFboAdds.push_back(tex);
     }
 
-    void delFBO(GLES3TextureD* tex)
+    void delFBO(GLTextureD* tex)
     {
         std::unique_lock<std::mutex> lk(m_mt);
         m_pendingFboDels.push_back(tex->m_fbo);
@@ -806,12 +806,12 @@ struct GLES3CommandQueue : IGraphicsCommandQueue
     }
 };
 
-void GLES3GraphicsBufferD::load(const void* data, size_t sz)
+void GLGraphicsBufferD::load(const void* data, size_t sz)
 {
     glBindBuffer(m_target, m_bufs[m_q->m_fillBuf]);
     glBufferData(m_target, sz, data, GL_DYNAMIC_DRAW);
 }
-void* GLES3GraphicsBufferD::map(size_t sz)
+void* GLGraphicsBufferD::map(size_t sz)
 {
     if (m_mappedBuf)
         free(m_mappedBuf);
@@ -819,30 +819,30 @@ void* GLES3GraphicsBufferD::map(size_t sz)
     m_mappedSize = sz;
     return m_mappedBuf;
 }
-void GLES3GraphicsBufferD::unmap()
+void GLGraphicsBufferD::unmap()
 {
     glBindBuffer(m_target, m_bufs[m_q->m_fillBuf]);
     glBufferData(m_target, m_mappedSize, m_mappedBuf, GL_DYNAMIC_DRAW);
     free(m_mappedBuf);
     m_mappedBuf = nullptr;
 }
-void GLES3GraphicsBufferD::bindVertex() const
+void GLGraphicsBufferD::bindVertex() const
 {glBindBuffer(GL_ARRAY_BUFFER, m_bufs[m_q->m_drawBuf]);}
-void GLES3GraphicsBufferD::bindIndex() const
+void GLGraphicsBufferD::bindIndex() const
 {glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_bufs[m_q->m_drawBuf]);}
-void GLES3GraphicsBufferD::bindUniform(size_t idx) const
+void GLGraphicsBufferD::bindUniform(size_t idx) const
 {glBindBufferBase(GL_UNIFORM_BUFFER, idx, m_bufs[m_q->m_drawBuf]);}
 
 IGraphicsBufferD*
-GLES3DataFactory::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
+GLDataFactory::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
 {
-    GLES3CommandQueue* q = static_cast<GLES3CommandQueue*>(m_parent->getCommandQueue());
-    GLES3GraphicsBufferD* retval = new GLES3GraphicsBufferD(q, use);
-    static_cast<GLES3Data*>(m_deferredData)->m_DBufs.emplace_back(retval);
+    GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
+    GLGraphicsBufferD* retval = new GLGraphicsBufferD(q, use);
+    static_cast<GLData*>(m_deferredData)->m_DBufs.emplace_back(retval);
     return retval;
 }
 
-GLES3TextureD::GLES3TextureD(GLES3CommandQueue* q, size_t width, size_t height, TextureFormat fmt)
+GLTextureD::GLTextureD(GLCommandQueue* q, size_t width, size_t height, TextureFormat fmt)
 : m_q(q)
 {
     m_width = width;
@@ -854,18 +854,18 @@ GLES3TextureD::GLES3TextureD(GLES3CommandQueue* q, size_t width, size_t height, 
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
     m_q->addFBO(this);
 }
-GLES3TextureD::~GLES3TextureD() {glDeleteTextures(2, m_texs); m_q->delFBO(this);}
+GLTextureD::~GLTextureD() {glDeleteTextures(2, m_texs); m_q->delFBO(this);}
 
 ITextureD*
-GLES3DataFactory::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
+GLDataFactory::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
 {
-    GLES3CommandQueue* q = static_cast<GLES3CommandQueue*>(m_parent->getCommandQueue());
-    GLES3TextureD* retval = new GLES3TextureD(q, width, height, fmt);
-    static_cast<GLES3Data*>(m_deferredData)->m_DTexs.emplace_back(retval);
+    GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
+    GLTextureD* retval = new GLTextureD(q, width, height, fmt);
+    static_cast<GLData*>(m_deferredData)->m_DTexs.emplace_back(retval);
     return retval;
 }
 
-GLES3VertexFormat::GLES3VertexFormat(GLES3CommandQueue* q, size_t elementCount,
+GLES3VertexFormat::GLES3VertexFormat(GLCommandQueue* q, size_t elementCount,
                                      const VertexElementDescriptor* elements)
 : m_q(q),
   m_elementCount(elementCount),
@@ -877,18 +877,18 @@ GLES3VertexFormat::GLES3VertexFormat(GLES3CommandQueue* q, size_t elementCount,
 }
 GLES3VertexFormat::~GLES3VertexFormat() {m_q->delVertexFormat(this);}
 
-IVertexFormat* GLES3DataFactory::newVertexFormat
+IVertexFormat* GLDataFactory::newVertexFormat
 (size_t elementCount, const VertexElementDescriptor* elements)
 {
-    GLES3CommandQueue* q = static_cast<GLES3CommandQueue*>(m_parent->getCommandQueue());
+    GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
     GLES3VertexFormat* retval = new struct GLES3VertexFormat(q, elementCount, elements);
-    static_cast<GLES3Data*>(m_deferredData)->m_VFmts.emplace_back(retval);
+    static_cast<GLData*>(m_deferredData)->m_VFmts.emplace_back(retval);
     return retval;
 }
 
 IGraphicsCommandQueue* _NewGLES3CommandQueue(IGraphicsContext* parent)
 {
-    return new struct GLES3CommandQueue(parent);
+    return new struct GLCommandQueue(parent);
 }
 
 }

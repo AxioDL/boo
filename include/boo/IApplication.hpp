@@ -23,7 +23,7 @@ class IApplication
 {
     friend class WindowCocoa;
     friend class WindowWayland;
-    friend class WindowXCB;
+    friend class WindowXlib;
     friend class WindowWin32;
     virtual void _deletedWindow(IWindow* window)=0;
 public:
@@ -33,7 +33,7 @@ public:
     {
         PLAT_AUTO        = 0,
         PLAT_WAYLAND     = 1,
-        PLAT_XCB         = 2,
+        PLAT_XLIB        = 2,
         PLAT_ANDROID     = 3,
         PLAT_COCOA       = 4,
         PLAT_COCOA_TOUCH = 5,

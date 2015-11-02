@@ -11,14 +11,14 @@
 namespace boo
 {
 
-class GLES3DataFactory : public IGraphicsDataFactory
+class GLDataFactory : public IGraphicsDataFactory
 {
     IGraphicsContext* m_parent;
     IGraphicsData* m_deferredData = nullptr;
     std::unordered_set<IGraphicsData*> m_committedData;
 public:
-    GLES3DataFactory(IGraphicsContext* parent);
-    ~GLES3DataFactory() {}
+    GLDataFactory(IGraphicsContext* parent);
+    ~GLDataFactory() {}
 
     Platform platform() const {return PlatformOGLES3;}
     const char* platformName() const {return "OpenGL ES 3.0";}

@@ -3,7 +3,7 @@
  */
 
 #define APPLICATION_UNIX_CPP
-#include "ApplicationXCB.hpp"
+#include "ApplicationXlib.hpp"
 #include "ApplicationWayland.hpp"
 
 #include <memory>
@@ -60,9 +60,9 @@ int ApplicationRun(IApplication::EPlatformType platform,
         return 1;
     if (platform == IApplication::PLAT_WAYLAND)
         APP = new ApplicationWayland(cb, uniqueName, friendlyName, pname, args, singleInstance);
-    else if (platform == IApplication::PLAT_XCB ||
+    else if (platform == IApplication::PLAT_XLIB ||
              platform == IApplication::PLAT_AUTO)
-        APP = new ApplicationXCB(cb, uniqueName, friendlyName, pname, args, singleInstance);
+        APP = new ApplicationXlib(cb, uniqueName, friendlyName, pname, args, singleInstance);
     else
         return 1;
     return APP->run();

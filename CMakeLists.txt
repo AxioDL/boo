@@ -53,9 +53,9 @@ elseif(APPLE)
 else(NOT GEKKO)
   list(APPEND PLAT_SRCS 
        lib/x11/ApplicationUnix.cpp
-       lib/x11/ApplicationXCB.hpp
+       lib/x11/ApplicationXlib.hpp
        lib/x11/ApplicationWayland.hpp
-       lib/x11/WindowXCB.cpp
+       lib/x11/WindowXlib.cpp
        lib/x11/WindowWayland.cpp
        lib/inputdev/HIDListenerUdev.cpp
        lib/inputdev/HIDDeviceUdev.cpp

@@ -92,11 +92,11 @@ static Window GetWindowOfEvent(XEvent* event, bool& windowEvent)
     return 0;
 }
     
-IWindow* _WindowXCBNew(const std::string& title,
+IWindow* _WindowXlibNew(const std::string& title,
                        Display* display, int defaultScreen,
                        GLXContext lastCtx);
     
-class ApplicationXCB final : public IApplication
+class ApplicationXlib final : public IApplication
 {
     IApplicationCallback& m_callback;
     const std::string m_uniqueName;
@@ -121,7 +121,7 @@ class ApplicationXCB final : public IApplication
     }
     
 public:
-    ApplicationXCB(IApplicationCallback& callback,
+    ApplicationXlib(IApplicationCallback& callback,
                     const std::string& uniqueName,
                     const std::string& friendlyName,
                     const std::string& pname,
@@ -207,14 +207,14 @@ public:
         XFlush(m_xDisp);
     }
 
-    ~ApplicationXCB()
+    ~ApplicationXlib()
     {
         XCloseDisplay(m_xDisp);
     }
     
     EPlatformType getPlatformType() const
     {
-        return PLAT_XCB;
+        return PLAT_XLIB;
     }
     
     int run()
@@ -308,7 +308,7 @@ public:
     
     IWindow* newWindow(const std::string& title)
     {
-        IWindow* newWindow = _WindowXCBNew(title, m_xDisp, m_xDefaultScreen, m_lastGlxCtx);
+        IWindow* newWindow = _WindowXlibNew(title, m_xDisp, m_xDefaultScreen, m_lastGlxCtx);
         m_windows[(Window)newWindow->getPlatformHandle()] = newWindow;
         return newWindow;
     }
@@ -317,9 +317,9 @@ public:
     GLXContext m_lastGlxCtx = nullptr;
 };
 
-void _XCBUpdateLastGlxCtx(GLXContext lastGlxCtx)
+void _XlibUpdateLastGlxCtx(GLXContext lastGlxCtx)
 {
-    static_cast<ApplicationXCB*>(APP)->m_lastGlxCtx = lastGlxCtx;
+    static_cast<ApplicationXlib*>(APP)->m_lastGlxCtx = lastGlxCtx;
 }
     
 }

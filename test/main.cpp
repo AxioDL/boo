@@ -188,8 +188,8 @@ struct TestApplicationCallback : IApplicationCallback
 
     static void LoaderProc(TestApplicationCallback* self)
     {
-        GLES3DataFactory* factory =
-        dynamic_cast<GLES3DataFactory*>(self->mainWindow->getLoadContextDataFactory());
+        GLDataFactory* factory =
+        dynamic_cast<GLDataFactory*>(self->mainWindow->getLoadContextDataFactory());
 
         /* Make Tri-strip VBO */
         struct Vert
