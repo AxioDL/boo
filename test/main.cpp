@@ -205,7 +205,7 @@ struct TestApplicationCallback : IApplicationCallback
             {{-0.5,-0.5},{0.0,0.0}}
         };
         IGraphicsBuffer* vbo =
-        factory->newStaticBuffer(BufferUseVertex, quad, sizeof(quad), 4);
+        factory->newStaticBuffer(BufferUseVertex, quad, sizeof(Vert), 4);
 
         /* Make vertex format */
         VertexElementDescriptor descs[2] =
@@ -289,6 +289,7 @@ struct TestApplicationCallback : IApplicationCallback
 
         size_t frameIdx = 0;
         size_t lastCheck = 0;
+        gfxQ->setViewport({{0, 0}, {640, 480}});
         while (running)
         {
             mainWindow->waitForRetrace();

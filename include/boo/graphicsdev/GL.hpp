@@ -20,8 +20,8 @@ public:
     GLDataFactory(IGraphicsContext* parent);
     ~GLDataFactory() {}
 
-    Platform platform() const {return PlatformOGLES3;}
-    const char* platformName() const {return "OpenGL ES 3.0";}
+    Platform platform() const {return PlatformOGL;}
+    const char* platformName() const {return "OpenGL";}
 
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
     IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count);

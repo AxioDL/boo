@@ -137,7 +137,7 @@ struct IGraphicsDataFactory
     enum Platform
     {
         PlatformNull,
-        PlatformOGLES3,
+        PlatformOGL,
         PlatformD3D11,
         PlatformD3D12,
         PlatformMetal,
