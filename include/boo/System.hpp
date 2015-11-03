@@ -22,4 +22,10 @@ namespace boo
 
 }
 
+#ifdef _WIN32
+#include <wrl/client.h>
+template <class T>
+using ComPtr = Microsoft::WRL::ComPtr<T>;
+#endif
+
 #endif

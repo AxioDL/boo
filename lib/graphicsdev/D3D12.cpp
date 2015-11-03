@@ -1,4 +1,5 @@
 #include "boo/graphicsdev/D3D12.hpp"
+#include "../win/Win32Common.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include <vector>
 #include <thread>
@@ -28,22 +29,6 @@ static inline UINT64 NextHeapOffset(UINT64 offset, const D3D12_RESOURCE_ALLOCATI
     offset += info.SizeInBytes;
     return (offset + info.Alignment - 1) & ~(info.Alignment - 1);
 }
-
-struct D3D12Context
-{
-    ComPtr<ID3D12Device> m_dev;
-    ComPtr<ID3D12CommandAllocator> m_qalloc;
-    ComPtr<ID3D12CommandQueue> m_q;
-    ComPtr<ID3D12CommandAllocator> m_loadqalloc;
-    ComPtr<ID3D12CommandQueue> m_loadq;
-    ComPtr<ID3D12Fence> m_frameFence;
-    ComPtr<ID3D12RootSignature> m_rs;
-    struct Window
-    {
-        ComPtr<ID3D12Resource> m_fbs[3];
-    };
-    std::vector<Window> m_windows;
-};
 
 struct D3D12Data : IGraphicsData
 {
@@ -212,6 +197,8 @@ class D3D12TextureD : public ITextureD
 public:
     ComPtr<ID3D12Resource> m_texs[2];
     ComPtr<ID3D12Resource> m_gpuTexs[2];
+    ComPtr<ID3D12DescriptorHeap> m_rtvHeap;
+    ComPtr<ID3D12DescriptorHeap> m_dsvHeap;
     ~D3D12TextureD() = default;
 
     void load(const void* data, size_t sz)
@@ -238,10 +225,21 @@ public:
         {
             D3D12_RESOURCE_DESC desc = m_texs[i]->GetDesc();
             ThrowIfFailed(ctx->m_dev->CreatePlacedResource(gpuHeap, offset, &desc, 
-                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 
+                i ? D3D12_RESOURCE_STATE_DEPTH_WRITE : D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 
                 nullptr, __uuidof(ID3D12Resource), &m_gpuTexs[i]));
             offset = NextHeapOffset(offset, ctx->m_dev->GetResourceAllocationInfo(0, 1, &desc));
         }
+
+        D3D12_DESCRIPTOR_HEAP_DESC rtvdesc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1};
+        ThrowIfFailed(ctx->m_dev->CreateDescriptorHeap(&rtvdesc, __uuidof(ID3D12DescriptorHeap), &m_rtvHeap));
+        D3D12_RENDER_TARGET_VIEW_DESC rtvvdesc = {DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_RTV_DIMENSION_TEXTURE2D};
+        ctx->m_dev->CreateRenderTargetView(m_gpuTexs[0].Get(), &rtvvdesc, m_rtvHeap->GetCPUDescriptorHandleForHeapStart());
+
+        D3D12_DESCRIPTOR_HEAP_DESC dsvdesc = {D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1};
+        ThrowIfFailed(ctx->m_dev->CreateDescriptorHeap(&dsvdesc, __uuidof(ID3D12DescriptorHeap), &m_dsvHeap));
+        D3D12_DEPTH_STENCIL_VIEW_DESC dsvvdesc = {DXGI_FORMAT_D24_UNORM_S8_UINT, D3D12_DSV_DIMENSION_TEXTURE2D};
+        ctx->m_dev->CreateDepthStencilView(m_gpuTexs[1].Get(), &dsvvdesc, m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
+
         return offset;
     }
 };
@@ -363,8 +361,7 @@ public:
 IShaderPipeline* D3D12DataFactory::newShaderPipeline
 (const char* vertSource, const char* fragSource,
  ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,
- const IVertexFormat* vtxFmt,
- BlendFactor srcFac, BlendFactor dstFac,
+ IVertexFormat* vtxFmt, BlendFactor srcFac, BlendFactor dstFac,
  bool depthTest, bool depthWrite, bool backfaceCulling)
 {
     ComPtr<ID3DBlob> errBlob;
@@ -666,78 +663,92 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         m_cmdList->SetGraphicsRootSignature(m_ctx->m_rs.Get());
     }
 
-    void setShaderDataBinding(const IShaderDataBinding* binding)
+    void setShaderDataBinding(IShaderDataBinding* binding)
     {
-        const D3D12ShaderDataBinding* cbind = static_cast<const D3D12ShaderDataBinding*>(binding);
+        D3D12ShaderDataBinding* cbind = static_cast<D3D12ShaderDataBinding*>(binding);
         ID3D12DescriptorHeap* descHeap = cbind->m_descHeap[m_fillBuf].Get();
         m_cmdList->SetDescriptorHeaps(1, &descHeap);
         m_cmdList->SetPipelineState(cbind->m_pipeline->m_state.Get());
     }
-    void setRenderTarget(const ITextureD* target)
+
+    D3D12TextureD* m_boundTarget = nullptr;
+
+    void setRenderTarget(IWindow* window)
     {
-        std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpSetRenderTarget);
-        cmds.back().target = target;
+
     }
 
+    void setRenderTarget(ITextureD* target)
+    {
+        D3D12TextureD* ctarget = static_cast<D3D12TextureD*>(target);
+
+        if (m_boundTarget)
+            m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_boundTarget->m_gpuTexs[0].Get(), 
+                D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+
+        m_cmdList->OMSetRenderTargets(1, &ctarget->m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), 
+                                      false, &ctarget->m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
+
+        m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(ctarget->m_gpuTexs[0].Get(), 
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET));
+
+        m_boundTarget = ctarget;
+    }
+
+    void setViewport(const SWindowRect& rect)
+    {
+
+    }
+
+    float m_clearColor[4] = {0.0,0.0,0.0,1.0};
     void setClearColor(const float rgba[4])
     {
-        std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpSetClearColor);
-        cmds.back().rgba[0] = rgba[0];
-        cmds.back().rgba[1] = rgba[1];
-        cmds.back().rgba[2] = rgba[2];
-        cmds.back().rgba[3] = rgba[3];
+        m_clearColor[0] = rgba[0];
+        m_clearColor[1] = rgba[1];
+        m_clearColor[2] = rgba[2];
+        m_clearColor[3] = rgba[3];
     }
+
     void clearTarget(bool render=true, bool depth=true)
     {
-        std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpClearTarget);
-        cmds.back().flags = 0;
         if (render)
-            cmds.back().flags |= GL_COLOR_BUFFER_BIT;
+        {
+            CD3DX12_CPU_DESCRIPTOR_HANDLE handle;
+            m_cmdList->ClearRenderTargetView(handle, m_clearColor, 0, nullptr);
+        }
         if (depth)
-            cmds.back().flags |= GL_DEPTH_BUFFER_BIT;
+        {
+            CD3DX12_CPU_DESCRIPTOR_HANDLE handle;
+            m_cmdList->ClearDepthStencilView(handle, D3D12_CLEAR_FLAG_DEPTH, 1.0, 0, 0, nullptr);
+        }
     }
 
     void setDrawPrimitive(Primitive prim)
     {
-        std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpSetDrawPrimitive);
         if (prim == PrimitiveTriangles)
-            cmds.back().prim = GL_TRIANGLES;
+            m_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         else if (prim == PrimitiveTriStrips)
-            cmds.back().prim = GL_TRIANGLE_STRIP;
+            m_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     }
+
     void draw(size_t start, size_t count)
     {
-        std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpDraw);
-        cmds.back().start = start;
-        cmds.back().count = count;
+        m_cmdList->DrawInstanced(count, 1, start, 0);
     }
+
     void drawIndexed(size_t start, size_t count)
     {
-        std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpDrawIndexed);
-        cmds.back().start = start;
-        cmds.back().count = count;
+        m_cmdList->DrawIndexedInstanced(count, 1, start, 0, 0);
     }
+
     void drawInstances(size_t start, size_t count, size_t instCount)
     {
-        std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpDrawInstances);
-        cmds.back().start = start;
-        cmds.back().count = count;
-        cmds.back().instCount = instCount;
+        m_cmdList->DrawInstanced(count, instCount, start, 0);
     }
+
     void drawInstancesIndexed(size_t start, size_t count, size_t instCount)
     {
-        std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpDrawInstancesIndexed);
-        cmds.back().start = start;
-        cmds.back().count = count;
-        cmds.back().instCount = instCount;
+        m_cmdList->DrawIndexedInstanced(count, instCount, start, 0, 0);
     }
 
     void present()
@@ -747,7 +758,6 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
 
     void execute()
     {
-        std::unique_lock<std::mutex> lk(m_mt);
         m_completeBuf = m_fillBuf;
         for (size_t i=0 ; i<3 ; ++i)
         {
@@ -756,37 +766,35 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
             m_fillBuf = i;
             break;
         }
-        lk.unlock();
-        m_cv.notify_one();
-        m_cmdBufs[m_fillBuf].clear();
     }
 };
 
 void D3D12GraphicsBufferD::load(const void* data, size_t sz)
 {
-    glBindBuffer(m_target, m_bufs[m_q->m_fillBuf]);
-    glBufferData(m_target, sz, data, GL_DYNAMIC_DRAW);
+    ID3D12Resource* res = m_bufs[m_q->m_fillBuf].Get();
+    void* d;
+    res->Map(0, nullptr, &d);
+    memcpy(d, data, sz);
+    res->Unmap(0, nullptr);
 }
 void* D3D12GraphicsBufferD::map(size_t sz)
 {
-    if (m_mappedBuf)
-        free(m_mappedBuf);
-    m_mappedBuf = malloc(sz);
-    m_mappedSize = sz;
-    return m_mappedBuf;
+    ID3D12Resource* res = m_bufs[m_q->m_fillBuf].Get();
+    void* d;
+    res->Map(0, nullptr, &d);
+    return d;
 }
 void D3D12GraphicsBufferD::unmap()
 {
-    glBindBuffer(m_target, m_bufs[m_q->m_fillBuf]);
-    glBufferData(m_target, m_mappedSize, m_mappedBuf, GL_DYNAMIC_DRAW);
-    free(m_mappedBuf);
-    m_mappedBuf = nullptr;
+    ID3D12Resource* res = m_bufs[m_q->m_fillBuf].Get();
+    res->Unmap(0, nullptr);
 }
 
 IGraphicsBufferD*
 D3D12DataFactory::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
 {
-    D3D12GraphicsBufferD* retval = new D3D12GraphicsBufferD(use, stride, count);
+    D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent->getCommandQueue());
+    D3D12GraphicsBufferD* retval = new D3D12GraphicsBufferD(q, use, m_ctx, stride, count);
     static_cast<D3D12Data*>(m_deferredData)->m_DBufs.emplace_back(retval);
     return retval;
 }
@@ -809,9 +817,9 @@ IVertexFormat* D3D12DataFactory::newVertexFormat
     return retval;
 }
 
-IGraphicsCommandQueue* _NewD3D12CommandQueue(IGraphicsContext* parent)
+IGraphicsCommandQueue* _NewD3D12CommandQueue(D3D12Context* ctx, IGraphicsContext* parent)
 {
-    return new struct D3D12CommandQueue(parent);
+    return new struct D3D12CommandQueue(ctx, parent);
 }
 
 }

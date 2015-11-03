@@ -7,89 +7,89 @@ namespace boo
 {
 struct IGraphicsCommandQueue;
 struct IGraphicsDataFactory;
+
+enum EMouseButton
+{
+    BUTTON_NONE      = 0,
+    BUTTON_PRIMARY   = 1,
+    BUTTON_SECONDARY = 2,
+    BUTTON_MIDDLE    = 3,
+    BUTTON_AUX1      = 4,
+    BUTTON_AUX2      = 5
+};
+
+struct SWindowRect
+{
+    int location[2];
+    int size[2];
+};
+
+struct SWindowCoord
+{
+    unsigned pixel[2];
+    unsigned virtualPixel[2];
+    float norm[2];
+};
+
+struct STouchCoord
+{
+    double coord[2];
+};
+
+struct SScrollDelta
+{
+    double delta[2];
+    bool isFine; /* Use system-scale fine-scroll (for scrollable-trackpads) */
+
+    SScrollDelta operator+(const SScrollDelta& other)
+    {return {{delta[0] + other.delta[0], delta[1] + other.delta[1]}, isFine || other.isFine};}
+    SScrollDelta& operator+=(const SScrollDelta& other)
+    {delta[0] += other.delta[0]; delta[1] += other.delta[1]; isFine |= other.isFine; return *this;}
+    void zeroOut() {delta[0] = 0.0; delta[1] = 0.0;}
+};
+
+enum ESpecialKey
+{
+    KEY_NONE       = 0,
+    KEY_F1         = 1,
+    KEY_F2         = 2,
+    KEY_F3         = 3,
+    KEY_F4         = 4,
+    KEY_F5         = 5,
+    KEY_F6         = 6,
+    KEY_F7         = 7,
+    KEY_F8         = 8,
+    KEY_F9         = 9,
+    KEY_F10        = 10,
+    KEY_F11        = 11,
+    KEY_F12        = 12,
+    KEY_ESC        = 13,
+    KEY_ENTER      = 14,
+    KEY_BACKSPACE  = 15,
+    KEY_INSERT     = 16,
+    KEY_DELETE     = 17,
+    KEY_HOME       = 18,
+    KEY_END        = 19,
+    KEY_PGUP       = 20,
+    KEY_PGDOWN     = 21,
+    KEY_LEFT       = 22,
+    KEY_RIGHT      = 23,
+    KEY_UP         = 24,
+    KEY_DOWN       = 25
+};
+
+enum EModifierKey
+{
+    MKEY_NONE    = 0,
+    MKEY_CTRL    = 1<<0,
+    MKEY_ALT     = 1<<2,
+    MKEY_SHIFT   = 1<<3,
+    MKEY_COMMAND = 1<<4
+};
     
 class IWindowCallback
 {
-public:
-    enum EMouseButton
-    {
-        BUTTON_NONE      = 0,
-        BUTTON_PRIMARY   = 1,
-        BUTTON_SECONDARY = 2,
-        BUTTON_MIDDLE    = 3,
-        BUTTON_AUX1      = 4,
-        BUTTON_AUX2      = 5
-    };
-    
-    struct SWindowRect
-    {
-        int location[2];
-        int size[2];
-    };
-
-    struct SWindowCoord
-    {
-        unsigned pixel[2];
-        unsigned virtualPixel[2];
-        float norm[2];
-    };
-
-    struct STouchCoord
-    {
-        double coord[2];
-    };
-    
-    struct SScrollDelta
-    {
-        double delta[2];
-        bool isFine; /* Use system-scale fine-scroll (for scrollable-trackpads) */
-
-        SScrollDelta operator+(const SScrollDelta& other)
-        {return {{delta[0] + other.delta[0], delta[1] + other.delta[1]}, isFine || other.isFine};}
-        SScrollDelta& operator+=(const SScrollDelta& other)
-        {delta[0] += other.delta[0]; delta[1] += other.delta[1]; isFine |= other.isFine; return *this;}
-        void zeroOut() {delta[0] = 0.0; delta[1] = 0.0;}
-    };
-    
-    enum ESpecialKey
-    {
-        KEY_NONE       = 0,
-        KEY_F1         = 1,
-        KEY_F2         = 2,
-        KEY_F3         = 3,
-        KEY_F4         = 4,
-        KEY_F5         = 5,
-        KEY_F6         = 6,
-        KEY_F7         = 7,
-        KEY_F8         = 8,
-        KEY_F9         = 9,
-        KEY_F10        = 10,
-        KEY_F11        = 11,
-        KEY_F12        = 12,
-        KEY_ESC        = 13,
-        KEY_ENTER      = 14,
-        KEY_BACKSPACE  = 15,
-        KEY_INSERT     = 16,
-        KEY_DELETE     = 17,
-        KEY_HOME       = 18,
-        KEY_END        = 19,
-        KEY_PGUP       = 20,
-        KEY_PGDOWN     = 21,
-        KEY_LEFT       = 22,
-        KEY_RIGHT      = 23,
-        KEY_UP         = 24,
-        KEY_DOWN       = 25
-    };
-    
-    enum EModifierKey
-    {
-        MKEY_NONE    = 0,
-        MKEY_CTRL    = 1<<0,
-        MKEY_ALT     = 1<<2,
-        MKEY_SHIFT   = 1<<3,
-        MKEY_COMMAND = 1<<4
-    };
-    
+public:    
     virtual void resized(const SWindowRect& rect)
     {(void)rect;}
     virtual void mouseDown(const SWindowCoord& coord, EMouseButton button, EModifierKey mods)
@@ -122,6 +122,13 @@ public:
     
 };
 
+enum ETouchType
+{
+    TOUCH_NONE     = 0,
+    TOUCH_DISPLAY  = 1,
+    TOUCH_TRACKPAD = 2
+};
+
 class IWindow
 {
 public:
@@ -149,12 +156,6 @@ public:
     virtual uintptr_t getPlatformHandle() const=0;
     virtual void _incomingEvent(void* event) {(void)event;}
 
-    enum ETouchType
-    {
-        TOUCH_NONE     = 0,
-        TOUCH_DISPLAY  = 1,
-        TOUCH_TRACKPAD = 2
-    };
     virtual ETouchType getTouchType() const=0;
 
     virtual IGraphicsCommandQueue* getCommandQueue()=0;

@@ -1,16 +1,17 @@
 #ifndef GDEV_D3D12_HPP
 #define GDEV_D3D12_HPP
 
+#if _WIN32
+#include <sdkddkver.h>
+#if _WIN32_WINNT_WIN10
+
 #include "IGraphicsDataFactory.hpp"
 #include "IGraphicsCommandQueue.hpp"
 #include "boo/IGraphicsContext.hpp"
+#include "boo/System.hpp"
 #include <d3d12.h>
 #include <vector>
 #include <unordered_set>
-
-#include <wrl/client.h>
-template <class T>
-using ComPtr = Microsoft::WRL::ComPtr<T>;
 
 namespace boo
 {
@@ -32,16 +33,16 @@ public:
     IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count);
 
     ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                      const void* data, size_t sz);
+                                const void* data, size_t sz);
     ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
 
     IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
 
     IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
-                                             ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,
-                                             const IVertexFormat* vtxFmt,
-                                             BlendFactor srcFac, BlendFactor dstFac,
-                                             bool depthTest, bool depthWrite, bool backfaceCulling);
+                                       ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,
+                                       IVertexFormat* vtxFmt,
+                                       BlendFactor srcFac, BlendFactor dstFac,
+                                       bool depthTest, bool depthWrite, bool backfaceCulling);
 
     IShaderDataBinding*
     newShaderDataBinding(IShaderPipeline* pipeline,
@@ -58,4 +59,6 @@ public:
 
 }
 
+#endif // _WIN32_WINNT_WIN10
+#endif // _WIN32
 #endif // GDEV_D3D12_HPP

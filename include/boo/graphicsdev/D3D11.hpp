@@ -1,6 +1,10 @@
 #ifndef GDEV_D3D11_HPP
 #define GDEV_D3D11_HPP
 
+#if _WIN32
+#include <sdkddkver.h>
+#if _WIN32_WINNT_WIN7
+
 #include "IGraphicsDataFactory.hpp"
 
 namespace boo
@@ -47,4 +51,6 @@ public:
 
 }
 
+#endif // _WIN32_WINNT_WIN7
+#endif // _WIN32
 #endif // GDEV_D3D11_HPP

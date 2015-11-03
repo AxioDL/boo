@@ -2,6 +2,7 @@
 #define IGFXCOMMANDQUEUE_HPP
 
 #include "IGraphicsDataFactory.hpp"
+#include "boo/IWindow.hpp"
 
 namespace boo
 {
@@ -19,8 +20,10 @@ struct IGraphicsCommandQueue
     virtual Platform platform() const=0;
     virtual const char* platformName() const=0;
 
-    virtual void setShaderDataBinding(const IShaderDataBinding* binding)=0;
-    virtual void setRenderTarget(const ITextureD* target)=0;
+    virtual void setShaderDataBinding(IShaderDataBinding* binding)=0;
+    virtual void setRenderTarget(IWindow* window)=0;
+    virtual void setRenderTarget(ITextureD* target)=0;
+    virtual void setViewport(const SWindowRect& rect)=0;
 
     virtual void setClearColor(const float rgba[4])=0;
     virtual void clearTarget(bool render=true, bool depth=true)=0;

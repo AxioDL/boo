@@ -24,6 +24,7 @@ if(WIN32)
   list(APPEND PLAT_SRCS 
        lib/win/ApplicationWin32.cpp
        lib/win/WindowWin32.cpp
+       lib/win/Win32Common.hpp
        lib/inputdev/HIDListenerWinUSB.cpp
        lib/inputdev/HIDDeviceWinUSB.cpp
        lib/graphicsdev/D3D11.cpp
@@ -32,6 +33,8 @@ if(WIN32)
   list(APPEND PLAT_HDRS
         include/boo/graphicsdev/D3D11.hpp
         include/boo/graphicsdev/D3D12.hpp)
+
+  list(APPEND _BOO_SYS_DEFINES -DUNICODE=1)
 
   list(APPEND _BOO_SYS_LIBS Winusb)
 elseif(APPLE)
@@ -116,7 +119,9 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
 endif()
 
 set(BOO_SYS_LIBS ${_BOO_SYS_LIBS} CACHE PATH "Boo System Libraries" FORCE)
+set(BOO_SYS_DEFINES ${_BOO_SYS_DEFINES} CACHE PATH "Boo System Defines" FORCE)
 
+add_definitions(${_BOO_SYS_DEFINES})
 include_directories(include)
 
 add_library(Boo
