@@ -253,9 +253,9 @@ public:
             glDisable(GL_DEPTH_TEST);
         glDepthMask(m_depthWrite);
 
-//        if (m_backfaceCulling)
-//            glEnable(GL_CULL_FACE);
-//        else
+        if (m_backfaceCulling)
+            glEnable(GL_CULL_FACE);
+        else
             glDisable(GL_CULL_FACE);
 
         return m_prog;
@@ -486,7 +486,7 @@ static const GLenum SEMANTIC_TYPE_TABLE[] =
 
 struct GLCommandQueue : IGraphicsCommandQueue
 {
-    Platform platform() const {return IGraphicsDataFactory::PlatformOGLES3;}
+    Platform platform() const {return IGraphicsDataFactory::PlatformOGL;}
     const char* platformName() const {return "OpenGL ES 3.0";}
     IGraphicsContext* m_parent = nullptr;
 
