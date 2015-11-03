@@ -492,6 +492,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
         {
             OpSetShaderDataBinding,
             OpSetRenderTarget,
+            OpSetViewport,
             OpSetClearColor,
             OpClearTarget,
             OpSetDrawPrimitive,
@@ -505,6 +506,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
         {
             const IShaderDataBinding* binding;
             const ITextureD* target;
+            SWindowRect rect;
             float rgba[4];
             GLbitfield flags;
             GLenum prim;
@@ -639,6 +641,10 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex->m_fbo);
                     break;
                 }
+                case Command::OpSetViewport:
+                    glViewport(cmd.rect.location[0], cmd.rect.location[1],
+                               cmd.rect.size[0], cmd.rect.size[1]);
+                    break;
                 case Command::OpSetClearColor:
                     glClearColor(cmd.rgba[0], cmd.rgba[1], cmd.rgba[2], cmd.rgba[3]);
                     break;
@@ -686,17 +692,27 @@ struct GLCommandQueue : IGraphicsCommandQueue
         m_thr.join();
     }
 
-    void setShaderDataBinding(const IShaderDataBinding* binding)
+    void setShaderDataBinding(IShaderDataBinding* binding)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::OpSetShaderDataBinding);
         cmds.back().binding = binding;
     }
-    void setRenderTarget(const ITextureD* target)
+    void setRenderTarget(ITextureD* target)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::OpSetRenderTarget);
         cmds.back().target = target;
+    }
+    void setRenderTarget(IWindow* target)
+    {
+        /* TODO: Do */
+    }
+    void setViewport(const SWindowRect& rect)
+    {
+        std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
+        cmds.emplace_back(Command::OpSetViewport);
+        cmds.back().rect = rect;
     }
 
     void setClearColor(const float rgba[4])

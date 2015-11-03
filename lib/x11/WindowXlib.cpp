@@ -48,42 +48,42 @@ extern int XINPUT_OPCODE;
 
 static uint32_t translateKeysym(KeySym sym, int& specialSym, int& modifierSym)
 {
-    specialSym = IWindowCallback::KEY_NONE;
-    modifierSym = IWindowCallback::MKEY_NONE;
+    specialSym = KEY_NONE;
+    modifierSym = MKEY_NONE;
     if (sym >= XK_F1 && sym <= XK_F12)
-        specialSym = IWindowCallback::KEY_F1 + sym - XK_F1;
+        specialSym = KEY_F1 + sym - XK_F1;
     else if (sym == XK_Escape)
-        specialSym = IWindowCallback::KEY_ESC;
+        specialSym = KEY_ESC;
     else if (sym == XK_Return)
-        specialSym = IWindowCallback::KEY_ENTER;
+        specialSym = KEY_ENTER;
     else if (sym == XK_BackSpace)
-        specialSym = IWindowCallback::KEY_BACKSPACE;
+        specialSym = KEY_BACKSPACE;
     else if (sym == XK_Insert)
-        specialSym = IWindowCallback::KEY_INSERT;
+        specialSym = KEY_INSERT;
     else if (sym == XK_Delete)
-        specialSym = IWindowCallback::KEY_DELETE;
+        specialSym = KEY_DELETE;
     else if (sym == XK_Home)
-        specialSym = IWindowCallback::KEY_HOME;
+        specialSym = KEY_HOME;
     else if (sym == XK_End)
-        specialSym = IWindowCallback::KEY_END;
+        specialSym = KEY_END;
     else if (sym == XK_Page_Up)
-        specialSym = IWindowCallback::KEY_PGUP;
+        specialSym = KEY_PGUP;
     else if (sym == XK_Page_Down)
-        specialSym = IWindowCallback::KEY_PGDOWN;
+        specialSym = KEY_PGDOWN;
     else if (sym == XK_Left)
-        specialSym = IWindowCallback::KEY_LEFT;
+        specialSym = KEY_LEFT;
     else if (sym == XK_Right)
-        specialSym = IWindowCallback::KEY_RIGHT;
+        specialSym = KEY_RIGHT;
     else if (sym == XK_Up)
-        specialSym = IWindowCallback::KEY_UP;
+        specialSym = KEY_UP;
     else if (sym == XK_Down)
-        specialSym = IWindowCallback::KEY_DOWN;
+        specialSym = KEY_DOWN;
     else if (sym == XK_Shift_L || sym == XK_Shift_R)
-        modifierSym = IWindowCallback::MKEY_SHIFT;
+        modifierSym = MKEY_SHIFT;
     else if (sym == XK_Control_L || sym == XK_Control_R)
-        modifierSym = IWindowCallback::MKEY_CTRL;
+        modifierSym = MKEY_CTRL;
     else if (sym == XK_Alt_L || sym == XK_Alt_R)
-        modifierSym = IWindowCallback::MKEY_ALT;
+        modifierSym = MKEY_ALT;
     else
         return xkb_keysym_to_utf32(sym);
     return 0;
@@ -93,11 +93,11 @@ static int translateModifiers(unsigned state)
 {
     int retval = 0;
     if (state & ShiftMask)
-        retval |= IWindowCallback::MKEY_SHIFT;
+        retval |= MKEY_SHIFT;
     if (state & ControlMask)
-        retval |= IWindowCallback::MKEY_CTRL;
+        retval |= MKEY_CTRL;
     if (state & Mod1Mask)
-        retval |= IWindowCallback::MKEY_ALT;
+        retval |= MKEY_ALT;
     return retval;
 }
 
@@ -105,16 +105,15 @@ static int translateButton(unsigned detail)
 {
     int retval = 0;
     if (detail == 1)
-        retval = IWindowCallback::BUTTON_PRIMARY;
+        retval = BUTTON_PRIMARY;
     else if (detail == 3)
-        retval = IWindowCallback::BUTTON_SECONDARY;
+        retval = BUTTON_SECONDARY;
     else if (detail == 2)
-        retval = IWindowCallback::BUTTON_MIDDLE;
+        retval = BUTTON_MIDDLE;
     else if (detail == 8)
-        retval = IWindowCallback::BUTTON_AUX1;
+        retval = BUTTON_AUX1;
     else if (detail == 9)
-        retval =
-IWindowCallback::BUTTON_AUX2;
+        retval = BUTTON_AUX2;
     return retval;
 }
 
@@ -763,7 +762,7 @@ public:
             m_wh = event->xexpose.height;
             if (m_callback)
             {
-                IWindowCallback::SWindowRect rect =
+                SWindowRect rect =
                 { {m_wx, m_wy}, {m_ww, m_wh} };
                 m_callback->resized(rect);
             }
@@ -780,7 +779,7 @@ public:
 
                 if (m_callback)
                 {
-                    IWindowCallback::SWindowRect rect =
+                    SWindowRect rect =
                     { {m_wx, m_wy}, {m_ww, m_wh} };
                     m_callback->resized(rect);
                 }
@@ -798,12 +797,12 @@ public:
                 int modifierMask = translateModifiers(event->xkey.state);
                 if (charCode)
                     m_callback->charKeyDown(charCode,
-                                            (IWindowCallback::EModifierKey)modifierMask, false);
+                                            (EModifierKey)modifierMask, false);
                 else if (specialKey)
-                    m_callback->specialKeyDown((IWindowCallback::ESpecialKey)specialKey,
-                                               (IWindowCallback::EModifierKey)modifierMask, false);
+                    m_callback->specialKeyDown((ESpecialKey)specialKey,
+                                               (EModifierKey)modifierMask, false);
                 else if (modifierKey)
-                    m_callback->modKeyDown((IWindowCallback::EModifierKey)modifierKey, false);
+                    m_callback->modKeyDown((EModifierKey)modifierKey, false);
             }
             return;
         }
@@ -818,12 +817,12 @@ public:
                 int modifierMask = translateModifiers(event->xkey.state);
                 if (charCode)
                     m_callback->charKeyUp(charCode,
-                                          (IWindowCallback::EModifierKey)modifierMask);
+                                          (EModifierKey)modifierMask);
                 else if (specialKey)
-                    m_callback->specialKeyUp((IWindowCallback::ESpecialKey)specialKey,
-                                             (IWindowCallback::EModifierKey)modifierMask);
+                    m_callback->specialKeyUp((ESpecialKey)specialKey,
+                                             (EModifierKey)modifierMask);
                 else if (modifierKey)
-                    m_callback->modKeyUp((IWindowCallback::EModifierKey)modifierKey);
+                    m_callback->modKeyUp((EModifierKey)modifierKey);
             }
             return;
         }
@@ -836,27 +835,27 @@ public:
                 if (button)
                 {
                     int modifierMask = translateModifiers(event->xbutton.state);
-                    IWindowCallback::SWindowCoord coord =
+                    SWindowCoord coord =
                     {
                         {(unsigned)event->xbutton.x, (unsigned)event->xbutton.y},
                         {(unsigned)(event->xbutton.x / m_pixelFactor), (unsigned)(event->xbutton.y / m_pixelFactor)},
                         {float(event->xbutton.x) / float(m_ww), float(event->xbutton.y) / float(m_wh)}
                     };
-                    m_callback->mouseDown(coord, (IWindowCallback::EMouseButton)button,
-                                          (IWindowCallback::EModifierKey)modifierMask);
+                    m_callback->mouseDown(coord, (EMouseButton)button,
+                                          (EModifierKey)modifierMask);
                 }
 
                 /* Also handle legacy scroll events here */
                 if (event->xbutton.button >= 4 && event->xbutton.button <= 7 &&
                     m_hScrollValuator == -1 && m_vScrollValuator == -1)
                 {
-                    IWindowCallback::SWindowCoord coord =
+                    SWindowCoord coord =
                     {
                         {(unsigned)event->xbutton.x, (unsigned)event->xbutton.y},
                         {(unsigned)(event->xbutton.x / m_pixelFactor), (unsigned)(event->xbutton.y / m_pixelFactor)},
                         {(float)event->xbutton.x / (float)m_ww, (float)event->xbutton.y / (float)m_wh}
                     };
-                    IWindowCallback::SScrollDelta scrollDelta =
+                    SScrollDelta scrollDelta =
                     {
                         {0.0, 0.0},
                         false
@@ -883,14 +882,14 @@ public:
                 if (button)
                 {
                     int modifierMask = translateModifiers(event->xbutton.state);
-                    IWindowCallback::SWindowCoord coord =
+                    SWindowCoord coord =
                     {
                         {(unsigned)event->xbutton.x, (unsigned)event->xbutton.y},
                         {(unsigned)(event->xbutton.x / m_pixelFactor), (unsigned)(event->xbutton.y / m_pixelFactor)},
                         {event->xbutton.x / (float)m_ww, event->xbutton.y / (float)m_wh}
                     };
-                    m_callback->mouseUp(coord, (IWindowCallback::EMouseButton)button,
-                                        (IWindowCallback::EModifierKey)modifierMask);
+                    m_callback->mouseUp(coord, (EMouseButton)button,
+                                        (EModifierKey)modifierMask);
                 }
             }
             return;
@@ -900,7 +899,7 @@ public:
             if (m_callback)
             {
                 getWindowFrame(m_wx, m_wy, m_ww, m_wh);
-                IWindowCallback::SWindowCoord coord =
+                SWindowCoord coord =
                 {
                     {(unsigned)event->xmotion.x, (unsigned)event->xmotion.y},
                     {(unsigned)(event->xmotion.x / m_pixelFactor), (unsigned)(event->xmotion.y / m_pixelFactor)},
@@ -946,7 +945,7 @@ public:
                         }
                     }
 
-                    IWindowCallback::SScrollDelta scrollDelta =
+                    SScrollDelta scrollDelta =
                     {
                         {newScroll[0] - m_hScrollLast, newScroll[1] - m_vScrollLast},
                         true
@@ -959,7 +958,7 @@ public:
                     {
                         unsigned event_x = unsigned(ev->event_x) >> 16;
                         unsigned event_y = unsigned(ev->event_y) >> 16;
-                        IWindowCallback::SWindowCoord coord =
+                        SWindowCoord coord =
                         {
                             {event_x, event_y},
                             {(unsigned)(event_x / m_pixelFactor), (unsigned)(event_y / m_pixelFactor)},
@@ -986,7 +985,7 @@ public:
                         }
                     }
 
-                    IWindowCallback::STouchCoord coord =
+                    STouchCoord coord =
                     {
                         {vals[0], vals[1]}
                     };
@@ -1012,7 +1011,7 @@ public:
                         }
                     }
 
-                    IWindowCallback::STouchCoord coord =
+                    STouchCoord coord =
                     {
                         {vals[0], vals[1]}
                     };
@@ -1038,7 +1037,7 @@ public:
                         }
                     }
 
-                    IWindowCallback::STouchCoord coord =
+                    STouchCoord coord =
                     {
                         {vals[0], vals[1]}
                     };

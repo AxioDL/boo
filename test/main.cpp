@@ -182,7 +182,7 @@ struct TestApplicationCallback : IApplicationCallback
     CTestWindowCallback windowCallback;
     bool running = true;
 
-    const IShaderDataBinding* m_binding = nullptr;
+    IShaderDataBinding* m_binding = nullptr;
     std::mutex m_mt;
     std::condition_variable m_cv;
 
