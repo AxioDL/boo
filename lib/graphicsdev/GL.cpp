@@ -14,12 +14,12 @@ static LogVisor::LogModule Log("boo::GL");
 struct GLData : IGraphicsData
 {
     std::vector<std::unique_ptr<class GLShaderPipeline>> m_SPs;
-    std::vector<std::unique_ptr<struct GLES3ShaderDataBinding>> m_SBinds;
+    std::vector<std::unique_ptr<struct GLShaderDataBinding>> m_SBinds;
     std::vector<std::unique_ptr<class GLGraphicsBufferS>> m_SBufs;
     std::vector<std::unique_ptr<class GLGraphicsBufferD>> m_DBufs;
     std::vector<std::unique_ptr<class GLTextureS>> m_STexs;
     std::vector<std::unique_ptr<class GLTextureD>> m_DTexs;
-    std::vector<std::unique_ptr<struct GLES3VertexFormat>> m_VFmts;
+    std::vector<std::unique_ptr<struct GLVertexFormat>> m_VFmts;
 };
 
 static const GLenum USE_TABLE[] =
@@ -351,32 +351,32 @@ IShaderPipeline* GLDataFactory::newShaderPipeline
     return retval;
 }
 
-struct GLES3VertexFormat : IVertexFormat
+struct GLVertexFormat : IVertexFormat
 {
     GLCommandQueue* m_q;
     GLuint m_vao = 0;
     size_t m_elementCount;
     std::unique_ptr<VertexElementDescriptor[]> m_elements;
-    GLES3VertexFormat(GLCommandQueue* q, size_t elementCount,
+    GLVertexFormat(GLCommandQueue* q, size_t elementCount,
                       const VertexElementDescriptor* elements);
-    ~GLES3VertexFormat();
+    ~GLVertexFormat();
     void bind() const {glBindVertexArray(m_vao);}
 };
 
-struct GLES3ShaderDataBinding : IShaderDataBinding
+struct GLShaderDataBinding : IShaderDataBinding
 {
     const GLShaderPipeline* m_pipeline;
-    const GLES3VertexFormat* m_vtxFormat;
+    const GLVertexFormat* m_vtxFormat;
     size_t m_ubufCount;
     std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
     size_t m_texCount;
     std::unique_ptr<ITexture*[]> m_texs;
-    GLES3ShaderDataBinding(IShaderPipeline* pipeline,
+    GLShaderDataBinding(IShaderPipeline* pipeline,
                            IVertexFormat* vtxFormat,
                            size_t ubufCount, IGraphicsBuffer** ubufs,
                            size_t texCount, ITexture** texs)
     : m_pipeline(static_cast<GLShaderPipeline*>(pipeline)),
-      m_vtxFormat(static_cast<GLES3VertexFormat*>(vtxFormat)),
+      m_vtxFormat(static_cast<GLVertexFormat*>(vtxFormat)),
       m_ubufCount(ubufCount),
       m_ubufs(new IGraphicsBuffer*[ubufCount]),
       m_texCount(texCount),
@@ -416,8 +416,8 @@ GLDataFactory::newShaderDataBinding(IShaderPipeline* pipeline,
                                        size_t ubufCount, IGraphicsBuffer** ubufs,
                                        size_t texCount, ITexture** texs)
 {
-    GLES3ShaderDataBinding* retval =
-    new GLES3ShaderDataBinding(pipeline, vtxFormat, ubufCount, ubufs, texCount, texs);
+    GLShaderDataBinding* retval =
+    new GLShaderDataBinding(pipeline, vtxFormat, ubufCount, ubufs, texCount, texs);
     static_cast<GLData*>(m_deferredData)->m_SBinds.emplace_back(retval);
     return retval;
 }
@@ -436,6 +436,10 @@ IGraphicsData* GLDataFactory::commit()
     IGraphicsData* retval = m_deferredData;
     m_deferredData = new struct GLData();
     m_committedData.insert(retval);
+    /* Let's go ahead and flush to ensure our data gets to the GPU
+       While this isn't strictly required, some drivers might behave
+       differently */
+    glFlush();
     return retval;
 }
     
@@ -482,7 +486,7 @@ static const GLenum SEMANTIC_TYPE_TABLE[] =
 
 struct GLCommandQueue : IGraphicsCommandQueue
 {
-    Platform platform() const {return IGraphicsDataFactory::PlatformOGLES3;}
+    Platform platform() const {return IGraphicsDataFactory::PlatformOGL;}
     const char* platformName() const {return "OpenGL ES 3.0";}
     IGraphicsContext* m_parent = nullptr;
 
@@ -533,12 +537,12 @@ struct GLCommandQueue : IGraphicsCommandQueue
     std::thread m_thr;
 
     /* These members are locked for multithreaded access */
-    std::vector<GLES3VertexFormat*> m_pendingFmtAdds;
+    std::vector<GLVertexFormat*> m_pendingFmtAdds;
     std::vector<GLuint> m_pendingFmtDels;
     std::vector<GLTextureD*> m_pendingFboAdds;
     std::vector<GLuint> m_pendingFboDels;
 
-    static void ConfigureVertexFormat(GLES3VertexFormat* fmt)
+    static void ConfigureVertexFormat(GLVertexFormat* fmt)
     {
         glGenVertexArrays(1, &fmt->m_vao);
 
@@ -607,7 +611,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 self->m_drawBuf = self->m_completeBuf;
 
                 if (self->m_pendingFmtAdds.size())
-                    for (GLES3VertexFormat* fmt : self->m_pendingFmtAdds)
+                    for (GLVertexFormat* fmt : self->m_pendingFmtAdds)
                         ConfigureVertexFormat(fmt);
                 self->m_pendingFmtAdds.clear();
 
@@ -633,7 +637,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 switch (cmd.m_op)
                 {
                 case Command::OpSetShaderDataBinding:
-                    static_cast<const GLES3ShaderDataBinding*>(cmd.binding)->bind();
+                    static_cast<const GLShaderDataBinding*>(cmd.binding)->bind();
                     break;
                 case Command::OpSetRenderTarget:
                 {
@@ -781,13 +785,13 @@ struct GLCommandQueue : IGraphicsCommandQueue
         cmds.emplace_back(Command::OpPresent);
     }
     
-    void addVertexFormat(GLES3VertexFormat* fmt)
+    void addVertexFormat(GLVertexFormat* fmt)
     {
         std::unique_lock<std::mutex> lk(m_mt);
         m_pendingFmtAdds.push_back(fmt);
     }
 
-    void delVertexFormat(GLES3VertexFormat* fmt)
+    void delVertexFormat(GLVertexFormat* fmt)
     {
         std::unique_lock<std::mutex> lk(m_mt);
         m_pendingFmtDels.push_back(fmt->m_vao);
@@ -881,7 +885,7 @@ GLDataFactory::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
     return retval;
 }
 
-GLES3VertexFormat::GLES3VertexFormat(GLCommandQueue* q, size_t elementCount,
+GLVertexFormat::GLVertexFormat(GLCommandQueue* q, size_t elementCount,
                                      const VertexElementDescriptor* elements)
 : m_q(q),
   m_elementCount(elementCount),
@@ -891,13 +895,13 @@ GLES3VertexFormat::GLES3VertexFormat(GLCommandQueue* q, size_t elementCount,
         m_elements[i] = elements[i];
     m_q->addVertexFormat(this);
 }
-GLES3VertexFormat::~GLES3VertexFormat() {m_q->delVertexFormat(this);}
+GLVertexFormat::~GLVertexFormat() {m_q->delVertexFormat(this);}
 
 IVertexFormat* GLDataFactory::newVertexFormat
 (size_t elementCount, const VertexElementDescriptor* elements)
 {
     GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
-    GLES3VertexFormat* retval = new struct GLES3VertexFormat(q, elementCount, elements);
+    GLVertexFormat* retval = new struct GLVertexFormat(q, elementCount, elements);
     static_cast<GLData*>(m_deferredData)->m_VFmts.emplace_back(retval);
     return retval;
 }
