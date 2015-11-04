@@ -29,6 +29,7 @@ public:
     ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                                       const void* data, size_t sz);
     ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
+    ITextureR* newRenderTexture(size_t width, size_t height, size_t samples);
 
     IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
 

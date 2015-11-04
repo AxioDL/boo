@@ -19,6 +19,7 @@ struct GLData : IGraphicsData
     std::vector<std::unique_ptr<class GLGraphicsBufferD>> m_DBufs;
     std::vector<std::unique_ptr<class GLTextureS>> m_STexs;
     std::vector<std::unique_ptr<class GLTextureD>> m_DTexs;
+    std::vector<std::unique_ptr<class GLTextureR>> m_RTexs;
     std::vector<std::unique_ptr<struct GLVertexFormat>> m_VFmts;
 };
 
@@ -130,8 +131,7 @@ class GLTextureD : public ITextureD
     friend class GLDataFactory;
     friend struct GLCommandQueue;
     struct GLCommandQueue* m_q;
-    GLuint m_texs[2];
-    GLuint m_fbo = 0;
+    GLuint m_texs[3];
     void* m_mappedBuf = nullptr;
     size_t m_mappedSize = 0;
     size_t m_width = 0;
@@ -140,26 +140,28 @@ class GLTextureD : public ITextureD
 public:
     ~GLTextureD();
 
-    void load(const void* data, size_t sz)
-    {
-        glBindTexture(GL_TEXTURE_2D, m_texs[0]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_width, m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-    }
-    void* map(size_t sz)
-    {
-        if (m_mappedBuf)
-            free(m_mappedBuf);
-        m_mappedBuf = malloc(sz);
-        m_mappedSize = sz;
-        return m_mappedBuf;
-    }
-    void unmap()
-    {
-        glBindTexture(GL_TEXTURE_2D, m_texs[0]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_width, m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, m_mappedBuf);
-        free(m_mappedBuf);
-        m_mappedBuf = nullptr;
-    }
+    void load(const void* data, size_t sz);
+    void* map(size_t sz);
+    void unmap();
+
+    void bind(size_t idx) const;
+};
+
+class GLTextureR : public ITextureR
+{
+    friend class GLDataFactory;
+    friend struct GLCommandQueue;
+    struct GLCommandQueue* m_q;
+    GLuint m_texs[2];
+    GLuint m_fbo = 0;
+    void* m_mappedBuf = nullptr;
+    size_t m_mappedSize = 0;
+    size_t m_width = 0;
+    size_t m_height = 0;
+    size_t m_samples = 0;
+    GLTextureR(GLCommandQueue* q, size_t width, size_t height, size_t samples);
+public:
+    ~GLTextureR();
 
     void bind(size_t idx) const
     {
@@ -401,9 +403,9 @@ struct GLShaderDataBinding : IShaderDataBinding
         }
         for (size_t i=0 ; i<m_texCount ; ++i)
         {
-            if (m_texs[i]->dynamic())
+            if (m_texs[i]->type() == ITexture::TextureDynamic)
                 static_cast<GLTextureD*>(m_texs[i])->bind(i);
-            else
+            else if (m_texs[i]->type() == ITexture::TextureStatic)
                 static_cast<GLTextureS*>(m_texs[i])->bind(i);
         }
     }
@@ -509,7 +511,8 @@ struct GLCommandQueue : IGraphicsCommandQueue
         union
         {
             const IShaderDataBinding* binding;
-            const ITextureD* target;
+            const ITextureR* target;
+            const ITextureR* source;
             SWindowRect rect;
             float rgba[4];
             GLbitfield flags;
@@ -539,7 +542,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
     /* These members are locked for multithreaded access */
     std::vector<GLVertexFormat*> m_pendingFmtAdds;
     std::vector<GLuint> m_pendingFmtDels;
-    std::vector<GLTextureD*> m_pendingFboAdds;
+    std::vector<GLTextureR*> m_pendingFboAdds;
     std::vector<GLuint> m_pendingFboDels;
 
     static void ConfigureVertexFormat(GLVertexFormat* fmt)
@@ -583,7 +586,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
         }
     }
 
-    static void ConfigureFBO(GLTextureD* tex)
+    static void ConfigureFBO(GLTextureR* tex)
     {
         glGenFramebuffers(1, &tex->m_fbo);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex->m_fbo);
@@ -621,7 +624,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 self->m_pendingFmtDels.clear();
 
                 if (self->m_pendingFboAdds.size())
-                    for (GLTextureD* tex : self->m_pendingFboAdds)
+                    for (GLTextureR* tex : self->m_pendingFboAdds)
                         ConfigureFBO(tex);
                 self->m_pendingFboAdds.clear();
 
@@ -641,8 +644,11 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     break;
                 case Command::OpSetRenderTarget:
                 {
-                    const GLTextureD* tex = static_cast<const GLTextureD*>(cmd.target);
-                    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex->m_fbo);
+                    const GLTextureR* tex = static_cast<const GLTextureR*>(cmd.target);
+                    if (!tex)
+                        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+                    else
+                        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex->m_fbo);
                     break;
                 }
                 case Command::OpSetViewport:
@@ -671,8 +677,18 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     glDrawElementsInstanced(prim, cmd.count, GL_UNSIGNED_INT, (void*)cmd.start, cmd.instCount);
                     break;
                 case Command::OpPresent:
+                {
+                    const GLTextureR* tex = static_cast<const GLTextureR*>(cmd.source);
+                    if (tex)
+                    {
+                        glBindFramebuffer(GL_READ_FRAMEBUFFER, tex->m_fbo);
+                        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+                        glBlitFramebuffer(0, 0, tex->m_width, tex->m_height, 0, 0,
+                                          tex->m_width, tex->m_height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+                    }
                     self->m_parent->present();
                     break;
+                }
                 default: break;
                 }
             }
@@ -702,16 +718,14 @@ struct GLCommandQueue : IGraphicsCommandQueue
         cmds.emplace_back(Command::OpSetShaderDataBinding);
         cmds.back().binding = binding;
     }
-    void setRenderTarget(ITextureD* target)
+
+    void setRenderTarget(ITextureR* target)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::OpSetRenderTarget);
         cmds.back().target = target;
     }
-    void setRenderTarget(IWindow* target)
-    {
-        /* TODO: Do */
-    }
+
     void setViewport(const SWindowRect& rect)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
@@ -728,6 +742,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
         cmds.back().rgba[2] = rgba[2];
         cmds.back().rgba[3] = rgba[3];
     }
+
     void clearTarget(bool render=true, bool depth=true)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
@@ -748,6 +763,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
         else if (prim == PrimitiveTriStrips)
             cmds.back().prim = GL_TRIANGLE_STRIP;
     }
+
     void draw(size_t start, size_t count)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
@@ -755,6 +771,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
         cmds.back().start = start;
         cmds.back().count = count;
     }
+
     void drawIndexed(size_t start, size_t count)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
@@ -762,6 +779,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
         cmds.back().start = start;
         cmds.back().count = count;
     }
+
     void drawInstances(size_t start, size_t count, size_t instCount)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
@@ -770,6 +788,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
         cmds.back().count = count;
         cmds.back().instCount = instCount;
     }
+
     void drawInstancesIndexed(size_t start, size_t count, size_t instCount)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
@@ -779,10 +798,11 @@ struct GLCommandQueue : IGraphicsCommandQueue
         cmds.back().instCount = instCount;
     }
 
-    void present()
+    void resolveDisplay(ITextureR* source)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::OpPresent);
+        cmds.back().source = source;
     }
     
     void addVertexFormat(GLVertexFormat* fmt)
@@ -797,13 +817,13 @@ struct GLCommandQueue : IGraphicsCommandQueue
         m_pendingFmtDels.push_back(fmt->m_vao);
     }
 
-    void addFBO(GLTextureD* tex)
+    void addFBO(GLTextureR* tex)
     {
         std::unique_lock<std::mutex> lk(m_mt);
         m_pendingFboAdds.push_back(tex);
     }
 
-    void delFBO(GLTextureD* tex)
+    void delFBO(GLTextureR* tex)
     {
         std::unique_lock<std::mutex> lk(m_mt);
         m_pendingFboDels.push_back(tex->m_fbo);
@@ -863,18 +883,44 @@ GLDataFactory::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
 }
 
 GLTextureD::GLTextureD(GLCommandQueue* q, size_t width, size_t height, TextureFormat fmt)
-: m_q(q)
+: m_q(q), m_width(width), m_height(height)
 {
-    m_width = width;
-    m_height = height;
-    glGenTextures(2, m_texs);
+    glGenTextures(3, m_texs);
     glBindTexture(GL_TEXTURE_2D, m_texs[0]);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     glBindTexture(GL_TEXTURE_2D, m_texs[1]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
-    m_q->addFBO(this);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glBindTexture(GL_TEXTURE_2D, m_texs[2]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 }
-GLTextureD::~GLTextureD() {glDeleteTextures(2, m_texs); m_q->delFBO(this);}
+GLTextureD::~GLTextureD() {glDeleteTextures(3, m_texs);}
+
+void GLTextureD::load(const void* data, size_t sz)
+{
+    glBindTexture(GL_TEXTURE_2D, m_texs[m_q->m_fillBuf]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_width, m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+}
+void* GLTextureD::map(size_t sz)
+{
+    if (m_mappedBuf)
+        free(m_mappedBuf);
+    m_mappedBuf = malloc(sz);
+    m_mappedSize = sz;
+    return m_mappedBuf;
+}
+void GLTextureD::unmap()
+{
+    glBindTexture(GL_TEXTURE_2D, m_texs[m_q->m_fillBuf]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_width, m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, m_mappedBuf);
+    free(m_mappedBuf);
+    m_mappedBuf = nullptr;
+}
+
+void GLTextureD::bind(size_t idx) const
+{
+    glActiveTexture(GL_TEXTURE0 + idx);
+    glBindTexture(GL_TEXTURE_2D, m_texs[0]);
+}
 
 ITextureD*
 GLDataFactory::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
@@ -882,6 +928,27 @@ GLDataFactory::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
     GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
     GLTextureD* retval = new GLTextureD(q, width, height, fmt);
     static_cast<GLData*>(m_deferredData)->m_DTexs.emplace_back(retval);
+    return retval;
+}
+
+GLTextureR::GLTextureR(GLCommandQueue* q, size_t width, size_t height, size_t samples)
+: m_q(q), m_width(width), m_height(height), m_samples(samples)
+{
+    glGenTextures(2, m_texs);
+    glBindTexture(GL_TEXTURE_2D, m_texs[0]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glBindTexture(GL_TEXTURE_2D, m_texs[1]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+    m_q->addFBO(this);
+}
+GLTextureR::~GLTextureR() {glDeleteTextures(2, m_texs); m_q->delFBO(this);}
+
+ITextureR*
+GLDataFactory::newRenderTexture(size_t width, size_t height, size_t samples)
+{
+    GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
+    GLTextureR* retval = new GLTextureR(q, width, height, samples);
+    static_cast<GLData*>(m_deferredData)->m_RTexs.emplace_back(retval);
     return retval;
 }
 

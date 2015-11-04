@@ -285,14 +285,20 @@ struct TestApplicationCallback : IApplicationCallback
         devFinder.startScanning();
 
         IGraphicsCommandQueue* gfxQ = mainWindow->getCommandQueue();
+        IGraphicsDataFactory* gfxF = mainWindow->getDataFactory();
+
+        ITextureR* renderTarget = gfxF->newRenderTexture(640, 480, 1);
+        gfxF->commit();
+
         std::thread loaderThread(LoaderProc, this);
 
         size_t frameIdx = 0;
         size_t lastCheck = 0;
-        gfxQ->setViewport({{0, 0}, {640, 480}});
         while (running)
         {
             mainWindow->waitForRetrace();
+            gfxQ->setRenderTarget(renderTarget);
+            gfxQ->setViewport({{0, 0}, {640, 480}});
             float rgba[] = {sinf(frameIdx / 60.0), cosf(frameIdx / 60.0), 0.0, 1.0};
             gfxQ->setClearColor(rgba);
             gfxQ->clearTarget();
@@ -302,7 +308,7 @@ struct TestApplicationCallback : IApplicationCallback
                 gfxQ->setShaderDataBinding(m_binding);
                 gfxQ->draw(0, 4);
             }
-            gfxQ->present();
+            gfxQ->resolveDisplay(renderTarget);
             gfxQ->execute();
 
             //fprintf(stderr, "%zu\n", frameIdx);

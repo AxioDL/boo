@@ -343,9 +343,9 @@ public:
             m_loadCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribs);
             if (!m_loadCtx)
                 Log.report(LogVisor::FatalError, "unable to make load GLX context");
-            if (!glXMakeContextCurrent(m_xDisp, m_glxWindow, m_glxWindow, m_loadCtx))
-                Log.report(LogVisor::FatalError, "unable to make load GLX context current");
         }
+        if (!glXMakeContextCurrent(m_xDisp, m_glxWindow, m_glxWindow, m_loadCtx))
+            Log.report(LogVisor::FatalError, "unable to make load GLX context current");
         return getDataFactory();
     }
 
