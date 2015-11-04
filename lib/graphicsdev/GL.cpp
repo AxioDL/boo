@@ -154,8 +154,6 @@ class GLTextureR : public ITextureR
     struct GLCommandQueue* m_q;
     GLuint m_texs[2];
     GLuint m_fbo = 0;
-    void* m_mappedBuf = nullptr;
-    size_t m_mappedSize = 0;
     size_t m_width = 0;
     size_t m_height = 0;
     size_t m_samples = 0;
@@ -167,6 +165,16 @@ public:
     {
         glActiveTexture(GL_TEXTURE0 + idx);
         glBindTexture(GL_TEXTURE_2D, m_texs[0]);
+    }
+    
+    void resize(size_t width, size_t height)
+    {
+        m_width = width;
+        m_height = height;
+        glBindTexture(GL_TEXTURE_2D, m_texs[0]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glBindTexture(GL_TEXTURE_2D, m_texs[1]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
     }
 };
 
@@ -499,6 +507,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
             OpSetShaderDataBinding,
             OpSetRenderTarget,
             OpSetViewport,
+            OpResizeRenderTexture,
             OpSetClearColor,
             OpClearTarget,
             OpSetDrawPrimitive,
@@ -523,6 +532,12 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 size_t count;
                 size_t instCount;
             };
+            struct
+            {
+                ITextureR* tex;
+                size_t width;
+                size_t height;
+            } resize;
         };
         Command(Op op) : m_op(op) {}
     };
@@ -655,6 +670,11 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     glViewport(cmd.rect.location[0], cmd.rect.location[1],
                                cmd.rect.size[0], cmd.rect.size[1]);
                     break;
+                case Command::OpResizeRenderTexture:
+                {
+                    GLTextureR* tex = static_cast<GLTextureR*>(cmd.resize.tex);
+                    tex->resize(cmd.resize.width, cmd.resize.height);
+                }
                 case Command::OpSetClearColor:
                     glClearColor(cmd.rgba[0], cmd.rgba[1], cmd.rgba[2], cmd.rgba[3]);
                     break;
@@ -731,6 +751,15 @@ struct GLCommandQueue : IGraphicsCommandQueue
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::OpSetViewport);
         cmds.back().rect = rect;
+    }
+    
+    void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)
+    {
+        std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
+        cmds.emplace_back(Command::OpResizeRenderTexture);
+        cmds.back().resize.tex = tex;
+        cmds.back().resize.width = width;
+        cmds.back().resize.height = height;
     }
 
     void setClearColor(const float rgba[4])

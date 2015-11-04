@@ -115,8 +115,15 @@ public:
 
 struct CTestWindowCallback : IWindowCallback
 {
+    SWindowRect m_lastRect;
+    bool m_rectDirty = false;
+    
     void resized(const SWindowRect& rect)
-    { fprintf(stderr, "Resized %d, %d (%d, %d)\n", rect.size[0], rect.size[1], rect.location[0], rect.location[1]); }
+    {
+        m_lastRect = rect;
+        m_rectDirty = true;
+        fprintf(stderr, "Resized %d, %d (%d, %d)\n", rect.size[0], rect.size[1], rect.location[0], rect.location[1]);
+    }
 
     void mouseDown(const SWindowCoord& coord, EMouseButton button, EModifierKey mods)
     {
@@ -183,13 +190,25 @@ struct TestApplicationCallback : IApplicationCallback
     bool running = true;
 
     IShaderDataBinding* m_binding = nullptr;
+    ITextureR* m_renderTarget = nullptr;
+    
     std::mutex m_mt;
     std::condition_variable m_cv;
+    
+    std::mutex m_initmt;
+    std::condition_variable m_initcv;
 
     static void LoaderProc(TestApplicationCallback* self)
     {
+        std::unique_lock<std::mutex> lk(self->m_initmt);
+        
         GLDataFactory* factory =
         dynamic_cast<GLDataFactory*>(self->mainWindow->getLoadContextDataFactory());
+        
+        /* Create render target */
+        int x, y, w, h;
+        self->mainWindow->getWindowFrame(x, y, w, h);
+        self->m_renderTarget = factory->newRenderTexture(w, h, 1);
 
         /* Make Tri-strip VBO */
         struct Vert
@@ -263,6 +282,10 @@ struct TestApplicationCallback : IApplicationCallback
 
         /* Commit objects */
         IGraphicsData* data = factory->commit();
+        
+        /* Return control to client */
+        lk.unlock();
+        self->m_initcv.notify_one();
 
         /* Wait for exit */
         while (self->running)
@@ -281,34 +304,35 @@ struct TestApplicationCallback : IApplicationCallback
         mainWindow = app->newWindow(_S("YAY!"));
         mainWindow->setCallback(&windowCallback);
         mainWindow->showWindow();
+        windowCallback.m_lastRect = mainWindow->getWindowFrame();
         //mainWindow->setFullscreen(true);
         devFinder.startScanning();
 
         IGraphicsCommandQueue* gfxQ = mainWindow->getCommandQueue();
-        IGraphicsDataFactory* gfxF = mainWindow->getDataFactory();
 
-        ITextureR* renderTarget = gfxF->newRenderTexture(640, 480, 1);
-        gfxF->commit();
-
+        std::unique_lock<std::mutex> lk(m_initmt);
         std::thread loaderThread(LoaderProc, this);
+        m_initcv.wait(lk);
 
         size_t frameIdx = 0;
         size_t lastCheck = 0;
         while (running)
         {
             mainWindow->waitForRetrace();
-            gfxQ->setRenderTarget(renderTarget);
-            gfxQ->setViewport({{0, 0}, {640, 480}});
+            gfxQ->setRenderTarget(m_renderTarget);
+            gfxQ->setViewport(windowCallback.m_lastRect);
+            if (windowCallback.m_rectDirty)
+            {
+                gfxQ->resizeRenderTexture(m_renderTarget, windowCallback.m_lastRect.size[0], windowCallback.m_lastRect.size[1]);
+                windowCallback.m_rectDirty = false;
+            }
             float rgba[] = {sinf(frameIdx / 60.0), cosf(frameIdx / 60.0), 0.0, 1.0};
             gfxQ->setClearColor(rgba);
             gfxQ->clearTarget();
-            if (m_binding)
-            {
-                gfxQ->setDrawPrimitive(PrimitiveTriStrips);
-                gfxQ->setShaderDataBinding(m_binding);
-                gfxQ->draw(0, 4);
-            }
-            gfxQ->resolveDisplay(renderTarget);
+            gfxQ->setDrawPrimitive(PrimitiveTriStrips);
+            gfxQ->setShaderDataBinding(m_binding);
+            gfxQ->draw(0, 4);
+            gfxQ->resolveDisplay(m_renderTarget);
             gfxQ->execute();
 
             //fprintf(stderr, "%zu\n", frameIdx);

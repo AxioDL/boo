@@ -193,7 +193,7 @@ public:
     IGraphicsDataFactory* getDataFactory()
     {
         if (!m_dataFactory)
-            m_dataFactory = new GLES3DataFactory(this);
+            m_dataFactory = new GLDataFactory(this);
         return m_dataFactory;
     }
     
@@ -275,35 +275,43 @@ IGraphicsContext* _GraphicsContextCocoaNew(IGraphicsContext::EGraphicsAPI api,
     return self;
 }
 
+- (void)reshape
+{
+    boo::SWindowRect rect = {{int(self.frame.origin.x), int(self.frame.origin.y)},
+                             {int(self.frame.size.width), int(self.frame.size.height)}};
+    booContext->m_callback->resized(rect);
+    [super reshape];
+}
+
 - (BOOL)acceptsTouchEvents
 {
     return YES;
 }
 
-static inline boo::IWindowCallback::EModifierKey getMod(NSUInteger flags)
+static inline boo::EModifierKey getMod(NSUInteger flags)
 {
-    int ret = boo::IWindowCallback::MKEY_NONE;
+    int ret = boo::MKEY_NONE;
     if (flags & NSControlKeyMask)
-        ret |= boo::IWindowCallback::MKEY_CTRL;
+        ret |= boo::MKEY_CTRL;
     if (flags & NSAlternateKeyMask)
-        ret |= boo::IWindowCallback::MKEY_ALT;
+        ret |= boo::MKEY_ALT;
     if (flags & NSShiftKeyMask)
-        ret |= boo::IWindowCallback::MKEY_SHIFT;
+        ret |= boo::MKEY_SHIFT;
     if (flags & NSCommandKeyMask)
-        ret |= boo::IWindowCallback::MKEY_COMMAND;
-    return static_cast<boo::IWindowCallback::EModifierKey>(ret);
+        ret |= boo::MKEY_COMMAND;
+    return static_cast<boo::EModifierKey>(ret);
 }
 
-static inline boo::IWindowCallback::EMouseButton getButton(NSEvent* event)
+static inline boo::EMouseButton getButton(NSEvent* event)
 {
     NSInteger buttonNumber = event.buttonNumber;
     if (buttonNumber == 3)
-        return boo::IWindowCallback::BUTTON_MIDDLE;
+        return boo::BUTTON_MIDDLE;
     else if (buttonNumber == 4)
-        return boo::IWindowCallback::BUTTON_AUX1;
+        return boo::BUTTON_AUX1;
     else if (buttonNumber == 5)
-        return boo::IWindowCallback::BUTTON_AUX2;
-    return boo::IWindowCallback::BUTTON_NONE;
+        return boo::BUTTON_AUX2;
+    return boo::BUTTON_NONE;
 }
 
 - (void)mouseDown:(NSEvent*)theEvent
@@ -313,13 +321,13 @@ static inline boo::IWindowCallback::EMouseButton getButton(NSEvent* event)
     NSPoint liw = [self convertPoint:[theEvent locationInWindow] fromView:nil];
     float pixelFactor = [[self window] backingScaleFactor];
     NSRect frame = [self frame];
-    boo::IWindowCallback::SWindowCoord coord =
+    boo::SWindowCoord coord =
     {
         {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
         {(unsigned)liw.x, (unsigned)liw.y},
         {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
     };
-    booContext->m_callback->mouseDown(coord, boo::IWindowCallback::BUTTON_PRIMARY,
+    booContext->m_callback->mouseDown(coord, boo::BUTTON_PRIMARY,
                                       getMod([theEvent modifierFlags]));
 }
 
@@ -330,13 +338,13 @@ static inline boo::IWindowCallback::EMouseButton getButton(NSEvent* event)
     NSPoint liw = [self convertPoint:[theEvent locationInWindow] fromView:nil];
     float pixelFactor = [[self window] backingScaleFactor];
     NSRect frame = [self frame];
-    boo::IWindowCallback::SWindowCoord coord =
+    boo::SWindowCoord coord =
     {
         {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
         {(unsigned)liw.x, (unsigned)liw.y},
         {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
     };
-    booContext->m_callback->mouseUp(coord, boo::IWindowCallback::BUTTON_PRIMARY,
+    booContext->m_callback->mouseUp(coord, boo::BUTTON_PRIMARY,
                                     getMod([theEvent modifierFlags]));
 }
 
@@ -347,13 +355,13 @@ static inline boo::IWindowCallback::EMouseButton getButton(NSEvent* event)
     NSPoint liw = [self convertPoint:[theEvent locationInWindow] fromView:nil];
     float pixelFactor = [[self window] backingScaleFactor];
     NSRect frame = [self frame];
-    boo::IWindowCallback::SWindowCoord coord =
+    boo::SWindowCoord coord =
     {
         {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
         {(unsigned)liw.x, (unsigned)liw.y},
         {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
     };
-    booContext->m_callback->mouseDown(coord, boo::IWindowCallback::BUTTON_SECONDARY,
+    booContext->m_callback->mouseDown(coord, boo::BUTTON_SECONDARY,
                                       getMod([theEvent modifierFlags]));
 }
 
@@ -364,13 +372,13 @@ static inline boo::IWindowCallback::EMouseButton getButton(NSEvent* event)
     NSPoint liw = [self convertPoint:[theEvent locationInWindow] fromView:nil];
     float pixelFactor = [[self window] backingScaleFactor];
     NSRect frame = [self frame];
-    boo::IWindowCallback::SWindowCoord coord =
+    boo::SWindowCoord coord =
     {
         {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
         {(unsigned)liw.x, (unsigned)liw.y},
         {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
     };
-    booContext->m_callback->mouseUp(coord, boo::IWindowCallback::BUTTON_SECONDARY,
+    booContext->m_callback->mouseUp(coord, boo::BUTTON_SECONDARY,
                                     getMod([theEvent modifierFlags]));
 }
 
@@ -378,13 +386,13 @@ static inline boo::IWindowCallback::EMouseButton getButton(NSEvent* event)
 {
     if (!booContext->m_callback)
         return;
-    boo::IWindowCallback::EMouseButton button = getButton(theEvent);
+    boo::EMouseButton button = getButton(theEvent);
     if (!button)
         return;
     NSPoint liw = [self convertPoint:[theEvent locationInWindow] fromView:nil];
     float pixelFactor = [[self window] backingScaleFactor];
     NSRect frame = [self frame];
-    boo::IWindowCallback::SWindowCoord coord =
+    boo::SWindowCoord coord =
     {
         {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
         {(unsigned)liw.x, (unsigned)liw.y},
@@ -397,13 +405,13 @@ static inline boo::IWindowCallback::EMouseButton getButton(NSEvent* event)
 {
     if (!booContext->m_callback)
         return;
-    boo::IWindowCallback::EMouseButton button = getButton(theEvent);
+    boo::EMouseButton button = getButton(theEvent);
     if (!button)
         return;
     NSPoint liw = [self convertPoint:[theEvent locationInWindow] fromView:nil];
     float pixelFactor = [[self window] backingScaleFactor];
     NSRect frame = [self frame];
-    boo::IWindowCallback::SWindowCoord coord =
+    boo::SWindowCoord coord =
     {
         {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
         {(unsigned)liw.x, (unsigned)liw.y},
@@ -419,7 +427,7 @@ static inline boo::IWindowCallback::EMouseButton getButton(NSEvent* event)
     NSPoint liw = [self convertPoint:[theEvent locationInWindow] fromView:nil];
     float pixelFactor = [[self window] backingScaleFactor];
     NSRect frame = [self frame];
-    boo::IWindowCallback::SWindowCoord coord =
+    boo::SWindowCoord coord =
     {
         {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
         {(unsigned)liw.x, (unsigned)liw.y},
@@ -447,13 +455,13 @@ static inline boo::IWindowCallback::EMouseButton getButton(NSEvent* event)
     NSPoint liw = [self convertPoint:[theEvent locationInWindow] fromView:nil];
     float pixelFactor = [[self window] backingScaleFactor];
     NSRect frame = [self frame];
-    boo::IWindowCallback::SWindowCoord coord =
+    boo::SWindowCoord coord =
     {
         {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
         {(unsigned)liw.x, (unsigned)liw.y},
         {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
     };
-    boo::IWindowCallback::SScrollDelta scroll =
+    boo::SScrollDelta scroll =
     {
         {(float)[theEvent scrollingDeltaX], (float)[theEvent scrollingDeltaY]},
         (bool)[theEvent hasPreciseScrollingDeltas]
@@ -468,7 +476,7 @@ static inline boo::IWindowCallback::EMouseButton getButton(NSEvent* event)
     for (NSTouch* touch in [event touchesMatchingPhase:NSTouchPhaseBegan inView:nil])
     {
         NSPoint pos = touch.normalizedPosition;
-        boo::IWindowCallback::STouchCoord coord =
+        boo::STouchCoord coord =
         {
             {(float)pos.x, (float)pos.y}
         };
@@ -483,7 +491,7 @@ static inline boo::IWindowCallback::EMouseButton getButton(NSEvent* event)
     for (NSTouch* touch in [event touchesMatchingPhase:NSTouchPhaseEnded inView:nil])
     {
         NSPoint pos = touch.normalizedPosition;
-        boo::IWindowCallback::STouchCoord coord =
+        boo::STouchCoord coord =
         {
             {(float)pos.x, (float)pos.y}
         };
@@ -498,7 +506,7 @@ static inline boo::IWindowCallback::EMouseButton getButton(NSEvent* event)
     for (NSTouch* touch in [event touchesMatchingPhase:NSTouchPhaseMoved inView:nil])
     {
         NSPoint pos = touch.normalizedPosition;
-        boo::IWindowCallback::STouchCoord coord =
+        boo::STouchCoord coord =
         {
             {(float)pos.x, (float)pos.y}
         };
@@ -513,7 +521,7 @@ static inline boo::IWindowCallback::EMouseButton getButton(NSEvent* event)
     for (NSTouch* touch in [event touchesMatchingPhase:NSTouchPhaseCancelled inView:nil])
     {
         NSPoint pos = touch.normalizedPosition;
-        boo::IWindowCallback::STouchCoord coord =
+        boo::STouchCoord coord =
         {
             {(float)pos.x, (float)pos.y}
         };
@@ -572,59 +580,59 @@ enum
     kVK_DownArrow                 = 0x7D,
     kVK_UpArrow                   = 0x7E
 };
-static boo::IWindowCallback::ESpecialKey translateKeycode(short code)
+static boo::ESpecialKey translateKeycode(short code)
 {
     switch (code) {
         case kVK_F1:
-            return boo::IWindowCallback::KEY_F1;
+            return boo::KEY_F1;
         case kVK_F2:
-            return boo::IWindowCallback::KEY_F2;
+            return boo::KEY_F2;
         case kVK_F3:
-            return boo::IWindowCallback::KEY_F3;
+            return boo::KEY_F3;
         case kVK_F4:
-            return boo::IWindowCallback::KEY_F4;
+            return boo::KEY_F4;
         case kVK_F5:
-            return boo::IWindowCallback::KEY_F5;
+            return boo::KEY_F5;
         case kVK_F6:
-            return boo::IWindowCallback::KEY_F6;
+            return boo::KEY_F6;
         case kVK_F7:
-            return boo::IWindowCallback::KEY_F7;
+            return boo::KEY_F7;
         case kVK_F8:
-            return boo::IWindowCallback::KEY_F8;
+            return boo::KEY_F8;
         case kVK_F9:
-            return boo::IWindowCallback::KEY_F9;
+            return boo::KEY_F9;
         case kVK_F10:
-            return boo::IWindowCallback::KEY_F10;
+            return boo::KEY_F10;
         case kVK_F11:
-            return boo::IWindowCallback::KEY_F11;
+            return boo::KEY_F11;
         case kVK_F12:
-            return boo::IWindowCallback::KEY_F12;
+            return boo::KEY_F12;
         case kVK_Escape:
-            return boo::IWindowCallback::KEY_ESC;
+            return boo::KEY_ESC;
         case kVK_Return:
-            return boo::IWindowCallback::KEY_ENTER;
+            return boo::KEY_ENTER;
         case kVK_Delete:
-            return boo::IWindowCallback::KEY_BACKSPACE;
+            return boo::KEY_BACKSPACE;
         case kVK_ForwardDelete:
-            return boo::IWindowCallback::KEY_DELETE;
+            return boo::KEY_DELETE;
         case kVK_Home:
-            return boo::IWindowCallback::KEY_HOME;
+            return boo::KEY_HOME;
         case kVK_End:
-            return boo::IWindowCallback::KEY_END;
+            return boo::KEY_END;
         case kVK_PageUp:
-            return boo::IWindowCallback::KEY_PGUP;
+            return boo::KEY_PGUP;
         case kVK_PageDown:
-            return boo::IWindowCallback::KEY_PGDOWN;
+            return boo::KEY_PGDOWN;
         case kVK_LeftArrow:
-            return boo::IWindowCallback::KEY_LEFT;
+            return boo::KEY_LEFT;
         case kVK_RightArrow:
-            return boo::IWindowCallback::KEY_RIGHT;
+            return boo::KEY_RIGHT;
         case kVK_UpArrow:
-            return boo::IWindowCallback::KEY_UP;
+            return boo::KEY_UP;
         case kVK_DownArrow:
-            return boo::IWindowCallback::KEY_DOWN;
+            return boo::KEY_DOWN;
         default:
-            return boo::IWindowCallback::KEY_NONE;
+            return boo::KEY_NONE;
     }
 }
 
@@ -668,23 +676,23 @@ static boo::IWindowCallback::ESpecialKey translateKeycode(short code)
         
         NSUInteger downFlags = changedFlags & modFlags;
         if (downFlags & NSControlKeyMask)
-            booContext->m_callback->modKeyDown(boo::IWindowCallback::MKEY_CTRL, isRepeat);
+            booContext->m_callback->modKeyDown(boo::MKEY_CTRL, isRepeat);
         if (downFlags & NSAlternateKeyMask)
-            booContext->m_callback->modKeyDown(boo::IWindowCallback::MKEY_ALT, isRepeat);
+            booContext->m_callback->modKeyDown(boo::MKEY_ALT, isRepeat);
         if (downFlags & NSShiftKeyMask)
-            booContext->m_callback->modKeyDown(boo::IWindowCallback::MKEY_SHIFT, isRepeat);
+            booContext->m_callback->modKeyDown(boo::MKEY_SHIFT, isRepeat);
         if (downFlags & NSCommandKeyMask)
-            booContext->m_callback->modKeyDown(boo::IWindowCallback::MKEY_COMMAND, isRepeat);
+            booContext->m_callback->modKeyDown(boo::MKEY_COMMAND, isRepeat);
         
         NSUInteger upFlags = changedFlags & ~modFlags;
         if (upFlags & NSControlKeyMask)
-            booContext->m_callback->modKeyUp(boo::IWindowCallback::MKEY_CTRL);
+            booContext->m_callback->modKeyUp(boo::MKEY_CTRL);
         if (upFlags & NSAlternateKeyMask)
-            booContext->m_callback->modKeyUp(boo::IWindowCallback::MKEY_ALT);
+            booContext->m_callback->modKeyUp(boo::MKEY_ALT);
         if (upFlags & NSShiftKeyMask)
-            booContext->m_callback->modKeyUp(boo::IWindowCallback::MKEY_SHIFT);
+            booContext->m_callback->modKeyUp(boo::MKEY_SHIFT);
         if (upFlags & NSCommandKeyMask)
-            booContext->m_callback->modKeyUp(boo::IWindowCallback::MKEY_COMMAND);
+            booContext->m_callback->modKeyUp(boo::MKEY_COMMAND);
         
         lastModifiers = modFlags;
     }
@@ -781,7 +789,25 @@ public:
         hOut = wFrame.size.height;
     }
     
+    void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const
+    {
+        NSRect wFrame = m_nsWindow.frame;
+        xOut = wFrame.origin.x;
+        yOut = wFrame.origin.y;
+        wOut = wFrame.size.width;
+        hOut = wFrame.size.height;
+    }
+    
     void setWindowFrame(float x, float y, float w, float h)
+    {
+        dispatch_sync(dispatch_get_main_queue(),
+        ^{
+            NSRect wFrame = NSMakeRect(x, y, w, h);
+            [m_nsWindow setFrame:wFrame display:NO];
+        });
+    }
+    
+    void setWindowFrame(int x, int y, int w, int h)
     {
         dispatch_sync(dispatch_get_main_queue(),
         ^{

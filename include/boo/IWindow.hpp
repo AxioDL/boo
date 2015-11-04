@@ -145,7 +145,19 @@ public:
 
     virtual void setWindowFrameDefault()=0;
     virtual void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const=0;
+    virtual void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const=0;
+    virtual SWindowRect getWindowFrame() const
+    {
+        SWindowRect retval;
+        getWindowFrame(retval.location[0], retval.location[1], retval.size[0], retval.size[1]);
+        return retval;
+    }
     virtual void setWindowFrame(float x, float y, float w, float h)=0;
+    virtual void setWindowFrame(int x, int y, int w, int h)=0;
+    virtual void getWindowFrame(const SWindowRect& rect)
+    {
+        setWindowFrame(rect.location[0], rect.location[1], rect.size[0], rect.size[1]);
+    }
     virtual float getVirtualPixelFactor() const=0;
     
     virtual bool isFullscreen() const=0;
