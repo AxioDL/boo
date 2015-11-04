@@ -133,9 +133,19 @@ struct WindowWayland : IWindow
         
     }
     
+    void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const
+    {
+
+    }
+
     void setWindowFrame(float x, float y, float w, float h)
     {
         
+    }
+
+    void setWindowFrame(int x, int y, int w, int h)
+    {
+
     }
     
     float getVirtualPixelFactor() const
