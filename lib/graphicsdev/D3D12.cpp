@@ -38,6 +38,7 @@ struct D3D12Data : IGraphicsData
     std::vector<std::unique_ptr<class D3D12GraphicsBufferD>> m_DBufs;
     std::vector<std::unique_ptr<class D3D12TextureS>> m_STexs;
     std::vector<std::unique_ptr<class D3D12TextureD>> m_DTexs;
+    std::vector<std::unique_ptr<class D3D12TextureR>> m_RTexs;
     std::vector<std::unique_ptr<struct D3D12VertexFormat>> m_VFmts;
     ComPtr<ID3D12Heap> m_gpuHeap;
 };
@@ -94,7 +95,7 @@ class D3D12GraphicsBufferD : public IGraphicsBufferD
     : m_state(USE_TABLE[use]), m_q(q), m_stride(stride), m_count(count)
     {
         size_t sz = stride * count;
-        for (int i=0 ; i<3 ; ++i)
+        for (int i=0 ; i<2 ; ++i)
         {
             ThrowIfFailed(ctx->m_dev->CreateCommittedResource(
                 &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), 
@@ -105,8 +106,8 @@ class D3D12GraphicsBufferD : public IGraphicsBufferD
 public:
     size_t m_stride;
     size_t m_count;
-    ComPtr<ID3D12Resource> m_bufs[3];
-    ComPtr<ID3D12Resource> m_gpuBufs[3];
+    ComPtr<ID3D12Resource> m_bufs[2];
+    ComPtr<ID3D12Resource> m_gpuBufs[2];
     ~D3D12GraphicsBufferD() = default;
 
     void load(const void* data, size_t sz);
@@ -115,7 +116,7 @@ public:
 
     UINT64 placeForGPU(D3D12Context* ctx, ID3D12Heap* gpuHeap, UINT64 offset)
     {
-        for (int i=0 ; i<3 ; ++i)
+        for (int i=0 ; i<2 ; ++i)
         {
             D3D12_RESOURCE_DESC desc = m_bufs[i]->GetDesc();
             ThrowIfFailed(ctx->m_dev->CreatePlacedResource(gpuHeap, offset, &desc, m_state, 
@@ -185,39 +186,22 @@ class D3D12TextureD : public ITextureD
     D3D12TextureD(D3D12CommandQueue* q, D3D12Context* ctx, size_t width, size_t height, TextureFormat fmt)
     : m_q(q) 
     {
-        ThrowIfFailed(ctx->m_dev->CreateCommittedResource(
-            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), 
-            D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height), 
-            D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, __uuidof(ID3D12Resource), &m_texs[0]));
-        ThrowIfFailed(ctx->m_dev->CreateCommittedResource(
-            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), 
-            D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D24_UNORM_S8_UINT, width, height), 
-            D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, __uuidof(ID3D12Resource), &m_texs[1]));
+        for (int i=0 ; i<2 ; ++i)
+        {
+            ThrowIfFailed(ctx->m_dev->CreateCommittedResource(
+                &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), 
+                D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height), 
+                D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, __uuidof(ID3D12Resource), &m_texs[i]));
+        }
     }
 public:
     ComPtr<ID3D12Resource> m_texs[2];
     ComPtr<ID3D12Resource> m_gpuTexs[2];
-    ComPtr<ID3D12DescriptorHeap> m_rtvHeap;
-    ComPtr<ID3D12DescriptorHeap> m_dsvHeap;
     ~D3D12TextureD() = default;
 
-    void load(const void* data, size_t sz)
-    {
-        void* buf;
-        m_texs[0]->Map(0, nullptr, &buf);
-        memcpy(buf, data, sz);
-        m_texs[0]->Unmap(0, nullptr);
-    }
-    void* map(size_t sz)
-    {
-        void* buf;
-        m_texs[0]->Map(0, nullptr, &buf);
-        return buf;
-    }
-    void unmap()
-    {
-        m_texs[0]->Unmap(0, nullptr);
-    }
+    void load(const void* data, size_t sz);
+    void* map(size_t sz);
+    void unmap();
 
     UINT64 placeForGPU(D3D12Context* ctx, ID3D12Heap* gpuHeap, UINT64 offset)
     {
@@ -225,10 +209,39 @@ public:
         {
             D3D12_RESOURCE_DESC desc = m_texs[i]->GetDesc();
             ThrowIfFailed(ctx->m_dev->CreatePlacedResource(gpuHeap, offset, &desc, 
-                i ? D3D12_RESOURCE_STATE_DEPTH_WRITE : D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 
                 nullptr, __uuidof(ID3D12Resource), &m_gpuTexs[i]));
             offset = NextHeapOffset(offset, ctx->m_dev->GetResourceAllocationInfo(0, 1, &desc));
         }
+        return offset;
+    }
+};
+
+static const float BLACK_COLOR[] = {0.0,0.0,0.0,1.0};
+
+class D3D12TextureR : public ITextureR
+{
+    friend class D3D12DataFactory;
+    friend struct D3D12CommandQueue;
+    size_t m_width = 0;
+    size_t m_height = 0;
+    size_t m_samples = 0;
+    D3D12TextureR(D3D12Context* ctx, size_t width, size_t height, size_t samples)
+    : m_width(width), m_height(height), m_samples(samples) 
+    {
+        if (samples == 0) m_samples = 1;
+
+        CD3DX12_RESOURCE_DESC rtvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, m_width, m_height, 1, 0, m_samples, 
+            0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT);
+        ThrowIfFailed(ctx->m_dev->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, 
+            &rtvresdesc, D3D12_RESOURCE_STATE_RENDER_TARGET, &CD3DX12_CLEAR_VALUE(DXGI_FORMAT_R8G8B8A8_UNORM, BLACK_COLOR), 
+            __uuidof(ID3D12Resource), &m_gpuTexs[0]));
+
+        CD3DX12_RESOURCE_DESC dsvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D24_UNORM_S8_UINT, m_width, m_height, 1, 0, m_samples, 
+            0, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT);
+        ThrowIfFailed(ctx->m_dev->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, 
+            &dsvresdesc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &CD3DX12_CLEAR_VALUE(DXGI_FORMAT_D24_UNORM_S8_UINT, 1.0, 0), 
+            __uuidof(ID3D12Resource), &m_gpuTexs[1]));
 
         D3D12_DESCRIPTOR_HEAP_DESC rtvdesc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1};
         ThrowIfFailed(ctx->m_dev->CreateDescriptorHeap(&rtvdesc, __uuidof(ID3D12DescriptorHeap), &m_rtvHeap));
@@ -239,9 +252,12 @@ public:
         ThrowIfFailed(ctx->m_dev->CreateDescriptorHeap(&dsvdesc, __uuidof(ID3D12DescriptorHeap), &m_dsvHeap));
         D3D12_DEPTH_STENCIL_VIEW_DESC dsvvdesc = {DXGI_FORMAT_D24_UNORM_S8_UINT, D3D12_DSV_DIMENSION_TEXTURE2D};
         ctx->m_dev->CreateDepthStencilView(m_gpuTexs[1].Get(), &dsvvdesc, m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
-
-        return offset;
     }
+public:
+    ComPtr<ID3D12Resource> m_gpuTexs[2];
+    ComPtr<ID3D12DescriptorHeap> m_rtvHeap;
+    ComPtr<ID3D12DescriptorHeap> m_dsvHeap;
+    ~D3D12TextureR() = default;
 };
 
 ITextureS*
@@ -397,9 +413,9 @@ static UINT64 PlaceBufferForGPU(IGraphicsBuffer* buf, D3D12Context* ctx, ID3D12H
 
 static UINT64 PlaceTextureForGPU(ITexture* tex, D3D12Context* ctx, ID3D12Heap* gpuHeap, UINT64 offset)
 {
-    if (tex->dynamic())
+    if (tex->type() == ITexture::TextureDynamic)
         return static_cast<D3D12TextureD*>(tex)->placeForGPU(ctx, gpuHeap, offset);
-    else
+    else if (tex->type() == ITexture::TextureStatic)
         return static_cast<D3D12TextureS*>(tex)->placeForGPU(ctx, gpuHeap, offset);
 }
 
@@ -429,12 +445,12 @@ static ID3D12Resource* GetBufferGPUResource(const IGraphicsBuffer* buf, int idx,
 
 static ID3D12Resource* GetTextureGPUResource(const ITexture* tex, int idx)
 {
-    if (tex->dynamic())
+    if (tex->type() == ITexture::TextureDynamic)
     {
         const D3D12TextureD* ctex = static_cast<const D3D12TextureD*>(tex);
         return ctex->m_gpuTexs[0].Get();
     }
-    else
+    else if (tex->type() == ITexture::TextureStatic)
     {
         const D3D12TextureS* ctex = static_cast<const D3D12TextureS*>(tex);
         return ctex->m_gpuTex.Get();
@@ -456,7 +472,7 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
 {
     D3D12ShaderPipeline* m_pipeline;
     ComPtr<ID3D12Heap> m_gpuHeap;
-    ComPtr<ID3D12DescriptorHeap> m_descHeap[3];
+    ComPtr<ID3D12DescriptorHeap> m_descHeap[2];
     IGraphicsBuffer* m_vbuf;
     IGraphicsBuffer* m_ibuf;
     size_t m_ubufCount;
@@ -484,7 +500,7 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
 
     void commit(D3D12Context* ctx)
     {
-        /* Create triple-buffered descriptor heaps */
+        /* Create double-buffered descriptor heaps */
         D3D12_DESCRIPTOR_HEAP_DESC desc;
         desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
         desc.NumDescriptors = 2 + m_ubufCount + m_texCount;
@@ -492,7 +508,7 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
         desc.NodeMask = 0;
 
         UINT incSz = ctx->m_dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-        for (int b=0 ; b<3 ; ++b)
+        for (int b=0 ; b<2 ; ++b)
         {
             ThrowIfFailed(ctx->m_dev->CreateDescriptorHeap(&desc, _uuidof(ID3D12DescriptorHeap), &m_descHeap[b]));
             CD3DX12_CPU_DESCRIPTOR_HANDLE handle(m_descHeap[b]->GetCPUDescriptorHandleForHeapStart());
@@ -561,7 +577,7 @@ IGraphicsData* D3D12DataFactory::commit()
 
     /* Gather resource descriptions */
     std::vector<D3D12_RESOURCE_DESC> descs;
-    descs.reserve(retval->m_SBufs.size() + retval->m_DBufs.size() * 3 + 
+    descs.reserve(retval->m_SBufs.size() + retval->m_DBufs.size() * 2 + 
                   retval->m_STexs.size() + retval->m_DTexs.size() * 2);
 
     for (std::unique_ptr<D3D12GraphicsBufferS>& buf : retval->m_SBufs)
@@ -571,7 +587,6 @@ IGraphicsData* D3D12DataFactory::commit()
     {
         descs.push_back(buf->m_bufs[0]->GetDesc());
         descs.push_back(buf->m_bufs[1]->GetDesc());
-        descs.push_back(buf->m_bufs[2]->GetDesc());
     }
 
     for (std::unique_ptr<D3D12TextureS>& tex : retval->m_STexs)
@@ -581,7 +596,6 @@ IGraphicsData* D3D12DataFactory::commit()
     {
         descs.push_back(tex->m_texs[0]->GetDesc());
         descs.push_back(tex->m_texs[1]->GetDesc());
-        descs.push_back(tex->m_texs[2]->GetDesc());
     }
 
     /* Calculate resources allocation */
@@ -636,19 +650,29 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
     Platform platform() const {return IGraphicsDataFactory::PlatformD3D12;}
     const char* platformName() const {return "Direct 3D 12";}
     D3D12Context* m_ctx;
+    D3D12Context::Window* m_windowCtx;
     IGraphicsContext* m_parent;
     ComPtr<ID3D12GraphicsCommandList> m_cmdList;
 
     size_t m_fillBuf = 0;
-    size_t m_completeBuf = 0;
     size_t m_drawBuf = 0;
 
-    D3D12CommandQueue(D3D12Context* ctx, IGraphicsContext* parent)
-    : m_ctx(ctx), m_parent(parent)
+    void resetCommandList()
+    {
+        ThrowIfFailed(m_ctx->m_qalloc[m_fillBuf]->Reset());
+        ThrowIfFailed(m_cmdList->Reset(m_ctx->m_qalloc[m_fillBuf].Get(), nullptr));
+        m_cmdList->SetGraphicsRootSignature(m_ctx->m_rs.Get());
+    }
+
+    D3D12CommandQueue(D3D12Context* ctx, D3D12Context::Window* windowCtx, IGraphicsContext* parent)
+    : m_ctx(ctx), m_windowCtx(windowCtx), m_parent(parent)
     {
         ThrowIfFailed(ctx->m_dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, 
                                                          __uuidof(ID3D12CommandAllocator),
-                                                         &ctx->m_qalloc));
+                                                         &ctx->m_qalloc[0]));
+        ThrowIfFailed(ctx->m_dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, 
+                                                         __uuidof(ID3D12CommandAllocator),
+                                                         &ctx->m_qalloc[1]));
         D3D12_COMMAND_QUEUE_DESC desc = 
         {
             D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -658,7 +682,7 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         ThrowIfFailed(ctx->m_dev->CreateCommandQueue(&desc, __uuidof(ID3D12CommandQueue), &ctx->m_q));
         ThrowIfFailed(ctx->m_dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, 
                                               __uuidof(ID3D12Fence), &ctx->m_frameFence));
-        ThrowIfFailed(ctx->m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, ctx->m_qalloc.Get(), 
+        ThrowIfFailed(ctx->m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, ctx->m_qalloc[0].Get(), 
                                                     nullptr, __uuidof(ID3D12GraphicsCommandList), &m_cmdList));
         m_cmdList->SetGraphicsRootSignature(m_ctx->m_rs.Get());
     }
@@ -671,19 +695,13 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         m_cmdList->SetPipelineState(cbind->m_pipeline->m_state.Get());
     }
 
-    D3D12TextureD* m_boundTarget = nullptr;
-
-    void setRenderTarget(IWindow* window)
+    ID3D12Resource* m_boundTarget = nullptr;
+    void setRenderTarget(ITextureR* target)
     {
-
-    }
-
-    void setRenderTarget(ITextureD* target)
-    {
-        D3D12TextureD* ctarget = static_cast<D3D12TextureD*>(target);
+        D3D12TextureR* ctarget = static_cast<D3D12TextureR*>(target);
 
         if (m_boundTarget)
-            m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_boundTarget->m_gpuTexs[0].Get(), 
+            m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_boundTarget, 
                 D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
 
         m_cmdList->OMSetRenderTargets(1, &ctarget->m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), 
@@ -692,12 +710,13 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(ctarget->m_gpuTexs[0].Get(), 
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET));
 
-        m_boundTarget = ctarget;
+        m_boundTarget = ctarget->m_gpuTexs[0].Get();
     }
 
     void setViewport(const SWindowRect& rect)
     {
-
+        D3D12_VIEWPORT vp = {rect.location[0], rect.location[1], rect.size[0], rect.size[1], 0.0, 1.0};
+        m_cmdList->RSSetViewports(1, &vp);
     }
 
     float m_clearColor[4] = {0.0,0.0,0.0,1.0};
@@ -751,21 +770,90 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         m_cmdList->DrawIndexedInstanced(count, instCount, start, 0, 0);
     }
 
-    void present()
+    bool m_doPresent = false;
+    void resolveDisplay(ITextureR* source)
     {
-        m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+        D3D12TextureR* csource = static_cast<D3D12TextureR*>(source);
+
+        ID3D12Resource* src = csource->m_gpuTexs[0].Get();
+        ID3D12Resource* dest = m_windowCtx->m_fb[m_windowCtx->m_backBuf].Get();
+
+        if (csource->m_samples > 1)
+        {
+            D3D12_RESOURCE_BARRIER msaaSetup[] =
+            {
+                CD3DX12_RESOURCE_BARRIER::Transition(src, 
+                    D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_RESOLVE_SOURCE),
+                CD3DX12_RESOURCE_BARRIER::Transition(dest, 
+                    D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RESOLVE_DEST)
+            };
+            m_cmdList->ResourceBarrier(2, msaaSetup);
+
+            m_cmdList->ResolveSubresource(dest, 0, src, 0, DXGI_FORMAT_R8G8B8A8_UNORM);
+
+            D3D12_RESOURCE_BARRIER msaaTeardown[] =
+            {
+                CD3DX12_RESOURCE_BARRIER::Transition(src, 
+                    D3D12_RESOURCE_STATE_RESOLVE_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET),
+                CD3DX12_RESOURCE_BARRIER::Transition(dest, 
+                    D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_PRESENT)
+            };
+            m_cmdList->ResourceBarrier(2, msaaTeardown);
+        }
+        else
+        {
+            D3D12_RESOURCE_BARRIER copySetup[] =
+            {
+                CD3DX12_RESOURCE_BARRIER::Transition(src, 
+                D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE),
+                CD3DX12_RESOURCE_BARRIER::Transition(dest, 
+                    D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST)
+            };
+            m_cmdList->ResourceBarrier(2, copySetup);
+
+            m_cmdList->CopyResource(dest, src);
+
+            D3D12_RESOURCE_BARRIER copyTeardown[] =
+            {
+                CD3DX12_RESOURCE_BARRIER::Transition(src, 
+                    D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET),
+                CD3DX12_RESOURCE_BARRIER::Transition(dest, 
+                    D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT)
+            };
+            m_cmdList->ResourceBarrier(2, copyTeardown);
+        }
+        m_doPresent = true;
     }
 
+    UINT64 m_submittedFenceVal = 0;
     void execute()
     {
-        m_completeBuf = m_fillBuf;
-        for (size_t i=0 ; i<3 ; ++i)
+        /* Check on fence */
+        if (m_ctx->m_frameFence->GetCompletedValue() < m_submittedFenceVal)
         {
-            if (i == m_completeBuf || i == m_drawBuf)
-                continue;
-            m_fillBuf = i;
-            break;
+            resetCommandList();
+            return;
         }
+        
+        m_drawBuf = m_fillBuf;
+        ++m_fillBuf;
+        if (m_fillBuf == 2)
+            m_fillBuf = 0;
+
+        m_cmdList->Close();
+        ID3D12CommandList* cl[] = {m_cmdList.Get()};
+        m_ctx->m_q->ExecuteCommandLists(1, cl);
+
+        if (m_doPresent)
+        {
+            ThrowIfFailed(m_windowCtx->m_swapChain->Present(1, 0));
+            m_windowCtx->m_backBuf = m_windowCtx->m_swapChain->GetCurrentBackBufferIndex();
+        }
+
+        ++m_submittedFenceVal;
+        ThrowIfFailed(m_ctx->m_q->Signal(m_ctx->m_frameFence.Get(), m_submittedFenceVal));
+
+        resetCommandList();
     }
 };
 
@@ -799,12 +887,42 @@ D3D12DataFactory::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
     return retval;
 }
 
+void D3D12TextureD::load(const void* data, size_t sz)
+{
+    ID3D12Resource* res = m_texs[m_q->m_fillBuf].Get();
+    void* d;
+    res->Map(0, nullptr, &d);
+    memcpy(d, data, sz);
+    res->Unmap(0, nullptr);
+}
+void* D3D12TextureD::map(size_t sz)
+{
+    ID3D12Resource* res = m_texs[m_q->m_fillBuf].Get();
+    void* d;
+    res->Map(0, nullptr, &d);
+    return d;
+}
+void D3D12TextureD::unmap()
+{
+    ID3D12Resource* res = m_texs[m_q->m_fillBuf].Get();
+    res->Unmap(0, nullptr);
+}
+
 ITextureD*
 D3D12DataFactory::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
 {
     D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent->getCommandQueue());
-    D3D12TextureD* retval = new D3D12TextureD(q, width, height, fmt);
+    D3D12TextureD* retval = new D3D12TextureD(q, m_ctx, width, height, fmt);
     static_cast<D3D12Data*>(m_deferredData)->m_DTexs.emplace_back(retval);
+    return retval;
+}
+
+ITextureR*
+D3D12DataFactory::newRenderTexture(size_t width, size_t height, size_t samples)
+{
+    D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent->getCommandQueue());
+    D3D12TextureR* retval = new D3D12TextureR(m_ctx, width, height, samples);
+    static_cast<D3D12Data*>(m_deferredData)->m_RTexs.emplace_back(retval);
     return retval;
 }
 
@@ -812,14 +930,14 @@ IVertexFormat* D3D12DataFactory::newVertexFormat
 (size_t elementCount, const VertexElementDescriptor* elements)
 {
     D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent->getCommandQueue());
-    D3D12VertexFormat* retval = new struct D3D12VertexFormat(q, elementCount, elements);
+    D3D12VertexFormat* retval = new struct D3D12VertexFormat(elementCount, elements);
     static_cast<D3D12Data*>(m_deferredData)->m_VFmts.emplace_back(retval);
     return retval;
 }
 
-IGraphicsCommandQueue* _NewD3D12CommandQueue(D3D12Context* ctx, IGraphicsContext* parent)
+IGraphicsCommandQueue* _NewD3D12CommandQueue(D3D12Context* ctx, D3D12Context::Window* windowCtx, IGraphicsContext* parent)
 {
-    return new struct D3D12CommandQueue(ctx, parent);
+    return new struct D3D12CommandQueue(ctx, windowCtx, parent);
 }
 
 }

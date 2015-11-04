@@ -41,19 +41,31 @@ enum BufferUse
     BufferUseUniform
 };
 
+enum TextureType
+{
+    TextureStatic,
+    Texture
+};
+
 struct ITexture
 {
-    bool dynamic() const {return m_dynamic;}
+    enum Type
+    {
+        TextureStatic,
+        TextureDynamic,
+        TextureRender
+    };
+    Type type() const {return m_type;}
 protected:
-    bool m_dynamic;
-    ITexture(bool dynamic) : m_dynamic(dynamic) {}
+    Type m_type;
+    ITexture(Type type) : m_type(type) {}
 };
 
 /** Static resource buffer for textures */
 struct ITextureS : ITexture
 {
 protected:
-    ITextureS() : ITexture(false) {}
+    ITextureS() : ITexture(TextureStatic) {}
 };
 
 /** Dynamic resource buffer for textures */
@@ -63,7 +75,14 @@ struct ITextureD : ITexture
     virtual void* map(size_t sz)=0;
     virtual void unmap()=0;
 protected:
-    ITextureD() : ITexture(true) {}
+    ITextureD() : ITexture(TextureDynamic) {}
+};
+
+/** Resource buffer for render-target textures */
+struct ITextureR : ITexture
+{
+protected:
+    ITextureR() : ITexture(TextureRender) {}
 };
 
 /** Supported texture formats */
@@ -157,6 +176,8 @@ struct IGraphicsDataFactory
                      const void* data, size_t sz)=0;
     virtual ITextureD*
     newDynamicTexture(size_t width, size_t height, TextureFormat fmt)=0;
+    virtual ITextureR*
+    newRenderTexture(size_t width, size_t height, size_t samples)=0;
 
     virtual IVertexFormat*
     newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)=0;

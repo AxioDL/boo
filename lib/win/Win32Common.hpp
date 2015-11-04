@@ -8,6 +8,9 @@
 #define WIN32_LEAN_AND_MEAN 1
 #endif
 #include <windows.h>
+#include <unordered_map>
+
+namespace boo {class IWindow;}
 
 #if _WIN32_WINNT_WIN10
 #include <dxgi1_4.h>
@@ -17,12 +20,20 @@
 struct D3D12Context
 {
     ComPtr<ID3D12Device> m_dev;
-    ComPtr<ID3D12CommandAllocator> m_qalloc;
+    ComPtr<ID3D12CommandAllocator> m_qalloc[2];
     ComPtr<ID3D12CommandQueue> m_q;
     ComPtr<ID3D12CommandAllocator> m_loadqalloc;
     ComPtr<ID3D12CommandQueue> m_loadq;
     ComPtr<ID3D12Fence> m_frameFence;
     ComPtr<ID3D12RootSignature> m_rs;
+    struct Window
+    {
+        ComPtr<IDXGISwapChain3> m_swapChain;
+        ComPtr<ID3D12Resource> m_fb[2]; /* Double-buffered */
+        UINT m_backBuf = 0;
+        size_t width, height;
+    };
+    std::unordered_map<boo::IWindow*, Window> m_windows;
 };
 
 #elif _WIN32_WINNT_WIN7
@@ -36,6 +47,12 @@ struct D3D11Context
 {
     ComPtr<ID3D11Device1> m_dev;
     ComPtr<ID3D11DeviceContext1> m_devCtx;
+    struct Window
+    {
+        IDXGISwapChain1* m_swapChain;
+        size_t width, height;
+    };
+    std::unordered_map<boo::IWindow*, Window> m_windows;
 };
 
 #include "boo/System.hpp"

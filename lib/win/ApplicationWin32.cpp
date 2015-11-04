@@ -4,10 +4,8 @@
 #include <Usbiodef.h>
 
 #if _DEBUG
-#define DXGI_FACTORY2_FLAGS DXGI_CREATE_FACTORY_DEBUG
 #define D3D11_CREATE_DEVICE_FLAGS D3D11_CREATE_DEVICE_DEBUG
 #else
-#define DXGI_FACTORY2_FLAGS 0
 #define D3D11_CREATE_DEVICE_FLAGS 0
 #endif
 
@@ -65,18 +63,26 @@ public:
         if (!MyCreateDXGIFactory2)
             Log.report(LogVisor::FatalError, "unable to find CreateDXGIFactory2 in DXGI.dll\n"
                                              "Windows 7 users should install \"Platform Update for Windows 7\" from Microsoft");
-        if (FAILED(MyCreateDXGIFactory2(DXGI_FACTORY2_FLAGS, __uuidof(IDXGIFactory2), &m_d3dCtx.m_dxFactory)))
-            Log.report(LogVisor::FatalError, "unable to create DXGI factory");
 
 #if WINVER >= _WIN32_WINNT_WIN10
         HMODULE d3d12lib = LoadLibraryW(L"D3D12.dll");
         if (d3d12lib)
         {
+            /* Create device */
             PFN_D3D12_CREATE_DEVICE MyD3D12CreateDevice = (PFN_D3D12_CREATE_DEVICE)GetProcAddress(d3d12lib, "D3D12CreateDevice");
             if (!MyD3D12CreateDevice)
                 Log.report(LogVisor::FatalError, "unable to find D3D12CreateDevice in D3D12.dll");
+
+            /* Create device */
             if (FAILED(MyD3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_12_0, __uuidof(ID3D12Device), &m_d3dCtx.m_ctx12.m_dev)))
                 Log.report(LogVisor::FatalError, "unable to create D3D12 device");
+
+            /* Obtain DXGI Factory */
+            ComPtr<IDXGIDevice2> device;
+            ComPtr<IDXGIAdapter> adapter;
+            m_d3dCtx.m_ctx12.m_dev.As<IDXGIDevice2>(&device);
+            device->GetParent(__uuidof(IDXGIAdapter), &adapter);
+            adapter->GetParent(__uuidof(IDXGIFactory2), &m_d3dCtx.m_dxFactory);
             
             return;
         }
@@ -98,6 +104,13 @@ public:
                 Log.report(LogVisor::FatalError, "unable to create D3D11.1 device");
             tempDev.As<ID3D11Device1>(&m_d3dCtx.m_ctx11.m_dev);
             tempCtx.As<ID3D11DeviceContext1>(&m_d3dCtx.m_ctx11.m_devCtx);
+
+            /* Obtain DXGI Factory */
+            ComPtr<IDXGIDevice2> device;
+            ComPtr<IDXGIAdapter> adapter;
+            m_d3dCtx.m_ctx11.m_dev.As<IDXGIDevice2>(&device);
+            device->GetParent(__uuidof(IDXGIAdapter), &adapter);
+            adapter->GetParent(__uuidof(IDXGIFactory2), &m_d3dCtx.m_dxFactory);
 
             return;
         }

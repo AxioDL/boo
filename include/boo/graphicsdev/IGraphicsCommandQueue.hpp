@@ -21,8 +21,7 @@ struct IGraphicsCommandQueue
     virtual const char* platformName() const=0;
 
     virtual void setShaderDataBinding(IShaderDataBinding* binding)=0;
-    virtual void setRenderTarget(IWindow* window)=0;
-    virtual void setRenderTarget(ITextureD* target)=0;
+    virtual void setRenderTarget(ITextureR* target)=0;
     virtual void setViewport(const SWindowRect& rect)=0;
 
     virtual void setClearColor(const float rgba[4])=0;
@@ -34,7 +33,7 @@ struct IGraphicsCommandQueue
     virtual void drawInstances(size_t start, size_t count, size_t instCount)=0;
     virtual void drawInstancesIndexed(size_t start, size_t count, size_t instCount)=0;
 
-    virtual void present()=0;
+    virtual void resolveDisplay(ITextureR* source)=0;
     virtual void execute()=0;
 };
 

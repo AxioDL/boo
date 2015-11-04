@@ -11,8 +11,8 @@ namespace boo
 {
 static LogVisor::LogModule Log("WindowWin32");
 class WindowWin32;
-IGraphicsCommandQueue* _NewD3D12CommandQueue(D3D12Context* ctx, IGraphicsContext* parent);
-IGraphicsCommandQueue* _NewD3D11CommandQueue(D3D11Context* ctx, IGraphicsContext* parent);
+IGraphicsCommandQueue* _NewD3D12CommandQueue(D3D12Context* ctx, D3D12Context::Window* windowCtx, IGraphicsContext* parent);
+IGraphicsCommandQueue* _NewD3D11CommandQueue(D3D11Context* ctx, D3D11Context::Window* windowCtx, IGraphicsContext* parent);
 
 struct GraphicsContextWin32 : IGraphicsContext
 {
@@ -47,9 +47,14 @@ public:
         scDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
 #if _WIN32_WINNT_WIN10
-        IUnknown* dev = d3dCtx.m_ctx12.m_dev ? 
-            static_cast<IUnknown*>(d3dCtx.m_ctx12.m_dev.Get()) : 
-            static_cast<IUnknown*>(d3dCtx.m_ctx11.m_dev.Get());
+        IUnknown* dev;
+        if (d3dCtx.m_ctx12.m_dev)
+        {
+            scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+            dev = static_cast<IUnknown*>(d3dCtx.m_ctx12.m_dev.Get());
+        }
+        else
+            dev = static_cast<IUnknown*>(d3dCtx.m_ctx11.m_dev.Get());
 #else
         IUnknown* dev = static_cast<IUnknown*>(d3dCtx.m_ctx11.m_dev.Get());
 #endif
@@ -63,20 +68,45 @@ public:
 #if _WIN32_WINNT_WIN10
         if (d3dCtx.m_ctx12.m_dev)
         {
+            auto insIt = d3dCtx.m_ctx12.m_windows.emplace(std::make_pair(parentWindow, D3D12Context::Window()));
+            D3D12Context::Window& w = insIt.first->second;
+            m_swapChain.As<IDXGISwapChain3>(&w.m_swapChain);
+            m_swapChain->GetBuffer(0, __uuidof(ID3D12Resource), &w.m_fb[0]);
+            m_swapChain->GetBuffer(1, __uuidof(ID3D12Resource), &w.m_fb[1]);
+            w.m_backBuf = w.m_swapChain->GetCurrentBackBufferIndex();
+            D3D12_RESOURCE_DESC resDesc = w.m_fb[0]->GetDesc();
+            w.width = resDesc.Width;
+            w.height = resDesc.Height;
             m_dataFactory = new D3D12DataFactory(this, &d3dCtx.m_ctx12);
-            m_commandQueue = _NewD3D12CommandQueue(&d3dCtx.m_ctx12, this);
+            m_commandQueue = _NewD3D12CommandQueue(&d3dCtx.m_ctx12, &w, this);
         }
         else
 #endif
         {
+            auto insIt = d3dCtx.m_ctx11.m_windows.emplace(std::make_pair(parentWindow, D3D11Context::Window()));
+            D3D11Context::Window& w = insIt.first->second;
+            ComPtr<ID3D11Texture2D> fbRes;
+            m_swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), &fbRes);
+            D3D11_TEXTURE2D_DESC resDesc;
+            fbRes->GetDesc(&resDesc);
+            w.width = resDesc.Width;
+            w.height = resDesc.Height;
             m_dataFactory = new D3D11DataFactory(this, &d3dCtx.m_ctx11);
-            m_commandQueue = _NewD3D11CommandQueue(&d3dCtx.m_ctx11, this);
+            m_commandQueue = _NewD3D11CommandQueue(&d3dCtx.m_ctx11, &insIt.first->second, this);
         }
     }
 
     ~GraphicsContextWin32()
     {
-
+#if _WIN32_WINNT_WIN10
+        if (m_d3dCtx.m_ctx12.m_dev)
+        {
+            m_d3dCtx.m_ctx12.m_windows.erase(m_parentWindow);
+        }
+        else
+#endif
+        {
+        }
     }
 
     void _setCallback(IWindowCallback* cb)
