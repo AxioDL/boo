@@ -63,10 +63,10 @@ public:
                 Log.report(LogVisor::FatalError, "unable to create swap chain");
 
             m_swapChain.As<IDXGISwapChain3>(&w.m_swapChain);
-            m_swapChain->GetBuffer(0, __uuidof(ID3D12Resource), &w.m_fb[0]);
-            m_swapChain->GetBuffer(1, __uuidof(ID3D12Resource), &w.m_fb[1]);
+            ComPtr<ID3D12Resource> fb;
+            m_swapChain->GetBuffer(0, __uuidof(ID3D12Resource), &fb);
             w.m_backBuf = w.m_swapChain->GetCurrentBackBufferIndex();
-            D3D12_RESOURCE_DESC resDesc = w.m_fb[0]->GetDesc();
+            D3D12_RESOURCE_DESC resDesc = fb->GetDesc();
             w.width = resDesc.Width;
             w.height = resDesc.Height;
         }
@@ -281,7 +281,7 @@ public:
     void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const
     {
         RECT rct;
-        GetWindowRect(m_hwnd, &rct);
+        GetClientRect(m_hwnd, &rct);
         xOut = rct.left;
         yOut = rct.top;
         wOut = rct.right;
@@ -291,7 +291,7 @@ public:
     void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const
     {
         RECT rct;
-        GetWindowRect(m_hwnd, &rct);
+        GetClientRect(m_hwnd, &rct);
         xOut = rct.left;
         yOut = rct.top;
         wOut = rct.right;
@@ -374,17 +374,13 @@ public:
         {
         case WM_SIZE:
         {
+            SWindowRect rect;
+            getWindowFrame(rect.location[0], rect.location[1], rect.size[0], rect.size[1]);
+            if (!rect.size[0] || !rect.size[1])
+                return;
+            m_gfxCtx->m_d3dCtx.resize(this, rect.size[0], rect.size[1]);
             if (m_callback)
-            {
-                SWindowRect rect;
-                int x, y, w, h;
-                getWindowFrame(x, y, w, h);
-                rect.location[0] = x;
-                rect.location[1] = y;
-                rect.size[0] = LOWORD(e.lParam);
-                rect.size[1] = HIWORD(e.lParam);
                 m_callback->resized(rect);
-            }
             return;
         }
         case WM_KEYDOWN:
