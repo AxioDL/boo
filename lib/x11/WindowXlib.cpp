@@ -367,7 +367,7 @@ public:
 
 };
 
-struct WindowXlib : IWindow
+class WindowXlib : public IWindow
 {
     Display* m_xDisp;
     IWindowCallback* m_callback;
@@ -389,7 +389,8 @@ struct WindowXlib : IWindow
     /* Cached window rectangle (to avoid repeated X queries) */
     int m_wx, m_wy, m_ww, m_wh;
     float m_pixelFactor;
-    
+    bool m_inFs = false;
+
 public:
     
     WindowXlib(const std::string& title,
@@ -570,7 +571,7 @@ public:
     {
         return m_pixelFactor;
     }
-    
+
     bool isFullscreen() const
     {
         unsigned long nitems;
@@ -593,12 +594,16 @@ public:
             XFree(vals);
             return fullscreen;
         }
+
         return false;
     }
     
     void setFullscreen(bool fs)
     {
-        XEvent fsEvent;
+        if (fs == m_inFs)
+            return;
+
+        XEvent fsEvent = {0};
         fsEvent.xclient.type = ClientMessage;
         fsEvent.xclient.window = m_windowId;
         fsEvent.xclient.message_type = XInternAtom(m_xDisp, "_NET_WM_STATE", False);
@@ -608,6 +613,7 @@ public:
         fsEvent.xclient.data.l[2] = 0;
         XSendEvent(m_xDisp, DefaultRootWindow(m_xDisp), False,
                    StructureNotifyMask | SubstructureRedirectMask, (XEvent*)&fsEvent);
+        m_inFs = fs;
     }
 
     void waitForRetrace()
