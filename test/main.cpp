@@ -128,6 +128,7 @@ struct CTestWindowCallback : IWindowCallback
     bool m_fullscreenToggleRequested = false;
     SWindowRect m_lastRect;
     bool m_rectDirty = false;
+    bool m_windowInvalid = false;
     
     void resized(const SWindowRect& rect)
     {
@@ -147,6 +148,14 @@ struct CTestWindowCallback : IWindowCallback
     void mouseMove(const SWindowCoord& coord)
     {
         fprintf(stderr, "Mouse Move (%f,%f)\n", coord.norm[0], coord.norm[1]);
+    }
+    void mouseEnter(const SWindowCoord &coord)
+    {
+        fprintf(stderr, "Mouse entered (%f,%f)\n", coord.norm[0], coord.norm[1]);
+    }
+    void mouseLeave(const SWindowCoord &coord)
+    {
+        fprintf(stderr, "Mouse left (%f,%f)\n", coord.norm[0], coord.norm[1]);
     }
     void scroll(const SWindowCoord& coord, const SScrollDelta& scroll)
     {
@@ -190,6 +199,16 @@ struct CTestWindowCallback : IWindowCallback
     void modKeyUp(EModifierKey mod)
     {
 
+    }
+
+    void windowMoved(const SWindowRect& rect)
+    {
+        fprintf(stderr, "Moved %d, %d (%d, %d)\n", rect.size[0], rect.size[1], rect.location[0], rect.location[1]);
+    }
+
+    void destroyed()
+    {
+        m_windowInvalid = true;
     }
 
 };
@@ -367,6 +386,12 @@ struct TestApplicationCallback : IApplicationCallback
         size_t lastCheck = 0;
         while (running)
         {
+            if (windowCallback.m_windowInvalid)
+            {
+                running = false;
+                break;
+            }
+
             mainWindow->waitForRetrace();
 
             if (windowCallback.m_rectDirty)

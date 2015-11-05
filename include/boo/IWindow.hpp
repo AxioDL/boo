@@ -89,7 +89,7 @@ enum EModifierKey
 
 class IWindowCallback
 {
-public:    
+public:
     virtual void resized(const SWindowRect& rect)
     {(void)rect;}
     virtual void mouseDown(const SWindowCoord& coord, EMouseButton button, EModifierKey mods)
@@ -97,6 +97,10 @@ public:
     virtual void mouseUp(const SWindowCoord& coord, EMouseButton button, EModifierKey mods)
     {(void)coord;(void)button;(void)mods;}
     virtual void mouseMove(const SWindowCoord& coord)
+    {(void)coord;}
+    virtual void mouseEnter(const SWindowCoord& coord)
+    {(void)coord;}
+    virtual void mouseLeave(const SWindowCoord& coord)
     {(void)coord;}
     virtual void scroll(const SWindowCoord& coord, const SScrollDelta& scroll)
     {(void)coord;(void)scroll;}
@@ -119,6 +123,13 @@ public:
     virtual void modKeyDown(EModifierKey mod, bool isRepeat)
     {(void)mod;(void)isRepeat;}
     virtual void modKeyUp(EModifierKey mod) {(void)mod;}
+    virtual void focusLost() {}
+    virtual void focusGained() {}
+    virtual void windowMoved(const SWindowRect& rect)
+    { (void)rect; }
+
+    virtual void destroyed()
+    {}
 };
 
 enum ETouchType

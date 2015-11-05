@@ -451,7 +451,7 @@ public:
         XSetWindowAttributes swa;
         swa.colormap = m_colormapId;
         swa.border_pixmap = None;
-        swa.event_mask = KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask | ExposureMask | StructureNotifyMask;
+        swa.event_mask = FocusChangeMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask | ExposureMask | StructureNotifyMask | LeaveWindowMask | EnterWindowMask;
 
         m_windowId = XCreateWindow(display, screen->root, x, y, w, h, 10,
                                    CopyFromParent, CopyFromParent, selectedVisual,
@@ -471,16 +471,7 @@ public:
 
 
         /* Register netwm extension atom for window closing */
-#if 0
-        xcb_change_property(m_xcbConn, XCB_PROP_MODE_REPLACE, m_windowId, S_ATOMS->m_wmProtocols,
-                            XCB_ATOM_ATOM, 32, 1, &S_ATOMS->m_wmDeleteWindow);
-        const xcb_atom_t wm_protocols[1] = {
-            S_ATOMS->m_wmDeleteWindow,
-        };
-        xcb_change_property(m_xcbConn, XCB_PROP_MODE_REPLACE, m_windowId,
-                            S_ATOMS->m_wmProtocols, 4,
-                            32, 1, wm_protocols);
-#endif
+        XSetWMProtocols(m_xDisp, m_windowId, &S_ATOMS->m_wmDeleteWindow, 1);
 
         /* Set the title of the window */
         const unsigned char* c_title = (unsigned char*)title.c_str();
@@ -760,10 +751,21 @@ public:
         XEvent* event = (XEvent*)e;
         switch (event->type)
         {
+        case ClientMessage:
+        {
+            if (event->xclient.data.l[0] == S_ATOMS->m_wmDeleteWindow && m_callback)
+                m_callback->destroyed();
+            return;
+        }
         case Expose:
         {
-            m_wx = event->xexpose.x;
-            m_wy = event->xexpose.y;
+            Window nw;
+            XWindowAttributes wxa;
+            int x, y;
+            XTranslateCoordinates(m_xDisp, m_windowId, DefaultRootWindow(m_xDisp), event->xexpose.x, event->xexpose.y, &x, &y, &nw);
+            XGetWindowAttributes(m_xDisp, m_windowId, &wxa);
+            m_wx = x - wxa.x;
+            m_wy = y - wxa.y;
             m_ww = event->xexpose.width;
             m_wh = event->xexpose.height;
             if (m_callback)
@@ -776,19 +778,21 @@ public:
         }
         case ConfigureNotify:
         {
-            if (event->xconfigure.width && event->xconfigure.height)
-            {
-                m_wx = event->xconfigure.x;
-                m_wy = event->xconfigure.y;
-                m_ww = event->xconfigure.width;
-                m_wh = event->xconfigure.height;
+            Window nw;
+            XWindowAttributes wxa;
+            int x, y;
+            XTranslateCoordinates(m_xDisp, m_windowId, DefaultRootWindow(m_xDisp), event->xconfigure.x, event->xconfigure.y, &x, &y, &nw);
+            XGetWindowAttributes(m_xDisp, m_windowId, &wxa);
+            m_wx = x - wxa.x;
+            m_wy = y - wxa.y;
+            m_ww = event->xconfigure.width;
+            m_wh = event->xconfigure.height;
 
-                if (m_callback)
-                {
-                    SWindowRect rect =
-                    { {m_wx, m_wy}, {m_ww, m_wh} };
-                    m_callback->resized(rect);
-                }
+            if (m_callback)
+            {
+                SWindowRect rect =
+                { {m_wx, m_wy}, {m_ww, m_wh} };
+                m_callback->windowMoved(rect);
             }
             return;
         }
@@ -900,6 +904,18 @@ public:
             }
             return;
         }
+        case FocusIn:
+        {
+            if (m_callback)
+                m_callback->focusGained();
+            return;
+        }
+        case FocusOut:
+        {
+            if (m_callback)
+                m_callback->focusLost();
+            return;
+        }
         case MotionNotify:
         {
             if (m_callback)
@@ -912,6 +928,36 @@ public:
                     {event->xmotion.x / (float)m_ww, event->xmotion.y / (float)m_wh}
                 };
                 m_callback->mouseMove(coord);
+            }
+            return;
+        }
+        case EnterNotify:
+        {
+            if (m_callback)
+            {
+                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
+                SWindowCoord coord =
+                {
+                    {(unsigned)event->xcrossing.x, (unsigned)event->xcrossing.y},
+                    {(unsigned)(event->xcrossing.x / m_pixelFactor), (unsigned)(event->xmotion.y / m_pixelFactor)},
+                    {event->xcrossing.x / (float)m_ww, event->xcrossing.y / (float)m_wh}
+                };
+                m_callback->mouseEnter(coord);
+            }
+            return;
+        }
+        case LeaveNotify:
+        {
+            if (m_callback)
+            {
+                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
+                SWindowCoord coord =
+                {
+                    {(unsigned)event->xcrossing.x, (unsigned)event->xcrossing.y},
+                    {(unsigned)(event->xcrossing.x / m_pixelFactor), (unsigned)(event->xmotion.y / m_pixelFactor)},
+                    {event->xcrossing.x / (float)m_ww, event->xcrossing.y / (float)m_wh}
+                };
+                m_callback->mouseLeave(coord);
             }
             return;
         }

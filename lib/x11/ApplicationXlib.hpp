@@ -45,20 +45,12 @@ static Window GetWindowOfEvent(XEvent* event, bool& windowEvent)
         return event->xconfigure.window;
     }
     case KeyPress:
-    {
-        windowEvent = true;
-        return event->xkey.window;
-    }
     case KeyRelease:
     {
         windowEvent = true;
         return event->xkey.window;
     }
     case ButtonPress:
-    {
-        windowEvent = true;
-        return event->xbutton.window;
-    }
     case ButtonRelease:
     {
         windowEvent = true;
@@ -68,6 +60,18 @@ static Window GetWindowOfEvent(XEvent* event, bool& windowEvent)
     {
         windowEvent = true;
         return event->xmotion.window;
+    }
+    case EnterNotify:
+    case LeaveNotify:
+    {
+        windowEvent = true;
+        return event->xcrossing.window;
+    }
+    case FocusIn:
+    case FocusOut:
+    {
+        windowEvent = true;
+        return event->xfocus.window;
     }
     case GenericEvent:
     {
@@ -223,12 +227,12 @@ public:
             return 1;
 
         /* Spawn client thread */
-        int clientReturn = 0;
+        int clientReturn = INT_MIN;
         std::thread clientThread([&]()
         {clientReturn = m_callback.appMain(this);});
 
         /* Begin application event loop */
-        while (true)
+        while (clientReturn == INT_MIN)
         {
             fd_set fds;
             FD_ZERO(&fds);
