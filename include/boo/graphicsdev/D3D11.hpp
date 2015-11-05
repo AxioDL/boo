@@ -5,6 +5,8 @@
 #include <sdkddkver.h>
 #if _WIN32_WINNT_WIN7
 
+#if 0
+
 #include "IGraphicsDataFactory.hpp"
 
 namespace boo
@@ -50,7 +52,7 @@ public:
 };
 
 }
-
+#endif
 #endif // _WIN32_WINNT_WIN7
 #endif // _WIN32
 #endif // GDEV_D3D11_HPP

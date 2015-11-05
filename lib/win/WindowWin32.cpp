@@ -10,8 +10,8 @@
 namespace boo
 {
 static LogVisor::LogModule Log("WindowWin32");
-class WindowWin32;
-IGraphicsCommandQueue* _NewD3D12CommandQueue(D3D12Context* ctx, D3D12Context::Window* windowCtx, IGraphicsContext* parent);
+IGraphicsCommandQueue* _NewD3D12CommandQueue(D3D12Context* ctx, D3D12Context::Window* windowCtx, IGraphicsContext* parent,
+                                             ID3D12CommandQueue** cmdQueueOut);
 IGraphicsCommandQueue* _NewD3D11CommandQueue(D3D11Context* ctx, D3D11Context::Window* windowCtx, IGraphicsContext* parent);
 
 struct GraphicsContextWin32 : IGraphicsContext
@@ -19,7 +19,7 @@ struct GraphicsContextWin32 : IGraphicsContext
 
     EGraphicsAPI m_api;
     EPixelFormat m_pf;
-    WindowWin32* m_parentWindow;
+    IWindow* m_parentWindow;
     D3DAppContext& m_d3dCtx;
 
     ComPtr<IDXGISwapChain1> m_swapChain;
@@ -31,7 +31,7 @@ struct GraphicsContextWin32 : IGraphicsContext
 public:
     IWindowCallback* m_callback;
 
-    GraphicsContextWin32(EGraphicsAPI api, WindowWin32* parentWindow, D3DAppContext& d3dCtx)
+    GraphicsContextWin32(EGraphicsAPI api, IWindow* parentWindow, HWND hwnd, D3DAppContext& d3dCtx)
     : m_api(api),
       m_pf(PF_RGBA8),
       m_parentWindow(parentWindow),
@@ -47,29 +47,21 @@ public:
         scDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
 #if _WIN32_WINNT_WIN10
-        IUnknown* dev;
-        if (d3dCtx.m_ctx12.m_dev)
-        {
-            scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-            dev = static_cast<IUnknown*>(d3dCtx.m_ctx12.m_dev.Get());
-        }
-        else
-            dev = static_cast<IUnknown*>(d3dCtx.m_ctx11.m_dev.Get());
-#else
-        IUnknown* dev = static_cast<IUnknown*>(d3dCtx.m_ctx11.m_dev.Get());
-#endif
-        if (FAILED(d3dCtx.m_dxFactory->CreateSwapChainForHwnd(dev, 
-            parentWindow->m_hwnd, &scDesc, nullptr, nullptr, &m_swapChain)))
-            Log.report(LogVisor::FatalError, "unable to create swap chain");
-
-        if (FAILED(m_swapChain->GetContainingOutput(&m_output)))
-            Log.report(LogVisor::FatalError, "unable to get DXGI output");
-
-#if _WIN32_WINNT_WIN10
         if (d3dCtx.m_ctx12.m_dev)
         {
             auto insIt = d3dCtx.m_ctx12.m_windows.emplace(std::make_pair(parentWindow, D3D12Context::Window()));
             D3D12Context::Window& w = insIt.first->second;
+
+            ID3D12CommandQueue* cmdQueue;
+            m_dataFactory = new D3D12DataFactory(this, &d3dCtx.m_ctx12);
+            m_commandQueue = _NewD3D12CommandQueue(&d3dCtx.m_ctx12, &w, this, &cmdQueue);
+
+            scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+            HRESULT hr = d3dCtx.m_ctx12.m_dxFactory->CreateSwapChainForHwnd(cmdQueue, 
+                hwnd, &scDesc, nullptr, nullptr, &m_swapChain);
+            if (FAILED(hr))
+                Log.report(LogVisor::FatalError, "unable to create swap chain");
+
             m_swapChain.As<IDXGISwapChain3>(&w.m_swapChain);
             m_swapChain->GetBuffer(0, __uuidof(ID3D12Resource), &w.m_fb[0]);
             m_swapChain->GetBuffer(1, __uuidof(ID3D12Resource), &w.m_fb[1]);
@@ -77,12 +69,15 @@ public:
             D3D12_RESOURCE_DESC resDesc = w.m_fb[0]->GetDesc();
             w.width = resDesc.Width;
             w.height = resDesc.Height;
-            m_dataFactory = new D3D12DataFactory(this, &d3dCtx.m_ctx12);
-            m_commandQueue = _NewD3D12CommandQueue(&d3dCtx.m_ctx12, &w, this);
         }
         else
 #endif
         {
+#if 0
+            if (FAILED(d3dCtx.m_ctx11.m_dxFactory->CreateSwapChainForHwnd(d3dCtx.m_ctx11.m_dev.Get(), 
+                hwnd, &scDesc, nullptr, nullptr, &m_swapChain)))
+                Log.report(LogVisor::FatalError, "unable to create swap chain");
+            
             auto insIt = d3dCtx.m_ctx11.m_windows.emplace(std::make_pair(parentWindow, D3D11Context::Window()));
             D3D11Context::Window& w = insIt.first->second;
             ComPtr<ID3D11Texture2D> fbRes;
@@ -93,7 +88,11 @@ public:
             w.height = resDesc.Height;
             m_dataFactory = new D3D11DataFactory(this, &d3dCtx.m_ctx11);
             m_commandQueue = _NewD3D11CommandQueue(&d3dCtx.m_ctx11, &insIt.first->second, this);
+#endif
         }
+
+        if (FAILED(m_swapChain->GetContainingOutput(&m_output)))
+            Log.report(LogVisor::FatalError, "unable to get DXGI output");
     }
 
     ~GraphicsContextWin32()
@@ -141,18 +140,18 @@ public:
 
     IGraphicsCommandQueue* getCommandQueue()
     {
-
+        return m_commandQueue;
     }
 
     IGraphicsDataFactory* getDataFactory()
     {
-
+        return m_dataFactory;
     }
 
     /* Creates a new context on current thread!! Call from client loading thread */
     IGraphicsDataFactory* getLoadContextDataFactory()
     {
-
+        return m_dataFactory;
     }
 };
 
@@ -235,7 +234,7 @@ public:
         m_hwnd = CreateWindowW(L"BooWindow", title.c_str(), WS_OVERLAPPEDWINDOW,
                                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                                NULL, NULL, NULL, NULL);
-        m_gfxCtx.reset(new GraphicsContextWin32(IGraphicsContext::API_D3D11, this, d3dCtx));
+        m_gfxCtx.reset(new GraphicsContextWin32(IGraphicsContext::API_D3D11, this, m_hwnd, d3dCtx));
     }
     
     ~WindowWin32()

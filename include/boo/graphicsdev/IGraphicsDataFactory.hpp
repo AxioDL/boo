@@ -115,6 +115,9 @@ struct VertexElementDescriptor
     const IGraphicsBuffer* indexBuffer = nullptr;
     VertexSemantic semantic;
     int semanticIdx = 0;
+    VertexElementDescriptor() = default;
+    VertexElementDescriptor(const IGraphicsBuffer* v, const IGraphicsBuffer* i, VertexSemantic s, int idx=0)
+    : vertBuffer(v), indexBuffer(i), semantic(s), semanticIdx(idx) {}
 };
 
 /** Opaque token for referencing a complete graphics pipeline state necessary

@@ -7,6 +7,15 @@
 #include <condition_variable>
 #include <LogVisor/LogVisor.hpp>
 
+#if _WIN32_WINNT_WIN10
+#include <boo/graphicsdev/D3D12.hpp>
+#include <boo/graphicsdev/D3D11.hpp>
+#elif _WIN32_WINNT_WIN7
+#include <boo/graphicsdev/D3D11.hpp>
+#else
+#error unsupported windows version
+#endif
+
 namespace boo
 {
 
@@ -202,8 +211,7 @@ struct TestApplicationCallback : IApplicationCallback
     {
         std::unique_lock<std::mutex> lk(self->m_initmt);
         
-        GLDataFactory* factory =
-        dynamic_cast<GLDataFactory*>(self->mainWindow->getLoadContextDataFactory());
+        IGraphicsDataFactory* factory = self->mainWindow->getLoadContextDataFactory();
         
         /* Create render target */
         int x, y, w, h;
@@ -249,32 +257,70 @@ struct TestApplicationCallback : IApplicationCallback
         factory->newStaticTexture(256, 256, 1, TextureFormatRGBA8, tex, 256*256*4);
 
         /* Make shader pipeline */
-        static const char* VS =
-        "#version 330\n"
-        "layout(location=0) in vec3 in_pos;\n"
-        "layout(location=1) in vec2 in_uv;\n"
-        "out vec2 out_uv;\n"
-        "void main()\n"
-        "{\n"
-        "    gl_Position = vec4(in_pos, 1.0);\n"
-        "    out_uv = in_uv;\n"
-        "}\n";
+        IShaderPipeline* pipeline = nullptr;
+        if (factory->platform() == IGraphicsDataFactory::PlatformOGL)
+        {
+            GLDataFactory* glF = dynamic_cast<GLDataFactory*>(factory);
 
-        static const char* FS =
-        "#version 330\n"
-        "precision highp float;\n"
-        "uniform sampler2D smplr;\n"
-        "layout(location=0) out vec4 out_frag;\n"
-        "in vec2 out_uv;\n"
-        "void main()\n"
-        "{\n"
-        "    out_frag = texture(smplr, out_uv);\n"
-        "}\n";
+            static const char* VS =
+            "#version 330\n"
+            "layout(location=0) in vec3 in_pos;\n"
+            "layout(location=1) in vec2 in_uv;\n"
+            "out vec2 out_uv;\n"
+            "void main()\n"
+            "{\n"
+            "    gl_Position = vec4(in_pos, 1.0);\n"
+            "    out_uv = in_uv;\n"
+            "}\n";
 
-        static const char* TexNames[] = {"smplr"};
+            static const char* FS =
+            "#version 330\n"
+            "precision highp float;\n"
+            "uniform sampler2D smplr;\n"
+            "layout(location=0) out vec4 out_frag;\n"
+            "in vec2 out_uv;\n"
+            "void main()\n"
+            "{\n"
+            "    out_frag = texture(smplr, out_uv);\n"
+            "}\n";
 
-        IShaderPipeline* pipeline =
-        factory->newShaderPipeline(VS, FS, 1, TexNames, BlendFactorOne, BlendFactorZero, true, true, false);
+            static const char* TexNames[] = {"smplr"};
+
+            pipeline = glF->newShaderPipeline(VS, FS, 1, TexNames, BlendFactorOne, BlendFactorZero, true, true, false);
+        }
+#if _WIN32_WINNT_WIN10
+        else if (factory->platform() == IGraphicsDataFactory::PlatformD3D12)
+        {
+            D3D12DataFactory* d3dF = dynamic_cast<D3D12DataFactory*>(factory);
+
+            static const char* VS =
+                "struct VertData {float3 in_pos : POSITION; float2 in_uv : UV;};\n"
+                "struct VertToFrag {float4 out_pos : SV_Position; float2 out_uv : UV;};\n"
+                "VertToFrag main(in VertData v)\n"
+                "{\n"
+                "    VertToFrag retval;\n"
+                "    retval.out_pos = float4(v.in_pos, 1.0);\n"
+                "    retval.out_uv = v.in_uv;\n"
+                "    return retval;\n"
+                "}\n";
+
+            static const char* PS =
+                "SamplerState samp : register(s0);\n"
+                "Texture2D tex : register(t0);\n"
+                "struct VertToFrag {float4 out_pos : SV_Position; float2 out_uv : UV;};\n"
+                "float4 main(in VertToFrag d) : SV_Target0\n"
+                "{\n"
+                "    return tex.Sample(samp, d.out_uv);\n"
+                "}\n";
+
+            ComPtr<ID3DBlob> vsCompile;
+            ComPtr<ID3DBlob> psCompile;
+            pipeline = d3dF->newShaderPipeline(VS, PS, vsCompile, psCompile, vfmt, 
+                                               BlendFactorOne, BlendFactorZero, true, true, false);
+        }
+#endif
+
+
 
         /* Make shader data binding */
         self->m_binding =
@@ -319,17 +365,23 @@ struct TestApplicationCallback : IApplicationCallback
         while (running)
         {
             mainWindow->waitForRetrace();
-            gfxQ->setRenderTarget(m_renderTarget);
-            gfxQ->setViewport(windowCallback.m_lastRect);
+
             if (windowCallback.m_rectDirty)
             {
                 gfxQ->resizeRenderTexture(m_renderTarget, windowCallback.m_lastRect.size[0], windowCallback.m_lastRect.size[1]);
                 windowCallback.m_rectDirty = false;
             }
+
+            gfxQ->setRenderTarget(m_renderTarget);
+            SWindowRect r = windowCallback.m_lastRect;
+            r.location[0] = 0;
+            r.location[1] = 0;
+            gfxQ->setViewport(r);
             float rgba[] = {sinf(frameIdx / 60.0), cosf(frameIdx / 60.0), 0.0, 1.0};
             gfxQ->setClearColor(rgba);
             gfxQ->clearTarget();
             gfxQ->setDrawPrimitive(PrimitiveTriStrips);
+
             gfxQ->setShaderDataBinding(m_binding);
             gfxQ->draw(0, 4);
             gfxQ->resolveDisplay(m_renderTarget);
@@ -383,4 +435,31 @@ int main(int argc, const char** argv)
     printf("IM DYING!!\n");
     return ret;
 }
+
+#if _WIN32
+int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int)
+{
+    int argc = 0;
+    const boo::SystemChar** argv = (const wchar_t**)(CommandLineToArgvW(lpCmdLine, &argc));
+
+    LogVisor::CreateWin32Console();
+    LogVisor::RegisterConsoleLogger();
+    boo::TestApplicationCallback appCb;
+    int ret = ApplicationRun(boo::IApplication::PLAT_AUTO,
+        appCb, _S("rwk"), _S("RWK"), argc, argv);
+    printf("IM DYING!!\n");
+    return ret;
+
+}
+#else
+int main(int argc, const char** argv)
+{
+    LogVisor::RegisterConsoleLogger();
+    boo::TestApplicationCallback appCb;
+    int ret = ApplicationRun(boo::IApplication::PLAT_AUTO,
+        appCb, _S("rwk"), _S("RWK"), argc, argv);
+    printf("IM DYING!!\n");
+    return ret;
+}
+#endif
 
