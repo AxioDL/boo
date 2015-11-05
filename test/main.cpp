@@ -12,7 +12,7 @@
 #include <boo/graphicsdev/D3D11.hpp>
 #elif _WIN32_WINNT_WIN7
 #include <boo/graphicsdev/D3D11.hpp>
-#else
+#elif _WIN32
 #error unsupported windows version
 #endif
 
@@ -34,6 +34,7 @@ class DolphinSmashAdapterCallback : public IDolphinSmashAdapterCallback
     {
         printf("CONTROLLER %u UPDATE %d %d\n", idx, state.m_leftStick[0], state.m_leftStick[1]);
         printf("                     %d %d\n", state.m_rightStick[0], state.m_rightStick[1]);
+        printf("                     %d %d\n", state.m_analogTriggers[0], state.m_analogTriggers[1]);
     }
 };
 
@@ -420,20 +421,6 @@ struct TestApplicationCallback : IApplicationCallback
     }
 };
 
-}
-
-#ifdef _WIN32
-int wmain(int argc, const wchar_t** argv)
-#else
-int main(int argc, const char** argv)
-#endif
-{
-    LogVisor::RegisterConsoleLogger();
-    boo::TestApplicationCallback appCb;
-    int ret = ApplicationRun(boo::IApplication::PLAT_AUTO,
-                             appCb, _S("rwk"), _S("RWK"), argc, argv);
-    printf("IM DYING!!\n");
-    return ret;
 }
 
 #if _WIN32

@@ -30,6 +30,7 @@ static const int ContextAttribs[] =
 {
     GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
     GLX_CONTEXT_MINOR_VERSION_ARB, 3,
+    GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
     //GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_DEBUG_BIT_ARB,
     //GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
     None
@@ -366,7 +367,7 @@ public:
 
 };
 
-struct WindowXlib : IWindow
+class WindowXlib : public IWindow
 {
     Display* m_xDisp;
     IWindowCallback* m_callback;
@@ -388,7 +389,8 @@ struct WindowXlib : IWindow
     /* Cached window rectangle (to avoid repeated X queries) */
     int m_wx, m_wy, m_ww, m_wh;
     float m_pixelFactor;
-    
+    bool m_inFs = false;
+
 public:
     
     WindowXlib(const std::string& title,
@@ -569,14 +571,9 @@ public:
     {
         return m_pixelFactor;
     }
-    
-    bool m_inFs = false;
-    int m_origFrame[4];
-    uint32_t m_decoBits;
 
     bool isFullscreen() const
     {
-#if 0
         unsigned long nitems;
         Atom     actualType;
         int      actualFormat;
@@ -597,81 +594,26 @@ public:
             XFree(vals);
             return fullscreen;
         }
+
         return false;
-#endif
-        return m_inFs;
     }
     
-    struct FSHints
-    {
-        uint32_t flags;
-        uint32_t functions;
-        uint32_t decorations;
-        int32_t inputMode;
-        uint32_t status;
-    };
-
     void setFullscreen(bool fs)
     {
-#if 0
-        XEvent fsEvent;
-        fsEvent.type = ClientMessage;
+        if (fs == m_inFs)
+            return;
+
+        XEvent fsEvent = {0};
+        fsEvent.xclient.type = ClientMessage;
         fsEvent.xclient.window = m_windowId;
         fsEvent.xclient.message_type = XInternAtom(m_xDisp, "_NET_WM_STATE", False);
         fsEvent.xclient.format = 32;
         fsEvent.xclient.data.l[0] = fs;
         fsEvent.xclient.data.l[1] = XInternAtom(m_xDisp, "_NET_WM_STATE_FULLSCREEN", False);
         fsEvent.xclient.data.l[2] = 0;
-        XSendEvent(m_xDisp, m_windowId, False,
+        XSendEvent(m_xDisp, DefaultRootWindow(m_xDisp), False,
                    StructureNotifyMask | SubstructureRedirectMask, (XEvent*)&fsEvent);
-#endif
-        if (!m_inFs)
-        {
-            if (!fs)
-                return;
-
-            XSetWindowAttributes attrs = {};
-            attrs.override_redirect = True;
-            //XChangeWindowAttributes(m_xDisp, m_windowId, CWOverrideRedirect, &attrs);
-
-            FSHints hints = {};
-            hints.flags = 2;
-            hints.decorations = 1;
-            XChangeProperty(m_xDisp, m_windowId, S_ATOMS->m_motifWmHints, S_ATOMS->m_motifWmHints, 32,
-                            PropModeReplace, (unsigned char*)&hints, 5);
-
-            getWindowFrame(m_origFrame[0], m_origFrame[1], m_origFrame[2], m_origFrame[3]);
-            Screen* screen = DefaultScreenOfDisplay(m_xDisp);
-            if (m_origFrame[2] < 1 || m_origFrame[3] < 1)
-                genFrameDefault(screen, m_origFrame[0], m_origFrame[1], m_origFrame[2], m_origFrame[3]);
-            fprintf(stderr, "= %d %d %d %d\n", m_origFrame[0], m_origFrame[1], m_origFrame[2], m_origFrame[3]);
-            fprintf(stderr, "%d %d %d %d\n", 0, 0, screen->width, screen->height);
-            setWindowFrame(0, 0, screen->width, screen->height);
-
-            m_inFs = true;
-            fprintf(stderr, "FULLSCREEN\n");
-        }
-        else
-        {
-            if (fs)
-                return;
-
-            fprintf(stderr, "%d %d %d %d\n", m_origFrame[0], m_origFrame[1], m_origFrame[2], m_origFrame[3]);
-            setWindowFrame(m_origFrame[0], m_origFrame[1], m_origFrame[2], m_origFrame[3]);
-
-            XSetWindowAttributes attrs = {};
-            attrs.override_redirect = False;
-            //XChangeWindowAttributes(m_xDisp, m_windowId, CWOverrideRedirect, &attrs);
-
-            FSHints hints = {};
-            hints.flags = 2;
-            hints.decorations = 1;
-            XChangeProperty(m_xDisp, m_windowId, S_ATOMS->m_motifWmHints, S_ATOMS->m_motifWmHints, 32,
-                            PropModeReplace, (unsigned char*)&hints, 5);
-
-            m_inFs = false;
-            fprintf(stderr, "WINDOWED\n");
-        }
+        m_inFs = fs;
     }
 
     void waitForRetrace()
@@ -1072,6 +1014,13 @@ public:
         return m_gfxCtx.getLoadContextDataFactory();
     }
 
+
+    bool _isWindowMapped()
+    {
+        XWindowAttributes attr;
+        XGetWindowAttributes(m_xDisp, m_windowId, &attr);
+        return attr.map_state != IsUnmapped;
+    }
 };
 
 IWindow* _WindowXlibNew(const std::string& title,
