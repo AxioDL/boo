@@ -10,6 +10,8 @@
 #include <windows.h>
 #include <unordered_map>
 
+#include "boo/System.hpp"
+
 namespace boo {class IWindow;}
 
 #if _WIN32_WINNT_WIN10
@@ -19,12 +21,16 @@ namespace boo {class IWindow;}
 
 struct D3D12Context
 {
+    ComPtr<IDXGIFactory4> m_dxFactory;
     ComPtr<ID3D12Device> m_dev;
     ComPtr<ID3D12CommandAllocator> m_qalloc[2];
     ComPtr<ID3D12CommandQueue> m_q;
     ComPtr<ID3D12CommandAllocator> m_loadqalloc;
     ComPtr<ID3D12CommandQueue> m_loadq;
-    ComPtr<ID3D12Fence> m_frameFence;
+    ComPtr<ID3D12Fence> m_loadfence;
+    UINT64 m_loadfenceval = 0;
+    HANDLE m_loadfencehandle;
+    ComPtr<ID3D12GraphicsCommandList> m_loadlist;
     ComPtr<ID3D12RootSignature> m_rs;
     struct Window
     {
@@ -45,6 +51,7 @@ struct D3D12Context
 
 struct D3D11Context
 {
+    ComPtr<IDXGIFactory2> m_dxFactory;
     ComPtr<ID3D11Device1> m_dev;
     ComPtr<ID3D11DeviceContext1> m_devCtx;
     struct Window
@@ -55,15 +62,12 @@ struct D3D11Context
     std::unordered_map<boo::IWindow*, Window> m_windows;
 };
 
-#include "boo/System.hpp"
-
 struct D3DAppContext
 {
     D3D11Context m_ctx11;
 #if _WIN32_WINNT_WIN10
     D3D12Context m_ctx12;
 #endif
-    ComPtr<IDXGIFactory2> m_dxFactory;
 };
 
 struct HWNDEvent

@@ -4,8 +4,10 @@
 #include <Usbiodef.h>
 
 #if _DEBUG
+#define DXGI_CREATE_FLAGS DXGI_CREATE_FACTORY_DEBUG
 #define D3D11_CREATE_DEVICE_FLAGS D3D11_CREATE_DEVICE_DEBUG
 #else
+#define DXGI_CREATE_FLAGS 0
 #define D3D11_CREATE_DEVICE_FLAGS 0
 #endif
 
@@ -15,6 +17,9 @@
 #include "boo/IApplication.hpp"
 #include "boo/inputdev/DeviceFinder.hpp"
 #include <LogVisor/LogVisor.hpp>
+
+static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+PFN_D3D12_SERIALIZE_ROOT_SIGNATURE D3D12SerializeRootSignaturePROC = nullptr;
 
 namespace boo
 {
@@ -68,22 +73,59 @@ public:
         HMODULE d3d12lib = LoadLibraryW(L"D3D12.dll");
         if (d3d12lib)
         {
+#if _DEBUG
+            {
+                PFN_D3D12_GET_DEBUG_INTERFACE MyD3D12GetDebugInterface = 
+                (PFN_D3D12_GET_DEBUG_INTERFACE)GetProcAddress(d3d12lib, "D3D12GetDebugInterface");
+                ComPtr<ID3D12Debug> debugController;
+                if (SUCCEEDED(MyD3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
+                {
+                    debugController->EnableDebugLayer();
+                }
+            }
+#endif
+            
+            D3D12SerializeRootSignaturePROC = 
+            (PFN_D3D12_SERIALIZE_ROOT_SIGNATURE)GetProcAddress(d3d12lib, "D3D12SerializeRootSignature");
+            
             /* Create device */
             PFN_D3D12_CREATE_DEVICE MyD3D12CreateDevice = (PFN_D3D12_CREATE_DEVICE)GetProcAddress(d3d12lib, "D3D12CreateDevice");
             if (!MyD3D12CreateDevice)
                 Log.report(LogVisor::FatalError, "unable to find D3D12CreateDevice in D3D12.dll");
 
             /* Create device */
-            if (FAILED(MyD3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_12_0, __uuidof(ID3D12Device), &m_d3dCtx.m_ctx12.m_dev)))
+            HRESULT hr = MyD3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), &m_d3dCtx.m_ctx12.m_dev);
+            if (FAILED(hr))
                 Log.report(LogVisor::FatalError, "unable to create D3D12 device");
 
             /* Obtain DXGI Factory */
-            ComPtr<IDXGIDevice2> device;
-            ComPtr<IDXGIAdapter> adapter;
-            m_d3dCtx.m_ctx12.m_dev.As<IDXGIDevice2>(&device);
-            device->GetParent(__uuidof(IDXGIAdapter), &adapter);
-            adapter->GetParent(__uuidof(IDXGIFactory2), &m_d3dCtx.m_dxFactory);
-            
+            hr = MyCreateDXGIFactory2(DXGI_CREATE_FLAGS, __uuidof(IDXGIFactory4), &m_d3dCtx.m_ctx12.m_dxFactory);
+            if (FAILED(hr))
+                Log.report(LogVisor::FatalError, "unable to create DXGI factory");
+
+            /* Establish loader objects */
+            if (FAILED(m_d3dCtx.m_ctx12.m_dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, 
+                __uuidof(ID3D12CommandAllocator), &m_d3dCtx.m_ctx12.m_loadqalloc)))
+                Log.report(LogVisor::FatalError, "unable to create loader allocator");
+
+            D3D12_COMMAND_QUEUE_DESC desc = 
+            {
+                D3D12_COMMAND_LIST_TYPE_DIRECT,
+                D3D12_COMMAND_QUEUE_PRIORITY_NORMAL,
+                D3D12_COMMAND_QUEUE_FLAG_NONE
+            };
+            if (FAILED(m_d3dCtx.m_ctx12.m_dev->CreateCommandQueue(&desc, __uuidof(ID3D12CommandQueue), &m_d3dCtx.m_ctx12.m_loadq)))
+                Log.report(LogVisor::FatalError, "unable to create loader queue");
+
+            if (FAILED(m_d3dCtx.m_ctx12.m_dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), &m_d3dCtx.m_ctx12.m_loadfence)))
+                Log.report(LogVisor::FatalError, "unable to create loader fence");
+
+            m_d3dCtx.m_ctx12.m_loadfencehandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+
+            if (FAILED(m_d3dCtx.m_ctx12.m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_d3dCtx.m_ctx12.m_loadqalloc.Get(), 
+                nullptr, __uuidof(ID3D12GraphicsCommandList), &m_d3dCtx.m_ctx12.m_loadlist)))
+                Log.report(LogVisor::FatalError, "unable to create loader list");
+
             return;
         }
 #endif
@@ -110,7 +152,7 @@ public:
             ComPtr<IDXGIAdapter> adapter;
             m_d3dCtx.m_ctx11.m_dev.As<IDXGIDevice2>(&device);
             device->GetParent(__uuidof(IDXGIAdapter), &adapter);
-            adapter->GetParent(__uuidof(IDXGIFactory2), &m_d3dCtx.m_dxFactory);
+            adapter->GetParent(__uuidof(IDXGIFactory2), &m_d3dCtx.m_ctx11.m_dxFactory);
 
             return;
         }
@@ -154,8 +196,11 @@ public:
         }
     }
     
+    DWORD m_mainThreadId = 0;
     int run()
     {
+        m_mainThreadId = GetCurrentThreadId();
+
         /* Spawn client thread */
         int clientReturn = 0;
         std::thread clientThread([&]()
@@ -165,6 +210,16 @@ public:
         MSG msg = {0};
         while (GetMessage(&msg, NULL, 0, 0))
         {
+            if (msg.message == WM_USER)
+            {
+                /* New-window message (coalesced onto main thread) */
+                std::unique_lock<std::mutex> lk(m_nwmt);
+                const SystemString* title = reinterpret_cast<const SystemString*>(msg.wParam);
+                m_mwret = newWindow(*title);
+                lk.unlock();
+                m_nwcv.notify_one();
+                continue;
+            }
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
@@ -194,8 +249,20 @@ public:
         return m_args;
     }
     
+    std::mutex m_nwmt;
+    std::condition_variable m_nwcv;
+    IWindow* m_mwret = nullptr;
     IWindow* newWindow(const SystemString& title)
     {
+        if (GetCurrentThreadId() != m_mainThreadId)
+        {
+            std::unique_lock<std::mutex> lk(m_nwmt);
+            if (!PostThreadMessage(m_mainThreadId, WM_USER, WPARAM(&title), 0))
+                Log.report(LogVisor::FatalError, "PostThreadMessage error");
+            m_nwcv.wait(lk);
+            return m_mwret;
+        }
+        
         IWindow* window = _WindowWin32New(title, m_d3dCtx);
         HWND hwnd = HWND(window->getPlatformHandle());
         m_allWindows[hwnd] = window;
@@ -217,6 +284,24 @@ int ApplicationRun(IApplication::EPlatformType platform,
     if (platform != IApplication::PLAT_WIN32 &&
         platform != IApplication::PLAT_AUTO)
         return 1;
+
+    /* One class for *all* boo windows */
+    WNDCLASS wndClass =
+    {
+        0,
+        WindowProc,
+        0,
+        0,
+        GetModuleHandle(nullptr),
+        0,
+        0,
+        0,
+        0,
+        L"BooWindow"
+    };
+
+    RegisterClassW(&wndClass);
+
     APP = new ApplicationWin32(cb, uniqueName, friendlyName, pname, args, singleInstance);
     return APP->run();
 }
@@ -242,36 +327,3 @@ static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
     return static_cast<boo::ApplicationWin32*>(boo::APP)->winHwndHandler(hwnd, uMsg, wParam, lParam);
 }
 
-int wmain(int argc, wchar_t** argv);
-int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int)
-{
-#if _DEBUG
-    /* Debug console */
-    AllocConsole();
-    freopen("CONOUT$", "w", stdout);
-#endif
-    
-    /* One class for *all* boo windows */
-    WNDCLASS wndClass =
-    {
-        0,
-        WindowProc,
-        0,
-        0,
-        hInstance,
-        0,
-        0,
-        0,
-        0,
-        L"BooWindow"
-    };
-    
-    RegisterClassW(&wndClass);
-    
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(lpCmdLine, &argc);
-    
-    /* Call into the 'proper' entry point */
-    return wmain(argc, argv);
-    
-}

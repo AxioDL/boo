@@ -34,9 +34,9 @@ if(WIN32)
         include/boo/graphicsdev/D3D11.hpp
         include/boo/graphicsdev/D3D12.hpp)
 
-  list(APPEND _BOO_SYS_DEFINES -DUNICODE=1)
+  list(APPEND _BOO_SYS_DEFINES -DUNICODE -D_UNICODE)
 
-  list(APPEND _BOO_SYS_LIBS Winusb)
+  list(APPEND _BOO_SYS_LIBS Winusb opengl32 Setupapi D3DCompiler)
 elseif(APPLE)
   list(APPEND PLAT_SRCS 
        lib/mac/ApplicationCocoa.mm
