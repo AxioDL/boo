@@ -12,7 +12,7 @@
 #include <boo/graphicsdev/D3D11.hpp>
 #elif _WIN32_WINNT_WIN7
 #include <boo/graphicsdev/D3D11.hpp>
-#else
+#elif _WIN32
 #error unsupported windows version
 #endif
 
@@ -421,20 +421,6 @@ struct TestApplicationCallback : IApplicationCallback
     }
 };
 
-}
-
-#ifdef _WIN32
-int wmain(int argc, const wchar_t** argv)
-#else
-int main(int argc, const char** argv)
-#endif
-{
-    LogVisor::RegisterConsoleLogger();
-    boo::TestApplicationCallback appCb;
-    int ret = ApplicationRun(boo::IApplication::PLAT_AUTO,
-                             appCb, _S("rwk"), _S("RWK"), argc, argv);
-    printf("IM DYING!!\n");
-    return ret;
 }
 
 #if _WIN32
