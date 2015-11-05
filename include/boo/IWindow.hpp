@@ -86,7 +86,7 @@ enum EModifierKey
     MKEY_SHIFT   = 1<<3,
     MKEY_COMMAND = 1<<4
 };
-    
+
 class IWindowCallback
 {
 public:    
@@ -119,7 +119,6 @@ public:
     virtual void modKeyDown(EModifierKey mod, bool isRepeat)
     {(void)mod;(void)isRepeat;}
     virtual void modKeyUp(EModifierKey mod) {(void)mod;}
-    
 };
 
 enum ETouchType
@@ -127,6 +126,16 @@ enum ETouchType
     TOUCH_NONE     = 0,
     TOUCH_DISPLAY  = 1,
     TOUCH_TRACKPAD = 2
+};
+
+enum EWindowStyle
+{
+    STYLE_NONE     = 0,
+    STYLE_TITLEBAR = 1<<0,
+    STYLE_RESIZE   = 1<<1,
+    STYLE_CLOSE    = 1<<2,
+
+    STYLE_DEFAULT = STYLE_TITLEBAR | STYLE_RESIZE | STYLE_CLOSE
 };
 
 class IWindow
@@ -172,6 +181,8 @@ public:
 
     virtual IGraphicsCommandQueue* getCommandQueue()=0;
     virtual IGraphicsDataFactory* getDataFactory()=0;
+    virtual void setStyle(EWindowStyle style)=0;
+    virtual EWindowStyle getStyle() const=0;
 
     /* Creates a new context on current thread!! Call from client loading thread */
     virtual IGraphicsDataFactory* getLoadContextDataFactory()=0;

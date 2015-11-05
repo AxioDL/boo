@@ -115,7 +115,7 @@ struct WindowWayland : IWindow
     
     std::string getTitle()
     {
-        
+        return "";
     }
     
     void setTitle(const std::string& title)
@@ -150,12 +150,20 @@ struct WindowWayland : IWindow
     
     float getVirtualPixelFactor() const
     {
-        
+        return 0;
     }
     
+    void setStyle(EWindowStyle /*style*/)
+    {}
+
+    EWindowStyle getStyle() const
+    {
+        return STYLE_NONE;
+    }
+
     bool isFullscreen() const
     {
-        
+        return false;
     }
     
     void setFullscreen(bool fs)
@@ -169,12 +177,12 @@ struct WindowWayland : IWindow
 
     uintptr_t getPlatformHandle() const
     {
-
+        return 0;
     }
     
     ETouchType getTouchType() const
     {
-        
+        return TOUCH_NONE;
     }
     
 

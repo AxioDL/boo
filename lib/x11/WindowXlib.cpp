@@ -18,11 +18,27 @@
 #include <xkbcommon/xkbcommon.h>
 #include <X11/extensions/XInput2.h>
 #include <X11/Xatom.h>
+#include <LogVisor/LogVisor.hpp>
 
 #define REF_DPMM 3.7824 /* 96 DPI */
 #define FS_ATOM "_NET_WM_STATE_FULLSCREEN"
 
-#include <LogVisor/LogVisor.hpp>
+#define MWM_HINTS_FUNCTIONS   (1L << 0)
+#define MWM_HINTS_DECORATIONS (1L << 1)
+
+#define MWM_DECOR_BORDER      (1L<<1)
+#define MWM_DECOR_RESIZEH     (1L<<2)
+#define MWM_DECOR_TITLE       (1L<<3)
+#define MWM_DECOR_MENU        (1L<<4)
+#define MWM_DECOR_MINIMIZE    (1L<<5)
+#define MWM_DECOR_MAXIMIZE    (1L<<6)
+
+#define MWM_FUNC_RESIZE       (1L<<1)
+#define MWM_FUNC_MOVE         (1L<<2)
+#define MWM_FUNC_MINIMIZE     (1L<<3)
+#define MWM_FUNC_MAXIMIZE     (1L<<4)
+#define MWM_FUNC_CLOSE        (1L<<5)
+
 
 typedef GLXContext (*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
 glXCreateContextAttribsARBProc glXCreateContextAttribsARB = 0;
@@ -391,6 +407,9 @@ class WindowXlib : public IWindow
     float m_pixelFactor;
     bool m_inFs = false;
 
+    /* Cached window style */
+    EWindowStyle m_styleFlags;
+
 public:
     
     WindowXlib(const std::string& title,
@@ -473,6 +492,8 @@ public:
         /* Initialize context */
         XMapWindow(m_xDisp, m_windowId);
         XFlush(m_xDisp);
+
+        setStyle(STYLE_DEFAULT);
 
         m_gfxCtx.initializeContext();
     }
@@ -574,13 +595,14 @@ public:
 
     bool isFullscreen() const
     {
+        return m_inFs;
         unsigned long nitems;
         Atom     actualType;
         int      actualFormat;
         unsigned long     bytes;
         Atom* vals = nullptr;
         bool fullscreen = false;
-        if (XGetWindowProperty(m_xDisp, m_windowId, XInternAtom(m_xDisp, "_NET_WM_STATE", True), 0, ~0l, False,
+        if (XGetWindowProperty(m_xDisp, m_windowId, S_ATOMS->m_netwmState, 0, ~0l, False,
                                XA_ATOM, &actualType, &actualFormat, &nitems, &bytes, (unsigned char**)&vals) == Success)
         {
             for (int i=0 ; i<nitems ; ++i)
@@ -597,7 +619,46 @@ public:
 
         return false;
     }
-    
+
+    void setStyle(EWindowStyle style)
+    {
+        struct
+        {
+            unsigned long flags;
+            unsigned long functions;
+            unsigned long decorations;
+            long inputMode;
+            unsigned long status;
+        } wmHints = {0};
+
+        if (S_ATOMS->m_motifWmHints)
+        {
+            wmHints.flags = MWM_HINTS_DECORATIONS | MWM_HINTS_FUNCTIONS;
+            if (style & STYLE_TITLEBAR)
+            {
+                wmHints.decorations |= MWM_DECOR_BORDER | MWM_DECOR_TITLE | MWM_DECOR_MINIMIZE | MWM_DECOR_MENU;
+                wmHints.functions  |= MWM_FUNC_MOVE | MWM_FUNC_MINIMIZE;
+            }
+            if (style & STYLE_RESIZE)
+            {
+                wmHints.decorations |= MWM_DECOR_MAXIMIZE | MWM_DECOR_RESIZEH;
+                wmHints.functions  |= MWM_FUNC_RESIZE | MWM_FUNC_MAXIMIZE;
+            }
+
+            if (style & STYLE_CLOSE)
+                wmHints.functions |= MWM_FUNC_CLOSE;
+
+            XChangeProperty(m_xDisp, m_windowId, S_ATOMS->m_motifWmHints, S_ATOMS->m_motifWmHints, 32, PropModeReplace, (unsigned char*)&wmHints, 5);
+        }
+
+        m_styleFlags = style;
+    }
+
+    EWindowStyle getStyle() const
+    {
+        return m_styleFlags;
+    }
+
     void setFullscreen(bool fs)
     {
         if (fs == m_inFs)
@@ -605,14 +666,17 @@ public:
 
         XEvent fsEvent = {0};
         fsEvent.xclient.type = ClientMessage;
+        fsEvent.xclient.serial = 0;
+        fsEvent.xclient.send_event = True;
         fsEvent.xclient.window = m_windowId;
-        fsEvent.xclient.message_type = XInternAtom(m_xDisp, "_NET_WM_STATE", False);
+        fsEvent.xclient.message_type = S_ATOMS->m_netwmState;
         fsEvent.xclient.format = 32;
         fsEvent.xclient.data.l[0] = fs;
-        fsEvent.xclient.data.l[1] = XInternAtom(m_xDisp, "_NET_WM_STATE_FULLSCREEN", False);
+        fsEvent.xclient.data.l[1] = S_ATOMS->m_netwmStateFullscreen;
         fsEvent.xclient.data.l[2] = 0;
         XSendEvent(m_xDisp, DefaultRootWindow(m_xDisp), False,
                    StructureNotifyMask | SubstructureRedirectMask, (XEvent*)&fsEvent);
+
         m_inFs = fs;
     }
 
@@ -1013,7 +1077,6 @@ public:
     {
         return m_gfxCtx.getLoadContextDataFactory();
     }
-
 
     bool _isWindowMapped()
     {

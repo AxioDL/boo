@@ -125,6 +125,7 @@ public:
 
 struct CTestWindowCallback : IWindowCallback
 {
+    bool m_fullscreenToggleRequested = false;
     SWindowRect m_lastRect;
     bool m_rectDirty = false;
     
@@ -149,7 +150,7 @@ struct CTestWindowCallback : IWindowCallback
     }
     void scroll(const SWindowCoord& coord, const SScrollDelta& scroll)
     {
-        fprintf(stderr, "Mouse Scroll (%f,%f) (%f,%f)\n", coord.norm[0], coord.norm[1], scroll.delta[0], scroll.delta[1]);
+        //fprintf(stderr, "Mouse Scroll (%f,%f) (%f,%f)\n", coord.norm[0], coord.norm[1], scroll.delta[0], scroll.delta[1]);
     }
 
     void touchDown(const STouchCoord& coord, uintptr_t tid)
@@ -175,7 +176,8 @@ struct CTestWindowCallback : IWindowCallback
     }
     void specialKeyDown(ESpecialKey key, EModifierKey mods, bool isRepeat)
     {
-
+        if (key == boo::KEY_ENTER && (mods & boo::MKEY_ALT))
+            m_fullscreenToggleRequested = true;
     }
     void specialKeyUp(ESpecialKey key, EModifierKey mods)
     {
@@ -371,6 +373,12 @@ struct TestApplicationCallback : IApplicationCallback
             {
                 gfxQ->resizeRenderTexture(m_renderTarget, windowCallback.m_lastRect.size[0], windowCallback.m_lastRect.size[1]);
                 windowCallback.m_rectDirty = false;
+            }
+
+            if (windowCallback.m_fullscreenToggleRequested)
+            {
+                mainWindow->setFullscreen(!mainWindow->isFullscreen());
+                windowCallback.m_fullscreenToggleRequested = false;
             }
 
             gfxQ->setRenderTarget(m_renderTarget);
