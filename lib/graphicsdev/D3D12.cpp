@@ -12,6 +12,9 @@
 #include <d3dcompiler.h>
 #include <comdef.h>
 
+#define MAX_UNIFORM_COUNT 8
+#define MAX_TEXTURE_COUNT 8
+
 extern PFN_D3D12_SERIALIZE_ROOT_SIGNATURE D3D12SerializeRootSignaturePROC;
 
 namespace boo
@@ -314,6 +317,10 @@ public:
 
     void resize(D3D12Context* ctx, size_t width, size_t height)
     {
+        if (width < 1)
+            width = 1;
+        if (height < 1)
+            height = 1;
         m_width = width;
         m_height = height;
         Setup(ctx, width, height, m_samples);
@@ -438,6 +445,12 @@ public:
     D3D12ShaderPipeline(const D3D12ShaderPipeline&) = delete;
 };
 
+#if _DEBUG
+#define BOO_D3DCOMPILE_FLAG D3DCOMPILE_DEBUG | D3DCOMPILE_OPTIMIZATION_LEVEL0
+#else
+#define BOO_D3DCOMPILE_FLAG D3DCOMPILE_OPTIMIZATION_LEVEL3
+#endif
+
 IShaderPipeline* D3D12DataFactory::newShaderPipeline
 (const char* vertSource, const char* fragSource,
  ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,
@@ -447,14 +460,14 @@ IShaderPipeline* D3D12DataFactory::newShaderPipeline
     ComPtr<ID3DBlob> errBlob;
 
     if (FAILED(D3DCompile(vertSource, strlen(vertSource), "HECL Vert Source", nullptr, nullptr, "main", 
-        "vs_5_0", D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &vertBlobOut, &errBlob)))
+        "vs_5_0", BOO_D3DCOMPILE_FLAG, 0, &vertBlobOut, &errBlob)))
     {
         Log.report(LogVisor::FatalError, "error compiling vert shader: %s", errBlob->GetBufferPointer());
         return nullptr;
     }
 
     if (FAILED(D3DCompile(fragSource, strlen(fragSource), "HECL Pixel Source", nullptr, nullptr, "main", 
-        "ps_5_0", D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &fragBlobOut, &errBlob)))
+        "ps_5_0", BOO_D3DCOMPILE_FLAG, 0, &fragBlobOut, &errBlob)))
     {
         Log.report(LogVisor::FatalError, "error compiling pixel shader: %s", errBlob->GetBufferPointer());
         return nullptr;
@@ -485,25 +498,62 @@ static UINT64 PlaceTextureForGPU(ITexture* tex, D3D12Context* ctx, ID3D12Heap* g
 }
 
 static ID3D12Resource* GetBufferGPUResource(const IGraphicsBuffer* buf, int idx,
-                                            D3D12_SHADER_RESOURCE_VIEW_DESC& descOut)
+                                            D3D12_VERTEX_BUFFER_VIEW& descOut)
 {
-    descOut.Format = DXGI_FORMAT_UNKNOWN;
-    descOut.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-    descOut.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    descOut.Buffer.FirstElement = 0;
-    descOut.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
     if (buf->dynamic())
     {
         const D3D12GraphicsBufferD* cbuf = static_cast<const D3D12GraphicsBufferD*>(buf);
-        descOut.Buffer.NumElements = cbuf->m_count;
-        descOut.Buffer.StructureByteStride = cbuf->m_stride;
+        descOut.SizeInBytes = cbuf->m_count * cbuf->m_stride;
+        descOut.StrideInBytes = cbuf->m_stride;
+        descOut.BufferLocation = cbuf->m_gpuBufs[idx]->GetGPUVirtualAddress();
         return cbuf->m_gpuBufs[idx].Get();
     }
     else
     {
         const D3D12GraphicsBufferS* cbuf = static_cast<const D3D12GraphicsBufferS*>(buf);
-        descOut.Buffer.NumElements = cbuf->m_count;
-        descOut.Buffer.StructureByteStride = cbuf->m_stride;
+        descOut.SizeInBytes = cbuf->m_count * cbuf->m_stride;
+        descOut.StrideInBytes = cbuf->m_stride;
+        descOut.BufferLocation = cbuf->m_gpuBuf->GetGPUVirtualAddress();
+        return cbuf->m_gpuBuf.Get();
+    }
+}
+
+static ID3D12Resource* GetBufferGPUResource(const IGraphicsBuffer* buf, int idx,
+                                            D3D12_INDEX_BUFFER_VIEW& descOut)
+{
+    if (buf->dynamic())
+    {
+        const D3D12GraphicsBufferD* cbuf = static_cast<const D3D12GraphicsBufferD*>(buf);
+        descOut.SizeInBytes = cbuf->m_count * cbuf->m_stride;
+        descOut.BufferLocation = cbuf->m_gpuBufs[idx]->GetGPUVirtualAddress();
+        descOut.Format = DXGI_FORMAT_R32_UINT;
+        return cbuf->m_gpuBufs[idx].Get();
+    }
+    else
+    {
+        const D3D12GraphicsBufferS* cbuf = static_cast<const D3D12GraphicsBufferS*>(buf);
+        descOut.SizeInBytes = cbuf->m_count * cbuf->m_stride;
+        descOut.BufferLocation = cbuf->m_gpuBuf->GetGPUVirtualAddress();
+        descOut.Format = DXGI_FORMAT_R32_UINT;
+        return cbuf->m_gpuBuf.Get();
+    }
+}
+
+static ID3D12Resource* GetBufferGPUResource(const IGraphicsBuffer* buf, int idx,
+                                            D3D12_CONSTANT_BUFFER_VIEW_DESC& descOut)
+{
+    if (buf->dynamic())
+    {
+        const D3D12GraphicsBufferD* cbuf = static_cast<const D3D12GraphicsBufferD*>(buf);
+        descOut.SizeInBytes = cbuf->m_count * cbuf->m_stride;
+        descOut.BufferLocation = cbuf->m_gpuBufs[idx]->GetGPUVirtualAddress();
+        return cbuf->m_gpuBufs[idx].Get();
+    }
+    else
+    {
+        const D3D12GraphicsBufferS* cbuf = static_cast<const D3D12GraphicsBufferS*>(buf);
+        descOut.SizeInBytes = cbuf->m_count * cbuf->m_stride;
+        descOut.BufferLocation = cbuf->m_gpuBuf->GetGPUVirtualAddress();
         return cbuf->m_gpuBuf.Get();
     }
 }
@@ -571,7 +621,7 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
         /* Create double-buffered descriptor heaps */
         D3D12_DESCRIPTOR_HEAP_DESC desc;
         desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        desc.NumDescriptors = 2 + m_ubufCount + m_texCount;
+        desc.NumDescriptors = MAX_UNIFORM_COUNT + MAX_TEXTURE_COUNT;
         desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         desc.NodeMask = 0;
 
@@ -580,31 +630,28 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
         {
             ThrowIfFailed(ctx->m_dev->CreateDescriptorHeap(&desc, _uuidof(ID3D12DescriptorHeap), &m_descHeap[b]));
             CD3DX12_CPU_DESCRIPTOR_HANDLE handle(m_descHeap[b]->GetCPUDescriptorHandleForHeapStart());
-            D3D12_SHADER_RESOURCE_VIEW_DESC viewDesc;
 
-            ID3D12Resource* res = GetBufferGPUResource(m_vbuf, b, viewDesc);
-            m_vboView[b].BufferLocation = res->GetGPUVirtualAddress();
-            m_vboView[b].StrideInBytes = viewDesc.Buffer.StructureByteStride; 
-            m_vboView[b].SizeInBytes = viewDesc.Buffer.NumElements * m_vboView[b].StrideInBytes;
-            ctx->m_dev->CreateShaderResourceView(res, &viewDesc, handle);
-            handle.Offset(1, incSz);
+            D3D12_CONSTANT_BUFFER_VIEW_DESC viewDesc;
+
+            GetBufferGPUResource(m_vbuf, b, m_vboView[b]);
             if (m_ibuf)
+                GetBufferGPUResource(m_ibuf, b, m_iboView[b]);
+            for (size_t i=0 ; i<MAX_UNIFORM_COUNT ; ++i)
             {
-                res = GetBufferGPUResource(m_ibuf, b, viewDesc);
-                m_iboView[b].BufferLocation = res->GetGPUVirtualAddress();
-                m_iboView[b].SizeInBytes = viewDesc.Buffer.NumElements * viewDesc.Buffer.StructureByteStride;
-                m_iboView[b].Format = DXGI_FORMAT_R32_UINT;
-                ctx->m_dev->CreateShaderResourceView(res, &viewDesc, handle);
-            }
-            handle.Offset(1, incSz);
-            for (size_t i=0 ; i<m_ubufCount ; ++i)
-            {
-                ctx->m_dev->CreateShaderResourceView(GetBufferGPUResource(m_ubufs[i], b, viewDesc), &viewDesc, handle);
+                if (i<m_ubufCount)
+                {
+                    GetBufferGPUResource(m_ubufs[i], b, viewDesc);
+                    ctx->m_dev->CreateConstantBufferView(&viewDesc, handle);
+                }
                 handle.Offset(1, incSz);
             }
-            for (size_t i=0 ; i<m_texCount ; ++i)
+            for (size_t i=0 ; i<MAX_TEXTURE_COUNT ; ++i)
             {
-                ctx->m_dev->CreateShaderResourceView(GetTextureGPUResource(m_texs[i], b), &Tex2DViewDesc, handle);
+                if (i<m_texCount)
+                {
+                    D3D12_SHADER_RESOURCE_VIEW_DESC viewDesc;
+                    ctx->m_dev->CreateShaderResourceView(GetTextureGPUResource(m_texs[i], b), &Tex2DViewDesc, handle);
+                }
                 handle.Offset(1, incSz);
             }
         }
@@ -614,6 +661,7 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
     {
         ID3D12DescriptorHeap* heap[] = {m_descHeap[b].Get()};
         list->SetDescriptorHeaps(1, heap);
+        list->SetGraphicsRootDescriptorTable(0, m_descHeap[b]->GetGPUDescriptorHandleForHeapStart());
         list->SetPipelineState(m_pipeline->m_state.Get());
         list->IASetVertexBuffers(0, 1, &m_vboView[b]);
         if (m_ibuf)
@@ -637,19 +685,21 @@ D3D12DataFactory::newShaderDataBinding(IShaderPipeline* pipeline,
 D3D12DataFactory::D3D12DataFactory(IGraphicsContext* parent, D3D12Context* ctx)
 : m_parent(parent), m_deferredData(new struct D3D12Data()), m_ctx(ctx)
 {
-    CD3DX12_DESCRIPTOR_RANGE cbvRange(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 2, 0);
-    CD3DX12_DESCRIPTOR_RANGE srvRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 8, 0);
-    CD3DX12_ROOT_PARAMETER rootParms[2];
-    rootParms[0].InitAsDescriptorTable(1, &cbvRange, D3D12_SHADER_VISIBILITY_VERTEX);
-    rootParms[1].InitAsDescriptorTable(1, &srvRange, D3D12_SHADER_VISIBILITY_PIXEL);
+    CD3DX12_DESCRIPTOR_RANGE ranges[] =
+    {
+        {D3D12_DESCRIPTOR_RANGE_TYPE_CBV, MAX_UNIFORM_COUNT, 0},
+        {D3D12_DESCRIPTOR_RANGE_TYPE_SRV, MAX_TEXTURE_COUNT, 0}
+    };
+    CD3DX12_ROOT_PARAMETER rootParms[1];
+    rootParms[0].InitAsDescriptorTable(2, ranges);
 
     ComPtr<ID3DBlob> rsOutBlob;
     ComPtr<ID3DBlob> rsErrorBlob;
     ThrowIfFailed(D3D12SerializeRootSignaturePROC(
-        &CD3DX12_ROOT_SIGNATURE_DESC(2, rootParms, 1, &CD3DX12_STATIC_SAMPLER_DESC(0), 
+        &CD3DX12_ROOT_SIGNATURE_DESC(1, rootParms, 1, &CD3DX12_STATIC_SAMPLER_DESC(0), 
             D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT), 
         D3D_ROOT_SIGNATURE_VERSION_1, &rsOutBlob, &rsErrorBlob));
-
+    
     ThrowIfFailed(ctx->m_dev->CreateRootSignature(0, rsOutBlob->GetBufferPointer(), 
         rsOutBlob->GetBufferSize(), __uuidof(ID3D12RootSignature), &ctx->m_rs));
 }
@@ -734,6 +784,8 @@ IGraphicsData* D3D12DataFactory::commit()
     m_ctx->m_loadq->ExecuteCommandLists(1, list);
     ++m_ctx->m_loadfenceval;
     ThrowIfFailed(m_ctx->m_loadq->Signal(m_ctx->m_loadfence.Get(), m_ctx->m_loadfenceval));
+
+    WaitForLoadList(m_ctx);
 
     /* Commit data bindings (create descriptor heaps) */
     for (std::unique_ptr<D3D12ShaderDataBinding>& bind : retval->m_SBinds)
@@ -899,7 +951,18 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
     {
         D3D12TextureR* csource = static_cast<D3D12TextureR*>(source);
 
-        ID3D12Resource* dest = m_windowCtx->m_fb[m_windowCtx->m_backBuf].Get();
+        if (m_windowCtx->m_needsResize)
+        {
+            UINT nodeMasks[] = {0,0};
+            IUnknown* const queues[] = {m_ctx->m_q.Get(), m_ctx->m_q.Get()};
+            m_windowCtx->m_swapChain->ResizeBuffers1(2, m_windowCtx->width, m_windowCtx->height, 
+                DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH, nodeMasks, queues);
+            m_windowCtx->m_backBuf = m_windowCtx->m_swapChain->GetCurrentBackBufferIndex();
+            m_windowCtx->m_needsResize = false;
+        }
+
+        ComPtr<ID3D12Resource> dest;
+        ThrowIfFailed(m_windowCtx->m_swapChain->GetBuffer(m_windowCtx->m_backBuf, __uuidof(ID3D12Resource), &dest));
 
         if (csource->m_samples > 1)
         {
@@ -909,18 +972,18 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
             {
                 CD3DX12_RESOURCE_BARRIER::Transition(src, 
                     D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_RESOLVE_SOURCE),
-                CD3DX12_RESOURCE_BARRIER::Transition(dest, 
+                CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(), 
                     D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RESOLVE_DEST)
             };
             m_cmdList->ResourceBarrier(2, msaaSetup);
 
-            m_cmdList->ResolveSubresource(dest, 0, src, 0, DXGI_FORMAT_R8G8B8A8_UNORM);
+            m_cmdList->ResolveSubresource(dest.Get(), 0, src, 0, DXGI_FORMAT_R8G8B8A8_UNORM);
 
             D3D12_RESOURCE_BARRIER msaaTeardown[] =
             {
                 CD3DX12_RESOURCE_BARRIER::Transition(src, 
                     D3D12_RESOURCE_STATE_RESOLVE_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET),
-                CD3DX12_RESOURCE_BARRIER::Transition(dest, 
+                CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(), 
                     D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_PRESENT)
             };
             m_cmdList->ResourceBarrier(2, msaaTeardown);
@@ -933,18 +996,18 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
             {
                 CD3DX12_RESOURCE_BARRIER::Transition(src, 
                 D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE),
-                CD3DX12_RESOURCE_BARRIER::Transition(dest, 
+                CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(), 
                     D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST)
             };
             m_cmdList->ResourceBarrier(2, copySetup);
 
-            m_cmdList->CopyResource(dest, src);
+            m_cmdList->CopyResource(dest.Get(), src);
 
             D3D12_RESOURCE_BARRIER copyTeardown[] =
             {
                 CD3DX12_RESOURCE_BARRIER::Transition(src, 
                     D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET),
-                CD3DX12_RESOURCE_BARRIER::Transition(dest, 
+                CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(), 
                     D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT)
             };
             m_cmdList->ResourceBarrier(2, copyTeardown);

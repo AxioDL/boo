@@ -35,8 +35,8 @@ struct D3D12Context
     struct Window
     {
         ComPtr<IDXGISwapChain3> m_swapChain;
-        ComPtr<ID3D12Resource> m_fb[2]; /* Double-buffered */
         UINT m_backBuf = 0;
+        bool m_needsResize = false;
         size_t width, height;
     };
     std::unordered_map<boo::IWindow*, Window> m_windows;
@@ -57,6 +57,7 @@ struct D3D11Context
     struct Window
     {
         IDXGISwapChain1* m_swapChain;
+        bool m_needsResize = false;
         size_t width, height;
     };
     std::unordered_map<boo::IWindow*, Window> m_windows;
@@ -68,6 +69,24 @@ struct D3DAppContext
 #if _WIN32_WINNT_WIN10
     D3D12Context m_ctx12;
 #endif
+
+    void resize(boo::IWindow* window, size_t width, size_t height)
+    {
+#if _WIN32_WINNT_WIN10
+        if (m_ctx12.m_dev)
+        {
+            m_ctx12.m_windows[window].width = width;
+            m_ctx12.m_windows[window].height = height;
+            m_ctx12.m_windows[window].m_needsResize = true;
+        }
+        else
+#endif
+        {
+            m_ctx11.m_windows[window].width = width;
+            m_ctx11.m_windows[window].height = height;
+            m_ctx11.m_windows[window].m_needsResize = true;
+        }
+    }
 };
 
 struct HWNDEvent
