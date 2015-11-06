@@ -55,7 +55,7 @@ static const int ContextAttribs[] =
 namespace boo
 {
 static LogVisor::LogModule Log("boo::WindowXCB");
-IGraphicsCommandQueue* _NewGLES3CommandQueue(IGraphicsContext* parent);
+IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent);
 void _XlibUpdateLastGlxCtx(GLXContext lastGlxCtx);
 void GLXExtensionCheck();
 void GLXWaitForVSync();
@@ -342,7 +342,7 @@ public:
     IGraphicsCommandQueue* getCommandQueue()
     {
         if (!m_commandQueue)
-            m_commandQueue = _NewGLES3CommandQueue(this);
+            m_commandQueue = _NewGLCommandQueue(this);
         return m_commandQueue;
     }
 

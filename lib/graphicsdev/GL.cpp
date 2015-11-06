@@ -1002,7 +1002,7 @@ IVertexFormat* GLDataFactory::newVertexFormat
     return retval;
 }
 
-IGraphicsCommandQueue* _NewGLES3CommandQueue(IGraphicsContext* parent)
+IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent)
 {
     return new struct GLCommandQueue(parent);
 }
