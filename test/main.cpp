@@ -7,13 +7,8 @@
 #include <condition_variable>
 #include <LogVisor/LogVisor.hpp>
 
-#if _WIN32_WINNT_WIN10
-#include <boo/graphicsdev/D3D12.hpp>
-#include <boo/graphicsdev/D3D11.hpp>
-#elif _WIN32_WINNT_WIN7
-#include <boo/graphicsdev/D3D11.hpp>
-#elif _WIN32
-#error unsupported windows version
+#if _WIN32
+#include <boo/graphicsdev/D3D.hpp>
 #endif
 
 namespace boo
@@ -310,10 +305,11 @@ struct TestApplicationCallback : IApplicationCallback
 
             pipeline = glF->newShaderPipeline(VS, FS, 1, TexNames, BlendFactorOne, BlendFactorZero, true, true, false);
         }
-#if _WIN32_WINNT_WIN10
-        else if (factory->platform() == IGraphicsDataFactory::PlatformD3D12)
+#if _WIN32
+        else if (factory->platform() == IGraphicsDataFactory::PlatformD3D12 ||
+                 factory->platform() == IGraphicsDataFactory::PlatformD3D11)
         {
-            D3D12DataFactory* d3dF = dynamic_cast<D3D12DataFactory*>(factory);
+            ID3DDataFactory* d3dF = dynamic_cast<ID3DDataFactory*>(factory);
 
             static const char* VS =
                 "struct VertData {float3 in_pos : POSITION; float2 in_uv : UV;};\n"
@@ -456,6 +452,16 @@ struct TestApplicationCallback : IApplicationCallback
 
 }
 
+int main(int argc, const boo::SystemChar** argv)
+{
+    LogVisor::RegisterConsoleLogger();
+    boo::TestApplicationCallback appCb;
+    int ret = ApplicationRun(boo::IApplication::PLAT_AUTO,
+        appCb, _S("rwk"), _S("RWK"), argc, argv);
+    printf("IM DYING!!\n");
+    return ret;
+}
+
 #if _WIN32
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int)
 {
@@ -463,23 +469,10 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int)
     const boo::SystemChar** argv = (const wchar_t**)(CommandLineToArgvW(lpCmdLine, &argc));
 
     LogVisor::CreateWin32Console();
-    LogVisor::RegisterConsoleLogger();
-    boo::TestApplicationCallback appCb;
-    int ret = ApplicationRun(boo::IApplication::PLAT_AUTO,
-        appCb, _S("rwk"), _S("RWK"), argc, argv);
-    printf("IM DYING!!\n");
-    return ret;
+    return main(argc, argv);
 
 }
 #else
-int main(int argc, const char** argv)
-{
-    LogVisor::RegisterConsoleLogger();
-    boo::TestApplicationCallback appCb;
-    int ret = ApplicationRun(boo::IApplication::PLAT_AUTO,
-        appCb, _S("rwk"), _S("RWK"), argc, argv);
-    printf("IM DYING!!\n");
-    return ret;
-}
+
 #endif
 

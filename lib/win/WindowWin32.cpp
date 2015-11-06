@@ -4,15 +4,18 @@
 #include "boo/IGraphicsContext.hpp"
 #include <LogVisor/LogVisor.hpp>
 
-#include "boo/graphicsdev/D3D11.hpp"
-#include "boo/graphicsdev/D3D12.hpp"
+#include "boo/graphicsdev/D3D.hpp"
 
 namespace boo
 {
 static LogVisor::LogModule Log("WindowWin32");
+#if _WIN32_WINNT_WIN10
 IGraphicsCommandQueue* _NewD3D12CommandQueue(D3D12Context* ctx, D3D12Context::Window* windowCtx, IGraphicsContext* parent,
                                              ID3D12CommandQueue** cmdQueueOut);
+IGraphicsDataFactory* _NewD3D12DataFactory(D3D12Context* ctx, IGraphicsContext* parent);
+#endif
 IGraphicsCommandQueue* _NewD3D11CommandQueue(D3D11Context* ctx, D3D11Context::Window* windowCtx, IGraphicsContext* parent);
+IGraphicsDataFactory* _NewD3D11DataFactory(D3D11Context* ctx, IGraphicsContext* parent);
 
 struct GraphicsContextWin32 : IGraphicsContext
 {
@@ -53,14 +56,15 @@ public:
             D3D12Context::Window& w = insIt.first->second;
 
             ID3D12CommandQueue* cmdQueue;
-            m_dataFactory = new D3D12DataFactory(this, &d3dCtx.m_ctx12);
+            m_dataFactory = _NewD3D12DataFactory(&d3dCtx.m_ctx12, this);
             m_commandQueue = _NewD3D12CommandQueue(&d3dCtx.m_ctx12, &w, this, &cmdQueue);
 
-            scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+            scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
             HRESULT hr = d3dCtx.m_ctx12.m_dxFactory->CreateSwapChainForHwnd(cmdQueue, 
                 hwnd, &scDesc, nullptr, nullptr, &m_swapChain);
             if (FAILED(hr))
                 Log.report(LogVisor::FatalError, "unable to create swap chain");
+            d3dCtx.m_ctx12.m_dxFactory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
 
             m_swapChain.As<IDXGISwapChain3>(&w.m_swapChain);
             ComPtr<ID3D12Resource> fb;
@@ -73,22 +77,23 @@ public:
         else
 #endif
         {
-#if 0
             if (FAILED(d3dCtx.m_ctx11.m_dxFactory->CreateSwapChainForHwnd(d3dCtx.m_ctx11.m_dev.Get(), 
                 hwnd, &scDesc, nullptr, nullptr, &m_swapChain)))
                 Log.report(LogVisor::FatalError, "unable to create swap chain");
+            d3dCtx.m_ctx11.m_dxFactory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
             
             auto insIt = d3dCtx.m_ctx11.m_windows.emplace(std::make_pair(parentWindow, D3D11Context::Window()));
             D3D11Context::Window& w = insIt.first->second;
+
+            m_swapChain.As<IDXGISwapChain1>(&w.m_swapChain);
             ComPtr<ID3D11Texture2D> fbRes;
             m_swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), &fbRes);
             D3D11_TEXTURE2D_DESC resDesc;
             fbRes->GetDesc(&resDesc);
             w.width = resDesc.Width;
             w.height = resDesc.Height;
-            m_dataFactory = new D3D11DataFactory(this, &d3dCtx.m_ctx11);
+            m_dataFactory = _NewD3D11DataFactory(&d3dCtx.m_ctx11, this);
             m_commandQueue = _NewD3D11CommandQueue(&d3dCtx.m_ctx11, &insIt.first->second, this);
-#endif
         }
 
         if (FAILED(m_swapChain->GetContainingOutput(&m_output)))
@@ -99,13 +104,10 @@ public:
     {
 #if _WIN32_WINNT_WIN10
         if (m_d3dCtx.m_ctx12.m_dev)
-        {
             m_d3dCtx.m_ctx12.m_windows.erase(m_parentWindow);
-        }
         else
 #endif
-        {
-        }
+            m_d3dCtx.m_ctx11.m_windows.erase(m_parentWindow);
     }
 
     void _setCallback(IWindowCallback* cb)
@@ -208,7 +210,7 @@ static uint32_t translateKeysym(WPARAM sym, int& specialSym, int& modifierSym)
     return 0;
 }
 
-static int translateModifiers()
+static int translateModifiers(UINT msg)
 {
     int retval = 0;
     if (GetKeyState(VK_LSHIFT) & 0x8000 != 0 || GetKeyState(VK_RSHIFT) & 0x8000 != 0)
@@ -216,6 +218,8 @@ static int translateModifiers()
     if (GetKeyState(VK_LCONTROL) & 0x8000 != 0 || GetKeyState(VK_RCONTROL) & 0x8000 != 0)
         retval |= MKEY_CTRL;
     if (GetKeyState(VK_MENU) & 0x8000 != 0)
+        retval |= MKEY_ALT;
+    if (msg == WM_SYSKEYDOWN || msg == WM_SYSKEYUP)
         retval |= MKEY_ALT;
     return retval;
 }
@@ -315,12 +319,12 @@ public:
     
     bool isFullscreen() const
     {
-        return false;
+        return m_gfxCtx->m_d3dCtx.isFullscreen(this);
     }
     
     void setFullscreen(bool fs)
     {
-        
+        m_gfxCtx->m_d3dCtx.setFullscreen(this, fs);
     }
 
     void waitForRetrace()
@@ -339,7 +343,7 @@ public:
         {
             int x, y, w, h;
             getWindowFrame(x, y, w, h);
-            int modifierMask = translateModifiers();
+            int modifierMask = translateModifiers(e.uMsg);
             SWindowCoord coord =
             {
                 {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam)},
@@ -356,7 +360,7 @@ public:
         {
             int x, y, w, h;
             getWindowFrame(x, y, w, h);
-            int modifierMask = translateModifiers();
+            int modifierMask = translateModifiers(e.uMsg);
             SWindowCoord coord =
             {
                 {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam)},
@@ -384,13 +388,14 @@ public:
             return;
         }
         case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
         {
             if (m_callback)
             {
                 int specialKey;
                 int modifierKey;
                 uint32_t charCode = translateKeysym(e.wParam, specialKey, modifierKey);
-                int modifierMask = translateModifiers();
+                int modifierMask = translateModifiers(e.uMsg);
                 if (charCode)
                     m_callback->charKeyDown(charCode, EModifierKey(modifierMask), e.lParam & 0xffff != 0);
                 else if (specialKey)
@@ -401,13 +406,14 @@ public:
             return;
         }
         case WM_KEYUP:
+        case WM_SYSKEYUP:
         {
             if (m_callback)
             {
                 int specialKey;
                 int modifierKey;
                 uint32_t charCode = translateKeysym(e.wParam, specialKey, modifierKey);
-                int modifierMask = translateModifiers();
+                int modifierMask = translateModifiers(e.uMsg);
                 if (charCode)
                     m_callback->charKeyUp(charCode, EModifierKey(modifierMask));
                 else if (specialKey)
@@ -486,6 +492,41 @@ public:
     ETouchType getTouchType() const
     {
         return TOUCH_NONE;
+    }
+
+    void setStyle(EWindowStyle style)
+    {
+        LONG sty = GetWindowLong(m_hwnd, GWL_STYLE);
+
+        if (style & STYLE_TITLEBAR)
+            sty |= WS_CAPTION;
+        else
+            sty &= ~WS_CAPTION;
+
+        if (style & STYLE_RESIZE)
+            sty |= WS_THICKFRAME;
+        else
+            sty &= ~WS_THICKFRAME;
+
+        if (style & STYLE_CLOSE)
+            sty |= (WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
+        else
+            sty &= ~(WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
+
+        SetWindowLong(m_hwnd, GWL_STYLE, sty);
+    }
+
+    EWindowStyle getStyle() const
+    {
+        LONG sty = GetWindowLong(m_hwnd, GWL_STYLE);
+        unsigned retval = STYLE_NONE;
+        if (sty & WS_CAPTION != 0)
+            retval |= STYLE_TITLEBAR;
+        if (sty & WS_THICKFRAME != 0)
+            retval |= STYLE_RESIZE;
+        if (sty & WS_SYSMENU)
+            retval |= STYLE_CLOSE;
+        return EWindowStyle(retval);
     }
 
     IGraphicsCommandQueue* getCommandQueue()

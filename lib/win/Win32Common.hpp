@@ -10,7 +10,7 @@
 #include <windows.h>
 #include <unordered_map>
 
-#include "boo/System.hpp"
+#include "boo/IWindow.hpp"
 
 namespace boo {class IWindow;}
 
@@ -39,7 +39,7 @@ struct D3D12Context
         bool m_needsResize = false;
         size_t width, height;
     };
-    std::unordered_map<boo::IWindow*, Window> m_windows;
+    std::unordered_map<const boo::IWindow*, Window> m_windows;
 };
 
 #elif _WIN32_WINNT_WIN7
@@ -54,13 +54,14 @@ struct D3D11Context
     ComPtr<IDXGIFactory2> m_dxFactory;
     ComPtr<ID3D11Device1> m_dev;
     ComPtr<ID3D11DeviceContext1> m_devCtx;
+    ComPtr<ID3D11SamplerState> m_ss;
     struct Window
     {
-        IDXGISwapChain1* m_swapChain;
+        ComPtr<IDXGISwapChain1> m_swapChain;
         bool m_needsResize = false;
         size_t width, height;
     };
-    std::unordered_map<boo::IWindow*, Window> m_windows;
+    std::unordered_map<const boo::IWindow*, Window> m_windows;
 };
 
 struct D3DAppContext
@@ -75,16 +76,94 @@ struct D3DAppContext
 #if _WIN32_WINNT_WIN10
         if (m_ctx12.m_dev)
         {
-            m_ctx12.m_windows[window].width = width;
-            m_ctx12.m_windows[window].height = height;
-            m_ctx12.m_windows[window].m_needsResize = true;
+            D3D12Context::Window& win = m_ctx12.m_windows[window];
+            win.width = width;
+            win.height = height;
+            win.m_needsResize = true;
         }
         else
 #endif
         {
-            m_ctx11.m_windows[window].width = width;
-            m_ctx11.m_windows[window].height = height;
-            m_ctx11.m_windows[window].m_needsResize = true;
+            D3D11Context::Window& win = m_ctx11.m_windows[window];
+            win.width = width;
+            win.height = height;
+            win.m_needsResize = true;
+        }
+    }
+
+    bool isFullscreen(const boo::IWindow* window)
+    {
+#if _WIN32_WINNT_WIN10
+        if (m_ctx12.m_dev)
+        {
+            D3D12Context::Window& win = m_ctx12.m_windows[window];
+            BOOL isFScr;
+            win.m_swapChain->GetFullscreenState(&isFScr, nullptr);
+            return isFScr;
+        }
+        else
+#endif
+        {
+            D3D11Context::Window& win = m_ctx11.m_windows[window];
+            BOOL isFScr;
+            win.m_swapChain->GetFullscreenState(&isFScr, nullptr);
+            return isFScr;
+        }
+    }
+
+    bool setFullscreen(boo::IWindow* window, bool fs)
+    {
+#if _WIN32_WINNT_WIN10
+        if (m_ctx12.m_dev)
+        {
+            D3D12Context::Window& win = m_ctx12.m_windows[window];
+            BOOL isFScr;
+            win.m_swapChain->GetFullscreenState(&isFScr, nullptr);
+            if (fs && isFScr)
+                return false;
+            else if (!fs && !isFScr)
+                return false;
+
+            if (fs)
+            {
+                ComPtr<IDXGIOutput> out;
+                win.m_swapChain->GetContainingOutput(&out);
+                DXGI_OUTPUT_DESC outDesc;
+                out->GetDesc(&outDesc);
+
+                win.m_swapChain->SetFullscreenState(true, nullptr);
+                DXGI_MODE_DESC mdesc = {outDesc.DesktopCoordinates.right, outDesc.DesktopCoordinates.bottom};
+                win.m_swapChain->ResizeTarget(&mdesc);
+            }
+            else
+                win.m_swapChain->SetFullscreenState(false, nullptr);
+            return true;
+        }
+        else
+#endif
+        {
+            D3D11Context::Window& win = m_ctx11.m_windows[window];
+            BOOL isFScr;
+            win.m_swapChain->GetFullscreenState(&isFScr, nullptr);
+            if (fs && isFScr)
+                return false;
+            else if (!fs && !isFScr)
+                return false;
+
+            if (fs)
+            {
+                ComPtr<IDXGIOutput> out;
+                win.m_swapChain->GetContainingOutput(&out);
+                DXGI_OUTPUT_DESC outDesc;
+                out->GetDesc(&outDesc);
+
+                win.m_swapChain->SetFullscreenState(true, nullptr);
+                DXGI_MODE_DESC mdesc = {outDesc.DesktopCoordinates.right, outDesc.DesktopCoordinates.bottom};
+                win.m_swapChain->ResizeTarget(&mdesc);
+            }
+            else
+                win.m_swapChain->SetFullscreenState(false, nullptr);
+            return true;
         }
     }
 };

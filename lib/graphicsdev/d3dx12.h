@@ -1486,6 +1486,106 @@ inline UINT64 UpdateSubresources(
 }
 
 //------------------------------------------------------------------------------------------------
+// All arrays must be populated (e.g. by calling GetCopyableFootprints)
+inline UINT64 PrepSubresources(
+    _In_ ID3D12Device* pDevice,
+    _In_ D3D12_RESOURCE_DESC& DestinationDesc,
+    _In_ ID3D12Resource* pIntermediate,
+    _In_range_(0,D3D12_REQ_SUBRESOURCES) UINT FirstSubresource,
+    _In_range_(0,D3D12_REQ_SUBRESOURCES-FirstSubresource) UINT NumSubresources,
+    UINT64 RequiredSize,
+    _In_reads_(NumSubresources) const D3D12_PLACED_SUBRESOURCE_FOOTPRINT* pLayouts,
+    _In_reads_(NumSubresources) const UINT* pNumRows,
+    _In_reads_(NumSubresources) const UINT64* pRowSizesInBytes,
+    _In_reads_(NumSubresources) const D3D12_SUBRESOURCE_DATA* pSrcData)
+{
+    // Minor validation
+    D3D12_RESOURCE_DESC IntermediateDesc = pIntermediate->GetDesc();
+    if (IntermediateDesc.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER || 
+        IntermediateDesc.Width < RequiredSize + pLayouts[0].Offset || 
+        RequiredSize > (SIZE_T)-1 || 
+        (DestinationDesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER && 
+            (FirstSubresource != 0 || NumSubresources != 1)))
+    {
+        return 0;
+    }
+
+    BYTE* pData;
+    HRESULT hr = pIntermediate->Map(0, NULL, reinterpret_cast<void**>(&pData));
+    if (FAILED(hr))
+    {
+        return 0;
+    }
+
+    for (UINT i = 0; i < NumSubresources; ++i)
+    {
+        if (pRowSizesInBytes[i] > (SIZE_T)-1) return 0;
+        D3D12_MEMCPY_DEST DestData = { pData + pLayouts[i].Offset, pLayouts[i].Footprint.RowPitch, pLayouts[i].Footprint.RowPitch * pNumRows[i] };
+        MemcpySubresource(&DestData, &pSrcData[i], (SIZE_T)pRowSizesInBytes[i], pNumRows[i], pLayouts[i].Footprint.Depth);
+    }
+    pIntermediate->Unmap(0, NULL);
+
+    return RequiredSize;
+}
+
+//------------------------------------------------------------------------------------------------
+// Stack-allocating UpdateSubresources implementation
+template <UINT MaxSubresources>
+inline UINT64 PrepSubresources( 
+    _In_ ID3D12Device* pDevice,
+    _In_ D3D12_RESOURCE_DESC& DestinationDesc,
+    _In_ ID3D12Resource* pIntermediate,
+    UINT64 IntermediateOffset,
+    _In_range_(0, MaxSubresources) UINT FirstSubresource,
+    _In_range_(1, MaxSubresources - FirstSubresource) UINT NumSubresources,
+    _In_reads_(NumSubresources) D3D12_SUBRESOURCE_DATA* pSrcData)
+{
+    UINT64 RequiredSize = 0;
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT Layouts[MaxSubresources];
+    UINT NumRows[MaxSubresources];
+    UINT64 RowSizesInBytes[MaxSubresources];
+
+    pDevice->GetCopyableFootprints(&DestinationDesc, FirstSubresource, NumSubresources, IntermediateOffset, Layouts, NumRows, RowSizesInBytes, &RequiredSize);
+
+    return PrepSubresources(pDevice, DestinationDesc, pIntermediate, FirstSubresource, NumSubresources, RequiredSize, Layouts, NumRows, RowSizesInBytes, pSrcData);
+}
+
+template <UINT MaxSubresources>
+inline void CommandSubresourcesTransfer(
+    _In_ ID3D12Device* pDevice,
+    _In_ ID3D12GraphicsCommandList* pCmdList,
+    _In_ ID3D12Resource* pDestinationResource,
+    _In_ ID3D12Resource* pIntermediate,
+    UINT64 IntermediateOffset,
+    _In_range_(0, MaxSubresources) UINT FirstSubresource,
+    _In_range_(1, MaxSubresources - FirstSubresource) UINT NumSubresources)
+{
+    UINT64 RequiredSize = 0;
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT Layouts[MaxSubresources];
+    UINT NumRows[MaxSubresources];
+    UINT64 RowSizesInBytes[MaxSubresources];
+
+    D3D12_RESOURCE_DESC Desc = pDestinationResource->GetDesc();
+    pDevice->GetCopyableFootprints(&Desc, FirstSubresource, NumSubresources, IntermediateOffset, Layouts, NumRows, RowSizesInBytes, &RequiredSize);
+
+    if (Desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
+    {
+        CD3DX12_BOX SrcBox( UINT( Layouts[0].Offset ), UINT( Layouts[0].Offset + Layouts[0].Footprint.Width ) );
+        pCmdList->CopyBufferRegion(
+            pDestinationResource, 0, pIntermediate, Layouts[0].Offset, Layouts[0].Footprint.Width);
+    }
+    else
+    {
+        for (UINT i = 0; i < NumSubresources; ++i)
+        {
+            CD3DX12_TEXTURE_COPY_LOCATION Dst(pDestinationResource, i + FirstSubresource);
+            CD3DX12_TEXTURE_COPY_LOCATION Src(pIntermediate, Layouts[i]);
+            pCmdList->CopyTextureRegion(&Dst, 0, 0, 0, &Src, nullptr);
+        }
+    }
+}
+
+//------------------------------------------------------------------------------------------------
 inline bool D3D12IsLayoutOpaque( D3D12_TEXTURE_LAYOUT Layout )
 { return Layout == D3D12_TEXTURE_LAYOUT_UNKNOWN || Layout == D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE; }
 

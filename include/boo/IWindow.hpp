@@ -190,10 +190,11 @@ public:
 
     virtual ETouchType getTouchType() const=0;
 
-    virtual IGraphicsCommandQueue* getCommandQueue()=0;
-    virtual IGraphicsDataFactory* getDataFactory()=0;
     virtual void setStyle(EWindowStyle style)=0;
     virtual EWindowStyle getStyle() const=0;
+
+    virtual IGraphicsCommandQueue* getCommandQueue()=0;
+    virtual IGraphicsDataFactory* getDataFactory()=0;
 
     /* Creates a new context on current thread!! Call from client loading thread */
     virtual IGraphicsDataFactory* getLoadContextDataFactory()=0;

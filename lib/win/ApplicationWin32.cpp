@@ -19,7 +19,9 @@
 #include <LogVisor/LogVisor.hpp>
 
 static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+#if _WIN32_WINNT_WIN10
 PFN_D3D12_SERIALIZE_ROOT_SIGNATURE D3D12SerializeRootSignaturePROC = nullptr;
+#endif
 
 namespace boo
 {
@@ -69,7 +71,7 @@ public:
             Log.report(LogVisor::FatalError, "unable to find CreateDXGIFactory2 in DXGI.dll\n"
                                              "Windows 7 users should install \"Platform Update for Windows 7\" from Microsoft");
 
-#if WINVER >= _WIN32_WINNT_WIN10
+#if _WIN32_WINNT_WIN10
         HMODULE d3d12lib = LoadLibraryW(L"D3D12.dll");
         if (d3d12lib)
         {
@@ -154,6 +156,9 @@ public:
             device->GetParent(__uuidof(IDXGIAdapter), &adapter);
             adapter->GetParent(__uuidof(IDXGIFactory2), &m_d3dCtx.m_ctx11.m_dxFactory);
 
+            /* Build default sampler here */
+            m_d3dCtx.m_ctx11.m_dev->CreateSamplerState(&CD3D11_SAMPLER_DESC(D3D11_DEFAULT), &m_d3dCtx.m_ctx11.m_ss);
+
             return;
         }
 
@@ -178,7 +183,9 @@ public:
                 return DeviceFinder::winDevChangedHandler(wParam, lParam);
                 
             case WM_SIZE:
+            case WM_SYSKEYDOWN:
             case WM_KEYDOWN:
+            case WM_SYSKEYUP:
             case WM_KEYUP:
             case WM_LBUTTONDOWN:
             case WM_LBUTTONUP:

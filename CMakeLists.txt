@@ -31,8 +31,7 @@ if(WIN32)
        lib/graphicsdev/D3D12.cpp)
 
   list(APPEND PLAT_HDRS
-        include/boo/graphicsdev/D3D11.hpp
-        include/boo/graphicsdev/D3D12.hpp)
+        include/boo/graphicsdev/D3D.hpp)
 
   list(APPEND _BOO_SYS_DEFINES -DUNICODE -D_UNICODE)
 
