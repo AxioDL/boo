@@ -234,7 +234,8 @@ public:
             case WM_DEVICECHANGE:
                 return DeviceFinder::winDevChangedHandler(wParam, lParam);
                 
-            case WM_SIZE:
+            case WM_SIZING:
+            case WM_MOVING:
             case WM_SYSKEYDOWN:
             case WM_KEYDOWN:
             case WM_SYSKEYUP:
@@ -248,6 +249,10 @@ public:
             case WM_XBUTTONDOWN:
             case WM_XBUTTONUP:
             case WM_MOUSEMOVE:
+            case WM_MOUSELEAVE:
+            case WM_NCMOUSELEAVE:
+            case WM_MOUSEHOVER:
+            case WM_NCMOUSEHOVER:
                 window->_incomingEvent(&HWNDEvent(uMsg, wParam, lParam));
 
             default:
