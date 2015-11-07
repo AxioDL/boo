@@ -594,7 +594,7 @@ public:
         HWNDEvent& e = *static_cast<HWNDEvent*>(ev);
         switch (e.uMsg)
         {
-        case WM_SIZING:
+        case WM_SIZE:
         {
             SWindowRect rect;
             getWindowFrame(rect.location[0], rect.location[1], rect.size[0], rect.size[1]);

@@ -234,7 +234,7 @@ public:
             case WM_DEVICECHANGE:
                 return DeviceFinder::winDevChangedHandler(wParam, lParam);
                 
-            case WM_SIZING:
+            case WM_SIZE:
             case WM_MOVING:
             case WM_SYSKEYDOWN:
             case WM_KEYDOWN:
