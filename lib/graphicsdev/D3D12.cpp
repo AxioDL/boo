@@ -12,6 +12,7 @@
 #define MAX_TEXTURE_COUNT 8
 
 extern PFN_D3D12_SERIALIZE_ROOT_SIGNATURE D3D12SerializeRootSignaturePROC;
+extern pD3DCompile D3DCompilePROC;
 
 namespace boo
 {
@@ -706,10 +707,11 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         m_cmdList->RSSetScissorRects(1, &r);
     }
 
+    std::unordered_map<D3D12TextureR*, std::pair<size_t, size_t>> m_texResizes;
     void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)
     {
         D3D12TextureR* ctex = static_cast<D3D12TextureR*>(tex);
-        ctex->resize(m_ctx, width, height);
+        m_texResizes[ctex] = std::make_pair(width, height);
     }
 
     float m_clearColor[4] = {0.0,0.0,0.0,1.0};
@@ -846,6 +848,18 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
             m_doPresent = false;
             return;
         }
+
+        /* Perform texture resizes */
+        if (m_texResizes.size())
+        {
+            for (const auto& resize : m_texResizes)
+                resize.first->resize(m_ctx, resize.second.first, resize.second.second);
+            m_texResizes.clear();
+            m_cmdList->Close();
+            resetCommandList();
+            m_doPresent = false;
+            return;
+        }
         
         m_drawBuf = m_fillBuf;
         ++m_fillBuf;
@@ -952,6 +966,14 @@ public:
         return retval;
     }
 
+    IGraphicsBufferS* newStaticBuffer(BufferUse use, std::unique_ptr<uint8_t[]>&& data, size_t stride, size_t count)
+    {
+        std::unique_ptr<uint8_t[]> d = std::move(data);
+        D3D12GraphicsBufferS* retval = new D3D12GraphicsBufferS(use, m_ctx, d.get(), stride, count);
+        static_cast<D3D12Data*>(m_deferredData)->m_SBufs.emplace_back(retval);
+        return retval;
+    }
+
     IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count)
     {
         D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent->getCommandQueue());
@@ -964,6 +986,15 @@ public:
                                 const void* data, size_t sz)
     {
         D3D12TextureS* retval = new D3D12TextureS(m_ctx, width, height, mips, fmt, data, sz);
+        static_cast<D3D12Data*>(m_deferredData)->m_STexs.emplace_back(retval);
+        return retval;
+    }
+
+    ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                                std::unique_ptr<uint8_t[]>&& data, size_t sz)
+    {
+        std::unique_ptr<uint8_t[]> d = std::move(data);
+        D3D12TextureS* retval = new D3D12TextureS(m_ctx, width, height, mips, fmt, d.get(), sz);
         static_cast<D3D12Data*>(m_deferredData)->m_STexs.emplace_back(retval);
         return retval;
     }
@@ -1006,14 +1037,14 @@ public:
     {
         ComPtr<ID3DBlob> errBlob;
 
-        if (FAILED(D3DCompile(vertSource, strlen(vertSource), "HECL Vert Source", nullptr, nullptr, "main", 
+        if (FAILED(D3DCompilePROC(vertSource, strlen(vertSource), "HECL Vert Source", nullptr, nullptr, "main", 
             "vs_5_0", BOO_D3DCOMPILE_FLAG, 0, &vertBlobOut, &errBlob)))
         {
             Log.report(LogVisor::FatalError, "error compiling vert shader: %s", errBlob->GetBufferPointer());
             return nullptr;
         }
 
-        if (FAILED(D3DCompile(fragSource, strlen(fragSource), "HECL Pixel Source", nullptr, nullptr, "main", 
+        if (FAILED(D3DCompilePROC(fragSource, strlen(fragSource), "HECL Pixel Source", nullptr, nullptr, "main", 
             "ps_5_0", BOO_D3DCOMPILE_FLAG, 0, &fragBlobOut, &errBlob)))
         {
             Log.report(LogVisor::FatalError, "error compiling pixel shader: %s", errBlob->GetBufferPointer());

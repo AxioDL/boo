@@ -90,6 +90,15 @@ GLDataFactory::newStaticBuffer(BufferUse use, const void* data, size_t stride, s
     return retval;
 }
 
+IGraphicsBufferS*
+GLDataFactory::newStaticBuffer(BufferUse use, std::unique_ptr<uint8_t[]>&& data, size_t stride, size_t count)
+{
+    std::unique_ptr<uint8_t[]> d = std::move(data);
+    GLGraphicsBufferS* retval = new GLGraphicsBufferS(use, d.get(), stride * count);
+    static_cast<GLData*>(m_deferredData)->m_SBufs.emplace_back(retval);
+    return retval;
+}
+
 class GLTextureS : public ITextureS
 {
     friend class GLDataFactory;
@@ -187,6 +196,16 @@ GLDataFactory::newStaticTexture(size_t width, size_t height, size_t mips, Textur
     return retval;
 }
 
+ITextureS*
+GLDataFactory::newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                                std::unique_ptr<uint8_t[]>&& data, size_t sz)
+{
+    std::unique_ptr<uint8_t[]> d = std::move(data);
+    GLTextureS* retval = new GLTextureS(width, height, mips, fmt, d.get(), sz);
+    static_cast<GLData*>(m_deferredData)->m_STexs.emplace_back(retval);
+    return retval;
+}
+
 class GLShaderPipeline : public IShaderPipeline
 {
     friend class GLDataFactory;
@@ -205,7 +224,6 @@ class GLShaderPipeline : public IShaderPipeline
         m_prog = glCreateProgram();
         if (!m_vert || !m_frag || !m_prog)
         {
-
             glDeleteShader(m_vert);
             m_vert = 0;
             glDeleteShader(m_frag);
@@ -1002,7 +1020,7 @@ IVertexFormat* GLDataFactory::newVertexFormat
     return retval;
 }
 
-IGraphicsCommandQueue* _NewGLES3CommandQueue(IGraphicsContext* parent)
+IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent)
 {
     return new struct GLCommandQueue(parent);
 }

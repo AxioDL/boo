@@ -9,6 +9,8 @@
 #include <d3dcompiler.h>
 #include <comdef.h>
 
+extern pD3DCompile D3DCompilePROC;
+
 namespace boo
 {
 static LogVisor::LogModule Log("boo::D3D11");
@@ -456,7 +458,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
     std::thread m_thr;
 
     ComPtr<ID3D11CommandList> m_cmdLists[3];
-    bool m_needPresent[3];
+    D3D11TextureR* m_workDoPresent[3];
 
     static void RenderingWorker(D3D11CommandQueue* self)
     {
@@ -472,12 +474,65 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
                 if (!self->m_running)
                     break;
                 self->m_drawBuf = self->m_completeBuf;
+
+                if (self->m_texResizes.size())
+                {
+                    for (const auto& resize : self->m_texResizes)
+                        resize.first->resize(self->m_ctx, resize.second.first, resize.second.second);
+                    self->m_texResizes.clear();
+                    self->m_cmdLists[self->m_drawBuf].Reset();
+                    continue;
+                }
+
+                if (self->m_windowCtx->m_needsFSTransition)
+                {
+                    if (self->m_windowCtx->m_fs)
+                    {
+                        self->m_windowCtx->m_swapChain->SetFullscreenState(true, nullptr);
+                        self->m_windowCtx->m_swapChain->ResizeTarget(&self->m_windowCtx->m_fsdesc);
+                    }
+                    else
+                        self->m_windowCtx->m_swapChain->SetFullscreenState(false, nullptr);
+
+                    self->m_windowCtx->m_needsFSTransition = false;
+                    self->m_cmdLists[self->m_drawBuf].Reset();
+                    continue;
+                }
+
+                if (self->m_windowCtx->m_needsResize)
+                {
+                    self->m_windowCtx->m_swapChain->ResizeBuffers(2, self->m_windowCtx->width, self->m_windowCtx->height, 
+                        DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+                    self->m_windowCtx->m_needsResize = false;
+                    self->m_cmdLists[self->m_drawBuf].Reset();
+                    continue;
+                }
             }
+
             ID3D11CommandList* list = self->m_cmdLists[self->m_drawBuf].Get();
             self->m_ctx->m_devCtx->ExecuteCommandList(list, false);
             self->m_cmdLists[self->m_drawBuf].Reset();
-            if (self->m_needPresent[self->m_drawBuf])
+
+            D3D11TextureR* csource = self->m_workDoPresent[self->m_drawBuf];
+
+            if (csource)
+            {
+                ComPtr<ID3D11Texture2D> dest;
+                ThrowIfFailed(self->m_windowCtx->m_swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), &dest));
+
+                if (csource->m_samples > 1)
+                {
+                    ID3D11Texture2D* src = csource->m_msaaTex.Get();
+                    self->m_ctx->m_devCtx->ResolveSubresource(dest.Get(), 0, src, 0, DXGI_FORMAT_R8G8B8A8_UNORM);
+                }
+                else
+                {
+                    ID3D11Texture2D* src = csource->m_tex.Get();
+                    self->m_ctx->m_devCtx->CopyResource(dest.Get(), src);
+                }
+                
                 self->m_windowCtx->m_swapChain->Present(1, 0);
+            }
         }
     }
 
@@ -522,10 +577,12 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         m_deferredCtx->RSSetViewports(1, &vp);
     }
 
+    std::unordered_map<D3D11TextureR*, std::pair<size_t, size_t>> m_texResizes;
     void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)
     {
         D3D11TextureR* ctex = static_cast<D3D11TextureR*>(tex);
-        ctex->resize(m_ctx, width, height);
+        std::unique_lock<std::mutex> lk(m_mt);
+        m_texResizes[ctex] = std::make_pair(width, height);
     }
 
     float m_clearColor[4] = {0.0,0.0,0.0,1.0};
@@ -557,12 +614,12 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
 
     void draw(size_t start, size_t count)
     {
-        m_deferredCtx->DrawInstanced(count, 1, start, 0);
+        m_deferredCtx->Draw(count, start);
     }
 
     void drawIndexed(size_t start, size_t count)
     {
-        m_deferredCtx->DrawIndexedInstanced(count, 1, start, 0, 0);
+        m_deferredCtx->DrawIndexed(count, start, 0);
     }
 
     void drawInstances(size_t start, size_t count, size_t instCount)
@@ -575,39 +632,17 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         m_deferredCtx->DrawIndexedInstanced(count, instCount, start, 0, 0);
     }
 
-    bool m_doPresent = false;
+    D3D11TextureR* m_doPresent = nullptr;
     void resolveDisplay(ITextureR* source)
     {
-        D3D11TextureR* csource = static_cast<D3D11TextureR*>(source);
-
-        if (m_windowCtx->m_needsResize)
-        {
-            m_windowCtx->m_swapChain->ResizeBuffers(2, m_windowCtx->width, m_windowCtx->height, DXGI_FORMAT_R8G8B8A8_UNORM,
-                DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
-            m_windowCtx->m_needsResize = false;
-        }
-
-        ComPtr<ID3D11Texture2D> dest;
-        ThrowIfFailed(m_windowCtx->m_swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), &dest));
-
-        if (csource->m_samples > 1)
-        {
-            ID3D11Texture2D* src = csource->m_msaaTex.Get();
-            m_deferredCtx->ResolveSubresource(dest.Get(), 0, src, 0, DXGI_FORMAT_R8G8B8A8_UNORM);
-        }
-        else
-        {
-            ID3D11Texture2D* src = csource->m_tex.Get();
-            m_deferredCtx->CopyResource(dest.Get(), src);
-        }
-        m_doPresent = true;
+        m_doPresent = static_cast<D3D11TextureR*>(source);
     }
 
     void execute()
     {
         ThrowIfFailed(m_deferredCtx->FinishCommandList(false, &m_cmdLists[m_fillBuf]));
-        m_needPresent[m_fillBuf] = m_doPresent;
-        m_doPresent = false;
+        m_workDoPresent[m_fillBuf] = m_doPresent;
+        m_doPresent = nullptr;
         std::unique_lock<std::mutex> lk(m_mt);
         m_completeBuf = m_fillBuf;
         for (size_t i=0 ; i<3 ; ++i)
@@ -686,6 +721,14 @@ public:
         return retval;
     }
 
+    IGraphicsBufferS* newStaticBuffer(BufferUse use, std::unique_ptr<uint8_t[]>&& data, size_t stride, size_t count)
+    {
+        std::unique_ptr<uint8_t[]> d = std::move(data);
+        D3D11GraphicsBufferS* retval = new D3D11GraphicsBufferS(use, m_ctx, d.get(), stride, count);
+        static_cast<D3D11Data*>(m_deferredData)->m_SBufs.emplace_back(retval);
+        return retval;
+    }
+
     IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count)
     {
         D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent->getCommandQueue());
@@ -698,6 +741,15 @@ public:
         const void* data, size_t sz)
     {
         D3D11TextureS* retval = new D3D11TextureS(m_ctx, width, height, mips, fmt, data, sz);
+        static_cast<D3D11Data*>(m_deferredData)->m_STexs.emplace_back(retval);
+        return retval;
+    }
+
+    ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                                std::unique_ptr<uint8_t[]>&& data, size_t sz)
+    {
+        std::unique_ptr<uint8_t[]> d = std::move(data);
+        D3D11TextureS* retval = new D3D11TextureS(m_ctx, width, height, mips, fmt, d.get(), sz);
         static_cast<D3D11Data*>(m_deferredData)->m_STexs.emplace_back(retval);
         return retval;
     }
@@ -740,14 +792,14 @@ public:
     {
         ComPtr<ID3DBlob> errBlob;
 
-        if (FAILED(D3DCompile(vertSource, strlen(vertSource), "HECL Vert Source", nullptr, nullptr, "main", 
+        if (FAILED(D3DCompilePROC(vertSource, strlen(vertSource), "HECL Vert Source", nullptr, nullptr, "main", 
             "vs_5_0", BOO_D3DCOMPILE_FLAG, 0, &vertBlobOut, &errBlob)))
         {
             Log.report(LogVisor::FatalError, "error compiling vert shader: %s", errBlob->GetBufferPointer());
             return nullptr;
         }
 
-        if (FAILED(D3DCompile(fragSource, strlen(fragSource), "HECL Pixel Source", nullptr, nullptr, "main", 
+        if (FAILED(D3DCompilePROC(fragSource, strlen(fragSource), "HECL Pixel Source", nullptr, nullptr, "main", 
             "ps_5_0", BOO_D3DCOMPILE_FLAG, 0, &fragBlobOut, &errBlob)))
         {
             Log.report(LogVisor::FatalError, "error compiling pixel shader: %s", errBlob->GetBufferPointer());

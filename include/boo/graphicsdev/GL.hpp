@@ -24,10 +24,13 @@ public:
     const char* platformName() const {return "OpenGL";}
 
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
+    IGraphicsBufferS* newStaticBuffer(BufferUse use, std::unique_ptr<uint8_t[]>&& data, size_t stride, size_t count);
     IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count);
 
     ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                      const void* data, size_t sz);
+                                const void* data, size_t sz);
+    ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                                std::unique_ptr<uint8_t[]>&& data, size_t sz);
     ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
     ITextureR* newRenderTexture(size_t width, size_t height, size_t samples);
 

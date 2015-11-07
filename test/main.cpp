@@ -467,10 +467,15 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int)
 {
     int argc = 0;
     const boo::SystemChar** argv = (const wchar_t**)(CommandLineToArgvW(lpCmdLine, &argc));
+    static boo::SystemChar selfPath[1024];
+    GetModuleFileNameW(nullptr, selfPath, 1024);
+    static const boo::SystemChar* booArgv[32] = {};
+    booArgv[0] = selfPath;
+    for (int i=0 ; i<argc ; ++i)
+        booArgv[i+1] = argv[i];
 
     LogVisor::CreateWin32Console();
-    return main(argc, argv);
-
+    return main(argc+1, booArgv);
 }
 #else
 

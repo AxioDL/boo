@@ -171,12 +171,17 @@ struct IGraphicsDataFactory
 
     virtual IGraphicsBufferS*
     newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)=0;
+    virtual IGraphicsBufferS*
+    newStaticBuffer(BufferUse use, std::unique_ptr<uint8_t[]>&& data, size_t stride, size_t count)=0;
     virtual IGraphicsBufferD*
     newDynamicBuffer(BufferUse use, size_t stride, size_t count)=0;
 
     virtual ITextureS*
     newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                      const void* data, size_t sz)=0;
+    virtual ITextureS*
+    newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                     std::unique_ptr<uint8_t[]>&& data, size_t sz)=0;
     virtual ITextureD*
     newDynamicTexture(size_t width, size_t height, TextureFormat fmt)=0;
     virtual ITextureR*

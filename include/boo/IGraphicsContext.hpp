@@ -25,9 +25,10 @@ public:
         API_OPENGLES_3 = 3,
         API_VULKAN     = 4,
         API_D3D11      = 5,
-        API_METAL      = 6,
-        API_GX         = 7,
-        API_GX2        = 8
+        API_D3D12      = 6,
+        API_METAL      = 7,
+        API_GX         = 8,
+        API_GX2        = 9
     };
     
     enum EPixelFormat

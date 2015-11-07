@@ -10,6 +10,8 @@
 #include <windows.h>
 #include <unordered_map>
 
+extern DWORD g_mainThreadId;
+
 #include "boo/IWindow.hpp"
 
 namespace boo {class IWindow;}
@@ -18,6 +20,8 @@ namespace boo {class IWindow;}
 #include <dxgi1_4.h>
 #include <d3d12.h>
 #include <d3d11_1.h>
+#include <d3dcompiler.h>
+#include <wingdi.h>
 
 struct D3D12Context
 {
@@ -45,6 +49,8 @@ struct D3D12Context
 #elif _WIN32_WINNT_WIN7
 #include <dxgi1_2.h>
 #include <d3d11_1.h>
+#include <d3dcompiler.h>
+#include <wingdi.h>
 #else
 #error Unsupported Windows target
 #endif
@@ -60,16 +66,43 @@ struct D3D11Context
         ComPtr<IDXGISwapChain1> m_swapChain;
         bool m_needsResize = false;
         size_t width, height;
+
+        bool m_needsFSTransition = false;
+        bool m_fs = false;
+        DXGI_MODE_DESC m_fsdesc = {};
     };
     std::unordered_map<const boo::IWindow*, Window> m_windows;
 };
 
-struct D3DAppContext
+struct OGLContext
+{
+    ComPtr<IDXGIFactory4> m_dxFactory;
+    HGLRC m_lastContext = 0;
+    struct Window
+    {
+        HWND m_hwnd;
+        HDC m_deviceContext;
+        HGLRC m_mainContext;
+        HGLRC m_renderContext;
+        bool m_needsResize = false;
+        size_t width, height;
+
+        bool m_fs = false;
+        LONG m_fsStyle;
+        LONG m_fsExStyle;
+        RECT m_fsRect;
+        int m_fsCountDown = 0;
+    };
+    std::unordered_map<const boo::IWindow*, Window> m_windows;
+};
+
+struct Boo3DAppContext
 {
     D3D11Context m_ctx11;
 #if _WIN32_WINNT_WIN10
     D3D12Context m_ctx12;
 #endif
+    OGLContext m_ctxOgl;
 
     void resize(boo::IWindow* window, size_t width, size_t height)
     {
@@ -101,14 +134,16 @@ struct D3DAppContext
             win.m_swapChain->GetFullscreenState(&isFScr, nullptr);
             return isFScr;
         }
-        else
 #endif
+        if (m_ctx11.m_dev)
         {
             D3D11Context::Window& win = m_ctx11.m_windows[window];
             BOOL isFScr;
             win.m_swapChain->GetFullscreenState(&isFScr, nullptr);
             return isFScr;
         }
+        OGLContext::Window& win = m_ctxOgl.m_windows[window];
+        return win.m_fs;
     }
 
     bool setFullscreen(boo::IWindow* window, bool fs)
@@ -139,8 +174,8 @@ struct D3DAppContext
                 win.m_swapChain->SetFullscreenState(false, nullptr);
             return true;
         }
-        else
 #endif
+        if (m_ctx11.m_dev)
         {
             D3D11Context::Window& win = m_ctx11.m_windows[window];
             BOOL isFScr;
@@ -156,15 +191,57 @@ struct D3DAppContext
                 win.m_swapChain->GetContainingOutput(&out);
                 DXGI_OUTPUT_DESC outDesc;
                 out->GetDesc(&outDesc);
-
-                win.m_swapChain->SetFullscreenState(true, nullptr);
-                DXGI_MODE_DESC mdesc = {outDesc.DesktopCoordinates.right, outDesc.DesktopCoordinates.bottom};
-                win.m_swapChain->ResizeTarget(&mdesc);
+                
+                win.m_fsdesc.Width = outDesc.DesktopCoordinates.right;
+                win.m_fsdesc.Height = outDesc.DesktopCoordinates.bottom;
             }
-            else
-                win.m_swapChain->SetFullscreenState(false, nullptr);
+            win.m_fs = fs;
+            win.m_needsFSTransition = true;
             return true;
         }
+
+        OGLContext::Window& win = m_ctxOgl.m_windows[window];
+        if (fs && win.m_fs)
+            return false;
+        else if (!fs && !win.m_fs)
+            return false;
+
+        if (fs)
+        {
+            win.m_fsStyle = GetWindowLong(win.m_hwnd, GWL_STYLE);
+            win.m_fsExStyle = GetWindowLong(win.m_hwnd, GWL_EXSTYLE);
+            GetWindowRect(win.m_hwnd, &win.m_fsRect);
+
+            SetWindowLong(win.m_hwnd, GWL_STYLE,
+                win.m_fsStyle & ~(WS_CAPTION | WS_THICKFRAME));
+            SetWindowLong(win.m_hwnd, GWL_EXSTYLE,
+                win.m_fsExStyle & ~(WS_EX_DLGMODALFRAME |
+                    WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE));
+
+            MONITORINFO monitor_info;
+            monitor_info.cbSize = sizeof(monitor_info);
+            GetMonitorInfo(MonitorFromWindow(win.m_hwnd, MONITOR_DEFAULTTONEAREST),
+                &monitor_info);
+            SetWindowPos(win.m_hwnd, NULL, monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
+                monitor_info.rcMonitor.right - monitor_info.rcMonitor.left, 
+                monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_ASYNCWINDOWPOS);
+
+            win.m_fs = true;
+        }
+        else
+        {
+            SetWindowLong(win.m_hwnd, GWL_STYLE, win.m_fsStyle);
+            SetWindowLong(win.m_hwnd, GWL_EXSTYLE, win.m_fsExStyle);
+
+            SetWindowPos(win.m_hwnd, NULL, win.m_fsRect.left, win.m_fsRect.top,
+                win.m_fsRect.right - win.m_fsRect.left, win.m_fsRect.bottom - win.m_fsRect.top,
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_ASYNCWINDOWPOS);
+
+            win.m_fs = false;
+        }
+
+        return true;
     }
 };
 
