@@ -45,7 +45,8 @@ struct D3D12Data : IGraphicsData
     std::vector<std::unique_ptr<class D3D12TextureD>> m_DTexs;
     std::vector<std::unique_ptr<class D3D12TextureR>> m_RTexs;
     std::vector<std::unique_ptr<struct D3D12VertexFormat>> m_VFmts;
-    ComPtr<ID3D12Heap> m_gpuHeap;
+    ComPtr<ID3D12Heap> m_bufHeap;
+    ComPtr<ID3D12Heap> m_texHeap;
 };
 
 static const D3D12_RESOURCE_STATES USE_TABLE[] =
@@ -202,7 +203,8 @@ class D3D12TextureD : public ITextureD
         {
             ThrowIfFailed(ctx->m_dev->CreateCommittedResource(
                 &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), 
-                D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height), 
+                D3D12_HEAP_FLAG_NONE, 
+                &CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height), 
                 D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, __uuidof(ID3D12Resource), &m_texs[i]));
         }
     }
@@ -1109,25 +1111,31 @@ public:
 
         /* Create heap */
         ThrowIfFailed(m_ctx->m_dev->CreateHeap(&CD3DX12_HEAP_DESC(allocInfo, 
-            D3D12_HEAP_TYPE_DEFAULT), __uuidof(ID3D12Heap), &retval->m_gpuHeap));
-        ID3D12Heap* gpuHeap = retval->m_gpuHeap.Get();
+            D3D12_HEAP_TYPE_DEFAULT, D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS), 
+            __uuidof(ID3D12Heap), &retval->m_bufHeap));
+        ThrowIfFailed(m_ctx->m_dev->CreateHeap(&CD3DX12_HEAP_DESC(allocInfo, 
+            D3D12_HEAP_TYPE_DEFAULT, D3D12_HEAP_FLAG_ALLOW_ONLY_NON_RT_DS_TEXTURES), 
+            __uuidof(ID3D12Heap), &retval->m_texHeap));
+        ID3D12Heap* bufHeap = retval->m_bufHeap.Get();
+        ID3D12Heap* texHeap = retval->m_texHeap.Get();
 
         /* Wait for previous transaction to complete */
         WaitForLoadList(m_ctx);
 
         /* Place resources */
-        UINT64 offset = 0;
+        UINT64 offsetBuf = 0;
         for (std::unique_ptr<D3D12GraphicsBufferS>& buf : retval->m_SBufs)
-            offset = PlaceBufferForGPU(buf.get(), m_ctx, gpuHeap, offset);
+            offsetBuf = PlaceBufferForGPU(buf.get(), m_ctx, bufHeap, offsetBuf);
 
         for (std::unique_ptr<D3D12GraphicsBufferD>& buf : retval->m_DBufs)
-            offset = PlaceBufferForGPU(buf.get(), m_ctx, gpuHeap, offset);
+            offsetBuf = PlaceBufferForGPU(buf.get(), m_ctx, bufHeap, offsetBuf);
 
+        UINT64 offsetTex = 0;
         for (std::unique_ptr<D3D12TextureS>& tex : retval->m_STexs)
-            offset = PlaceTextureForGPU(tex.get(), m_ctx, gpuHeap, offset);
+            offsetTex = PlaceTextureForGPU(tex.get(), m_ctx, texHeap, offsetTex);
 
         for (std::unique_ptr<D3D12TextureD>& tex : retval->m_DTexs)
-            offset = PlaceTextureForGPU(tex.get(), m_ctx, gpuHeap, offset);
+            offsetTex = PlaceTextureForGPU(tex.get(), m_ctx, texHeap, offsetTex);
 
         /* Execute static uploads */
         ThrowIfFailed(m_ctx->m_loadlist->Close());
