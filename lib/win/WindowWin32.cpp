@@ -420,9 +420,9 @@ class WindowWin32 : public IWindow
     HWND m_hwnd;
     std::unique_ptr<GraphicsContextWin32> m_gfxCtx;
     IWindowCallback* m_callback = nullptr;
-    
+
 public:
-    
+
     WindowWin32(const SystemString& title, Boo3DAppContext& b3dCtx)
     {
         m_hwnd = CreateWindowW(L"BooWindow", title.c_str(), WS_OVERLAPPEDWINDOW,
@@ -440,39 +440,39 @@ public:
         }
         m_gfxCtx.reset(new GraphicsContextWin32D3D(api, this, m_hwnd, b3dCtx));
     }
-    
+
     ~WindowWin32()
     {
-        
+
     }
-    
+
     void setCallback(IWindowCallback* cb)
     {
         m_callback = cb;
     }
-    
+
     void showWindow()
     {
         ShowWindow(m_hwnd, SW_SHOW);
     }
-    
+
     void hideWindow()
     {
         ShowWindow(m_hwnd, SW_HIDE);
     }
-    
+
     SystemString getTitle()
     {
-         wchar_t title[256];
-         int c = GetWindowTextW(m_hwnd, title, 256);
-         return SystemString(title, c);
+        wchar_t title[256];
+        int c = GetWindowTextW(m_hwnd, title, 256);
+        return SystemString(title, c);
     }
-    
+
     void setTitle(const SystemString& title)
     {
         SetWindowTextW(m_hwnd, title.c_str());
     }
-    
+
     void setWindowFrameDefault()
     {
         MONITORINFO monInfo;
@@ -481,13 +481,17 @@ public:
         genFrameDefault(&monInfo, x, y, w, h);
         setWindowFrame(x, y, w, h);
     }
-    
+
     void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const
     {
         RECT rct;
         GetClientRect(m_hwnd, &rct);
-        xOut = rct.left;
-        yOut = rct.top;
+        POINT pt;
+        pt.x = rct.left;
+        pt.y = rct.top;
+        MapWindowPoints(m_hwnd, HWND_DESKTOP, &pt, 1);
+        xOut = pt.x;
+        yOut = pt.y;
         wOut = rct.right;
         hOut = rct.bottom;
     }
@@ -496,12 +500,16 @@ public:
     {
         RECT rct;
         GetClientRect(m_hwnd, &rct);
-        xOut = rct.left;
-        yOut = rct.top;
+        POINT pt;
+        pt.x = rct.left;
+        pt.y = rct.top;
+        MapWindowPoints(m_hwnd, HWND_DESKTOP, &pt, 1);
+        xOut = pt.x;
+        yOut = pt.y;
         wOut = rct.right;
         hOut = rct.bottom;
     }
-    
+
     void setWindowFrame(float x, float y, float w, float h)
     {
         MoveWindow(m_hwnd, x, y, w, h, true);
@@ -511,17 +519,17 @@ public:
     {
         MoveWindow(m_hwnd, x, y, w, h, true);
     }
-    
+
     float getVirtualPixelFactor() const
     {
         return 1.0;
     }
-    
+
     bool isFullscreen() const
     {
         return m_gfxCtx->m_3dCtx.isFullscreen(this);
     }
-    
+
     void setFullscreen(bool fs)
     {
         m_gfxCtx->m_3dCtx.setFullscreen(this, fs);
@@ -570,13 +578,23 @@ public:
             m_callback->mouseUp(coord, button, EModifierKey(modifierMask));
         }
     }
-    
+
+    void _trackMouse()
+    {
+        TRACKMOUSEEVENT tme;
+        tme.cbSize = sizeof(TRACKMOUSEEVENT);
+        tme.dwFlags = TME_NONCLIENT | TME_HOVER | TME_LEAVE;
+        tme.dwHoverTime = 500;
+        tme.hwndTrack = m_hwnd;
+    }
+
+    bool mouseTracking = false;
     void _incomingEvent(void* ev)
     {
         HWNDEvent& e = *static_cast<HWNDEvent*>(ev);
         switch (e.uMsg)
         {
-        case WM_SIZE:
+        case WM_SIZING:
         {
             SWindowRect rect;
             getWindowFrame(rect.location[0], rect.location[1], rect.size[0], rect.size[1]);
@@ -585,6 +603,17 @@ public:
             m_gfxCtx->m_3dCtx.resize(this, rect.size[0], rect.size[1]);
             if (m_callback)
                 m_callback->resized(rect);
+            return;
+        }
+        case WM_MOVING:
+        {
+            SWindowRect rect;
+            getWindowFrame(rect.location[0], rect.location[1], rect.size[0], rect.size[1]);
+            if (!rect.size[0] || !rect.size[1])
+                return;
+
+            if (m_callback)
+                m_callback->windowMoved(rect);
             return;
         }
         case WM_KEYDOWN:
@@ -681,7 +710,50 @@ public:
                     {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam)},
                     {float(GET_X_LPARAM(e.lParam)) / float(w), float(GET_Y_LPARAM(e.lParam)) / float(h)}
                 };
-                m_callback->mouseMove(coord);
+                if (!mouseTracking)
+                {
+                    _trackMouse();
+                    mouseTracking = true;
+                    m_callback->mouseEnter(coord);
+                }
+                else
+                    m_callback->mouseMove(coord);
+            }
+
+            return;
+        }
+        case WM_MOUSELEAVE:
+        case WM_NCMOUSELEAVE:
+        {
+            if (m_callback)
+            {
+                int x, y, w, h;
+                getWindowFrame(x, y, w, h);
+                SWindowCoord coord =
+                {
+                    { (unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam) },
+                    { (unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam) },
+                    { float(GET_X_LPARAM(e.lParam)) / float(w), float(GET_Y_LPARAM(e.lParam)) / float(h) }
+                };
+                m_callback->mouseLeave(coord);
+                mouseTracking = false;
+            }
+            return;
+        }
+        case WM_NCMOUSEHOVER:
+        case WM_MOUSEHOVER:
+        {
+            if (m_callback)
+            {
+                int x, y, w, h;
+                getWindowFrame(x, y, w, h);
+                SWindowCoord coord =
+                {
+                    { (unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam) },
+                    { (unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam) },
+                    { float(GET_X_LPARAM(e.lParam)) / float(w), float(GET_Y_LPARAM(e.lParam)) / float(h) }
+                };
+                m_callback->mouseEnter(coord);
             }
             return;
         }
@@ -743,7 +815,7 @@ public:
     {
         return m_gfxCtx->getLoadContextDataFactory();
     }
-    
+
 };
 
 IWindow* _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx)
