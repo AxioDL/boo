@@ -25,7 +25,7 @@ namespace boo {class IWindow;}
 
 struct D3D12Context
 {
-    ComPtr<IDXGIFactory4> m_dxFactory;
+    ComPtr<IDXGIFactory2> m_dxFactory;
     ComPtr<ID3D12Device> m_dev;
     ComPtr<ID3D12CommandAllocator> m_qalloc[2];
     ComPtr<ID3D12CommandQueue> m_q;
@@ -76,7 +76,7 @@ struct D3D11Context
 
 struct OGLContext
 {
-    ComPtr<IDXGIFactory4> m_dxFactory;
+    ComPtr<IDXGIFactory1> m_dxFactory;
     HGLRC m_lastContext = 0;
     struct Window
     {

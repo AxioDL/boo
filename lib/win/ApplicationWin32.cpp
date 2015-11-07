@@ -4,10 +4,8 @@
 #include <Usbiodef.h>
 
 #if _DEBUG
-#define DXGI_CREATE_FLAGS DXGI_CREATE_FACTORY_DEBUG
 #define D3D11_CREATE_DEVICE_FLAGS D3D11_CREATE_DEVICE_DEBUG
 #else
-#define DXGI_CREATE_FLAGS 0
 #define D3D11_CREATE_DEVICE_FLAGS 0
 #endif
 
@@ -95,11 +93,10 @@ public:
         if (!dxgilib)
             Log.report(LogVisor::FatalError, "unable to load dxgi.dll");
 
-        typedef HRESULT(WINAPI*CreateDXGIFactory2PROC)(UINT Flags, REFIID riid, _COM_Outptr_ void **ppFactory);
-        CreateDXGIFactory2PROC MyCreateDXGIFactory2 = (CreateDXGIFactory2PROC)GetProcAddress(dxgilib, "CreateDXGIFactory2");
-        if (!MyCreateDXGIFactory2)
-            Log.report(LogVisor::FatalError, "unable to find CreateDXGIFactory2 in DXGI.dll\n"
-                                             "Windows 7 users should install \"Platform Update for Windows 7\" from Microsoft");
+        typedef HRESULT(WINAPI*CreateDXGIFactory1PROC)(REFIID riid, _COM_Outptr_ void **ppFactory);
+        CreateDXGIFactory1PROC MyCreateDXGIFactory1 = (CreateDXGIFactory1PROC)GetProcAddress(dxgilib, "CreateDXGIFactory1");
+        if (!MyCreateDXGIFactory1)
+            Log.report(LogVisor::FatalError, "unable to find CreateDXGIFactory1 in DXGI.dll\n");
 
         bool no12 = false;
         bool noD3d = false;
@@ -143,7 +140,7 @@ public:
                 Log.report(LogVisor::FatalError, "unable to create D3D12 device");
 
             /* Obtain DXGI Factory */
-            hr = MyCreateDXGIFactory2(DXGI_CREATE_FLAGS, __uuidof(IDXGIFactory4), &m_3dCtx.m_ctx12.m_dxFactory);
+            hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory2), &m_3dCtx.m_ctx12.m_dxFactory);
             if (FAILED(hr))
                 Log.report(LogVisor::FatalError, "unable to create DXGI factory");
 
@@ -210,7 +207,7 @@ public:
         /* Finally try OpenGL */
         {
             /* Obtain DXGI Factory */
-            HRESULT hr = MyCreateDXGIFactory2(DXGI_CREATE_FLAGS, __uuidof(IDXGIFactory4), &m_3dCtx.m_ctxOgl.m_dxFactory);
+            HRESULT hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory1), &m_3dCtx.m_ctxOgl.m_dxFactory);
             if (FAILED(hr))
                 Log.report(LogVisor::FatalError, "unable to create DXGI factory");
 
