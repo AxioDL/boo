@@ -426,8 +426,8 @@ public:
     WindowWin32(const SystemString& title, Boo3DAppContext& b3dCtx)
     {
         m_hwnd = CreateWindowW(L"BooWindow", title.c_str(), WS_OVERLAPPEDWINDOW,
-            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-            NULL, NULL, NULL, NULL);
+                               CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                               NULL, NULL, NULL, NULL);
         IGraphicsContext::EGraphicsAPI api = IGraphicsContext::API_D3D11;
 #if _WIN32_WINNT_WIN10
         if (b3dCtx.m_ctx12.m_dev)
@@ -589,9 +589,6 @@ public:
     }
 
     bool mouseTracking = false;
-    bool moving = false;
-    bool resizing = false;
-
     void _incomingEvent(void* ev)
     {
         HWNDEvent& e = *static_cast<HWNDEvent*>(ev);
