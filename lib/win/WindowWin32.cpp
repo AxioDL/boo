@@ -429,9 +429,11 @@ public:
                                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                                NULL, NULL, NULL, NULL);
         IGraphicsContext::EGraphicsAPI api = IGraphicsContext::API_D3D11;
+#if _WIN32_WINNT_WIN10
         if (b3dCtx.m_ctx12.m_dev)
             api = IGraphicsContext::API_D3D12;
-        else if (b3dCtx.m_ctxOgl.m_dxFactory)
+#endif
+        if (b3dCtx.m_ctxOgl.m_dxFactory)
         {
             m_gfxCtx.reset(new GraphicsContextWin32GL(IGraphicsContext::API_OPENGL_3_3, this, m_hwnd, b3dCtx));
             return;
