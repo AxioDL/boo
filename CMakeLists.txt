@@ -40,9 +40,9 @@ elseif(APPLE)
   list(APPEND PLAT_SRCS 
        lib/mac/ApplicationCocoa.mm
        lib/mac/WindowCocoa.mm
-       lib/mac/GLViewCocoa.mm
        lib/inputdev/HIDListenerIOKit.cpp
-       lib/inputdev/HIDDeviceIOKit.cpp)
+       lib/inputdev/HIDDeviceIOKit.cpp
+       lib/graphicsdev/Metal.mm)
 
   list(APPEND PLAT_HDRS
        include/boo/graphicsdev/Metal.hpp)

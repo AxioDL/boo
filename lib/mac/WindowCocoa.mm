@@ -1,4 +1,6 @@
 #include "boo/graphicsdev/GL.hpp"
+#include "boo/graphicsdev/glew.h"
+#include "boo/graphicsdev/Metal.hpp"
 #import <AppKit/AppKit.h>
 #import <CoreVideo/CVDisplayLink.h>
 #include "boo/IApplication.hpp"
@@ -72,53 +74,110 @@ static const NSOpenGLPixelFormatAttribute* PF_TABLE[] =
     PF_RGBAF32_Z24_ATTRS
 };
 
-namespace boo {class GraphicsContextCocoa;}
-@interface GraphicsContextCocoaInternal : NSOpenGLView
+namespace boo
 {
+class GraphicsContextCocoa : public IGraphicsContext
+{
+protected:
+    EGraphicsAPI m_api;
+    EPixelFormat m_pf;
+    IWindow* m_parentWindow;
+    CVDisplayLinkRef m_dispLink = nullptr;
+    
+    GraphicsContextCocoa(EGraphicsAPI api, EPixelFormat pf, IWindow* parentWindow)
+    : m_api(api), m_pf(pf), m_parentWindow(parentWindow) {}
+    
+    std::mutex m_dlmt;
+    std::condition_variable m_dlcv;
+    
+    static CVReturn DLCallback(CVDisplayLinkRef CV_NONNULL displayLink,
+                               const CVTimeStamp * CV_NONNULL inNow,
+                               const CVTimeStamp * CV_NONNULL inOutputTime,
+                               CVOptionFlags flagsIn,
+                               CVOptionFlags * CV_NONNULL flagsOut,
+                               GraphicsContextCocoa* CV_NULLABLE ctx)
+    {
+        ctx->m_dlcv.notify_one();
+        return kCVReturnSuccess;
+    }
+    
+    ~GraphicsContextCocoa()
+    {
+        if (m_dispLink)
+        {
+            CVDisplayLinkStop(m_dispLink);
+            CVDisplayLinkRelease(m_dispLink);
+        }
+    }
+    
+public:
+    IWindowCallback* m_callback = nullptr;
+    void waitForRetrace()
+    {
+        std::unique_lock<std::mutex> lk(m_dlmt);
+        m_dlcv.wait(lk);
+    }
+};
+class GraphicsContextCocoaGL;
+class GraphicsContextCocoaMetal;
+}
+
+@interface BooCocoaResponder : NSResponder
+{
+    @public
     NSUInteger lastModifiers;
     boo::GraphicsContextCocoa* booContext;
+    NSView* parentView;
 }
-- (id)initWithBooContext:(boo::GraphicsContextCocoa*)bctx;
+- (id)initWithBooContext:(boo::GraphicsContextCocoa*)bctx View:(NSView*)view;
+@end
+
+@interface GraphicsContextCocoaGLInternal : NSOpenGLView
+{
+    BooCocoaResponder* resp;
+}
+- (id)initWithBooContext:(boo::GraphicsContextCocoaGL*)bctx;
+@end
+
+@interface GraphicsContextCocoaMetalInternal : NSView
+{
+    BooCocoaResponder* resp;
+}
+- (id)initWithBooContext:(boo::GraphicsContextCocoaMetal*)bctx;
 @end
     
 namespace boo
 {
 static LogVisor::LogModule Log("boo::WindowCocoa");
-IGraphicsCommandQueue* _NewGLES3CommandQueue(IGraphicsContext* parent);
+IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent);
+IGraphicsCommandQueue* _NewMetalCommandQueue(MetalContext* ctx, MetalContext::Window* windowCtx,
+                                             IGraphicsContext* parent);
 void _CocoaUpdateLastGLCtx(NSOpenGLContext* lastGLCtx);
 
-class GraphicsContextCocoa : public IGraphicsContext
+class GraphicsContextCocoaGL : public GraphicsContextCocoa
 {
-    
-    EGraphicsAPI m_api;
-    EPixelFormat m_pf;
-    IWindow* m_parentWindow;
-    GraphicsContextCocoaInternal* m_nsContext = nullptr;
+    GraphicsContextCocoaGLInternal* m_nsContext = nullptr;
     
     IGraphicsCommandQueue* m_commandQueue = nullptr;
     IGraphicsDataFactory* m_dataFactory = nullptr;
     NSOpenGLContext* m_loadCtx = nullptr;
-    CVDisplayLinkRef m_dispLink = nullptr;
     
 public:
     NSOpenGLContext* m_lastCtx = nullptr;
-    IWindowCallback* m_callback = nullptr;
     
-    GraphicsContextCocoa(EGraphicsAPI api, IWindow* parentWindow, NSOpenGLContext* lastGLCtx)
-    : m_api(api),
-    m_pf(PF_RGBA8),
-    m_parentWindow(parentWindow),
-    m_lastCtx(lastGLCtx)
-    {}
+    GraphicsContextCocoaGL(EGraphicsAPI api, IWindow* parentWindow, NSOpenGLContext* lastGLCtx)
+    : GraphicsContextCocoa(api, PF_RGBA8, parentWindow),
+      m_lastCtx(lastGLCtx)
+    {
+        m_dataFactory = new GLDataFactory(this);
+    }
     
-    ~GraphicsContextCocoa()
+    ~GraphicsContextCocoaGL()
     {
         delete m_dataFactory;
         delete m_commandQueue;
         [m_nsContext release];
         [m_loadCtx release];
-        CVDisplayLinkStop(m_dispLink);
-        CVDisplayLinkRelease(m_dispLink);
     }
     
     void _setCallback(IWindowCallback* cb)
@@ -143,35 +202,16 @@ public:
         m_pf = pf;
     }
     
-    std::mutex m_dlmt;
-    std::condition_variable m_dlcv;
-    
-    static CVReturn DLCallback(CVDisplayLinkRef CV_NONNULL displayLink,
-                               const CVTimeStamp * CV_NONNULL inNow,
-                               const CVTimeStamp * CV_NONNULL inOutputTime,
-                               CVOptionFlags flagsIn,
-                               CVOptionFlags * CV_NONNULL flagsOut,
-                               GraphicsContextCocoa* CV_NULLABLE ctx)
-    {
-        ctx->m_dlcv.notify_one();
-        return kCVReturnSuccess;
-    }
-    
-    void waitForRetrace()
-    {
-        std::unique_lock<std::mutex> lk(m_dlmt);
-        m_dlcv.wait(lk);
-    }
-    
     void initializeContext()
     {
-        m_nsContext = [[GraphicsContextCocoaInternal alloc] initWithBooContext:this];
+        m_nsContext = [[GraphicsContextCocoaGLInternal alloc] initWithBooContext:this];
         if (!m_nsContext)
             Log.report(LogVisor::FatalError, "unable to make new NSOpenGLView");
         [(NSWindow*)m_parentWindow->getPlatformHandle() setContentView:m_nsContext];
         CVDisplayLinkCreateWithActiveCGDisplays(&m_dispLink);
         CVDisplayLinkSetOutputCallback(m_dispLink, (CVDisplayLinkOutputCallback)DLCallback, this);
         CVDisplayLinkStart(m_dispLink);
+        m_commandQueue = _NewGLCommandQueue(this);
     }
     
     void makeCurrent()
@@ -185,15 +225,11 @@ public:
     
     IGraphicsCommandQueue* getCommandQueue()
     {
-        if (!m_commandQueue)
-            m_commandQueue = _NewGLES3CommandQueue(this);
         return m_commandQueue;
     }
     
     IGraphicsDataFactory* getDataFactory()
     {
-        if (!m_dataFactory)
-            m_dataFactory = new GLDataFactory(this);
         return m_dataFactory;
     }
     
@@ -208,7 +244,7 @@ public:
                 Log.report(LogVisor::FatalError, "unable to make load NSOpenGLContext");
             [m_loadCtx makeCurrentContext];
         }
-        return getDataFactory();
+        return m_dataFactory;
     }
     
     void present()
@@ -218,8 +254,8 @@ public:
     
 };
 
-IGraphicsContext* _GraphicsContextCocoaNew(IGraphicsContext::EGraphicsAPI api,
-                                           IWindow* parentWindow, NSOpenGLContext* lastGLCtx)
+IGraphicsContext* _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI api,
+                                             IWindow* parentWindow, NSOpenGLContext* lastGLCtx)
 {
     if (api != IGraphicsContext::API_OPENGL_3_3 && api != IGraphicsContext::API_OPENGL_4_2)
         return NULL;
@@ -252,40 +288,117 @@ IGraphicsContext* _GraphicsContextCocoaNew(IGraphicsContext::EGraphicsAPI api,
         if (api == IGraphicsContext::API_OPENGL_4_2)
             return NULL;
     
-    return new GraphicsContextCocoa(api, parentWindow, lastGLCtx);
+    return new GraphicsContextCocoaGL(api, parentWindow, lastGLCtx);
 }
     
-}
+class GraphicsContextCocoaMetal : public GraphicsContextCocoa
+{
+    GraphicsContextCocoaMetalInternal* m_nsContext = nullptr;
     
-@implementation GraphicsContextCocoaInternal
-- (id)initWithBooContext:(boo::GraphicsContextCocoa*)bctx
+    IGraphicsCommandQueue* m_commandQueue = nullptr;
+    IGraphicsDataFactory* m_dataFactory = nullptr;
+    MetalContext* m_metalCtx;
+    MetalContext::Window* m_metalWindowCtx;
+    
+public:
+    
+    GraphicsContextCocoaMetal(EGraphicsAPI api, IWindow* parentWindow,
+                              MetalContext* metalCtx, MetalContext::Window* metalWindowCtx)
+    : GraphicsContextCocoa(api, PF_RGBA8, parentWindow),
+      m_metalCtx(metalCtx), m_metalWindowCtx(metalWindowCtx)
+    {
+        m_dataFactory = new MetalDataFactory(this);
+    }
+    
+    ~GraphicsContextCocoaMetal()
+    {
+        delete m_dataFactory;
+        delete m_commandQueue;
+        [m_nsContext release];
+    }
+    
+    void _setCallback(IWindowCallback* cb)
+    {
+        m_callback = cb;
+    }
+    
+    EGraphicsAPI getAPI() const
+    {
+        return m_api;
+    }
+    
+    EPixelFormat getPixelFormat() const
+    {
+        return m_pf;
+    }
+    
+    void setPixelFormat(EPixelFormat pf)
+    {
+        if (pf > PF_RGBAF32_Z24)
+            return;
+        m_pf = pf;
+    }
+    
+    void initializeContext()
+    {
+        m_nsContext = [[GraphicsContextCocoaMetalInternal alloc] initWithBooContext:this];
+        if (!m_nsContext)
+            Log.report(LogVisor::FatalError, "unable to make new NSView for Metal");
+        [(NSWindow*)m_parentWindow->getPlatformHandle() setContentView:m_nsContext];
+        CVDisplayLinkCreateWithActiveCGDisplays(&m_dispLink);
+        CVDisplayLinkSetOutputCallback(m_dispLink, (CVDisplayLinkOutputCallback)DLCallback, this);
+        CVDisplayLinkStart(m_dispLink);
+        m_commandQueue = _NewMetalCommandQueue(m_metalCtx, m_metalWindowCtx, this);
+    }
+    
+    void makeCurrent()
+    {
+    }
+    
+    void postInit()
+    {
+    }
+    
+    IGraphicsCommandQueue* getCommandQueue()
+    {
+        return m_commandQueue;
+    }
+    
+    IGraphicsDataFactory* getDataFactory()
+    {
+        return m_dataFactory;
+    }
+    
+    IGraphicsDataFactory* getLoadContextDataFactory()
+    {
+        return m_dataFactory;
+    }
+    
+    void present()
+    {
+    }
+    
+};
+
+IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI api,
+                                                IWindow* parentWindow,
+                                                MetalContext* metalCtx,
+                                                MetalContext::Window* metalWindowCtx)
+{
+    if (api != IGraphicsContext::API_METAL)
+        return nullptr;
+    return new GraphicsContextCocoaMetal(api, parentWindow, metalCtx, metalWindowCtx);
+}
+
+}
+
+@implementation BooCocoaResponder
+- (id)initWithBooContext:(boo::GraphicsContextCocoa*)bctx View:(NSView*)view
 {
     lastModifiers = 0;
     booContext = bctx;
-    boo::IGraphicsContext::EPixelFormat pf = bctx->getPixelFormat();
-    NSOpenGLPixelFormat* nspf = [[NSOpenGLPixelFormat alloc] initWithAttributes:PF_TABLE[pf]];
-    self = [self initWithFrame:NSMakeRect(0, 0, 100, 100) pixelFormat:nspf];
-    if (bctx->m_lastCtx)
-    {
-        NSOpenGLContext* sharedCtx = [[NSOpenGLContext alloc] initWithFormat:nspf shareContext:bctx->m_lastCtx];
-        [self setOpenGLContext:sharedCtx];
-        [sharedCtx setView:self];
-    }
-    [nspf release];
+    parentView = view;
     return self;
-}
-
-- (void)reshape
-{
-    boo::SWindowRect rect = {{int(self.frame.origin.x), int(self.frame.origin.y)},
-                             {int(self.frame.size.width), int(self.frame.size.height)}};
-    booContext->m_callback->resized(rect);
-    [super reshape];
-}
-
-- (BOOL)acceptsTouchEvents
-{
-    return YES;
 }
 
 static inline boo::EModifierKey getMod(NSUInteger flags)
@@ -318,9 +431,9 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 {
     if (!booContext->m_callback)
         return;
-    NSPoint liw = [self convertPoint:[theEvent locationInWindow] fromView:nil];
-    float pixelFactor = [[self window] backingScaleFactor];
-    NSRect frame = [self frame];
+    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+    float pixelFactor = [[parentView window] backingScaleFactor];
+    NSRect frame = [parentView frame];
     boo::SWindowCoord coord =
     {
         {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
@@ -335,9 +448,9 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 {
     if (!booContext->m_callback)
         return;
-    NSPoint liw = [self convertPoint:[theEvent locationInWindow] fromView:nil];
-    float pixelFactor = [[self window] backingScaleFactor];
-    NSRect frame = [self frame];
+    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+    float pixelFactor = [[parentView window] backingScaleFactor];
+    NSRect frame = [parentView frame];
     boo::SWindowCoord coord =
     {
         {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
@@ -352,9 +465,9 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 {
     if (!booContext->m_callback)
         return;
-    NSPoint liw = [self convertPoint:[theEvent locationInWindow] fromView:nil];
-    float pixelFactor = [[self window] backingScaleFactor];
-    NSRect frame = [self frame];
+    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+    float pixelFactor = [[parentView window] backingScaleFactor];
+    NSRect frame = [parentView frame];
     boo::SWindowCoord coord =
     {
         {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
@@ -369,9 +482,9 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 {
     if (!booContext->m_callback)
         return;
-    NSPoint liw = [self convertPoint:[theEvent locationInWindow] fromView:nil];
-    float pixelFactor = [[self window] backingScaleFactor];
-    NSRect frame = [self frame];
+    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+    float pixelFactor = [[parentView window] backingScaleFactor];
+    NSRect frame = [parentView frame];
     boo::SWindowCoord coord =
     {
         {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
@@ -389,9 +502,9 @@ static inline boo::EMouseButton getButton(NSEvent* event)
     boo::EMouseButton button = getButton(theEvent);
     if (!button)
         return;
-    NSPoint liw = [self convertPoint:[theEvent locationInWindow] fromView:nil];
-    float pixelFactor = [[self window] backingScaleFactor];
-    NSRect frame = [self frame];
+    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+    float pixelFactor = [[parentView window] backingScaleFactor];
+    NSRect frame = [parentView frame];
     boo::SWindowCoord coord =
     {
         {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
@@ -408,9 +521,9 @@ static inline boo::EMouseButton getButton(NSEvent* event)
     boo::EMouseButton button = getButton(theEvent);
     if (!button)
         return;
-    NSPoint liw = [self convertPoint:[theEvent locationInWindow] fromView:nil];
-    float pixelFactor = [[self window] backingScaleFactor];
-    NSRect frame = [self frame];
+    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+    float pixelFactor = [[parentView window] backingScaleFactor];
+    NSRect frame = [parentView frame];
     boo::SWindowCoord coord =
     {
         {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
@@ -424,25 +537,31 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 {
     if (!booContext->m_callback)
         return;
-    NSPoint liw = [self convertPoint:[theEvent locationInWindow] fromView:nil];
-    float pixelFactor = [[self window] backingScaleFactor];
-    NSRect frame = [self frame];
-    boo::SWindowCoord coord =
+    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+    if (theEvent.window == [parentView window] && NSPointInRect(liw, parentView.frame))
     {
-        {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
-        {(unsigned)liw.x, (unsigned)liw.y},
-        {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
-    };
-    booContext->m_callback->mouseMove(coord);
+        float pixelFactor = [[parentView window] backingScaleFactor];
+        NSRect frame = [parentView frame];
+        boo::SWindowCoord coord =
+        {
+            {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
+            {(unsigned)liw.x, (unsigned)liw.y},
+            {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
+        };
+        booContext->m_callback->mouseMove(coord);
+    }
 }
+
 - (void)mouseDragged:(NSEvent*)theEvent
 {
     [self mouseMoved:theEvent];
 }
+
 - (void)rightMouseDragged:(NSEvent*)theEvent
 {
     [self mouseMoved:theEvent];
 }
+
 - (void)otherMouseDragged:(NSEvent*)theEvent
 {
     [self mouseMoved:theEvent];
@@ -452,9 +571,9 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 {
     if (!booContext->m_callback)
         return;
-    NSPoint liw = [self convertPoint:[theEvent locationInWindow] fromView:nil];
-    float pixelFactor = [[self window] backingScaleFactor];
-    NSRect frame = [self frame];
+    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+    float pixelFactor = [[parentView window] backingScaleFactor];
+    NSRect frame = [parentView frame];
     boo::SWindowCoord coord =
     {
         {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
@@ -641,7 +760,9 @@ static boo::ESpecialKey translateKeycode(short code)
     if (!booContext->m_callback)
         return;
     NSString* chars = theEvent.characters;
-    if ([chars length] == 0)
+    if ([chars length] == 0 ||
+        [chars characterAtIndex:0] == '\n' ||
+        [chars characterAtIndex:0] == '\r')
         booContext->m_callback->specialKeyDown(translateKeycode(theEvent.keyCode),
                                                getMod(theEvent.modifierFlags),
                                                theEvent.isARepeat);
@@ -669,20 +790,19 @@ static boo::ESpecialKey translateKeycode(short code)
     if (!booContext->m_callback)
         return;
     NSUInteger modFlags = theEvent.modifierFlags;
-    bool isRepeat = theEvent.isARepeat;
     if (modFlags != lastModifiers)
     {
         NSUInteger changedFlags = modFlags ^ lastModifiers;
         
         NSUInteger downFlags = changedFlags & modFlags;
         if (downFlags & NSControlKeyMask)
-            booContext->m_callback->modKeyDown(boo::MKEY_CTRL, isRepeat);
+            booContext->m_callback->modKeyDown(boo::MKEY_CTRL, false);
         if (downFlags & NSAlternateKeyMask)
-            booContext->m_callback->modKeyDown(boo::MKEY_ALT, isRepeat);
+            booContext->m_callback->modKeyDown(boo::MKEY_ALT, false);
         if (downFlags & NSShiftKeyMask)
-            booContext->m_callback->modKeyDown(boo::MKEY_SHIFT, isRepeat);
+            booContext->m_callback->modKeyDown(boo::MKEY_SHIFT, false);
         if (downFlags & NSCommandKeyMask)
-            booContext->m_callback->modKeyDown(boo::MKEY_COMMAND, isRepeat);
+            booContext->m_callback->modKeyDown(boo::MKEY_COMMAND, false);
         
         NSUInteger upFlags = changedFlags & ~modFlags;
         if (upFlags & NSControlKeyMask)
@@ -698,6 +818,94 @@ static boo::ESpecialKey translateKeycode(short code)
     }
 }
 
+- (BOOL)acceptsTouchEvents
+{
+    return YES;
+}
+
+- (BOOL)acceptsFirstResponder
+{
+    return YES;
+}
+
+@end
+    
+@implementation GraphicsContextCocoaGLInternal
+- (id)initWithBooContext:(boo::GraphicsContextCocoaGL*)bctx
+{
+    resp = [[BooCocoaResponder alloc] initWithBooContext:bctx View:self];
+    boo::IGraphicsContext::EPixelFormat pf = bctx->getPixelFormat();
+    NSOpenGLPixelFormat* nspf = [[NSOpenGLPixelFormat alloc] initWithAttributes:PF_TABLE[pf]];
+    self = [self initWithFrame:NSMakeRect(0, 0, 100, 100) pixelFormat:nspf];
+    if (bctx->m_lastCtx)
+    {
+        NSOpenGLContext* sharedCtx = [[NSOpenGLContext alloc] initWithFormat:nspf shareContext:bctx->m_lastCtx];
+        [self setOpenGLContext:sharedCtx];
+        [sharedCtx setView:self];
+    }
+    [nspf release];
+    return self;
+}
+
+- (void)dealloc
+{
+    [resp release];
+    [super dealloc];
+}
+
+- (void)reshape
+{
+    boo::SWindowRect rect = {{int(self.frame.origin.x), int(self.frame.origin.y)},
+                             {int(self.frame.size.width), int(self.frame.size.height)}};
+    resp->booContext->m_callback->resized(rect);
+    [super reshape];
+}
+
+- (BOOL)acceptsTouchEvents
+{
+    return YES;
+}
+
+- (BOOL)acceptsFirstResponder
+{
+    return YES;
+}
+
+- (NSResponder*)nextResponder
+{
+    return resp;
+}
+
+@end
+
+@implementation GraphicsContextCocoaMetalInternal
+- (id)initWithBooContext:(boo::GraphicsContextCocoaMetal*)bctx
+{
+    resp = [[BooCocoaResponder alloc] initWithBooContext:bctx View:self];
+    return self;
+}
+
+- (void)dealloc
+{
+    [resp release];
+    [super dealloc];
+}
+
+- (BOOL)acceptsTouchEvents
+{
+    return YES;
+}
+
+- (BOOL)acceptsFirstResponder
+{
+    return YES;
+}
+
+- (NSResponder*)nextResponder
+{
+    return resp;
+}
+
 @end
 
 namespace boo
@@ -711,12 +919,12 @@ class WindowCocoa : public IWindow
 
 public:
 
-    WindowCocoa(const std::string& title, NSOpenGLContext* lastGLCtx)
+    WindowCocoa(const std::string& title, NSOpenGLContext* lastGLCtx, MetalContext* metalCtx)
     {
         dispatch_sync(dispatch_get_main_queue(),
         ^{
             m_nsWindow = [[WindowCocoaInternal alloc] initWithBooWindow:this title:title];
-            m_gfxCtx = _GraphicsContextCocoaNew(IGraphicsContext::API_OPENGL_3_3, this, lastGLCtx);
+            m_gfxCtx = _GraphicsContextCocoaGLNew(IGraphicsContext::API_OPENGL_3_3, this, lastGLCtx);
             m_gfxCtx->initializeContext();
         });
     }
@@ -840,6 +1048,33 @@ public:
         return TOUCH_TRACKPAD;
     }
     
+    void setStyle(EWindowStyle style)
+    {
+        if (style & STYLE_TITLEBAR)
+            m_nsWindow.titleVisibility = NSWindowTitleVisible;
+        else
+            m_nsWindow.titleVisibility = NSWindowTitleHidden;
+        
+        if (style & STYLE_CLOSE)
+            m_nsWindow.styleMask |= NSClosableWindowMask;
+        else
+            m_nsWindow.styleMask &= ~NSClosableWindowMask;
+        
+        if (style & STYLE_RESIZE)
+            m_nsWindow.styleMask |= NSResizableWindowMask;
+        else
+            m_nsWindow.styleMask &= ~NSResizableWindowMask;
+    }
+    
+    EWindowStyle getStyle() const
+    {
+        int retval = 0;
+        retval |= m_nsWindow.titleVisibility == NSWindowTitleVisible ? STYLE_TITLEBAR : 0;
+        retval |= (m_nsWindow.styleMask & NSClosableWindowMask) ? STYLE_CLOSE : 0;
+        retval |= (m_nsWindow.styleMask & NSResizableWindowMask) ? STYLE_RESIZE: 0;
+        return EWindowStyle(retval);
+    }
+    
     void waitForRetrace()
     {
         static_cast<GraphicsContextCocoa*>(m_gfxCtx)->waitForRetrace();
@@ -867,9 +1102,9 @@ public:
     
 };
     
-IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx)
+IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx, MetalContext* metalCtx)
 {
-    return new WindowCocoa(title, lastGLCtx);
+    return new WindowCocoa(title, lastGLCtx, metalCtx);
 }
     
 }

@@ -2,6 +2,7 @@
 #include <thread>
 
 #include "boo/IApplication.hpp"
+#include "boo/graphicsdev/Metal.hpp"
 
 namespace boo {class ApplicationCocoa;}
 @interface AppDelegate : NSObject <NSApplicationDelegate>
@@ -16,7 +17,7 @@ namespace boo {class ApplicationCocoa;}
 namespace boo
 {
     
-IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx);
+IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx, MetalContext* metalCtx);
     
 class ApplicationCocoa : public IApplication
 {
@@ -33,6 +34,8 @@ private:
     
     /* All windows */
     std::unordered_map<NSWindow*, IWindow*> m_windows;
+    
+    MetalContext m_metalCtx;
     
     void _deletedWindow(IWindow* window)
     {
@@ -86,7 +89,7 @@ public:
         NSText* aboutText = [[NSText alloc] initWithFrame:aboutCr];
         [aboutText setEditable:NO];
         [aboutText setAlignment:NSCenterTextAlignment];
-        [aboutText setString:@"\nRWK Authors\n\nJackoalan\nAntidote\n"];
+        [aboutText setString:@"\nBoo Authors\n\nJackoalan\nAntidote\n"];
         [aboutPanel setContentView:aboutText];
         appDelegate->aboutPanel = aboutPanel;
     }
@@ -142,7 +145,7 @@ public:
     
     IWindow* newWindow(const std::string& title)
     {
-        IWindow* newWindow = _WindowCocoaNew(title, m_lastGLCtx);
+        IWindow* newWindow = _WindowCocoaNew(title, m_lastGLCtx, &m_metalCtx);
         m_windows[(NSWindow*)newWindow->getPlatformHandle()] = newWindow;
         return newWindow;
     }

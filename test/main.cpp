@@ -457,7 +457,7 @@ int main(int argc, const boo::SystemChar** argv)
     LogVisor::RegisterConsoleLogger();
     boo::TestApplicationCallback appCb;
     int ret = ApplicationRun(boo::IApplication::PLAT_AUTO,
-        appCb, _S("rwk"), _S("RWK"), argc, argv);
+        appCb, _S("boo"), _S("Boo"), argc, argv);
     printf("IM DYING!!\n");
     return ret;
 }

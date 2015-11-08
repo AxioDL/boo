@@ -4,7 +4,6 @@
 #include "IGraphicsDataFactory.hpp"
 #include "IGraphicsCommandQueue.hpp"
 #include "boo/IGraphicsContext.hpp"
-#include "glew.h"
 #include <vector>
 #include <unordered_set>
 

@@ -1,4 +1,5 @@
 #include "boo/graphicsdev/GL.hpp"
+#include "boo/graphicsdev/glew.h"
 #include "boo/IGraphicsContext.hpp"
 #include <vector>
 #include <thread>
