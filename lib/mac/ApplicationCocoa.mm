@@ -3,6 +3,7 @@
 
 #include "boo/IApplication.hpp"
 #include "boo/graphicsdev/Metal.hpp"
+#include "CocoaCommon.hpp"
 
 namespace boo {class ApplicationCocoa;}
 @interface AppDelegate : NSObject <NSApplicationDelegate>
@@ -92,6 +93,15 @@ public:
         [aboutText setString:@"\nBoo Authors\n\nJackoalan\nAntidote\n"];
         [aboutPanel setContentView:aboutText];
         appDelegate->aboutPanel = aboutPanel;
+        
+        /* Determine which graphics API to use */
+        for (const SystemString& arg : args)
+            if (!arg.compare("--metal"))
+            {
+                m_metalCtx.m_dev = MTLCreateSystemDefaultDevice();
+                m_metalCtx.m_q = [m_metalCtx.m_dev.get() newCommandQueue];
+                break;
+            }
     }
     
     EPlatformType getPlatformType() const

@@ -9,6 +9,8 @@
 
 #if _WIN32
 #include <boo/graphicsdev/D3D.hpp>
+#elif __APPLE__
+#include <boo/graphicsdev/Metal.hpp>
 #endif
 
 namespace boo
@@ -335,6 +337,33 @@ struct TestApplicationCallback : IApplicationCallback
             ComPtr<ID3DBlob> psCompile;
             pipeline = d3dF->newShaderPipeline(VS, PS, vsCompile, psCompile, vfmt, 
                                                BlendFactorOne, BlendFactorZero, true, true, false);
+        }
+#elif __APPLE__
+        else if (factory->platform() == IGraphicsDataFactory::PlatformMetal)
+        {
+            MetalDataFactory* metalF = dynamic_cast<MetalDataFactory*>(factory);
+            
+            static const char* VS =
+            "struct VertData {float3 in_pos [[ attribute(0) ]]; float2 in_uv [[ attribute(1) ]];};\n"
+            "struct VertToFrag {float4 out_pos [[ position ]]; float2 out_uv;};\n"
+            "vertex VertToFrag main(VertData v [[ stage_in ]])\n"
+            "{\n"
+            "    VertToFrag retval;\n"
+            "    retval.out_pos = float4(v.in_pos, 1.0);\n"
+            "    retval.out_uv = v.in_uv;\n"
+            "    return retval;\n"
+            "}\n";
+            
+            static const char* FS =
+            "constexpr sampler samp(address::repeat);\n"
+            "struct VertToFrag {float4 out_pos [[ position ]]; float2 out_uv;};\n"
+            "fragment float4 main(VertToFrag d [[ stage_in ]], texture2d<float> tex [[ texture(0) ]])\n"
+            "{\n"
+            "    return tex.sample(samp, d.out_uv);\n"
+            "}\n";
+            
+            pipeline = metalF->newShaderPipeline(VS, FS, vfmt, self->m_renderTarget,
+                                                 BlendFactorOne, BlendFactorZero, true, true, false);
         }
 #endif
 

@@ -6,17 +6,20 @@
 #include "boo/IGraphicsContext.hpp"
 #include <vector>
 #include <unordered_set>
+#include <unordered_map>
 
 namespace boo
 {
+struct MetalContext;
     
 class MetalDataFactory : public IGraphicsDataFactory
 {
     IGraphicsContext* m_parent;
     IGraphicsData* m_deferredData = nullptr;
     std::unordered_set<IGraphicsData*> m_committedData;
+    struct MetalContext* m_ctx;
 public:
-    MetalDataFactory(IGraphicsContext* parent);
+    MetalDataFactory(IGraphicsContext* parent, MetalContext* ctx);
     ~MetalDataFactory() {}
     
     Platform platform() const {return PlatformMetal;}
@@ -36,7 +39,7 @@ public:
     IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
     
     IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
-                                       size_t texCount, const char** texNames,
+                                       IVertexFormat* vtxFmt, ITextureR* target,
                                        BlendFactor srcFac, BlendFactor dstFac,
                                        bool depthTest, bool depthWrite, bool backfaceCulling);
     
@@ -51,14 +54,6 @@ public:
     IGraphicsData* commit();
     void destroyData(IGraphicsData*);
     void destroyAllData();
-};
-
-struct MetalContext
-{
-    struct Window
-    {
-        
-    };
 };
 
 }

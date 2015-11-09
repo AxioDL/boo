@@ -1,6 +1,7 @@
 #include "boo/graphicsdev/GL.hpp"
 #include "boo/graphicsdev/glew.h"
 #include "boo/graphicsdev/Metal.hpp"
+#include "CocoaCommon.hpp"
 #import <AppKit/AppKit.h>
 #import <CoreVideo/CVDisplayLink.h>
 #include "boo/IApplication.hpp"
@@ -142,6 +143,7 @@ class GraphicsContextCocoaMetal;
 @interface GraphicsContextCocoaMetalInternal : NSView
 {
     BooCocoaResponder* resp;
+    boo::MetalContext* m_ctx;
 }
 - (id)initWithBooContext:(boo::GraphicsContextCocoaMetal*)bctx;
 @end
@@ -150,7 +152,7 @@ namespace boo
 {
 static LogVisor::LogModule Log("boo::WindowCocoa");
 IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent);
-IGraphicsCommandQueue* _NewMetalCommandQueue(MetalContext* ctx, MetalContext::Window* windowCtx,
+IGraphicsCommandQueue* _NewMetalCommandQueue(MetalContext* ctx, IWindow* parentWindow,
                                              IGraphicsContext* parent);
 void _CocoaUpdateLastGLCtx(NSOpenGLContext* lastGLCtx);
 
@@ -297,17 +299,16 @@ class GraphicsContextCocoaMetal : public GraphicsContextCocoa
     
     IGraphicsCommandQueue* m_commandQueue = nullptr;
     IGraphicsDataFactory* m_dataFactory = nullptr;
-    MetalContext* m_metalCtx;
-    MetalContext::Window* m_metalWindowCtx;
     
 public:
-    
+    MetalContext* m_metalCtx;
+
     GraphicsContextCocoaMetal(EGraphicsAPI api, IWindow* parentWindow,
-                              MetalContext* metalCtx, MetalContext::Window* metalWindowCtx)
+                              MetalContext* metalCtx)
     : GraphicsContextCocoa(api, PF_RGBA8, parentWindow),
-      m_metalCtx(metalCtx), m_metalWindowCtx(metalWindowCtx)
+      m_metalCtx(metalCtx)
     {
-        m_dataFactory = new MetalDataFactory(this);
+        m_dataFactory = new MetalDataFactory(this, metalCtx);
     }
     
     ~GraphicsContextCocoaMetal()
@@ -315,6 +316,7 @@ public:
         delete m_dataFactory;
         delete m_commandQueue;
         [m_nsContext release];
+        m_metalCtx->m_windows.erase(m_parentWindow);
     }
     
     void _setCallback(IWindowCallback* cb)
@@ -341,14 +343,16 @@ public:
     
     void initializeContext()
     {
+        MetalContext::Window& w = m_metalCtx->m_windows[m_parentWindow];
         m_nsContext = [[GraphicsContextCocoaMetalInternal alloc] initWithBooContext:this];
         if (!m_nsContext)
             Log.report(LogVisor::FatalError, "unable to make new NSView for Metal");
+        w.m_metalLayer = (CAMetalLayer*)m_nsContext.layer;
         [(NSWindow*)m_parentWindow->getPlatformHandle() setContentView:m_nsContext];
         CVDisplayLinkCreateWithActiveCGDisplays(&m_dispLink);
         CVDisplayLinkSetOutputCallback(m_dispLink, (CVDisplayLinkOutputCallback)DLCallback, this);
         CVDisplayLinkStart(m_dispLink);
-        m_commandQueue = _NewMetalCommandQueue(m_metalCtx, m_metalWindowCtx, this);
+        m_commandQueue = _NewMetalCommandQueue(m_metalCtx, m_parentWindow, this);
     }
     
     void makeCurrent()
@@ -382,12 +386,11 @@ public:
 
 IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI api,
                                                 IWindow* parentWindow,
-                                                MetalContext* metalCtx,
-                                                MetalContext::Window* metalWindowCtx)
+                                                MetalContext* metalCtx)
 {
     if (api != IGraphicsContext::API_METAL)
         return nullptr;
-    return new GraphicsContextCocoaMetal(api, parentWindow, metalCtx, metalWindowCtx);
+    return new GraphicsContextCocoaMetal(api, parentWindow, metalCtx);
 }
 
 }
@@ -881,6 +884,8 @@ static boo::ESpecialKey translateKeycode(short code)
 @implementation GraphicsContextCocoaMetalInternal
 - (id)initWithBooContext:(boo::GraphicsContextCocoaMetal*)bctx
 {
+    self = [self initWithFrame:NSMakeRect(0, 0, 100, 100)];
+    m_ctx = bctx->m_metalCtx;
     resp = [[BooCocoaResponder alloc] initWithBooContext:bctx View:self];
     return self;
 }
@@ -889,6 +894,20 @@ static boo::ESpecialKey translateKeycode(short code)
 {
     [resp release];
     [super dealloc];
+}
+
+- (BOOL)wantsLayer
+{
+    return YES;
+}
+
+- (CALayer*)makeBackingLayer
+{
+    CAMetalLayer* layer = [CAMetalLayer new];
+    layer.device = m_ctx->m_dev.get();
+    layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+    layer.framebufferOnly = NO;
+    return layer;
 }
 
 - (BOOL)acceptsTouchEvents
@@ -924,7 +943,10 @@ public:
         dispatch_sync(dispatch_get_main_queue(),
         ^{
             m_nsWindow = [[WindowCocoaInternal alloc] initWithBooWindow:this title:title];
-            m_gfxCtx = _GraphicsContextCocoaGLNew(IGraphicsContext::API_OPENGL_3_3, this, lastGLCtx);
+            if (metalCtx->m_dev)
+                m_gfxCtx = _GraphicsContextCocoaMetalNew(IGraphicsContext::API_METAL, this, metalCtx);
+            else
+                m_gfxCtx = _GraphicsContextCocoaGLNew(IGraphicsContext::API_OPENGL_3_3, this, lastGLCtx);
             m_gfxCtx->initializeContext();
         });
     }

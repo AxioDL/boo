@@ -40,6 +40,7 @@ elseif(APPLE)
   list(APPEND PLAT_SRCS 
        lib/mac/ApplicationCocoa.mm
        lib/mac/WindowCocoa.mm
+       lib/mac/CocoaCommon.hpp
        lib/inputdev/HIDListenerIOKit.cpp
        lib/inputdev/HIDDeviceIOKit.cpp
        lib/graphicsdev/Metal.mm)
@@ -50,8 +51,11 @@ elseif(APPLE)
   find_library(APPKIT_LIBRARY AppKit)
   find_library(IOKIT_LIBRARY IOKit)
   find_library(OPENGL_LIBRARY OpenGL)
+  find_library(METAL_LIBRARY Metal)
+  find_library(QUARTZCORE_LIBRARY QuartzCore)
   find_library(COREVIDEO_LIBRARY CoreVideo)
-  list(APPEND _BOO_SYS_LIBS ${APPKIT_LIBRARY} ${IOKIT_LIBRARY} ${OPENGL_LIBRARY} ${COREVIDEO_LIBRARY})
+  list(APPEND _BOO_SYS_LIBS ${APPKIT_LIBRARY} ${IOKIT_LIBRARY} ${OPENGL_LIBRARY} ${METAL_LIBRARY}
+                            ${QUARTZCORE_LIBRARY} ${COREVIDEO_LIBRARY})
 else(NOT GEKKO)
   list(APPEND PLAT_SRCS 
        lib/x11/ApplicationUnix.cpp
