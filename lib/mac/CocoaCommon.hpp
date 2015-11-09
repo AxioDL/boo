@@ -13,13 +13,7 @@ public:
     NSPtr() = default;
     ~NSPtr() {[m_ptr release];}
     NSPtr(T&& recv) : m_ptr(recv) {}
-    NSPtr& operator=(T&& recv)
-    {
-        NSUInteger rc = [m_ptr retainCount];
-        [m_ptr release];
-        m_ptr = recv;
-        return *this;
-    }
+    NSPtr& operator=(T&& recv) {[m_ptr release]; m_ptr = recv; return *this;}
     NSPtr(const NSPtr& other) = delete;
     NSPtr(NSPtr&& other) = default;
     NSPtr& operator=(const NSPtr& other) = delete;
