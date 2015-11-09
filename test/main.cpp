@@ -344,9 +344,11 @@ struct TestApplicationCallback : IApplicationCallback
             MetalDataFactory* metalF = dynamic_cast<MetalDataFactory*>(factory);
             
             static const char* VS =
+            "#include <metal_stdlib>\n"
+            "using namespace metal;\n"
             "struct VertData {float3 in_pos [[ attribute(0) ]]; float2 in_uv [[ attribute(1) ]];};\n"
             "struct VertToFrag {float4 out_pos [[ position ]]; float2 out_uv;};\n"
-            "vertex VertToFrag main(VertData v [[ stage_in ]])\n"
+            "vertex VertToFrag vmain(VertData v [[ stage_in ]])\n"
             "{\n"
             "    VertToFrag retval;\n"
             "    retval.out_pos = float4(v.in_pos, 1.0);\n"
@@ -355,9 +357,11 @@ struct TestApplicationCallback : IApplicationCallback
             "}\n";
             
             static const char* FS =
+            "#include <metal_stdlib>\n"
+            "using namespace metal;\n"
             "constexpr sampler samp(address::repeat);\n"
             "struct VertToFrag {float4 out_pos [[ position ]]; float2 out_uv;};\n"
-            "fragment float4 main(VertToFrag d [[ stage_in ]], texture2d<float> tex [[ texture(0) ]])\n"
+            "fragment float4 fmain(VertToFrag d [[ stage_in ]], texture2d<float> tex [[ texture(0) ]])\n"
             "{\n"
             "    return tex.sample(samp, d.out_uv);\n"
             "}\n";

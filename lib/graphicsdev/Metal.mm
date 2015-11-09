@@ -24,7 +24,7 @@ struct MetalData : IGraphicsData
     std::vector<std::unique_ptr<struct MetalVertexFormat>> m_VFmts;
 };
 
-#define MTL_STATIC MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModePrivate
+#define MTL_STATIC MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeShared
 #define MTL_DYNAMIC MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeShared
 
 class MetalGraphicsBufferS : public IGraphicsBufferS
@@ -138,10 +138,13 @@ class MetalTextureR : public ITextureR
     void Setup(MetalContext* ctx, size_t width, size_t height, size_t samples)
     {
         NSPtr<MTLTextureDescriptor*> desc =
-        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
                                                            width:width height:height
                                                        mipmapped:NO];
-        m_passDesc = [MTLRenderPassDescriptor renderPassDescriptor];
+        @autoreleasepool
+        {
+            m_passDesc = [[MTLRenderPassDescriptor renderPassDescriptor] retain];
+        }
         desc.get().usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
         desc.get().storageMode = MTLStorageModePrivate;
 
@@ -241,18 +244,19 @@ struct MetalVertexFormat : IVertexFormat
         }
         
         m_vdesc = [MTLVertexDescriptor vertexDescriptor];
+        MTLVertexBufferLayoutDescriptor* layoutDesc = m_vdesc.get().layouts[0];
+        layoutDesc.stride = stride;
+        layoutDesc.stepFunction = MTLVertexStepFunctionPerVertex;
+        layoutDesc.stepRate = 1;
+        
         size_t offset = 0;
         for (size_t i=0 ; i<elementCount ; ++i)
         {
             const VertexElementDescriptor* elemin = &elements[i];
             MTLVertexAttributeDescriptor* attrDesc = m_vdesc.get().attributes[i];
-            MTLVertexBufferLayoutDescriptor* layoutDesc = m_vdesc.get().layouts[i];
             attrDesc.format = SEMANTIC_TYPE_TABLE[elemin->semantic];
             attrDesc.offset = offset;
             attrDesc.bufferIndex = 0;
-            layoutDesc.stride = stride;
-            layoutDesc.stepFunction = MTLVertexStepFunctionPerVertex;
-            layoutDesc.stepRate = 1;
             offset += SEMANTIC_SIZE_TABLE[elemin->semantic];
         }
     }
@@ -290,7 +294,7 @@ class MetalShaderPipeline : public IShaderPipeline
         desc.get().fragmentFunction = frag;
         desc.get().vertexDescriptor = vtxFmt->m_vdesc.get();
         desc.get().sampleCount = target->samples();
-        desc.get().colorAttachments[0].pixelFormat = MTLPixelFormatRGBA8Unorm;
+        desc.get().colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
         desc.get().colorAttachments[0].blendingEnabled = dstFac != BlendFactorZero;
         desc.get().colorAttachments[0].sourceRGBBlendFactor = BLEND_FACTOR_TABLE[srcFac];
         desc.get().colorAttachments[0].destinationRGBBlendFactor = BLEND_FACTOR_TABLE[dstFac];
@@ -412,7 +416,10 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     MetalCommandQueue(MetalContext* ctx, IWindow* parentWindow, IGraphicsContext* parent)
     : m_ctx(ctx), m_parentWindow(parentWindow), m_parent(parent)
     {
-        m_cmdBuf = [ctx->m_q.get() commandBuffer];
+        @autoreleasepool
+        {
+            m_cmdBuf = [[ctx->m_q.get() commandBufferWithUnretainedReferences] retain];
+        }
     }
     
     MetalShaderDataBinding* m_boundData = nullptr;
@@ -506,14 +513,16 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         
         MetalTextureR* csource = static_cast<MetalTextureR*>(source);
         [m_enc.get() endEncoding];
+        m_enc.reset();
         NSPtr<id<CAMetalDrawable>> drawable = [w.m_metalLayer nextDrawable];
+        NSPtr<id<MTLTexture>> dest = drawable.get().texture;
         NSPtr<id<MTLBlitCommandEncoder>> blitEnc = [m_cmdBuf.get() blitCommandEncoder];
         [blitEnc.get() copyFromTexture:csource->m_tex.get()
                            sourceSlice:0
                            sourceLevel:0
                           sourceOrigin:MTLOriginMake(0, 0, 0)
-                            sourceSize:MTLSizeMake(csource->m_width, csource->m_height, 1)
-                             toTexture:drawable.get().texture
+                            sourceSize:MTLSizeMake(dest.get().width, dest.get().height, 1)
+                             toTexture:dest.get()
                       destinationSlice:0
                       destinationLevel:0
                      destinationOrigin:MTLOriginMake(0, 0, 0)];
@@ -524,32 +533,35 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     bool m_inProgress = false;
     void execute()
     {
-        /* Abandon if in progress (renderer too slow) */
-        if (m_inProgress)
+        @autoreleasepool
         {
-            m_cmdBuf = [m_ctx->m_q.get() commandBufferWithUnretainedReferences];
-            return;
+            /* Abandon if in progress (renderer too slow) */
+            if (m_inProgress)
+            {
+                m_cmdBuf = [[m_ctx->m_q.get() commandBufferWithUnretainedReferences] retain];
+                return;
+            }
+            
+            /* Perform texture resizes */
+            if (m_texResizes.size())
+            {
+                for (const auto& resize : m_texResizes)
+                    resize.first->resize(m_ctx, resize.second.first, resize.second.second);
+                m_texResizes.clear();
+                m_cmdBuf = [[m_ctx->m_q.get() commandBufferWithUnretainedReferences] retain];
+                return;
+            }
+            
+            m_drawBuf = m_fillBuf;
+            ++m_fillBuf;
+            if (m_fillBuf == 2)
+                m_fillBuf = 0;
+            
+            [m_cmdBuf.get() addCompletedHandler:^(id<MTLCommandBuffer> buf) {m_inProgress = false;}];
+            m_inProgress = true;
+            [m_cmdBuf.get() commit];
+            m_cmdBuf = [[m_ctx->m_q.get() commandBufferWithUnretainedReferences] retain];
         }
-        
-        /* Perform texture resizes */
-        if (m_texResizes.size())
-        {
-            for (const auto& resize : m_texResizes)
-                resize.first->resize(m_ctx, resize.second.first, resize.second.second);
-            m_texResizes.clear();
-            m_cmdBuf = [m_ctx->m_q.get() commandBufferWithUnretainedReferences];
-            return;
-        }
-        
-        m_drawBuf = m_fillBuf;
-        ++m_fillBuf;
-        if (m_fillBuf == 2)
-            m_fillBuf = 0;
-        
-        [m_cmdBuf.get() addCompletedHandler:^(id<MTLCommandBuffer> buf) {m_inProgress = false;}];
-        m_inProgress = true;
-        [m_cmdBuf.get() commit];
-        m_cmdBuf = [m_ctx->m_q.get() commandBufferWithUnretainedReferences];
     }
 };
     
@@ -591,7 +603,7 @@ void MetalTextureD::unmap()
 }
     
 MetalDataFactory::MetalDataFactory(IGraphicsContext* parent, MetalContext* ctx)
-: m_parent(parent), m_ctx(ctx) {}
+: m_parent(parent), m_deferredData(new struct MetalData()), m_ctx(ctx) {}
     
 IGraphicsBufferS* MetalDataFactory::newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
 {
@@ -664,14 +676,14 @@ IShaderPipeline* MetalDataFactory::newShaderPipeline(const char* vertSource, con
                                                                              error:&err];
     if (err)
         Log.report(LogVisor::FatalError, "error compiling vert shader: %s", [[err localizedDescription] UTF8String]);
-    NSPtr<id<MTLFunction>> vertFunc = [vertShaderLib.get() newFunctionWithName:@"main"];
+    NSPtr<id<MTLFunction>> vertFunc = [vertShaderLib.get() newFunctionWithName:@"vmain"];
     
     NSPtr<id<MTLLibrary>> fragShaderLib = [m_ctx->m_dev.get() newLibraryWithSource:@(fragSource)
                                                                            options:compOpts.get()
                                                                              error:&err];
     if (err)
         Log.report(LogVisor::FatalError, "error compiling frag shader: %s", [[err localizedDescription] UTF8String]);
-    NSPtr<id<MTLFunction>> fragFunc = [fragShaderLib.get() newFunctionWithName:@"main"];
+    NSPtr<id<MTLFunction>> fragFunc = [fragShaderLib.get() newFunctionWithName:@"fmain"];
     
     MetalShaderPipeline* retval = new MetalShaderPipeline(m_ctx, vertFunc.get(), fragFunc.get(),
                                                           static_cast<const MetalVertexFormat*>(vtxFmt),

@@ -884,8 +884,9 @@ static boo::ESpecialKey translateKeycode(short code)
 @implementation GraphicsContextCocoaMetalInternal
 - (id)initWithBooContext:(boo::GraphicsContextCocoaMetal*)bctx
 {
-    self = [self initWithFrame:NSMakeRect(0, 0, 100, 100)];
     m_ctx = bctx->m_metalCtx;
+    self = [self initWithFrame:NSMakeRect(0, 0, 100, 100)];
+    [self setWantsLayer:YES];
     resp = [[BooCocoaResponder alloc] initWithBooContext:bctx View:self];
     return self;
 }
@@ -894,11 +895,6 @@ static boo::ESpecialKey translateKeycode(short code)
 {
     [resp release];
     [super dealloc];
-}
-
-- (BOOL)wantsLayer
-{
-    return YES;
 }
 
 - (CALayer*)makeBackingLayer
