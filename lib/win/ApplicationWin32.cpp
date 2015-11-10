@@ -53,7 +53,7 @@ static bool FindBestD3DCompile()
 
 namespace boo
 {
-static LogVisor::LogModule Log("ApplicationWin32");
+static LogVisor::LogModule Log("boo::ApplicationWin32");
     
 IWindow* _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx);
 
@@ -167,6 +167,7 @@ public:
                 nullptr, __uuidof(ID3D12GraphicsCommandList), &m_3dCtx.m_ctx12.m_loadlist)))
                 Log.report(LogVisor::FatalError, "unable to create loader list");
 
+            Log.report(LogVisor::Info, "initialized D3D12 renderer");
             return;
         }
 #endif
@@ -201,6 +202,7 @@ public:
             /* Build default sampler here */
             m_3dCtx.m_ctx11.m_dev->CreateSamplerState(&CD3D11_SAMPLER_DESC(D3D11_DEFAULT), &m_3dCtx.m_ctx11.m_ss);
 
+            Log.report(LogVisor::Info, "initialized D3D12 renderer");
             return;
         }
 
@@ -211,6 +213,7 @@ public:
             if (FAILED(hr))
                 Log.report(LogVisor::FatalError, "unable to create DXGI factory");
 
+            Log.report(LogVisor::Info, "initialized OpenGL renderer");
             return;
         }
 

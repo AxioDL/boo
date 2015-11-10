@@ -6,6 +6,7 @@
 
 #include "boo/graphicsdev/D3D.hpp"
 #include "boo/graphicsdev/GL.hpp"
+#include "boo/graphicsdev/glew.h"
 #include "boo/graphicsdev/wglew.h"
 
 static const int ContextAttribs[] =
@@ -20,7 +21,7 @@ static const int ContextAttribs[] =
 
 namespace boo
 {
-static LogVisor::LogModule Log("WindowWin32");
+static LogVisor::LogModule Log("boo::WindowWin32");
 #if _WIN32_WINNT_WIN10
 IGraphicsCommandQueue* _NewD3D12CommandQueue(D3D12Context* ctx, D3D12Context::Window* windowCtx, IGraphicsContext* parent,
                                              ID3D12CommandQueue** cmdQueueOut);
