@@ -117,7 +117,7 @@ else(NOT GEKKO)
 endif()
 
 # For some reason, clang takes forever if glew.c is not built with -Os
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "AppleClang")
   set_source_files_properties(lib/graphicsdev/glew.c PROPERTIES COMPILE_FLAGS -Os)
 endif()
 
