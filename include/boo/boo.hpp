@@ -6,5 +6,7 @@
 #include "inputdev/DeviceFinder.hpp"
 #include "inputdev/DolphinSmashAdapter.hpp"
 #include "inputdev/DualshockPad.hpp"
+#include "graphicsdev/IGraphicsCommandQueue.hpp"
+#include "graphicsdev/IGraphicsDataFactory.hpp"
 
 #endif // BOO_HPP

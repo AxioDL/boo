@@ -242,6 +242,7 @@ public:
 
             if (FD_ISSET(m_xcbFd, &fds))
             {
+                XLockDisplay(m_xDisp);
                 while (XPending(m_xDisp))
                 {
                     XEvent event;
@@ -256,6 +257,7 @@ public:
                             window->second->_incomingEvent(&event);
                     }
                 }
+                XUnlockDisplay(m_xDisp);
             }
 
             if (FD_ISSET(m_dbusFd, &fds))

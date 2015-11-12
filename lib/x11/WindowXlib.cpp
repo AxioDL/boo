@@ -196,6 +196,8 @@ public:
       m_xDisp(display),
       m_lastCtx(lastCtx)
     {
+        m_dataFactory = new class GLDataFactory(this);
+
         /* Query framebuffer configurations */
         GLXFBConfig* fbConfigs = nullptr;
         int numFBConfigs = 0;
@@ -305,51 +307,35 @@ public:
         m_timerCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribs);
         if (!m_timerCtx)
             Log.report(LogVisor::FatalError, "unable to make new timer GLX context");
+
+        XUnlockDisplay(m_xDisp);
+        m_commandQueue = _NewGLCommandQueue(this);
+        XLockDisplay(m_xDisp);
     }
 
     void makeCurrent()
     {
+        XLockDisplay(m_xDisp);
         if (!glXMakeContextCurrent(m_xDisp, m_glxWindow, m_glxWindow, m_glxCtx))
             Log.report(LogVisor::FatalError, "unable to make GLX context current");
+        XUnlockDisplay(m_xDisp);
     }
-
-    typedef void (*DEBUGPROC)(GLenum source,
-                              GLenum type,
-                              GLuint id,
-                              GLenum severity,
-                              GLsizei length,
-                              const GLchar* message,
-                              void* userParam);
-
-    static void DebugCb(GLenum source,
-                        GLenum type,
-                        GLuint id,
-                        GLenum severity,
-                        GLsizei length,
-                        const GLchar* message,
-                        void* userParam)
-    {
-        fprintf(stderr, "%s\n", message);
-    }
-    typedef void(*glDebugMessageCallbackPROC)(DEBUGPROC callback, void* userParam);
 
     void postInit()
     {
         GLXExtensionCheck();
+        XLockDisplay(m_xDisp);
         GLXEnableVSync(m_xDisp, m_glxWindow);
+        XUnlockDisplay(m_xDisp);
     }
 
     IGraphicsCommandQueue* getCommandQueue()
     {
-        if (!m_commandQueue)
-            m_commandQueue = _NewGLCommandQueue(this);
         return m_commandQueue;
     }
 
     IGraphicsDataFactory* getDataFactory()
     {
-        if (!m_dataFactory)
-            m_dataFactory = new class GLDataFactory(this);
         return m_dataFactory;
     }
 
@@ -491,9 +477,11 @@ public:
     
     ~WindowXlib()
     {
+        XLockDisplay(m_xDisp);
         XUnmapWindow(m_xDisp, m_windowId);
         XDestroyWindow(m_xDisp, m_windowId);
         XFreeColormap(m_xDisp, m_colormapId);
+        XUnlockDisplay(m_xDisp);
         APP->_deletedWindow(this);
     }
     
@@ -504,14 +492,16 @@ public:
     
     void showWindow()
     {
+        XLockDisplay(m_xDisp);
         XMapWindow(m_xDisp, m_windowId);
-        XFlush(m_xDisp);
+        XUnlockDisplay(m_xDisp);
     }
     
     void hideWindow()
     {
+        XLockDisplay(m_xDisp);
         XUnmapWindow(m_xDisp, m_windowId);
-        XFlush(m_xDisp);
+        XUnlockDisplay(m_xDisp);
     }
     
     std::string getTitle()
@@ -521,8 +511,11 @@ public:
         int      actualFormat;
         unsigned long     bytes;
         unsigned char* string = nullptr;
-        if (XGetWindowProperty(m_xDisp, m_windowId, XA_WM_NAME, 0, ~0l, False,
-                               XA_STRING, &actualType, &actualFormat, &nitems, &bytes, &string) == Success)
+        XLockDisplay(m_xDisp);
+        int ret = XGetWindowProperty(m_xDisp, m_windowId, XA_WM_NAME, 0, ~0l, False,
+                                     XA_STRING, &actualType, &actualFormat, &nitems, &bytes, &string);
+        XUnlockDisplay(m_xDisp);
+        if (ret == Success)
         {
             std::string retval((const char*)string);
             XFree(string);
@@ -534,8 +527,10 @@ public:
     void setTitle(const std::string& title)
     {
         const unsigned char* c_title = (unsigned char*)title.c_str();
+        XLockDisplay(m_xDisp);
         XChangeProperty(m_xDisp, m_windowId, XA_WM_NAME, XA_STRING, 8,
                         PropModeReplace, c_title, title.length());
+        XUnlockDisplay(m_xDisp);
     }
     
     void setWindowFrameDefault()
@@ -544,13 +539,17 @@ public:
         Screen* screen = DefaultScreenOfDisplay(m_xDisp);
         genFrameDefault(screen, x, y, w, h);
         XWindowChanges values = {(int)x, (int)y, (int)w, (int)h};
+        XLockDisplay(m_xDisp);
         XConfigureWindow(m_xDisp, m_windowId, CWX|CWY|CWWidth|CWHeight, &values);
+        XUnlockDisplay(m_xDisp);
     }
     
     void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const
     {
         XWindowAttributes attrs;
+        XLockDisplay(m_xDisp);
         XGetWindowAttributes(m_xDisp, m_windowId, &attrs);
+        XUnlockDisplay(m_xDisp);
         xOut = attrs.x;
         yOut = attrs.y;
         wOut = attrs.width;
@@ -560,7 +559,9 @@ public:
     void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const
     {
         XWindowAttributes attrs;
+        XLockDisplay(m_xDisp);
         XGetWindowAttributes(m_xDisp, m_windowId, &attrs);
+        XUnlockDisplay(m_xDisp);
         xOut = attrs.x;
         yOut = attrs.y;
         wOut = attrs.width;
@@ -570,13 +571,17 @@ public:
     void setWindowFrame(float x, float y, float w, float h)
     {
         XWindowChanges values = {(int)x, (int)y, (int)w, (int)h};
+        XLockDisplay(m_xDisp);
         XConfigureWindow(m_xDisp, m_windowId, CWX|CWY|CWWidth|CWHeight, &values);
+        XUnlockDisplay(m_xDisp);
     }
 
     void setWindowFrame(int x, int y, int w, int h)
     {
         XWindowChanges values = {x, y, w, h};
+        XLockDisplay(m_xDisp);
         XConfigureWindow(m_xDisp, m_windowId, CWX|CWY|CWWidth|CWHeight, &values);
+        XUnlockDisplay(m_xDisp);
     }
     
     float getVirtualPixelFactor() const
@@ -593,8 +598,11 @@ public:
         unsigned long     bytes;
         Atom* vals = nullptr;
         bool fullscreen = false;
-        if (XGetWindowProperty(m_xDisp, m_windowId, S_ATOMS->m_netwmState, 0, ~0l, False,
-                               XA_ATOM, &actualType, &actualFormat, &nitems, &bytes, (unsigned char**)&vals) == Success)
+        XLockDisplay(m_xDisp);
+        int ret = XGetWindowProperty(m_xDisp, m_windowId, S_ATOMS->m_netwmState, 0, ~0l, False,
+                                     XA_ATOM, &actualType, &actualFormat, &nitems, &bytes, (unsigned char**)&vals);
+        XUnlockDisplay(m_xDisp);
+        if (ret == Success)
         {
             for (int i=0 ; i<nitems ; ++i)
             {
@@ -639,7 +647,9 @@ public:
             if (style & STYLE_CLOSE)
                 wmHints.functions |= MWM_FUNC_CLOSE;
 
+            XLockDisplay(m_xDisp);
             XChangeProperty(m_xDisp, m_windowId, S_ATOMS->m_motifWmHints, S_ATOMS->m_motifWmHints, 32, PropModeReplace, (unsigned char*)&wmHints, 5);
+            XUnlockDisplay(m_xDisp);
         }
 
         m_styleFlags = style;
@@ -665,8 +675,10 @@ public:
         fsEvent.xclient.data.l[0] = fs;
         fsEvent.xclient.data.l[1] = S_ATOMS->m_netwmStateFullscreen;
         fsEvent.xclient.data.l[2] = 0;
+        XLockDisplay(m_xDisp);
         XSendEvent(m_xDisp, DefaultRootWindow(m_xDisp), False,
                    StructureNotifyMask | SubstructureRedirectMask, (XEvent*)&fsEvent);
+        XUnlockDisplay(m_xDisp);
 
         m_inFs = fs;
     }
@@ -1127,7 +1139,9 @@ public:
     bool _isWindowMapped()
     {
         XWindowAttributes attr;
+        XLockDisplay(m_xDisp);
         XGetWindowAttributes(m_xDisp, m_windowId, &attr);
+        XUnlockDisplay(m_xDisp);
         return attr.map_state != IsUnmapped;
     }
 };
@@ -1136,7 +1150,10 @@ IWindow* _WindowXlibNew(const std::string& title,
                        Display* display, int defaultScreen,
                        GLXContext lastCtx)
 {
-    return new WindowXlib(title, display, defaultScreen, lastCtx);
+    XLockDisplay(display);
+    IWindow* ret = new WindowXlib(title, display, defaultScreen, lastCtx);
+    XUnlockDisplay(display);
+    return ret;
 }
     
 }
