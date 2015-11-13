@@ -341,6 +341,7 @@ public:
 
     IGraphicsDataFactory* getLoadContextDataFactory()
     {
+        XLockDisplay(m_xDisp);
         if (!m_loadCtx)
         {
             m_loadCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribs);
@@ -349,6 +350,7 @@ public:
         }
         if (!glXMakeContextCurrent(m_xDisp, m_glxWindow, m_glxWindow, m_loadCtx))
             Log.report(LogVisor::FatalError, "unable to make load GLX context current");
+        XUnlockDisplay(m_xDisp);
         return getDataFactory();
     }
 
@@ -362,8 +364,10 @@ public:
     {
         if (m_timerBound)
             return;
+        XLockDisplay(m_xDisp);
         if (!glXMakeContextCurrent(m_xDisp, m_glxWindow, m_glxWindow, m_timerCtx))
             Log.report(LogVisor::FatalError, "unable to make timer GLX context current");
+        XUnlockDisplay(m_xDisp);
         m_timerBound = true;
     }
 

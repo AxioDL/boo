@@ -9,7 +9,7 @@
 namespace boo
 {
 
-static udev* UDEV_INST = NULL;
+static udev* UDEV_INST = nullptr;
 udev* GetUdev()
 {
     if (!UDEV_INST)
@@ -22,7 +22,7 @@ class HIDListenerUdev final : public IHIDListener
     DeviceFinder& m_finder;
     
     udev_monitor* m_udevMon;
-    std::thread* m_udevThread;
+    std::thread m_udevThread;
     bool m_udevRunning;
     bool m_scanningEnabled;
     
@@ -50,7 +50,7 @@ class HIDListenerUdev final : public IHIDListener
         int vid = 0, pid = 0;
         udev_list_entry* attrs = udev_device_get_properties_list_entry(device);
 #if 0
-        udev_list_entry* att = NULL;
+        udev_list_entry* att = nullptr;
         udev_list_entry_foreach(att, attrs)
         {
             const char* name = udev_list_entry_get_name(att);
@@ -62,18 +62,18 @@ class HIDListenerUdev final : public IHIDListener
 
         udev_list_entry* vide = udev_list_entry_get_by_name(attrs, "ID_VENDOR_ID");
         if (vide)
-            vid = strtol(udev_list_entry_get_value(vide), NULL, 16);
+            vid = strtol(udev_list_entry_get_value(vide), nullptr, 16);
 
         udev_list_entry* pide = udev_list_entry_get_by_name(attrs, "ID_MODEL_ID");
         if (pide)
-            pid = strtol(udev_list_entry_get_value(pide), NULL, 16);
+            pid = strtol(udev_list_entry_get_value(pide), nullptr, 16);
 
-        const char* manuf = NULL;
+        const char* manuf = nullptr;
         udev_list_entry* manufe = udev_list_entry_get_by_name(attrs, "ID_VENDOR");
         if (manufe)
             manuf = udev_list_entry_get_value(manufe);
 
-        const char* product = NULL;
+        const char* product = nullptr;
         udev_list_entry* producte = udev_list_entry_get_by_name(attrs, "ID_MODEL");
         if (producte)
             product = udev_list_entry_get_value(producte);
@@ -81,7 +81,7 @@ class HIDListenerUdev final : public IHIDListener
         if (!listener->m_finder._insertToken(DeviceToken(type, vid, pid, manuf, product, devPath)))
         {
             /* Matched-insertion failed; see if generic HID interface is available */
-            udev_list_entry* devInterfaces = NULL;
+            udev_list_entry* devInterfaces = nullptr;
             if (type == DeviceToken::DEVTYPE_USB)
                 devInterfaces = udev_list_entry_get_by_name(attrs, "ID_USB_INTERFACES");
             else if (type == DeviceToken::DEVTYPE_BLUETOOTH)
@@ -117,8 +117,28 @@ class HIDListenerUdev final : public IHIDListener
         listener->m_finder._removeToken(devPath);
     }
 
+    /* Empty handler for SIGTERM */
+    static void _sigterm(int signo)
+    {
+        (void)signo;
+    }
+
     static void _udevProc(HIDListenerUdev* listener)
     {
+        /* SIGTERM will be used to terminate thread */
+        struct sigaction s;
+        s.sa_handler = _sigterm;
+        sigemptyset(&s.sa_mask);
+        s.sa_flags = 0;
+        sigaction(SIGTERM, &s, nullptr);
+
+        /* SIGTERM will atomically become unblocked
+         * when pselect is entered */
+        sigset_t sigset, oldset;
+        sigemptyset(&sigset);
+        sigaddset(&sigset, SIGTERM);
+        pthread_sigmask(SIG_BLOCK, &sigset, &oldset);
+
         udev_monitor_enable_receiving(listener->m_udevMon);
         int fd = udev_monitor_get_fd(listener->m_udevMon);
         while (listener->m_udevRunning)
@@ -126,7 +146,12 @@ class HIDListenerUdev final : public IHIDListener
             fd_set fds;
             FD_ZERO(&fds);
             FD_SET(fd, &fds);
-            select(fd+1, &fds, NULL, NULL, NULL);
+            if (pselect(fd+1, &fds, nullptr, nullptr, nullptr, &oldset) < 0)
+            {
+                /* SIGTERM handled here */
+                if (errno == EINTR)
+                    break;
+            }
             udev_device* dev = udev_monitor_receive_device(listener->m_udevMon);
             if (dev)
             {
@@ -144,7 +169,6 @@ public:
     HIDListenerUdev(DeviceFinder& finder)
     : m_finder(finder)
     {
-        
         /* Setup hotplug events */
         m_udevMon = udev_monitor_new_from_netlink(GetUdev(), "udev");
         if (!m_udevMon)
@@ -163,16 +187,14 @@ public:
 
         /* Start hotplug thread */
         m_udevRunning = true;
-        m_udevThread = new std::thread(_udevProc, this);
-        
+        m_udevThread = std::thread(_udevProc, this);
     }
     
     ~HIDListenerUdev()
     {
         m_udevRunning = false;
-        pthread_kill(m_udevThread->native_handle(), SIGINT);
-        m_udevThread->join();
-        delete m_udevThread;
+        pthread_kill(m_udevThread.native_handle(), SIGTERM);
+        m_udevThread.join();
         udev_monitor_unref(m_udevMon);
     }
     
