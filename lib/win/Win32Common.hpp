@@ -140,7 +140,7 @@ struct Boo3DAppContext
             D3D11Context::Window& win = m_ctx11.m_windows[window];
             BOOL isFScr;
             win.m_swapChain->GetFullscreenState(&isFScr, nullptr);
-            return isFScr;
+            return isFScr != 0;
         }
         OGLContext::Window& win = m_ctxOgl.m_windows[window];
         return win.m_fs;

@@ -369,7 +369,7 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
         {
             D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_vbuf);
             ID3D11Buffer* buf[] = {cbuf->m_bufs[b].Get()};
-            UINT strides[] = {cbuf->m_stride};
+            UINT strides[] = {UINT(cbuf->m_stride)};
             UINT offsets[] = {0};
             ctx->IASetVertexBuffers(0, 1, buf, strides, offsets);
         }
@@ -377,7 +377,7 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
         {
             D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_vbuf);
             ID3D11Buffer* buf[] = {cbuf->m_buf.Get()};
-            UINT strides[] = {cbuf->m_stride};
+            UINT strides[] = {UINT(cbuf->m_stride)};
             UINT offsets[] = {0};
             ctx->IASetVertexBuffers(0, 1, buf, strides, offsets);
         }
@@ -573,7 +573,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
 
     void setViewport(const SWindowRect& rect)
     {
-        D3D11_VIEWPORT vp = {rect.location[0], rect.location[1], rect.size[0], rect.size[1], 0.0, 1.0};
+        D3D11_VIEWPORT vp = {FLOAT(rect.location[0]), FLOAT(rect.location[1]), FLOAT(rect.size[0]), FLOAT(rect.size[1]), 0.0, 1.0};
         m_deferredCtx->RSSetViewports(1, &vp);
     }
 

@@ -404,11 +404,11 @@ static uint32_t translateKeysym(WPARAM sym, int& specialSym, int& modifierSym)
 static int translateModifiers(UINT msg)
 {
     int retval = 0;
-    if (GetKeyState(VK_LSHIFT) & 0x8000 != 0 || GetKeyState(VK_RSHIFT) & 0x8000 != 0)
+    if ((GetKeyState(VK_LSHIFT) & 0x8000) != 0 || (GetKeyState(VK_RSHIFT) & 0x8000) != 0)
         retval |= MKEY_SHIFT;
-    if (GetKeyState(VK_LCONTROL) & 0x8000 != 0 || GetKeyState(VK_RCONTROL) & 0x8000 != 0)
+    if ((GetKeyState(VK_LCONTROL) & 0x8000) != 0 || (GetKeyState(VK_RCONTROL) & 0x8000) != 0)
         retval |= MKEY_CTRL;
-    if (GetKeyState(VK_MENU) & 0x8000 != 0)
+    if ((GetKeyState(VK_MENU) & 0x8000) != 0)
         retval |= MKEY_ALT;
     if (msg == WM_SYSKEYDOWN || msg == WM_SYSKEYUP)
         retval |= MKEY_ALT;
@@ -627,11 +627,11 @@ public:
                 uint32_t charCode = translateKeysym(e.wParam, specialKey, modifierKey);
                 int modifierMask = translateModifiers(e.uMsg);
                 if (charCode)
-                    m_callback->charKeyDown(charCode, EModifierKey(modifierMask), e.lParam & 0xffff != 0);
+                    m_callback->charKeyDown(charCode, EModifierKey(modifierMask), (e.lParam & 0xffff) != 0);
                 else if (specialKey)
-                    m_callback->specialKeyDown(ESpecialKey(specialKey), EModifierKey(modifierMask), e.lParam & 0xffff != 0);
+                    m_callback->specialKeyDown(ESpecialKey(specialKey), EModifierKey(modifierMask), (e.lParam & 0xffff) != 0);
                 else if (modifierKey)
-                    m_callback->modKeyDown(EModifierKey(modifierKey), e.lParam & 0xffff != 0);
+                    m_callback->modKeyDown(EModifierKey(modifierKey), (e.lParam & 0xffff) != 0);
             }
             return;
         }
@@ -793,11 +793,11 @@ public:
     {
         LONG sty = GetWindowLong(m_hwnd, GWL_STYLE);
         unsigned retval = STYLE_NONE;
-        if (sty & WS_CAPTION != 0)
+        if ((sty & WS_CAPTION) != 0)
             retval |= STYLE_TITLEBAR;
-        if (sty & WS_THICKFRAME != 0)
+        if ((sty & WS_THICKFRAME) != 0)
             retval |= STYLE_RESIZE;
-        if (sty & WS_SYSMENU)
+        if ((sty & WS_SYSMENU))
             retval |= STYLE_CLOSE;
         return EWindowStyle(retval);
     }
