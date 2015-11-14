@@ -7,8 +7,10 @@ endif()
 
 if (NOT TARGET LogVisor)
     add_subdirectory(LogVisor)
-    set(LOG_VISOR_INCLUDE_DIR LogVisor/include)
 endif()
+
+set(BOO_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE PATH "libBoo include path" FORCE)
+
 include_directories(include ${LOG_VISOR_INCLUDE_DIR})
 
 if(NOT GEKKO AND NOT CAFE)
