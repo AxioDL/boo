@@ -118,10 +118,7 @@ class HIDListenerUdev final : public IHIDListener
     }
 
     /* Empty handler for SIGTERM */
-    static void _sigterm(int signo)
-    {
-        (void)signo;
-    }
+    static void _sigterm(int) {}
 
     static void _udevProc(HIDListenerUdev* listener)
     {
@@ -132,13 +129,6 @@ class HIDListenerUdev final : public IHIDListener
         s.sa_flags = 0;
         sigaction(SIGTERM, &s, nullptr);
 
-        /* SIGTERM will atomically become unblocked
-         * when pselect is entered */
-        sigset_t sigset, oldset;
-        sigemptyset(&sigset);
-        sigaddset(&sigset, SIGTERM);
-        pthread_sigmask(SIG_BLOCK, &sigset, &oldset);
-
         udev_monitor_enable_receiving(listener->m_udevMon);
         int fd = udev_monitor_get_fd(listener->m_udevMon);
         while (listener->m_udevRunning)
@@ -146,7 +136,7 @@ class HIDListenerUdev final : public IHIDListener
             fd_set fds;
             FD_ZERO(&fds);
             FD_SET(fd, &fds);
-            if (pselect(fd+1, &fds, nullptr, nullptr, nullptr, &oldset) < 0)
+            if (select(fd+1, &fds, nullptr, nullptr, nullptr) < 0)
             {
                 /* SIGTERM handled here */
                 if (errno == EINTR)

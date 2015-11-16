@@ -262,6 +262,12 @@ public:
         other.m_frag = 0;
         m_prog = other.m_prog;
         other.m_prog = 0;
+        m_sfactor = other.m_sfactor;
+        m_dfactor = other.m_dfactor;
+        m_depthTest = other.m_depthTest;
+        m_depthWrite = other.m_depthWrite;
+        m_backfaceCulling = other.m_backfaceCulling;
+        m_uniLocs = std::move(other.m_uniLocs);
         return *this;
     }
     GLShaderPipeline(GLShaderPipeline&& other) {*this = std::move(other);}
@@ -440,18 +446,20 @@ struct GLShaderDataBinding : IShaderDataBinding
         m_vtxFormat->bind();
         for (size_t i=0 ; i<m_ubufCount ; ++i)
         {
-            if (m_ubufs[i]->dynamic())
-                static_cast<GLGraphicsBufferD*>(m_ubufs[i])->bindUniform(i);
+            IGraphicsBuffer* ubuf = m_ubufs[i];
+            if (ubuf->dynamic())
+                static_cast<GLGraphicsBufferD*>(ubuf)->bindUniform(i);
             else
-                static_cast<GLGraphicsBufferS*>(m_ubufs[i])->bindUniform(i);
+                static_cast<GLGraphicsBufferS*>(ubuf)->bindUniform(i);
             glUniformBlockBinding(prog, m_pipeline->m_uniLocs.at(i), i);
         }
         for (size_t i=0 ; i<m_texCount ; ++i)
         {
-            if (m_texs[i]->type() == ITexture::TextureDynamic)
-                static_cast<GLTextureD*>(m_texs[i])->bind(i);
-            else if (m_texs[i]->type() == ITexture::TextureStatic)
-                static_cast<GLTextureS*>(m_texs[i])->bind(i);
+            ITexture* tex = m_texs[i];
+            if (tex->type() == ITexture::TextureDynamic)
+                static_cast<GLTextureD*>(tex)->bind(i);
+            else if (tex->type() == ITexture::TextureStatic)
+                static_cast<GLTextureS*>(tex)->bind(i);
         }
     }
 };

@@ -13,6 +13,7 @@ struct IGraphicsBuffer
 protected:
     bool m_dynamic;
     IGraphicsBuffer(bool dynamic) : m_dynamic(dynamic) {}
+    virtual ~IGraphicsBuffer() {}
 };
 
 /** Static resource buffer for verts, indices, uniform constants */
@@ -59,6 +60,7 @@ struct ITexture
 protected:
     Type m_type;
     ITexture(Type type) : m_type(type) {}
+    virtual ~ITexture() {}
 };
 
 /** Static resource buffer for textures */
