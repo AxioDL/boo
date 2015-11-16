@@ -95,6 +95,7 @@ public:
         appDelegate->aboutPanel = aboutPanel;
         
         /* Determine which graphics API to use */
+#if BOO_HAS_METAL
         for (const SystemString& arg : args)
             if (!arg.compare("--metal"))
             {
@@ -102,6 +103,7 @@ public:
                 m_metalCtx.m_q = [m_metalCtx.m_dev.get() newCommandQueue];
                 break;
             }
+#endif
     }
     
     EPlatformType getPlatformType() const

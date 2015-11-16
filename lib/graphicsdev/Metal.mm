@@ -1,6 +1,7 @@
+#include "../mac/CocoaCommon.hpp"
+#if BOO_HAS_METAL
 #include <LogVisor/LogVisor.hpp>
 #include "boo/graphicsdev/Metal.hpp"
-#include "../mac/CocoaCommon.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include <vector>
 
@@ -738,3 +739,5 @@ IGraphicsCommandQueue* _NewMetalCommandQueue(MetalContext* ctx, IWindow* parentW
 }
     
 }
+
+#endif

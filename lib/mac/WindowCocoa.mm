@@ -91,12 +91,12 @@ protected:
     std::mutex m_dlmt;
     std::condition_variable m_dlcv;
     
-    static CVReturn DLCallback(CVDisplayLinkRef CV_NONNULL displayLink,
-                               const CVTimeStamp * CV_NONNULL inNow,
-                               const CVTimeStamp * CV_NONNULL inOutputTime,
+    static CVReturn DLCallback(CVDisplayLinkRef displayLink,
+                               const CVTimeStamp * inNow,
+                               const CVTimeStamp * inOutputTime,
                                CVOptionFlags flagsIn,
-                               CVOptionFlags * CV_NONNULL flagsOut,
-                               GraphicsContextCocoa* CV_NULLABLE ctx)
+                               CVOptionFlags * flagsOut,
+                               GraphicsContextCocoa* ctx)
     {
         ctx->m_dlcv.notify_one();
         return kCVReturnSuccess;
@@ -293,6 +293,7 @@ IGraphicsContext* _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI api,
     return new GraphicsContextCocoaGL(api, parentWindow, lastGLCtx);
 }
     
+#if BOO_HAS_METAL
 class GraphicsContextCocoaMetal : public GraphicsContextCocoa
 {
     GraphicsContextCocoaMetalInternal* m_nsContext = nullptr;
@@ -392,6 +393,7 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
         return nullptr;
     return new GraphicsContextCocoaMetal(api, parentWindow, metalCtx);
 }
+#endif
 
 }
 
@@ -881,6 +883,7 @@ static boo::ESpecialKey translateKeycode(short code)
 
 @end
 
+#if BOO_HAS_METAL
 @implementation GraphicsContextCocoaMetalInternal
 - (id)initWithBooContext:(boo::GraphicsContextCocoaMetal*)bctx
 {
@@ -922,6 +925,7 @@ static boo::ESpecialKey translateKeycode(short code)
 }
 
 @end
+#endif
 
 namespace boo
 {
@@ -939,9 +943,11 @@ public:
         dispatch_sync(dispatch_get_main_queue(),
         ^{
             m_nsWindow = [[WindowCocoaInternal alloc] initWithBooWindow:this title:title];
+#if BOO_HAS_METAL
             if (metalCtx->m_dev)
                 m_gfxCtx = _GraphicsContextCocoaMetalNew(IGraphicsContext::API_METAL, this, metalCtx);
             else
+#endif
                 m_gfxCtx = _GraphicsContextCocoaGLNew(IGraphicsContext::API_OPENGL_3_3, this, lastGLCtx);
             m_gfxCtx->initializeContext();
         });
@@ -1068,10 +1074,12 @@ public:
     
     void setStyle(EWindowStyle style)
     {
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
         if (style & STYLE_TITLEBAR)
             m_nsWindow.titleVisibility = NSWindowTitleVisible;
         else
             m_nsWindow.titleVisibility = NSWindowTitleHidden;
+#endif
         
         if (style & STYLE_CLOSE)
             m_nsWindow.styleMask |= NSClosableWindowMask;
@@ -1087,7 +1095,11 @@ public:
     EWindowStyle getStyle() const
     {
         int retval = 0;
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
         retval |= m_nsWindow.titleVisibility == NSWindowTitleVisible ? STYLE_TITLEBAR : 0;
+#else
+        retval |= STYLE_TITLEBAR;
+#endif
         retval |= (m_nsWindow.styleMask & NSClosableWindowMask) ? STYLE_CLOSE : 0;
         retval |= (m_nsWindow.styleMask & NSResizableWindowMask) ? STYLE_RESIZE: 0;
         return EWindowStyle(retval);

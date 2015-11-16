@@ -2,8 +2,7 @@
 #define BOO_COCOACOMMON_HPP
 #if __APPLE__
 
-#include <Metal/Metal.h>
-#include <QuartzCore/CAMetalLayer.h>
+#include <Availability.h>
 
 template <class T>
 class NSPtr
@@ -23,6 +22,12 @@ public:
     void reset() {[m_ptr release]; m_ptr = 0;}
 };
 
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101100
+#define BOO_HAS_METAL 1
+
+#include <Metal/Metal.h>
+#include <QuartzCore/CAMetalLayer.h>
+
 namespace boo
 {
 struct MetalContext
@@ -36,6 +41,14 @@ struct MetalContext
     std::unordered_map<IWindow*, Window> m_windows;
 };
 }
+
+#else
+#define BOO_HAS_METAL 0
+namespace boo
+{
+    struct MetalContext {};
+}
+#endif
 
 #endif // __APPLE__
 #endif // BOO_COCOACOMMON_HPP
