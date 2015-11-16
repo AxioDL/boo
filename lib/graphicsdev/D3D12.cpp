@@ -636,7 +636,7 @@ static ID3D12GraphicsCommandList* WaitForLoadList(D3D12Context* ctx)
 struct D3D12CommandQueue : IGraphicsCommandQueue
 {
     Platform platform() const {return IGraphicsDataFactory::PlatformD3D12;}
-    const char* platformName() const {return "Direct 3D 12";}
+    const char* platformName() const {return "D3D12";}
     D3D12Context* m_ctx;
     D3D12Context::Window* m_windowCtx;
     IGraphicsContext* m_parent;
@@ -959,7 +959,7 @@ public:
     ~D3D12DataFactory() = default;
 
     Platform platform() const {return PlatformD3D12;}
-    const char* platformName() const {return "Direct3D 12";}
+    const char* platformName() const {return "D3D12";}
 
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
     {

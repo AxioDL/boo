@@ -193,7 +193,7 @@ struct IGraphicsDataFactory
     virtual IShaderDataBinding*
     newShaderDataBinding(IShaderPipeline* pipeline,
                          IVertexFormat* vtxFormat,
-                         IGraphicsBuffer* vbo, IGraphicsBuffer* ebo,
+                         IGraphicsBuffer* vbo, IGraphicsBuffer* ibo,
                          size_t ubufCount, IGraphicsBuffer** ubufs,
                          size_t texCount, ITexture** texs)=0;
 

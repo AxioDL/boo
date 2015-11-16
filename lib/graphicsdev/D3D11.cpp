@@ -439,7 +439,7 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
 struct D3D11CommandQueue : IGraphicsCommandQueue
 {
     Platform platform() const {return IGraphicsDataFactory::PlatformD3D11;}
-    const char* platformName() const {return "Direct3D 11";}
+    const char* platformName() const {return "D3D11";}
     D3D11Context* m_ctx;
     D3D11Context::Window* m_windowCtx;
     IGraphicsContext* m_parent;
@@ -712,7 +712,7 @@ public:
     ~D3D11DataFactory() = default;
 
     Platform platform() const {return PlatformD3D11;}
-    const char* platformName() const {return "Direct3D 11";}
+    const char* platformName() const {return "D3D11";}
 
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
     {

@@ -15,12 +15,13 @@ class GLDataFactory : public IGraphicsDataFactory
     IGraphicsContext* m_parent;
     IGraphicsData* m_deferredData = nullptr;
     std::unordered_set<IGraphicsData*> m_committedData;
+    std::vector<int> m_texUnis;
 public:
     GLDataFactory(IGraphicsContext* parent);
     ~GLDataFactory() {}
 
     Platform platform() const {return PlatformOGL;}
-    const char* platformName() const {return "OpenGL";}
+    const char* platformName() const {return "OGL";}
 
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
     IGraphicsBufferS* newStaticBuffer(BufferUse use, std::unique_ptr<uint8_t[]>&& data, size_t stride, size_t count);
@@ -36,14 +37,15 @@ public:
     IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
 
     IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
-                                       size_t texCount, const char** texNames,
+                                       size_t texCount, const char* texArrayName,
+                                       size_t uniformBlockCount, const char** uniformBlockNames,
                                        BlendFactor srcFac, BlendFactor dstFac,
                                        bool depthTest, bool depthWrite, bool backfaceCulling);
 
     IShaderDataBinding*
     newShaderDataBinding(IShaderPipeline* pipeline,
                          IVertexFormat* vtxFormat,
-                         IGraphicsBuffer* vbo, IGraphicsBuffer* ebo,
+                         IGraphicsBuffer* vbo, IGraphicsBuffer* ibo,
                          size_t ubufCount, IGraphicsBuffer** ubufs,
                          size_t texCount, ITexture** texs);
 

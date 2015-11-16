@@ -210,6 +210,7 @@ GLDataFactory::newStaticTexture(size_t width, size_t height, size_t mips, Textur
 class GLShaderPipeline : public IShaderPipeline
 {
     friend class GLDataFactory;
+    friend struct GLShaderDataBinding;
     GLuint m_vert = 0;
     GLuint m_frag = 0;
     GLuint m_prog = 0;
@@ -218,6 +219,7 @@ class GLShaderPipeline : public IShaderPipeline
     bool m_depthTest = true;
     bool m_depthWrite = true;
     bool m_backfaceCulling = true;
+    std::vector<GLint> m_uniLocs;
     bool initObjects()
     {
         m_vert = glCreateShader(GL_VERTEX_SHADER);
@@ -307,7 +309,8 @@ static const GLenum BLEND_FACTOR_TABLE[] =
 
 IShaderPipeline* GLDataFactory::newShaderPipeline
 (const char* vertSource, const char* fragSource,
- size_t texCount, const char** texNames,
+ size_t texCount, const char* texArrayName,
+ size_t uniformBlockCount, const char** uniformBlockNames,
  BlendFactor srcFac, BlendFactor dstFac,
  bool depthTest, bool depthWrite, bool backfaceCulling)
 {
@@ -366,13 +369,28 @@ IShaderPipeline* GLDataFactory::newShaderPipeline
     }
 
     glUseProgram(shader.m_prog);
-    for (size_t i=0 ; i<texCount ; ++i)
+
+    if (uniformBlockCount)
     {
-        GLint loc;
-        if ((loc = glGetUniformLocation(shader.m_prog, texNames[i])) >= 0)
-            glUniform1i(loc, i);
-        else
-            Log.report(LogVisor::FatalError, "unable to find sampler variable '%s'", texNames[i]);
+        shader.m_uniLocs.reserve(uniformBlockCount);
+        for (size_t i=0 ; i<uniformBlockCount ; ++i)
+        {
+            GLint uniLoc = glGetUniformBlockIndex(shader.m_prog, uniformBlockNames[i]);
+            if (uniLoc < 0)
+                Log.report(LogVisor::FatalError, "unable to find uniform block '%s'", uniformBlockNames[i]);
+            shader.m_uniLocs.push_back(uniLoc);
+        }
+    }
+
+    if (texCount && texArrayName)
+    {
+        GLint texLoc = glGetUniformLocation(shader.m_prog, texArrayName);
+        if (texLoc < 0)
+            Log.report(LogVisor::FatalError, "unable to find sampler variable '%s'", texArrayName);
+        if (texCount > m_texUnis.size())
+            for (size_t i=m_texUnis.size() ; i<texCount ; ++i)
+                m_texUnis.push_back(i);
+        glUniform1iv(texLoc, m_texUnis.size(), m_texUnis.data());
     }
 
     GLShaderPipeline* retval = new GLShaderPipeline(std::move(shader));
@@ -401,9 +419,9 @@ struct GLShaderDataBinding : IShaderDataBinding
     size_t m_texCount;
     std::unique_ptr<ITexture*[]> m_texs;
     GLShaderDataBinding(IShaderPipeline* pipeline,
-                           IVertexFormat* vtxFormat,
-                           size_t ubufCount, IGraphicsBuffer** ubufs,
-                           size_t texCount, ITexture** texs)
+                        IVertexFormat* vtxFormat,
+                        size_t ubufCount, IGraphicsBuffer** ubufs,
+                        size_t texCount, ITexture** texs)
     : m_pipeline(static_cast<GLShaderPipeline*>(pipeline)),
       m_vtxFormat(static_cast<GLVertexFormat*>(vtxFormat)),
       m_ubufCount(ubufCount),
@@ -425,8 +443,8 @@ struct GLShaderDataBinding : IShaderDataBinding
             if (m_ubufs[i]->dynamic())
                 static_cast<GLGraphicsBufferD*>(m_ubufs[i])->bindUniform(i);
             else
-                static_cast<GLGraphicsBufferD*>(m_ubufs[i])->bindUniform(i);
-            glUniformBlockBinding(prog, i, i);
+                static_cast<GLGraphicsBufferS*>(m_ubufs[i])->bindUniform(i);
+            glUniformBlockBinding(prog, m_pipeline->m_uniLocs.at(i), i);
         }
         for (size_t i=0 ; i<m_texCount ; ++i)
         {
@@ -516,7 +534,7 @@ static const GLenum SEMANTIC_TYPE_TABLE[] =
 struct GLCommandQueue : IGraphicsCommandQueue
 {
     Platform platform() const {return IGraphicsDataFactory::PlatformOGL;}
-    const char* platformName() const {return "OpenGL ES 3.0";}
+    const char* platformName() const {return "OGL";}
     IGraphicsContext* m_parent = nullptr;
 
     struct Command

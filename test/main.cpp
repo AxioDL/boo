@@ -295,17 +295,17 @@ struct TestApplicationCallback : IApplicationCallback
             static const char* FS =
             "#version 330\n"
             "precision highp float;\n"
-            "uniform sampler2D smplr;\n"
+            "uniform sampler2D texs[1];\n"
             "layout(location=0) out vec4 out_frag;\n"
             "in vec2 out_uv;\n"
             "void main()\n"
             "{\n"
-            "    out_frag = texture(smplr, out_uv);\n"
+            "    out_frag = texture(texs[0], out_uv);\n"
             "}\n";
 
-            static const char* TexNames[] = {"smplr"};
-
-            pipeline = glF->newShaderPipeline(VS, FS, 1, TexNames, BlendFactorOne, BlendFactorZero, true, true, false);
+            pipeline = glF->newShaderPipeline(VS, FS, 1, "texs", 0, nullptr,
+                                              BlendFactorOne, BlendFactorZero,
+                                              true, true, false);
         }
 #if _WIN32
         else if (factory->platform() == IGraphicsDataFactory::PlatformD3D12 ||
