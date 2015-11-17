@@ -13,14 +13,6 @@ void GLXExtensionCheck()
         Log.report(LogVisor::FatalError, "swap_control not available");
 }
 
-void GLXWaitForVSync()
-{
-    unsigned int sync;
-    int err = glXWaitVideoSyncSGI(1, 0, &sync);
-    if (err)
-        Log.report(LogVisor::FatalError, "wait err");
-}
-
 void GLXEnableVSync(Display* disp, GLXWindow drawable)
 {
     if (GLXEW_EXT_swap_control)

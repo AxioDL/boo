@@ -8,6 +8,9 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 
 #include <GL/glx.h>
 
@@ -41,7 +44,9 @@
 
 
 typedef GLXContext (*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
-glXCreateContextAttribsARBProc glXCreateContextAttribsARB = 0;
+static glXCreateContextAttribsARBProc glXCreateContextAttribsARB = 0;
+typedef int (*glXWaitVideoSyncSGIProc)(int divisor, int remainder, unsigned int* count);
+static glXWaitVideoSyncSGIProc glXWaitVideoSyncSGI = 0;
 static const int ContextAttribs[] =
 {
     GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
@@ -58,7 +63,6 @@ static LogVisor::LogModule Log("boo::WindowXCB");
 IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent);
 void _XlibUpdateLastGlxCtx(GLXContext lastGlxCtx);
 void GLXExtensionCheck();
-void GLXWaitForVSync();
 void GLXEnableVSync(Display* disp, GLXWindow drawable);
 
 extern int XINPUT_OPCODE;
@@ -178,11 +182,13 @@ struct GraphicsContextGLX : IGraphicsContext
     int m_visualid = 0;
     GLXWindow m_glxWindow = 0;
     GLXContext m_glxCtx = 0;
-    GLXContext m_timerCtx = 0;
 
     IGraphicsCommandQueue* m_commandQueue = nullptr;
     IGraphicsDataFactory* m_dataFactory = nullptr;
     GLXContext m_loadCtx = 0;
+
+    std::thread m_vsyncThread;
+    bool m_vsyncRunning;
 
 public:
     IWindowCallback* m_callback;
@@ -265,8 +271,8 @@ public:
             glXDestroyWindow(m_xDisp, m_glxWindow);
         if (m_loadCtx)
             glXDestroyContext(m_xDisp, m_loadCtx);
-        if (m_timerCtx)
-            glXDestroyContext(m_xDisp, m_timerCtx);
+        m_vsyncRunning = false;
+        m_vsyncThread.join();
     }
 
     void _setCallback(IWindowCallback* cb)
@@ -291,10 +297,26 @@ public:
         m_pf = pf;
     }
 
+    std::mutex m_vsyncmt;
+    std::condition_variable m_vsynccv;
+
     void initializeContext()
     {
-        glXCreateContextAttribsARB = (glXCreateContextAttribsARBProc)
-                   glXGetProcAddressARB((const GLubyte*)"glXCreateContextAttribsARB");
+        if (!glXCreateContextAttribsARB)
+        {
+            glXCreateContextAttribsARB = (glXCreateContextAttribsARBProc)
+                    glXGetProcAddressARB((const GLubyte*)"glXCreateContextAttribsARB");
+            if (!glXCreateContextAttribsARB)
+                Log.report(LogVisor::FatalError, "unable to resolve glXCreateContextAttribsARB");
+        }
+        if (!glXWaitVideoSyncSGI)
+        {
+            glXWaitVideoSyncSGI = (glXWaitVideoSyncSGIProc)
+                    glXGetProcAddressARB((const GLubyte*)"glXWaitVideoSyncSGI");
+            if (!glXWaitVideoSyncSGI)
+                Log.report(LogVisor::FatalError, "unable to resolve glXWaitVideoSyncSGI");
+        }
+
         m_glxCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_lastCtx, True, ContextAttribs);
         if (!m_glxCtx)
             Log.report(LogVisor::FatalError, "unable to make new GLX context");
@@ -303,10 +325,45 @@ public:
             Log.report(LogVisor::FatalError, "unable to make new GLX window");
         _XlibUpdateLastGlxCtx(m_glxCtx);
 
-        /* Make additional shared context for vsync timing */
-        m_timerCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribs);
-        if (!m_timerCtx)
-            Log.report(LogVisor::FatalError, "unable to make new timer GLX context");
+        /* Spawn vsync thread */
+        m_vsyncRunning = true;
+        std::mutex initmt;
+        std::condition_variable initcv;
+        std::unique_lock<std::mutex> outerLk(initmt);
+        m_vsyncThread = std::thread([&]()
+        {
+            Display* vsyncDisp;
+            GLXContext vsyncCtx;
+            {
+                std::unique_lock<std::mutex> innerLk(initmt);
+
+                vsyncDisp = XOpenDisplay(0);
+                if (!vsyncDisp)
+                    Log.report(LogVisor::FatalError, "unable to open new vsync display");
+
+                vsyncCtx = glXCreateContextAttribsARB(vsyncDisp, m_fbconfig, nullptr, True, ContextAttribs);
+                if (!vsyncCtx)
+                    Log.report(LogVisor::FatalError, "unable to make new vsync GLX context");
+
+                if (!glXMakeCurrent(vsyncDisp, DefaultRootWindow(vsyncDisp), vsyncCtx))
+                    Log.report(LogVisor::FatalError, "unable to make vsync context current");
+            }
+            initcv.notify_one();
+
+            while (m_vsyncRunning)
+            {
+                unsigned int sync;
+                int err = glXWaitVideoSyncSGI(1, 0, &sync);
+                if (err)
+                    Log.report(LogVisor::FatalError, "wait err");
+                m_vsynccv.notify_one();
+            }
+
+            glXMakeCurrent(vsyncDisp, None, nullptr);
+            glXDestroyContext(vsyncDisp, vsyncCtx);
+            XCloseDisplay(vsyncDisp);
+        });
+        initcv.wait(outerLk);
 
         XUnlockDisplay(m_xDisp);
         m_commandQueue = _NewGLCommandQueue(this);
@@ -357,18 +414,6 @@ public:
     void present()
     {
         glXSwapBuffers(m_xDisp, m_glxWindow);
-    }
-
-    bool m_timerBound = false;
-    void bindTimerContext()
-    {
-        if (m_timerBound)
-            return;
-        XLockDisplay(m_xDisp);
-        if (!glXMakeContextCurrent(m_xDisp, m_glxWindow, m_glxWindow, m_timerCtx))
-            Log.report(LogVisor::FatalError, "unable to make timer GLX context current");
-        XUnlockDisplay(m_xDisp);
-        m_timerBound = true;
     }
 
 };
@@ -689,8 +734,8 @@ public:
 
     void waitForRetrace()
     {
-        m_gfxCtx.bindTimerContext();
-        GLXWaitForVSync();
+        std::unique_lock<std::mutex> lk(m_gfxCtx.m_vsyncmt);
+        m_gfxCtx.m_vsynccv.wait(lk);
     }
 
     uintptr_t getPlatformHandle() const
