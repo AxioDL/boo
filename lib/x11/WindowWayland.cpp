@@ -72,6 +72,11 @@ public:
         return nullptr;
     }
 
+    IGraphicsDataFactory* getMainContextDataFactory()
+    {
+        return nullptr;
+    }
+
     IGraphicsDataFactory* getLoadContextDataFactory()
     {
         return nullptr;
@@ -194,6 +199,11 @@ struct WindowWayland : IWindow
     IGraphicsDataFactory* getDataFactory()
     {
         return m_gfxCtx.getDataFactory();
+    }
+
+    IGraphicsDataFactory* getMainContextDataFactory()
+    {
+        return m_gfxCtx.getMainContextDataFactory();
     }
 
     IGraphicsDataFactory* getLoadContextDataFactory()

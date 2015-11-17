@@ -53,6 +53,9 @@ public:
     virtual IGraphicsCommandQueue* getCommandQueue()=0;
     virtual IGraphicsDataFactory* getDataFactory()=0;
 
+    /* Creates a new context on current thread!! Call from main client thread */
+    virtual IGraphicsDataFactory* getMainContextDataFactory()=0;
+
     /* Creates a new context on current thread!! Call from client loading thread */
     virtual IGraphicsDataFactory* getLoadContextDataFactory()=0;
 

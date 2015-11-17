@@ -552,7 +552,6 @@ struct GLCommandQueue : IGraphicsCommandQueue
             OpSetShaderDataBinding,
             OpSetRenderTarget,
             OpSetViewport,
-            OpResizeRenderTexture,
             OpSetClearColor,
             OpClearTarget,
             OpSetDrawPrimitive,
@@ -577,12 +576,6 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 size_t count;
                 size_t instCount;
             };
-            struct
-            {
-                ITextureR* tex;
-                size_t width;
-                size_t height;
-            } resize;
         };
         Command(Op op) : m_op(op) {}
     };
@@ -599,7 +592,15 @@ struct GLCommandQueue : IGraphicsCommandQueue
     std::unique_lock<std::mutex> m_initlk;
     std::thread m_thr;
 
+    struct RenderTextureResize
+    {
+        GLTextureR* tex;
+        size_t width;
+        size_t height;
+    };
+
     /* These members are locked for multithreaded access */
+    std::vector<RenderTextureResize> m_pendingResizes;
     std::vector<GLVertexFormat*> m_pendingFmtAdds;
     std::vector<GLuint> m_pendingFmtDels;
     std::vector<GLTextureR*> m_pendingFboAdds;
@@ -673,25 +674,40 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     break;
                 self->m_drawBuf = self->m_completeBuf;
 
+                if (self->m_pendingResizes.size())
+                {
+                    for (const RenderTextureResize& resize : self->m_pendingResizes)
+                        resize.tex->resize(resize.width, resize.height);
+                    self->m_pendingResizes.clear();
+                }
+
                 if (self->m_pendingFmtAdds.size())
+                {
                     for (GLVertexFormat* fmt : self->m_pendingFmtAdds)
                         ConfigureVertexFormat(fmt);
-                self->m_pendingFmtAdds.clear();
+                    self->m_pendingFmtAdds.clear();
+                }
 
                 if (self->m_pendingFmtDels.size())
+                {
                     for (GLuint fmt : self->m_pendingFmtDels)
                         glDeleteVertexArrays(1, &fmt);
-                self->m_pendingFmtDels.clear();
+                    self->m_pendingFmtDels.clear();
+                }
 
                 if (self->m_pendingFboAdds.size())
+                {
                     for (GLTextureR* tex : self->m_pendingFboAdds)
                         ConfigureFBO(tex);
-                self->m_pendingFboAdds.clear();
+                    self->m_pendingFboAdds.clear();
+                }
 
                 if (self->m_pendingFboDels.size())
+                {
                     for (GLuint fbo : self->m_pendingFboDels)
                         glDeleteFramebuffers(1, &fbo);
-                self->m_pendingFboDels.clear();
+                    self->m_pendingFboDels.clear();
+                }
             }
             std::vector<Command>& cmds = self->m_cmdBufs[self->m_drawBuf];
             GLenum prim = GL_TRIANGLES;
@@ -715,11 +731,6 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     glViewport(cmd.rect.location[0], cmd.rect.location[1],
                                cmd.rect.size[0], cmd.rect.size[1]);
                     break;
-                case Command::OpResizeRenderTexture:
-                {
-                    GLTextureR* tex = static_cast<GLTextureR*>(cmd.resize.tex);
-                    tex->resize(cmd.resize.width, cmd.resize.height);
-                }
                 case Command::OpSetClearColor:
                     glClearColor(cmd.rgba[0], cmd.rgba[1], cmd.rgba[2], cmd.rgba[3]);
                     break;
@@ -800,11 +811,14 @@ struct GLCommandQueue : IGraphicsCommandQueue
     
     void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)
     {
-        std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpResizeRenderTexture);
-        cmds.back().resize.tex = tex;
-        cmds.back().resize.width = width;
-        cmds.back().resize.height = height;
+        std::unique_lock<std::mutex> lk(m_mt);
+        GLTextureR* texgl = static_cast<GLTextureR*>(tex);
+        m_pendingResizes.push_back({texgl, width, height});
+    }
+
+    void flushBufferUpdates()
+    {
+        glFlush();
     }
 
     void setClearColor(const float rgba[4])
@@ -1022,6 +1036,7 @@ GLDataFactory::newRenderTexture(size_t width, size_t height, size_t samples)
 {
     GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
     GLTextureR* retval = new GLTextureR(q, width, height, samples);
+    q->resizeRenderTexture(retval, width, height);
     static_cast<GLData*>(m_deferredData)->m_RTexs.emplace_back(retval);
     return retval;
 }

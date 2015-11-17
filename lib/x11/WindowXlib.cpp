@@ -185,6 +185,7 @@ struct GraphicsContextGLX : IGraphicsContext
 
     IGraphicsCommandQueue* m_commandQueue = nullptr;
     IGraphicsDataFactory* m_dataFactory = nullptr;
+    GLXContext m_mainCtx = 0;
     GLXContext m_loadCtx = 0;
 
     std::thread m_vsyncThread;
@@ -394,6 +395,21 @@ public:
     IGraphicsDataFactory* getDataFactory()
     {
         return m_dataFactory;
+    }
+
+    IGraphicsDataFactory* getMainContextDataFactory()
+    {
+        XLockDisplay(m_xDisp);
+        if (!m_mainCtx)
+        {
+            m_mainCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribs);
+            if (!m_mainCtx)
+                Log.report(LogVisor::FatalError, "unable to make main GLX context");
+        }
+        if (!glXMakeContextCurrent(m_xDisp, m_glxWindow, m_glxWindow, m_mainCtx))
+            Log.report(LogVisor::FatalError, "unable to make main GLX context current");
+        XUnlockDisplay(m_xDisp);
+        return getDataFactory();
     }
 
     IGraphicsDataFactory* getLoadContextDataFactory()
@@ -1178,6 +1194,11 @@ public:
     IGraphicsDataFactory* getDataFactory()
     {
         return m_gfxCtx.getDataFactory();
+    }
+
+    IGraphicsDataFactory* getMainContextDataFactory()
+    {
+        return m_gfxCtx.getMainContextDataFactory();
     }
 
     IGraphicsDataFactory* getLoadContextDataFactory()

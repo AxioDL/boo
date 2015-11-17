@@ -17,6 +17,8 @@ DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
 
 #include <sys/param.h>
 #include <thread>
+#include <mutex>
+#include <condition_variable>
 
 namespace boo
 {
@@ -239,11 +241,18 @@ public:
 
         /* Spawn client thread */
         int clientReturn = INT_MIN;
+        std::mutex initmt;
+        std::condition_variable initcv;
+        std::unique_lock<std::mutex> outerLk(initmt);
         std::thread clientThread([&]()
         {
+            std::unique_lock<std::mutex> innerLk(initmt);
+            innerLk.unlock();
+            initcv.notify_one();
             clientReturn = m_callback.appMain(this);
             pthread_kill(mainThread, SIGTERM);
         });
+        initcv.wait(outerLk);
 
         /* Begin application event loop */
         while (clientReturn == INT_MIN)
