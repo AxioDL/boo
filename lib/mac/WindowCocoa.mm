@@ -162,6 +162,7 @@ class GraphicsContextCocoaGL : public GraphicsContextCocoa
     
     IGraphicsCommandQueue* m_commandQueue = nullptr;
     IGraphicsDataFactory* m_dataFactory = nullptr;
+    NSOpenGLContext* m_mainCtx = nullptr;
     NSOpenGLContext* m_loadCtx = nullptr;
     
 public:
@@ -232,6 +233,20 @@ public:
     
     IGraphicsDataFactory* getDataFactory()
     {
+        return m_dataFactory;
+    }
+    
+    IGraphicsDataFactory* getMainContextDataFactory()
+    {
+        if (!m_mainCtx)
+        {
+            NSOpenGLPixelFormat* nspf = [[NSOpenGLPixelFormat alloc] initWithAttributes:PF_TABLE[m_pf]];
+            m_mainCtx = [[NSOpenGLContext alloc] initWithFormat:nspf shareContext:[m_nsContext openGLContext]];
+            [nspf release];
+            if (!m_mainCtx)
+                Log.report(LogVisor::FatalError, "unable to make main NSOpenGLContext");
+            [m_mainCtx makeCurrentContext];
+        }
         return m_dataFactory;
     }
     
@@ -1123,6 +1138,11 @@ public:
     IGraphicsDataFactory* getDataFactory()
     {
         return m_gfxCtx->getDataFactory();
+    }
+    
+    IGraphicsDataFactory* getMainContextDataFactory()
+    {
+        return m_gfxCtx->getMainContextDataFactory();
     }
     
     IGraphicsDataFactory* getLoadContextDataFactory()
