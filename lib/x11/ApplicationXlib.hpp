@@ -221,15 +221,29 @@ public:
         return PLAT_XLIB;
     }
     
+    /* Empty handler for SIGTERM */
+    static void _sigterm(int) {}
+
     int run()
     {
         if (!m_xDisp)
             return 1;
 
+        /* SIGTERM will be used to terminate main thread when client thread ends */
+        pthread_t mainThread = pthread_self();
+        struct sigaction s;
+        s.sa_handler = _sigterm;
+        sigemptyset(&s.sa_mask);
+        s.sa_flags = 0;
+        sigaction(SIGTERM, &s, nullptr);
+
         /* Spawn client thread */
         int clientReturn = INT_MIN;
         std::thread clientThread([&]()
-        {clientReturn = m_callback.appMain(this);});
+        {
+            clientReturn = m_callback.appMain(this);
+            pthread_kill(mainThread, SIGTERM);
+        });
 
         /* Begin application event loop */
         while (clientReturn == INT_MIN)
@@ -238,7 +252,12 @@ public:
             FD_ZERO(&fds);
             FD_SET(m_xcbFd, &fds);
             FD_SET(m_dbusFd, &fds);
-            select(m_maxFd+1, &fds, NULL, NULL, NULL);
+            if (select(m_maxFd+1, &fds, NULL, NULL, NULL) < 0)
+            {
+                /* SIGTERM handled here */
+                if (errno == EINTR)
+                    break;
+            }
 
             if (FD_ISSET(m_xcbFd, &fds))
             {
