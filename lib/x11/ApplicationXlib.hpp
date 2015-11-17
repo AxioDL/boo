@@ -223,21 +223,27 @@ public:
         return PLAT_XLIB;
     }
     
-    /* Empty handler for SIGTERM */
-    static void _sigterm(int) {}
+    /* Empty handler for SIGINT */
+    static void _sigint(int) {}
 
     int run()
     {
         if (!m_xDisp)
             return 1;
 
-        /* SIGTERM will be used to terminate main thread when client thread ends */
+        /* SIGINT will be used to cancel main thread when client thread ends
+         * (also enables graceful quitting via ctrl-c) */
         pthread_t mainThread = pthread_self();
         struct sigaction s;
-        s.sa_handler = _sigterm;
+        s.sa_handler = _sigint;
         sigemptyset(&s.sa_mask);
         s.sa_flags = 0;
-        sigaction(SIGTERM, &s, nullptr);
+        sigaction(SIGINT, &s, nullptr);
+
+        sigset_t waitmask, origmask;
+        sigemptyset(&waitmask);
+        sigaddset(&waitmask, SIGINT);
+        pthread_sigmask(SIG_BLOCK, &waitmask, &origmask);
 
         /* Spawn client thread */
         int clientReturn = INT_MIN;
@@ -250,7 +256,7 @@ public:
             innerLk.unlock();
             initcv.notify_one();
             clientReturn = m_callback.appMain(this);
-            pthread_kill(mainThread, SIGTERM);
+            pthread_kill(mainThread, SIGINT);
         });
         initcv.wait(outerLk);
 
@@ -261,9 +267,9 @@ public:
             FD_ZERO(&fds);
             FD_SET(m_xcbFd, &fds);
             FD_SET(m_dbusFd, &fds);
-            if (select(m_maxFd+1, &fds, NULL, NULL, NULL) < 0)
+            if (pselect(m_maxFd+1, &fds, NULL, NULL, NULL, &origmask) < 0)
             {
-                /* SIGTERM handled here */
+                /* SIGINT handled here */
                 if (errno == EINTR)
                     break;
             }

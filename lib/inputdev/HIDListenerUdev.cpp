@@ -129,6 +129,11 @@ class HIDListenerUdev final : public IHIDListener
         s.sa_flags = 0;
         sigaction(SIGTERM, &s, nullptr);
 
+        sigset_t waitmask, origmask;
+        sigemptyset(&waitmask);
+        sigaddset(&waitmask, SIGTERM);
+        pthread_sigmask(SIG_BLOCK, &waitmask, &origmask);
+
         udev_monitor_enable_receiving(listener->m_udevMon);
         int fd = udev_monitor_get_fd(listener->m_udevMon);
         while (listener->m_udevRunning)
@@ -136,7 +141,7 @@ class HIDListenerUdev final : public IHIDListener
             fd_set fds;
             FD_ZERO(&fds);
             FD_SET(fd, &fds);
-            if (select(fd+1, &fds, nullptr, nullptr, nullptr) < 0)
+            if (pselect(fd+1, &fds, nullptr, nullptr, nullptr, &origmask) < 0)
             {
                 /* SIGTERM handled here */
                 if (errno == EINTR)
