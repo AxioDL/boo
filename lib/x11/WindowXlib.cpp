@@ -342,7 +342,10 @@ public:
                 if (!vsyncDisp)
                     Log.report(LogVisor::FatalError, "unable to open new vsync display");
 
-                vsyncCtx = glXCreateContextAttribsARB(vsyncDisp, m_fbconfig, nullptr, True, ContextAttribs);
+                static int attributeList[] = { GLX_RGBA, GLX_DOUBLEBUFFER, GLX_RED_SIZE, 1, GLX_GREEN_SIZE, 1, GLX_BLUE_SIZE, 1, None };
+                XVisualInfo *vi = glXChooseVisual(vsyncDisp, DefaultScreen(vsyncDisp),attributeList);
+
+                vsyncCtx = glXCreateContext(vsyncDisp, vi, nullptr, True);
                 if (!vsyncCtx)
                     Log.report(LogVisor::FatalError, "unable to make new vsync GLX context");
 
