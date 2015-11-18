@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <stdint.h>
+#include "boo/System.hpp"
 
 namespace boo
 {
@@ -169,7 +170,7 @@ struct IGraphicsDataFactory
         PlatformGX2
     };
     virtual Platform platform() const=0;
-    virtual const char* platformName() const=0;
+    virtual const SystemChar* platformName() const=0;
 
     virtual IGraphicsBufferS*
     newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)=0;
@@ -189,6 +190,7 @@ struct IGraphicsDataFactory
     virtual ITextureR*
     newRenderTexture(size_t width, size_t height, size_t samples)=0;
 
+    virtual bool bindingNeedsVertexFormat() const=0;
     virtual IVertexFormat*
     newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)=0;
 

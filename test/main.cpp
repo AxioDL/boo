@@ -335,7 +335,8 @@ struct TestApplicationCallback : IApplicationCallback
 
             ComPtr<ID3DBlob> vsCompile;
             ComPtr<ID3DBlob> psCompile;
-            pipeline = d3dF->newShaderPipeline(VS, PS, vsCompile, psCompile, vfmt, 
+            ComPtr<ID3DBlob> cachedPipeline;
+            pipeline = d3dF->newShaderPipeline(VS, PS, vsCompile, psCompile, cachedPipeline, vfmt,
                                                BlendFactorOne, BlendFactorZero, true, true, false);
         }
 #elif __APPLE__

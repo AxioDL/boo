@@ -11,15 +11,21 @@
 #include <vector>
 #include <unordered_set>
 
+typedef HRESULT (WINAPI *pD3DCreateBlob)
+    (SIZE_T     Size,
+     ID3DBlob** ppBlob);
+extern pD3DCreateBlob D3DCreateBlobPROC;
+
 namespace boo
 {
 
 class ID3DDataFactory : public IGraphicsDataFactory
 {
 public:
+    bool bindingNeedsVertexFormat() const {return false;}
     virtual IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
                                                ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,
-                                               IVertexFormat* vtxFmt,
+                                               ComPtr<ID3DBlob>& pipelineBlob, IVertexFormat* vtxFmt,
                                                BlendFactor srcFac, BlendFactor dstFac,
                                                bool depthTest, bool depthWrite, bool backfaceCulling)=0;
 };

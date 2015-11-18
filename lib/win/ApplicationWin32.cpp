@@ -14,6 +14,7 @@
 #include "boo/System.hpp"
 #include "boo/IApplication.hpp"
 #include "boo/inputdev/DeviceFinder.hpp"
+#include "boo/graphicsdev/D3D.hpp"
 #include <LogVisor/LogVisor.hpp>
 
 DWORD g_mainThreadId = 0;
@@ -23,6 +24,7 @@ static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 PFN_D3D12_SERIALIZE_ROOT_SIGNATURE D3D12SerializeRootSignaturePROC = nullptr;
 #endif
 pD3DCompile D3DCompilePROC = nullptr;
+pD3DCreateBlob D3DCreateBlobPROC = nullptr;
 
 static bool FindBestD3DCompile()
 {
@@ -46,7 +48,8 @@ static bool FindBestD3DCompile()
     if (d3dCompilelib)
     {
         D3DCompilePROC = (pD3DCompile)GetProcAddress(d3dCompilelib, "D3DCompile");
-        return D3DCompilePROC != nullptr;
+        D3DCreateBlobPROC = (pD3DCreateBlob)GetProcAddress(d3dCompilelib, "D3DCreateBlob");
+        return D3DCompilePROC != nullptr && D3DCreateBlobPROC != nullptr;
     }
     return false;
 }
@@ -202,7 +205,7 @@ public:
             /* Build default sampler here */
             m_3dCtx.m_ctx11.m_dev->CreateSamplerState(&CD3D11_SAMPLER_DESC(D3D11_DEFAULT), &m_3dCtx.m_ctx11.m_ss);
 
-            Log.report(LogVisor::Info, "initialized D3D12 renderer");
+            Log.report(LogVisor::Info, "initialized D3D11 renderer");
             return;
         }
 
@@ -237,6 +240,7 @@ public:
             case WM_DEVICECHANGE:
                 return DeviceFinder::winDevChangedHandler(wParam, lParam);
                 
+            case WM_CLOSE:
             case WM_SIZE:
             case WM_MOVING:
             case WM_SYSKEYDOWN:
@@ -270,13 +274,18 @@ public:
         /* Spawn client thread */
         int clientReturn = 0;
         std::thread clientThread([&]()
-        {clientReturn = m_callback.appMain(this);});
+        {
+            clientReturn = m_callback.appMain(this);
+            PostThreadMessage(g_mainThreadId, WM_USER+1, 0, 0);
+        });
         
         /* Pump messages */
         MSG msg = {0};
         while (GetMessage(&msg, NULL, 0, 0))
         {
-            if (msg.message == WM_USER)
+            switch (msg.message)
+            {
+            case WM_USER:
             {
                 /* New-window message (coalesced onto main thread) */
                 std::unique_lock<std::mutex> lk(m_nwmt);
@@ -286,8 +295,14 @@ public:
                 m_nwcv.notify_one();
                 continue;
             }
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
+            case WM_USER+1:
+                /* Quit message from client thread */
+                PostQuitMessage(0);
+                continue;
+            default:
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
         }
 
         m_callback.appQuitting(this);
@@ -374,9 +389,9 @@ int ApplicationRun(IApplication::EPlatformType platform,
 
 }
 
-static const DEV_BROADCAST_DEVICEINTERFACE_A HOTPLUG_CONF =
+static const DEV_BROADCAST_DEVICEINTERFACE HOTPLUG_CONF =
 {
-    sizeof(DEV_BROADCAST_DEVICEINTERFACE_A),
+    sizeof(DEV_BROADCAST_DEVICEINTERFACE),
     DBT_DEVTYP_DEVICEINTERFACE,
     0,
     GUID_DEVINTERFACE_USB_DEVICE
@@ -387,7 +402,7 @@ static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
     if (!HOTPLUG_REGISTERED && uMsg == WM_CREATE)
     {
         /* Register hotplug notification with windows */
-        RegisterDeviceNotificationA(hwnd, (LPVOID)&HOTPLUG_CONF, DEVICE_NOTIFY_WINDOW_HANDLE);
+        RegisterDeviceNotification(hwnd, (LPVOID)&HOTPLUG_CONF, DEVICE_NOTIFY_WINDOW_HANDLE);
         HOTPLUG_REGISTERED = true;
     }
     return static_cast<boo::ApplicationWin32*>(boo::APP)->winHwndHandler(hwnd, uMsg, wParam, lParam);

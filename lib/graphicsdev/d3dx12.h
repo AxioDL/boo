@@ -3,7 +3,7 @@
 //  Copyright (C) Microsoft Corporation.  All Rights Reserved.
 //
 //  File:       d3dx12.h
-//  Content:    D3DX12 utility library
+//  Content:    D3DX12 utility library (modified for boo data-handling)
 //
 //////////////////////////////////////////////////////////////////////////////
 
@@ -1363,6 +1363,17 @@ inline UINT64 GetRequiredIntermediateSize(
     return RequiredSize;
 }
 
+inline UINT64 GetRequiredIntermediateSize(
+    _In_ ID3D12Device* pDevice,
+    _In_ D3D12_RESOURCE_DESC* Desc,
+    _In_range_(0,D3D12_REQ_SUBRESOURCES) UINT FirstSubresource,
+    _In_range_(0,D3D12_REQ_SUBRESOURCES-FirstSubresource) UINT NumSubresources)
+{
+    UINT64 RequiredSize = 0;
+    pDevice->GetCopyableFootprints(Desc, FirstSubresource, NumSubresources, 0, nullptr, nullptr, nullptr, &RequiredSize);
+    return RequiredSize;
+}
+
 //------------------------------------------------------------------------------------------------
 // All arrays must be populated (e.g. by calling GetCopyableFootprints)
 inline UINT64 UpdateSubresources(
@@ -1489,7 +1500,7 @@ inline UINT64 UpdateSubresources(
 // All arrays must be populated (e.g. by calling GetCopyableFootprints)
 inline UINT64 PrepSubresources(
     _In_ ID3D12Device* pDevice,
-    _In_ D3D12_RESOURCE_DESC& DestinationDesc,
+    _In_ D3D12_RESOURCE_DESC* DestinationDesc,
     _In_ ID3D12Resource* pIntermediate,
     _In_range_(0,D3D12_REQ_SUBRESOURCES) UINT FirstSubresource,
     _In_range_(0,D3D12_REQ_SUBRESOURCES-FirstSubresource) UINT NumSubresources,
@@ -1504,7 +1515,7 @@ inline UINT64 PrepSubresources(
     if (IntermediateDesc.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER || 
         IntermediateDesc.Width < RequiredSize + pLayouts[0].Offset || 
         RequiredSize > (SIZE_T)-1 || 
-        (DestinationDesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER && 
+        (DestinationDesc->Dimension == D3D12_RESOURCE_DIMENSION_BUFFER &&
             (FirstSubresource != 0 || NumSubresources != 1)))
     {
         return 0;
@@ -1533,7 +1544,7 @@ inline UINT64 PrepSubresources(
 template <UINT MaxSubresources>
 inline UINT64 PrepSubresources( 
     _In_ ID3D12Device* pDevice,
-    _In_ D3D12_RESOURCE_DESC& DestinationDesc,
+    _In_ D3D12_RESOURCE_DESC* DestinationDesc,
     _In_ ID3D12Resource* pIntermediate,
     UINT64 IntermediateOffset,
     _In_range_(0, MaxSubresources) UINT FirstSubresource,
@@ -1545,7 +1556,7 @@ inline UINT64 PrepSubresources(
     UINT NumRows[MaxSubresources];
     UINT64 RowSizesInBytes[MaxSubresources];
 
-    pDevice->GetCopyableFootprints(&DestinationDesc, FirstSubresource, NumSubresources, IntermediateOffset, Layouts, NumRows, RowSizesInBytes, &RequiredSize);
+    pDevice->GetCopyableFootprints(DestinationDesc, FirstSubresource, NumSubresources, IntermediateOffset, Layouts, NumRows, RowSizesInBytes, &RequiredSize);
 
     return PrepSubresources(pDevice, DestinationDesc, pIntermediate, FirstSubresource, NumSubresources, RequiredSize, Layouts, NumRows, RowSizesInBytes, pSrcData);
 }

@@ -68,13 +68,15 @@ class D3D12GraphicsBufferS : public IGraphicsBufferS
     : m_state(USE_TABLE[use]), m_stride(stride), m_count(count), m_sz(stride * count)
     {
         m_gpuDesc = CD3DX12_RESOURCE_DESC::Buffer(m_sz);
+        size_t reqSz = GetRequiredIntermediateSize(ctx->m_dev.Get(), &m_gpuDesc, 0, 1);
+        m_gpuDesc = CD3DX12_RESOURCE_DESC::Buffer(reqSz);
         ThrowIfFailed(ctx->m_dev->CreateCommittedResource(
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), 
             D3D12_HEAP_FLAG_NONE, &m_gpuDesc, 
             D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, __uuidof(ID3D12Resource), &m_buf));
 
-        D3D12_SUBRESOURCE_DATA upData = {data, m_sz, m_sz};
-        if (!PrepSubresources<16>(ctx->m_dev.Get(), m_gpuDesc, m_buf.Get(), 0, 0, 1, &upData))
+        D3D12_SUBRESOURCE_DATA upData = {data, LONG_PTR(m_sz), LONG_PTR(m_sz)};
+        if (!PrepSubresources<1>(ctx->m_dev.Get(), &m_gpuDesc, m_buf.Get(), 0, 0, 1, &upData))
             Log.report(LogVisor::FatalError, "error preparing resource for upload");
     }
 public:
@@ -90,7 +92,7 @@ public:
             nullptr, __uuidof(ID3D12Resource), &m_gpuBuf));
 
         /* Stage resource upload */
-        CommandSubresourcesTransfer<16>(ctx->m_dev.Get(), ctx->m_loadlist.Get(), m_gpuBuf.Get(), m_buf.Get(), 0, 0, 1);
+        CommandSubresourcesTransfer<1>(ctx->m_dev.Get(), ctx->m_loadlist.Get(), m_gpuBuf.Get(), m_buf.Get(), 0, 0, 1);
         ctx->m_loadlist->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_gpuBuf.Get(), 
             D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
 
@@ -104,15 +106,20 @@ class D3D12GraphicsBufferD : public IGraphicsBufferD
     friend struct D3D12CommandQueue;
     D3D12CommandQueue* m_q;
     D3D12_RESOURCE_STATES m_state;
+    size_t m_mappedSz;
+    void* m_mappedBuf = nullptr;
     D3D12GraphicsBufferD(D3D12CommandQueue* q, BufferUse use, D3D12Context* ctx, size_t stride, size_t count)
     : m_state(USE_TABLE[use]), m_q(q), m_stride(stride), m_count(count)
     {
         size_t sz = stride * count;
+        D3D12_RESOURCE_DESC desc = CD3DX12_RESOURCE_DESC::Buffer(sz);
+        size_t reqSz = GetRequiredIntermediateSize(ctx->m_dev.Get(), &desc, 0, 1);
+        desc = CD3DX12_RESOURCE_DESC::Buffer(reqSz);
         for (int i=0 ; i<2 ; ++i)
         {
             ThrowIfFailed(ctx->m_dev->CreateCommittedResource(
                 &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), 
-                D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sz), 
+                D3D12_HEAP_FLAG_NONE, &desc,
                 D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, __uuidof(ID3D12Resource), &m_bufs[i]));
         }
     }
@@ -150,9 +157,10 @@ class D3D12TextureS : public ITextureS
     : m_sz(sz)
     {
         m_gpuDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, mips);
+        size_t reqSz = GetRequiredIntermediateSize(ctx->m_dev.Get(), &m_gpuDesc, 0, mips);
         ThrowIfFailed(ctx->m_dev->CreateCommittedResource(
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), 
-            D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sz), 
+            D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(reqSz),
             D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, __uuidof(ID3D12Resource), &m_tex));
 
         const uint8_t* dataIt = static_cast<const uint8_t*>(data);
@@ -167,7 +175,7 @@ class D3D12TextureS : public ITextureS
             height /= 2;
         }
 
-        if (!PrepSubresources<16>(ctx->m_dev.Get(), m_gpuDesc, m_tex.Get(), 0, 0, m_gpuDesc.MipLevels, upData))
+        if (!PrepSubresources<16>(ctx->m_dev.Get(), &m_gpuDesc, m_tex.Get(), 0, 0, m_gpuDesc.MipLevels, upData))
             Log.report(LogVisor::FatalError, "error preparing resource for upload");
     }
 public:
@@ -196,15 +204,20 @@ class D3D12TextureD : public ITextureD
     size_t m_width = 0;
     size_t m_height = 0;
     D3D12CommandQueue* m_q;
+    D3D12_RESOURCE_DESC m_gpuDesc;
+    size_t m_mappedSz;
+    void* m_mappedBuf = nullptr;
     D3D12TextureD(D3D12CommandQueue* q, D3D12Context* ctx, size_t width, size_t height, TextureFormat fmt)
     : m_q(q) 
     {
+        m_gpuDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height);
+        size_t reqSz = GetRequiredIntermediateSize(ctx->m_dev.Get(), &m_gpuDesc, 0, 1);
         for (int i=0 ; i<2 ; ++i)
         {
             ThrowIfFailed(ctx->m_dev->CreateCommittedResource(
                 &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), 
                 D3D12_HEAP_FLAG_NONE, 
-                &CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height), 
+                &CD3DX12_RESOURCE_DESC::Buffer(reqSz),
                 D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, __uuidof(ID3D12Resource), &m_texs[i]));
         }
     }
@@ -221,11 +234,10 @@ public:
     {
         for (int i=0 ; i<2 ; ++i)
         {
-            D3D12_RESOURCE_DESC desc = m_texs[i]->GetDesc();
-            ThrowIfFailed(ctx->m_dev->CreatePlacedResource(gpuHeap, offset, &desc, 
+            ThrowIfFailed(ctx->m_dev->CreatePlacedResource(gpuHeap, offset, &m_gpuDesc,
                 D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, 
                 nullptr, __uuidof(ID3D12Resource), &m_gpuTexs[i]));
-            offset = NextHeapOffset(offset, ctx->m_dev->GetResourceAllocationInfo(0, 1, &desc));
+            offset = NextHeapOffset(offset, ctx->m_dev->GetResourceAllocationInfo(0, 1, &m_gpuDesc));
         }
         return offset;
     }
@@ -388,7 +400,7 @@ static const D3D12_BLEND BLEND_FACTOR_TABLE[] =
 class D3D12ShaderPipeline : public IShaderPipeline
 {
     friend class D3D12DataFactory;
-    D3D12ShaderPipeline(D3D12Context* ctx, ID3DBlob* vert, ID3DBlob* pixel,
+    D3D12ShaderPipeline(D3D12Context* ctx, ID3DBlob* vert, ID3DBlob* pixel, ID3DBlob* pipeline,
                         const D3D12VertexFormat* vtxFmt,
                         BlendFactor srcFac, BlendFactor dstFac,
                         bool depthTest, bool depthWrite, bool backfaceCulling)
@@ -420,6 +432,11 @@ class D3D12ShaderPipeline : public IShaderPipeline
         desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
         desc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
         desc.SampleDesc.Count = 1;
+        if (pipeline)
+        {
+            desc.CachedPSO.pCachedBlob = pipeline->GetBufferPointer();
+            desc.CachedPSO.CachedBlobSizeInBytes = pipeline->GetBufferSize();
+        }
         ThrowIfFailed(ctx->m_dev->CreateGraphicsPipelineState(&desc, __uuidof(ID3D12PipelineState), &m_state));
     }
 public:
@@ -580,8 +597,6 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
             ThrowIfFailed(ctx->m_dev->CreateDescriptorHeap(&desc, _uuidof(ID3D12DescriptorHeap), &m_descHeap[b]));
             CD3DX12_CPU_DESCRIPTOR_HANDLE handle(m_descHeap[b]->GetCPUDescriptorHandleForHeapStart());
 
-            D3D12_CONSTANT_BUFFER_VIEW_DESC viewDesc;
-
             GetBufferGPUResource(m_vbuf, b, m_vboView[b]);
             if (m_ibuf)
                 GetBufferGPUResource(m_ibuf, b, m_iboView[b]);
@@ -589,7 +604,9 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
             {
                 if (i<m_ubufCount)
                 {
+                    D3D12_CONSTANT_BUFFER_VIEW_DESC viewDesc;
                     GetBufferGPUResource(m_ubufs[i], b, viewDesc);
+                    viewDesc.SizeInBytes = (viewDesc.SizeInBytes + 255) & ~255;
                     ctx->m_dev->CreateConstantBufferView(&viewDesc, handle);
                 }
                 handle.Offset(1, incSz);
@@ -598,7 +615,6 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
             {
                 if (i<m_texCount)
                 {
-                    D3D12_SHADER_RESOURCE_VIEW_DESC viewDesc;
                     ctx->m_dev->CreateShaderResourceView(GetTextureGPUResource(m_texs[i], b), &Tex2DViewDesc, handle);
                 }
                 handle.Offset(1, incSz);
@@ -636,7 +652,7 @@ static ID3D12GraphicsCommandList* WaitForLoadList(D3D12Context* ctx)
 struct D3D12CommandQueue : IGraphicsCommandQueue
 {
     Platform platform() const {return IGraphicsDataFactory::PlatformD3D12;}
-    const char* platformName() const {return "D3D12";}
+    const SystemChar* platformName() const {return _S("D3D12");}
     D3D12Context* m_ctx;
     D3D12Context::Window* m_windowCtx;
     IGraphicsContext* m_parent;
@@ -703,11 +719,14 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
 
     void setViewport(const SWindowRect& rect)
     {
-        D3D12_VIEWPORT vp = {rect.location[0], rect.location[1], rect.size[0], rect.size[1], 0.0, 1.0};
+        D3D12_VIEWPORT vp = {FLOAT(rect.location[0]), FLOAT(rect.location[1]),
+                             FLOAT(rect.size[0]), FLOAT(rect.size[1]), 0.0f, 1.0f};
         m_cmdList->RSSetViewports(1, &vp);
         D3D12_RECT r = {rect.location[0], rect.location[1], rect.size[0], rect.size[1]};
         m_cmdList->RSSetScissorRects(1, &r);
     }
+
+    void flushBufferUpdates() {}
 
     std::unordered_map<D3D12TextureR*, std::pair<size_t, size_t>> m_texResizes;
     void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)
@@ -889,43 +908,71 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
 void D3D12GraphicsBufferD::load(const void* data, size_t sz)
 {
     ID3D12Resource* res = m_bufs[m_q->m_fillBuf].Get();
-    void* d;
-    res->Map(0, nullptr, &d);
-    memcpy(d, data, sz);
-    res->Unmap(0, nullptr);
+    ID3D12Resource* gpuRes = m_gpuBufs[m_q->m_fillBuf].Get();
+    D3D12_SUBRESOURCE_DATA d = {data, LONG_PTR(sz), LONG_PTR(sz)};
+    m_q->m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+        m_state, D3D12_RESOURCE_STATE_COPY_DEST));
+    if (!UpdateSubresources<1>(m_q->m_cmdList.Get(), gpuRes, res, 0, 0, 1, &d))
+        Log.report(LogVisor::FatalError, "unable to update dynamic buffer data");
+    m_q->m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+        D3D12_RESOURCE_STATE_COPY_DEST, m_state));
 }
 void* D3D12GraphicsBufferD::map(size_t sz)
 {
-    ID3D12Resource* res = m_bufs[m_q->m_fillBuf].Get();
-    void* d;
-    res->Map(0, nullptr, &d);
-    return d;
+    if (m_mappedBuf)
+        free(m_mappedBuf);
+    m_mappedSz = sz;
+    m_mappedBuf = malloc(sz);
+    return m_mappedBuf;
 }
 void D3D12GraphicsBufferD::unmap()
 {
     ID3D12Resource* res = m_bufs[m_q->m_fillBuf].Get();
-    res->Unmap(0, nullptr);
+    ID3D12Resource* gpuRes = m_gpuBufs[m_q->m_fillBuf].Get();
+    D3D12_SUBRESOURCE_DATA data = {m_mappedBuf, LONG_PTR(m_mappedSz), LONG_PTR(m_mappedSz)};
+    m_q->m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+        m_state, D3D12_RESOURCE_STATE_COPY_DEST));
+    if (!UpdateSubresources<1>(m_q->m_cmdList.Get(), gpuRes, res, 0, 0, 1, &data))
+        Log.report(LogVisor::FatalError, "unable to update dynamic buffer data");
+    free(m_mappedBuf);
+    m_mappedBuf = nullptr;
+    m_q->m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+        D3D12_RESOURCE_STATE_COPY_DEST, m_state));
 }
 
 void D3D12TextureD::load(const void* data, size_t sz)
 {
     ID3D12Resource* res = m_texs[m_q->m_fillBuf].Get();
-    void* d;
-    res->Map(0, nullptr, &d);
-    memcpy(d, data, sz);
-    res->Unmap(0, nullptr);
+    ID3D12Resource* gpuRes = m_gpuTexs[m_q->m_fillBuf].Get();
+    D3D12_SUBRESOURCE_DATA d = {data, LONG_PTR(m_width * 4), LONG_PTR(sz)};
+    m_q->m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST));
+    if (!UpdateSubresources<1>(m_q->m_cmdList.Get(), gpuRes, res, 0, 0, 1, &d))
+        Log.report(LogVisor::FatalError, "unable to update dynamic texture data");
+    m_q->m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+        D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
 }
 void* D3D12TextureD::map(size_t sz)
 {
-    ID3D12Resource* res = m_texs[m_q->m_fillBuf].Get();
-    void* d;
-    res->Map(0, nullptr, &d);
-    return d;
+    if (m_mappedBuf)
+        free(m_mappedBuf);
+    m_mappedSz = sz;
+    m_mappedBuf = malloc(sz);
+    return m_mappedBuf;
 }
 void D3D12TextureD::unmap()
 {
     ID3D12Resource* res = m_texs[m_q->m_fillBuf].Get();
-    res->Unmap(0, nullptr);
+    ID3D12Resource* gpuRes = m_gpuTexs[m_q->m_fillBuf].Get();
+    D3D12_SUBRESOURCE_DATA data = {m_mappedBuf, LONG_PTR(m_width * 4), LONG_PTR(m_mappedSz)};
+    m_q->m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST));
+    if (!UpdateSubresources<1>(m_q->m_cmdList.Get(), gpuRes, res, 0, 0, 1, &data))
+        Log.report(LogVisor::FatalError, "unable to update dynamic buffer data");
+    free(m_mappedBuf);
+    m_mappedBuf = nullptr;
+    m_q->m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+        D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
 }
 
 class D3D12DataFactory : public ID3DDataFactory
@@ -959,7 +1006,7 @@ public:
     ~D3D12DataFactory() = default;
 
     Platform platform() const {return PlatformD3D12;}
-    const char* platformName() const {return "D3D12";}
+    const SystemChar* platformName() const {return _S("D3D12");}
 
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
     {
@@ -1019,7 +1066,6 @@ public:
 
     IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)
     {
-        D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent->getCommandQueue());
         D3D12VertexFormat* retval = new struct D3D12VertexFormat(elementCount, elements);
         static_cast<D3D12Data*>(m_deferredData)->m_VFmts.emplace_back(retval);
         return retval;
@@ -1033,29 +1079,38 @@ public:
 
     IShaderPipeline* newShaderPipeline
         (const char* vertSource, const char* fragSource,
-            ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,
-            IVertexFormat* vtxFmt, BlendFactor srcFac, BlendFactor dstFac,
-            bool depthTest, bool depthWrite, bool backfaceCulling)
+         ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,
+         ComPtr<ID3DBlob>& pipelineBlob, IVertexFormat* vtxFmt,
+         BlendFactor srcFac, BlendFactor dstFac,
+         bool depthTest, bool depthWrite, bool backfaceCulling)
     {
         ComPtr<ID3DBlob> errBlob;
 
-        if (FAILED(D3DCompilePROC(vertSource, strlen(vertSource), "HECL Vert Source", nullptr, nullptr, "main", 
-            "vs_5_0", BOO_D3DCOMPILE_FLAG, 0, &vertBlobOut, &errBlob)))
+        if (!vertBlobOut)
         {
-            Log.report(LogVisor::FatalError, "error compiling vert shader: %s", errBlob->GetBufferPointer());
-            return nullptr;
+            if (FAILED(D3DCompilePROC(vertSource, strlen(vertSource), "HECL Vert Source", nullptr, nullptr, "main",
+                "vs_5_0", BOO_D3DCOMPILE_FLAG, 0, &vertBlobOut, &errBlob)))
+            {
+                Log.report(LogVisor::FatalError, "error compiling vert shader: %s", errBlob->GetBufferPointer());
+                return nullptr;
+            }
         }
 
-        if (FAILED(D3DCompilePROC(fragSource, strlen(fragSource), "HECL Pixel Source", nullptr, nullptr, "main", 
-            "ps_5_0", BOO_D3DCOMPILE_FLAG, 0, &fragBlobOut, &errBlob)))
+        if (!fragBlobOut)
         {
-            Log.report(LogVisor::FatalError, "error compiling pixel shader: %s", errBlob->GetBufferPointer());
-            return nullptr;
+            if (FAILED(D3DCompilePROC(fragSource, strlen(fragSource), "HECL Pixel Source", nullptr, nullptr, "main",
+                "ps_5_0", BOO_D3DCOMPILE_FLAG, 0, &fragBlobOut, &errBlob)))
+            {
+                Log.report(LogVisor::FatalError, "error compiling pixel shader: %s", errBlob->GetBufferPointer());
+                return nullptr;
+            }
         }
 
-        D3D12ShaderPipeline* retval = new D3D12ShaderPipeline(m_ctx, vertBlobOut.Get(), fragBlobOut.Get(),
-            static_cast<const D3D12VertexFormat*>(vtxFmt),
-            srcFac, dstFac, depthTest, depthWrite, backfaceCulling);
+        D3D12ShaderPipeline* retval = new D3D12ShaderPipeline(m_ctx, vertBlobOut.Get(), fragBlobOut.Get(), pipelineBlob.Get(),
+                                                              static_cast<const D3D12VertexFormat*>(vtxFmt),
+                                                              srcFac, dstFac, depthTest, depthWrite, backfaceCulling);
+        if (!pipelineBlob)
+            retval->m_state->GetCachedBlob(&pipelineBlob);
         static_cast<D3D12Data*>(m_deferredData)->m_SPs.emplace_back(retval);
         return retval;
     }
@@ -1144,11 +1199,19 @@ public:
         ++m_ctx->m_loadfenceval;
         ThrowIfFailed(m_ctx->m_loadq->Signal(m_ctx->m_loadfence.Get(), m_ctx->m_loadfenceval));
 
-        WaitForLoadList(m_ctx);
-
         /* Commit data bindings (create descriptor heaps) */
         for (std::unique_ptr<D3D12ShaderDataBinding>& bind : retval->m_SBinds)
             bind->commit(m_ctx);
+
+        /* Block handle return until data is ready on GPU */
+        WaitForLoadList(m_ctx);
+
+        /* Delete static upload heaps */
+        for (std::unique_ptr<D3D12GraphicsBufferS>& buf : retval->m_SBufs)
+            buf->m_buf.Reset();
+
+        for (std::unique_ptr<D3D12TextureS>& tex : retval->m_STexs)
+            tex->m_tex.Reset();
 
         /* All set! */
         m_deferredData = new struct D3D12Data();

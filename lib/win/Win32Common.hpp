@@ -132,7 +132,7 @@ struct Boo3DAppContext
             D3D12Context::Window& win = m_ctx12.m_windows[window];
             BOOL isFScr;
             win.m_swapChain->GetFullscreenState(&isFScr, nullptr);
-            return isFScr;
+            return isFScr != 0;
         }
 #endif
         if (m_ctx11.m_dev)
@@ -167,7 +167,8 @@ struct Boo3DAppContext
                 out->GetDesc(&outDesc);
 
                 win.m_swapChain->SetFullscreenState(true, nullptr);
-                DXGI_MODE_DESC mdesc = {outDesc.DesktopCoordinates.right, outDesc.DesktopCoordinates.bottom};
+                DXGI_MODE_DESC mdesc = {UINT(outDesc.DesktopCoordinates.right - outDesc.DesktopCoordinates.left),
+                                        UINT(outDesc.DesktopCoordinates.bottom - outDesc.DesktopCoordinates.top)};
                 win.m_swapChain->ResizeTarget(&mdesc);
             }
             else

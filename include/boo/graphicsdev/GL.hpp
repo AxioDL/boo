@@ -21,7 +21,7 @@ public:
     ~GLDataFactory() {}
 
     Platform platform() const {return PlatformOGL;}
-    const char* platformName() const {return "OGL";}
+    const SystemChar* platformName() const {return _S("OGL");}
 
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
     IGraphicsBufferS* newStaticBuffer(BufferUse use, std::unique_ptr<uint8_t[]>&& data, size_t stride, size_t count);
@@ -34,6 +34,7 @@ public:
     ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
     ITextureR* newRenderTexture(size_t width, size_t height, size_t samples);
 
+    bool bindingNeedsVertexFormat() const {return true;}
     IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
 
     IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,

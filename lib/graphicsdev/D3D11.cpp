@@ -74,7 +74,8 @@ class D3D11GraphicsBufferD : public IGraphicsBufferD
     {
         size_t sz = stride * count;
         for (int i=0 ; i<3 ; ++i)
-            ThrowIfFailed(ctx->m_dev->CreateBuffer(&CD3D11_BUFFER_DESC(sz, USE_TABLE[use]), nullptr, &m_bufs[i]));
+            ThrowIfFailed(ctx->m_dev->CreateBuffer(&CD3D11_BUFFER_DESC(sz, USE_TABLE[use],
+                          D3D11_USAGE_DYNAMIC, D3D11_CPU_ACCESS_WRITE), nullptr, &m_bufs[i]));
     }
 public:
     size_t m_stride;
@@ -439,7 +440,7 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
 struct D3D11CommandQueue : IGraphicsCommandQueue
 {
     Platform platform() const {return IGraphicsDataFactory::PlatformD3D11;}
-    const char* platformName() const {return "D3D11";}
+    const SystemChar* platformName() const {return _S("D3D11");}
     D3D11Context* m_ctx;
     D3D11Context::Window* m_windowCtx;
     IGraphicsContext* m_parent;
@@ -577,6 +578,8 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         m_deferredCtx->RSSetViewports(1, &vp);
     }
 
+    void flushBufferUpdates() {}
+
     std::unordered_map<D3D11TextureR*, std::pair<size_t, size_t>> m_texResizes;
     void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)
     {
@@ -712,7 +715,7 @@ public:
     ~D3D11DataFactory() = default;
 
     Platform platform() const {return PlatformD3D11;}
-    const char* platformName() const {return "D3D11";}
+    const SystemChar* platformName() const {return _S("D3D11");}
 
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
     {
@@ -786,24 +789,31 @@ public:
 
     IShaderPipeline* newShaderPipeline
         (const char* vertSource, const char* fragSource,
-            ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,
-            IVertexFormat* vtxFmt, BlendFactor srcFac, BlendFactor dstFac,
-            bool depthTest, bool depthWrite, bool backfaceCulling)
+         ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,
+         ComPtr<ID3DBlob>& pipelineBlob, IVertexFormat* vtxFmt,
+         BlendFactor srcFac, BlendFactor dstFac,
+         bool depthTest, bool depthWrite, bool backfaceCulling)
     {
         ComPtr<ID3DBlob> errBlob;
 
-        if (FAILED(D3DCompilePROC(vertSource, strlen(vertSource), "HECL Vert Source", nullptr, nullptr, "main", 
-            "vs_5_0", BOO_D3DCOMPILE_FLAG, 0, &vertBlobOut, &errBlob)))
+        if (!vertBlobOut)
         {
-            Log.report(LogVisor::FatalError, "error compiling vert shader: %s", errBlob->GetBufferPointer());
-            return nullptr;
+            if (FAILED(D3DCompilePROC(vertSource, strlen(vertSource), "HECL Vert Source", nullptr, nullptr, "main",
+                "vs_5_0", BOO_D3DCOMPILE_FLAG, 0, &vertBlobOut, &errBlob)))
+            {
+                Log.report(LogVisor::FatalError, "error compiling vert shader: %s", errBlob->GetBufferPointer());
+                return nullptr;
+            }
         }
 
-        if (FAILED(D3DCompilePROC(fragSource, strlen(fragSource), "HECL Pixel Source", nullptr, nullptr, "main", 
-            "ps_5_0", BOO_D3DCOMPILE_FLAG, 0, &fragBlobOut, &errBlob)))
+        if (!fragBlobOut)
         {
-            Log.report(LogVisor::FatalError, "error compiling pixel shader: %s", errBlob->GetBufferPointer());
-            return nullptr;
+            if (FAILED(D3DCompilePROC(fragSource, strlen(fragSource), "HECL Pixel Source", nullptr, nullptr, "main",
+                "ps_5_0", BOO_D3DCOMPILE_FLAG, 0, &fragBlobOut, &errBlob)))
+            {
+                Log.report(LogVisor::FatalError, "error compiling pixel shader: %s", errBlob->GetBufferPointer());
+                return nullptr;
+            }
         }
 
         D3D11ShaderPipeline* retval = new D3D11ShaderPipeline(m_ctx, vertBlobOut.Get(), fragBlobOut.Get(),

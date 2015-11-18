@@ -171,6 +171,11 @@ public:
         return m_dataFactory;
     }
 
+    IGraphicsDataFactory* getMainContextDataFactory()
+    {
+        return m_dataFactory;
+    }
+
     IGraphicsDataFactory* getLoadContextDataFactory()
     {
         return m_dataFactory;
@@ -328,6 +333,22 @@ public:
 
     IGraphicsDataFactory* getDataFactory()
     {
+        return m_dataFactory;
+    }
+
+    /* Creates a new context on current thread!! Call from client loading thread */
+    HGLRC m_mainCtx = 0;
+    IGraphicsDataFactory* getMainContextDataFactory()
+    {
+        OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
+        if (!m_mainCtx)
+        {
+            m_mainCtx = wglCreateContextAttribsARB(w.m_deviceContext, w.m_mainContext, ContextAttribs);
+            if (!m_mainCtx)
+                Log.report(LogVisor::FatalError, "unable to make main WGL context");
+        }
+        if (!wglMakeCurrent(w.m_deviceContext, m_mainCtx))
+            Log.report(LogVisor::FatalError, "unable to make main WGL context current");
         return m_dataFactory;
     }
 
@@ -595,6 +616,10 @@ public:
         HWNDEvent& e = *static_cast<HWNDEvent*>(ev);
         switch (e.uMsg)
         {
+        case WM_CLOSE:
+            if (m_callback)
+                m_callback->destroyed();
+            return;
         case WM_SIZE:
         {
             SWindowRect rect;
@@ -809,6 +834,12 @@ public:
     IGraphicsDataFactory* getDataFactory()
     {
         return m_gfxCtx->getDataFactory();
+    }
+
+    /* Creates a new context on current thread!! Call from main client thread */
+    IGraphicsDataFactory* getMainContextDataFactory()
+    {
+        return m_gfxCtx->getMainContextDataFactory();
     }
 
     /* Creates a new context on current thread!! Call from client loading thread */
