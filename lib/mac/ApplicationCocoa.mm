@@ -5,6 +5,8 @@
 #include "boo/graphicsdev/Metal.hpp"
 #include "CocoaCommon.hpp"
 
+#include <LogVisor/LogVisor.hpp>
+
 namespace boo {class ApplicationCocoa;}
 @interface AppDelegate : NSObject <NSApplicationDelegate>
 {
@@ -17,6 +19,7 @@ namespace boo {class ApplicationCocoa;}
 
 namespace boo
 {
+static LogVisor::LogModule Log("boo::ApplicationCocoa");
     
 IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx, MetalContext* metalCtx);
     
@@ -101,8 +104,13 @@ public:
             {
                 m_metalCtx.m_dev = MTLCreateSystemDefaultDevice();
                 m_metalCtx.m_q = [m_metalCtx.m_dev.get() newCommandQueue];
+                Log.report(LogVisor::Info, "using Metal renderer");
                 break;
             }
+        if (!m_metalCtx.m_dev)
+            Log.report(LogVisor::Info, "using OpenGL renderer");
+#else
+        Log.report(LogVisor::Info, "using OpenGL renderer");
 #endif
     }
     

@@ -27,9 +27,11 @@ public:
 
 #include <Metal/Metal.h>
 #include <QuartzCore/CAMetalLayer.h>
+#include <unordered_map>
 
 namespace boo
 {
+class IWindow;
 struct MetalContext
 {
     NSPtr<id<MTLDevice>> m_dev;

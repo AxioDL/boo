@@ -76,10 +76,13 @@ class MetalTextureS : public ITextureS
     MetalTextureS(MetalContext* ctx, size_t width, size_t height, size_t mips,
                   TextureFormat fmt, const void* data, size_t sz)
     {
-        NSPtr<MTLTextureDescriptor*> desc =
-        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
-                                                           width:width height:height
-                                                       mipmapped:(mips>1)?YES:NO];
+        NSPtr<MTLTextureDescriptor*> desc;
+        @autoreleasepool
+        {
+            desc = [[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                       width:width height:height
+                                                                   mipmapped:(mips>1)?YES:NO] retain];
+        }
         desc.get().usage = MTLTextureUsageShaderRead;
         desc.get().mipmapLevelCount = mips;
         m_tex = [ctx->m_dev.get() newTextureWithDescriptor:desc.get()];
@@ -111,10 +114,13 @@ class MetalTextureD : public ITextureD
     MetalTextureD(MetalCommandQueue* q, MetalContext* ctx, size_t width, size_t height, TextureFormat fmt)
     : m_q(q), m_width(width), m_height(height)
     {
-        NSPtr<MTLTextureDescriptor*> desc =
-        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
-                                                           width:width height:height
-                                                       mipmapped:NO];
+        NSPtr<MTLTextureDescriptor*> desc;
+        @autoreleasepool
+        {
+            desc = [[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                       width:width height:height
+                                                                   mipmapped:NO] retain];
+        }
         desc.get().usage = MTLTextureUsageShaderRead;
         m_texs[0] = [ctx->m_dev.get() newTextureWithDescriptor:desc.get()];
         m_texs[1] = [ctx->m_dev.get() newTextureWithDescriptor:desc.get()];
@@ -138,12 +144,12 @@ class MetalTextureR : public ITextureR
     
     void Setup(MetalContext* ctx, size_t width, size_t height, size_t samples)
     {
-        NSPtr<MTLTextureDescriptor*> desc =
-        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
-                                                           width:width height:height
-                                                       mipmapped:NO];
+        NSPtr<MTLTextureDescriptor*> desc;
         @autoreleasepool
         {
+            desc = [[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                                                       width:width height:height
+                                                                   mipmapped:NO] retain];
             m_passDesc = [[MTLRenderPassDescriptor renderPassDescriptor] retain];
         }
         desc.get().usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
@@ -436,7 +442,10 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     {
         MetalTextureR* ctarget = static_cast<MetalTextureR*>(target);
         [m_enc.get() endEncoding];
-        m_enc = [m_cmdBuf.get() renderCommandEncoderWithDescriptor:ctarget->m_passDesc.get()];
+        @autoreleasepool
+        {
+            m_enc = [[m_cmdBuf.get() renderCommandEncoderWithDescriptor:ctarget->m_passDesc.get()] retain];
+        }
         m_boundTarget = ctarget;
     }
     
@@ -453,6 +462,8 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         MetalTextureR* ctex = static_cast<MetalTextureR*>(tex);
         m_texResizes[ctex] = std::make_pair(width, height);
     }
+    
+    void flushBufferUpdates() {}
     
     float m_clearColor[4] = {0.0,0.0,0.0,1.0};
     void setClearColor(const float rgba[4])
@@ -515,20 +526,26 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         MetalTextureR* csource = static_cast<MetalTextureR*>(source);
         [m_enc.get() endEncoding];
         m_enc.reset();
-        NSPtr<id<CAMetalDrawable>> drawable = [w.m_metalLayer nextDrawable];
-        NSPtr<id<MTLTexture>> dest = drawable.get().texture;
-        NSPtr<id<MTLBlitCommandEncoder>> blitEnc = [m_cmdBuf.get() blitCommandEncoder];
-        [blitEnc.get() copyFromTexture:csource->m_tex.get()
-                           sourceSlice:0
-                           sourceLevel:0
-                          sourceOrigin:MTLOriginMake(0, 0, 0)
-                            sourceSize:MTLSizeMake(dest.get().width, dest.get().height, 1)
-                             toTexture:dest.get()
-                      destinationSlice:0
-                      destinationLevel:0
-                     destinationOrigin:MTLOriginMake(0, 0, 0)];
-        [blitEnc.get() endEncoding];
-        [m_cmdBuf.get() presentDrawable:drawable.get()];
+        @autoreleasepool
+        {
+            id<CAMetalDrawable> drawable = [w.m_metalLayer nextDrawable];
+            if (drawable)
+            {
+                id<MTLTexture> dest = drawable.texture;
+                id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf.get() blitCommandEncoder];
+                [blitEnc copyFromTexture:csource->m_tex.get()
+                             sourceSlice:0
+                             sourceLevel:0
+                            sourceOrigin:MTLOriginMake(0, 0, 0)
+                              sourceSize:MTLSizeMake(dest.width, dest.height, 1)
+                               toTexture:dest
+                        destinationSlice:0
+                        destinationLevel:0
+                       destinationOrigin:MTLOriginMake(0, 0, 0)];
+                [blitEnc endEncoding];
+                [m_cmdBuf.get() presentDrawable:drawable];
+            }
+        }
     }
     
     bool m_inProgress = false;
@@ -570,7 +587,6 @@ void MetalGraphicsBufferD::load(const void* data, size_t sz)
 {
     id<MTLBuffer> res = m_bufs[m_q->m_fillBuf].get();
     memcpy(res.contents, data, sz);
-    [res didModifyRange:NSMakeRange(0, sz)];
 }
 void* MetalGraphicsBufferD::map(size_t sz)
 {
@@ -578,11 +594,7 @@ void* MetalGraphicsBufferD::map(size_t sz)
     id<MTLBuffer> res = m_bufs[m_q->m_fillBuf].get();
     return res.contents;
 }
-void MetalGraphicsBufferD::unmap()
-{
-    id<MTLBuffer> res = m_bufs[m_q->m_fillBuf].get();
-    [res didModifyRange:NSMakeRange(0, m_mappedSz)];
-}
+void MetalGraphicsBufferD::unmap() {}
 
 void MetalTextureD::load(const void* data, size_t sz)
 {

@@ -36,6 +36,7 @@ public:
     ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
     ITextureR* newRenderTexture(size_t width, size_t height, size_t samples);
     
+    bool bindingNeedsVertexFormat() const {return false;}
     IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
     
     IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,

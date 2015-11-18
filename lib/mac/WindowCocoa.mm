@@ -245,8 +245,8 @@ public:
             [nspf release];
             if (!m_mainCtx)
                 Log.report(LogVisor::FatalError, "unable to make main NSOpenGLContext");
-            [m_mainCtx makeCurrentContext];
         }
+        [m_mainCtx makeCurrentContext];
         return m_dataFactory;
     }
     
@@ -259,8 +259,8 @@ public:
             [nspf release];
             if (!m_loadCtx)
                 Log.report(LogVisor::FatalError, "unable to make load NSOpenGLContext");
-            [m_loadCtx makeCurrentContext];
         }
+        [m_loadCtx makeCurrentContext];
         return m_dataFactory;
     }
     
@@ -385,6 +385,11 @@ public:
     }
     
     IGraphicsDataFactory* getDataFactory()
+    {
+        return m_dataFactory;
+    }
+    
+    IGraphicsDataFactory* getMainContextDataFactory()
     {
         return m_dataFactory;
     }
