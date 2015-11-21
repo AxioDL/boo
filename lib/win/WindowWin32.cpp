@@ -40,7 +40,7 @@ struct GraphicsContextWin32 : IGraphicsContext
     ComPtr<IDXGIOutput> m_output;
     GraphicsContextWin32(EGraphicsAPI api, IWindow* parentWindow, Boo3DAppContext& b3dCtx)
     : m_api(api),
-      m_pf(PF_RGBA8),
+      m_pf(EPixelFormat::RGBA8),
       m_parentWindow(parentWindow),
       m_3dCtx(b3dCtx) {}
 };
@@ -148,7 +148,7 @@ public:
 
     void setPixelFormat(EPixelFormat pf)
     {
-        if (pf > PF_RGBAF32_Z24)
+        if (pf > EPixelFormat::RGBAF32_Z24)
             return;
         m_pf = pf;
     }
@@ -288,7 +288,7 @@ public:
 
     void setPixelFormat(EPixelFormat pf)
     {
-        if (pf > PF_RGBAF32_Z24)
+        if (pf > EPixelFormat::RGBAF32_Z24)
             return;
         m_pf = pf;
     }
@@ -379,66 +379,66 @@ static void genFrameDefault(MONITORINFO* screen, int& xOut, int& yOut, int& wOut
     hOut = height;
 }
 
-static uint32_t translateKeysym(WPARAM sym, int& specialSym, int& modifierSym)
+static uint32_t translateKeysym(WPARAM sym, ESpecialKey& specialSym, EModifierKey& modifierSym)
 {
-    specialSym = KEY_NONE;
-    modifierSym = MKEY_NONE;
+    specialSym = ESpecialKey::None;
+    modifierSym = EModifierKey::None;
     if (sym >= VK_F1 && sym <= VK_F12)
-        specialSym = KEY_F1 + sym - VK_F1;
+        specialSym = ESpecialKey(uint32_t(ESpecialKey::F1) + sym - VK_F1);
     else if (sym == VK_ESCAPE)
-        specialSym = KEY_ESC;
+        specialSym = ESpecialKey::Esc;
     else if (sym == VK_RETURN)
-        specialSym = KEY_ENTER;
+        specialSym = ESpecialKey::Enter;
     else if (sym == VK_BACK)
-        specialSym = KEY_BACKSPACE;
+        specialSym = ESpecialKey::Backspace;
     else if (sym == VK_INSERT)
-        specialSym = KEY_INSERT;
+        specialSym = ESpecialKey::Insert;
     else if (sym == VK_DELETE)
-        specialSym = KEY_DELETE;
+        specialSym = ESpecialKey::Delete;
     else if (sym == VK_HOME)
-        specialSym = KEY_HOME;
+        specialSym = ESpecialKey::Home;
     else if (sym == VK_END)
-        specialSym = KEY_END;
+        specialSym = ESpecialKey::End;
     else if (sym == VK_PRIOR)
-        specialSym = KEY_PGUP;
+        specialSym = ESpecialKey::PgUp;
     else if (sym == VK_NEXT)
-        specialSym = KEY_PGDOWN;
+        specialSym = ESpecialKey::PgDown;
     else if (sym == VK_LEFT)
-        specialSym = KEY_LEFT;
+        specialSym = ESpecialKey::Left;
     else if (sym == VK_RIGHT)
-        specialSym = KEY_RIGHT;
+        specialSym = ESpecialKey::Right;
     else if (sym == VK_UP)
-        specialSym = KEY_UP;
+        specialSym = ESpecialKey::Up;
     else if (sym == VK_DOWN)
-        specialSym = KEY_DOWN;
+        specialSym = ESpecialKey::Down;
     else if (sym == VK_LSHIFT || sym == VK_RSHIFT)
-        modifierSym = MKEY_SHIFT;
+        modifierSym = EModifierKey::Shift;
     else if (sym == VK_LCONTROL || sym == VK_RCONTROL)
-        modifierSym = MKEY_CTRL;
+        modifierSym = EModifierKey::Ctrl;
     else if (sym == VK_MENU)
-        modifierSym = MKEY_ALT;
+        modifierSym = EModifierKey::Alt;
     else
         return MapVirtualKey(sym, MAPVK_VK_TO_CHAR);
     return 0;
 }
 
-static int translateModifiers(UINT msg)
+static EModifierKey translateModifiers(UINT msg)
 {
-    int retval = 0;
+    EModifierKey retval = EModifierKey::None;
     if ((GetKeyState(VK_LSHIFT) & 0x8000) != 0 || (GetKeyState(VK_RSHIFT) & 0x8000) != 0)
-        retval |= MKEY_SHIFT;
+        retval |= EModifierKey::Shift;
     if ((GetKeyState(VK_LCONTROL) & 0x8000) != 0 || (GetKeyState(VK_RCONTROL) & 0x8000) != 0)
-        retval |= MKEY_CTRL;
+        retval |= EModifierKey::Ctrl;
     if ((GetKeyState(VK_MENU) & 0x8000) != 0)
-        retval |= MKEY_ALT;
+        retval |= EModifierKey::Alt;
     if (msg == WM_SYSKEYDOWN || msg == WM_SYSKEYUP)
-        retval |= MKEY_ALT;
+        retval |= EModifierKey::Alt;
     return retval;
 }
     
 class WindowWin32 : public IWindow
 {
-    friend GraphicsContextWin32;
+    friend struct GraphicsContextWin32;
     HWND m_hwnd;
     std::unique_ptr<GraphicsContextWin32> m_gfxCtx;
     IWindowCallback* m_callback = nullptr;
@@ -450,14 +450,14 @@ public:
         m_hwnd = CreateWindowW(L"BooWindow", title.c_str(), WS_OVERLAPPEDWINDOW,
                                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                                NULL, NULL, NULL, NULL);
-        IGraphicsContext::EGraphicsAPI api = IGraphicsContext::API_D3D11;
+        IGraphicsContext::EGraphicsAPI api = IGraphicsContext::EGraphicsAPI::D3D11;
 #if _WIN32_WINNT_WIN10
         if (b3dCtx.m_ctx12.m_dev)
-            api = IGraphicsContext::API_D3D12;
+            api = IGraphicsContext::EGraphicsAPI::D3D12;
 #endif
         if (b3dCtx.m_ctxOgl.m_dxFactory)
         {
-            m_gfxCtx.reset(new GraphicsContextWin32GL(IGraphicsContext::API_OPENGL_3_3, this, m_hwnd, b3dCtx));
+            m_gfxCtx.reset(new GraphicsContextWin32GL(IGraphicsContext::EGraphicsAPI::OpenGL3_3, this, m_hwnd, b3dCtx));
             return;
         }
         m_gfxCtx.reset(new GraphicsContextWin32D3D(api, this, m_hwnd, b3dCtx));
@@ -573,14 +573,14 @@ public:
         {
             int x, y, w, h;
             getWindowFrame(x, y, w, h);
-            int modifierMask = translateModifiers(e.uMsg);
+            EModifierKey modifierMask = translateModifiers(e.uMsg);
             SWindowCoord coord =
             {
                 {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam)},
                 {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam)},
                 {float(GET_X_LPARAM(e.lParam)) / float(w), float(GET_Y_LPARAM(e.lParam)) / float(h)}
             };
-            m_callback->mouseDown(coord, button, EModifierKey(modifierMask));
+            m_callback->mouseDown(coord, button, modifierMask);
         }
     }
 
@@ -590,14 +590,14 @@ public:
         {
             int x, y, w, h;
             getWindowFrame(x, y, w, h);
-            int modifierMask = translateModifiers(e.uMsg);
+            EModifierKey modifierMask = translateModifiers(e.uMsg);
             SWindowCoord coord =
             {
                 {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam)},
                 {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam)},
                 {float(GET_X_LPARAM(e.lParam)) / float(w), float(GET_Y_LPARAM(e.lParam)) / float(h)}
             };
-            m_callback->mouseUp(coord, button, EModifierKey(modifierMask));
+            m_callback->mouseUp(coord, button, modifierMask);
         }
     }
 
@@ -647,16 +647,16 @@ public:
         {
             if (m_callback)
             {
-                int specialKey;
-                int modifierKey;
+                ESpecialKey specialKey;
+                EModifierKey modifierKey;
                 uint32_t charCode = translateKeysym(e.wParam, specialKey, modifierKey);
-                int modifierMask = translateModifiers(e.uMsg);
+                EModifierKey modifierMask = translateModifiers(e.uMsg);
                 if (charCode)
-                    m_callback->charKeyDown(charCode, EModifierKey(modifierMask), (e.lParam & 0xffff) != 0);
-                else if (specialKey)
-                    m_callback->specialKeyDown(ESpecialKey(specialKey), EModifierKey(modifierMask), (e.lParam & 0xffff) != 0);
-                else if (modifierKey)
-                    m_callback->modKeyDown(EModifierKey(modifierKey), (e.lParam & 0xffff) != 0);
+                    m_callback->charKeyDown(charCode, modifierMask, (e.lParam & 0xffff) != 0);
+                else if (specialKey != ESpecialKey::None)
+                    m_callback->specialKeyDown(specialKey, modifierMask, (e.lParam & 0xffff) != 0);
+                else if (modifierKey != EModifierKey::None)
+                    m_callback->modKeyDown(modifierKey, (e.lParam & 0xffff) != 0);
             }
             return;
         }
@@ -665,63 +665,63 @@ public:
         {
             if (m_callback)
             {
-                int specialKey;
-                int modifierKey;
+                ESpecialKey specialKey;
+                EModifierKey modifierKey;
                 uint32_t charCode = translateKeysym(e.wParam, specialKey, modifierKey);
-                int modifierMask = translateModifiers(e.uMsg);
+                EModifierKey modifierMask = translateModifiers(e.uMsg);
                 if (charCode)
-                    m_callback->charKeyUp(charCode, EModifierKey(modifierMask));
-                else if (specialKey)
-                    m_callback->specialKeyUp(ESpecialKey(specialKey), EModifierKey(modifierMask));
-                else if (modifierKey)
-                    m_callback->modKeyUp(EModifierKey(modifierKey));
+                    m_callback->charKeyUp(charCode, modifierMask);
+                else if (specialKey != ESpecialKey::None)
+                    m_callback->specialKeyUp(specialKey, modifierMask);
+                else if (modifierKey != EModifierKey::None)
+                    m_callback->modKeyUp(modifierKey);
             }
             return;
         }
         case WM_LBUTTONDOWN:
         {
-            buttonDown(e, BUTTON_PRIMARY);
+            buttonDown(e, EMouseButton::Primary);
             return;
         }
         case WM_LBUTTONUP:
         {
-            buttonUp(e, BUTTON_PRIMARY);
+            buttonUp(e, EMouseButton::Primary);
             return;
         }
         case WM_RBUTTONDOWN:
         {
-            buttonDown(e, BUTTON_SECONDARY);
+            buttonDown(e, EMouseButton::Secondary);
             return;
         }
         case WM_RBUTTONUP:
         {
-            buttonUp(e, BUTTON_SECONDARY);
+            buttonUp(e, EMouseButton::Secondary);
             return;
         }
         case WM_MBUTTONDOWN:
         {
-            buttonDown(e, BUTTON_MIDDLE);
+            buttonDown(e, EMouseButton::Middle);
             return;
         }
         case WM_MBUTTONUP:
         {
-            buttonUp(e, BUTTON_MIDDLE);
+            buttonUp(e, EMouseButton::Middle);
             return;
         }
         case WM_XBUTTONDOWN:
         {
             if (HIWORD(e.wParam) == XBUTTON1)
-                buttonDown(e, BUTTON_AUX1);
+                buttonDown(e, EMouseButton::Aux1);
             else if (HIWORD(e.wParam) == XBUTTON2)
-                buttonDown(e, BUTTON_AUX2);
+                buttonDown(e, EMouseButton::Aux2);
             return;
         }
         case WM_XBUTTONUP:
         {
             if (HIWORD(e.wParam) == XBUTTON1)
-                buttonUp(e, BUTTON_AUX1);
+                buttonUp(e, EMouseButton::Aux1);
             else if (HIWORD(e.wParam) == XBUTTON2)
-                buttonUp(e, BUTTON_AUX2);
+                buttonUp(e, EMouseButton::Aux2);
             return;
         }
         case WM_MOUSEMOVE:
@@ -789,24 +789,24 @@ public:
 
     ETouchType getTouchType() const
     {
-        return TOUCH_NONE;
+        return ETouchType::None;
     }
 
     void setStyle(EWindowStyle style)
     {
         LONG sty = GetWindowLong(m_hwnd, GWL_STYLE);
 
-        if (style & STYLE_TITLEBAR)
+        if ((style & EWindowStyle::Titlebar) != EWindowStyle::None)
             sty |= WS_CAPTION;
         else
             sty &= ~WS_CAPTION;
 
-        if (style & STYLE_RESIZE)
+        if ((style & EWindowStyle::Resize) != EWindowStyle::None)
             sty |= WS_THICKFRAME;
         else
             sty &= ~WS_THICKFRAME;
 
-        if (style & STYLE_CLOSE)
+        if ((style & EWindowStyle::Close) != EWindowStyle::None)
             sty |= (WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
         else
             sty &= ~(WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
@@ -817,14 +817,14 @@ public:
     EWindowStyle getStyle() const
     {
         LONG sty = GetWindowLong(m_hwnd, GWL_STYLE);
-        unsigned retval = STYLE_NONE;
+        EWindowStyle retval = EWindowStyle::None;
         if ((sty & WS_CAPTION) != 0)
-            retval |= STYLE_TITLEBAR;
+            retval |= EWindowStyle::Titlebar;
         if ((sty & WS_THICKFRAME) != 0)
-            retval |= STYLE_RESIZE;
+            retval |= EWindowStyle::Resize;
         if ((sty & WS_SYSMENU))
-            retval |= STYLE_CLOSE;
-        return EWindowStyle(retval);
+            retval |= EWindowStyle::Close;
+        return retval;
     }
 
     IGraphicsCommandQueue* getCommandQueue()

@@ -55,7 +55,7 @@ class D3D11GraphicsBufferS : public IGraphicsBufferS
     : m_stride(stride), m_count(count), m_sz(stride * count)
     {
         D3D11_SUBRESOURCE_DATA iData = {data};
-        ThrowIfFailed(ctx->m_dev->CreateBuffer(&CD3D11_BUFFER_DESC(m_sz, USE_TABLE[use], D3D11_USAGE_IMMUTABLE), &iData, &m_buf));
+        ThrowIfFailed(ctx->m_dev->CreateBuffer(&CD3D11_BUFFER_DESC(m_sz, USE_TABLE[int(use)], D3D11_USAGE_IMMUTABLE), &iData, &m_buf));
     }
 public:
     size_t m_stride;
@@ -74,7 +74,7 @@ class D3D11GraphicsBufferD : public IGraphicsBufferD
     {
         size_t sz = stride * count;
         for (int i=0 ; i<3 ; ++i)
-            ThrowIfFailed(ctx->m_dev->CreateBuffer(&CD3D11_BUFFER_DESC(sz, USE_TABLE[use],
+            ThrowIfFailed(ctx->m_dev->CreateBuffer(&CD3D11_BUFFER_DESC(sz, USE_TABLE[int(use)],
                           D3D11_USAGE_DYNAMIC, D3D11_CPU_ACCESS_WRITE), nullptr, &m_bufs[i]));
     }
 public:
@@ -257,12 +257,12 @@ struct D3D11VertexFormat : IVertexFormat
         {
             const VertexElementDescriptor* elemin = &elements[i];
             D3D11_INPUT_ELEMENT_DESC& elem = m_elements[i];
-            elem.SemanticName = SEMANTIC_NAME_TABLE[elemin->semantic];
+            elem.SemanticName = SEMANTIC_NAME_TABLE[int(elemin->semantic)];
             elem.SemanticIndex = elemin->semanticIdx;
-            elem.Format = SEMANTIC_TYPE_TABLE[elemin->semantic];
+            elem.Format = SEMANTIC_TYPE_TABLE[int(elemin->semantic)];
             elem.AlignedByteOffset = offset;
             elem.InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
-            offset += SEMANTIC_SIZE_TABLE[elemin->semantic];
+            offset += SEMANTIC_SIZE_TABLE[int(elemin->semantic)];
         }
     }
 };
@@ -304,9 +304,9 @@ class D3D11ShaderPipeline : public IShaderPipeline
         ThrowIfFailed(ctx->m_dev->CreateDepthStencilState(&dsDesc, &m_dsState));
 
         CD3D11_BLEND_DESC blDesc(D3D11_DEFAULT);
-        blDesc.RenderTarget[0].BlendEnable = (dstFac != BlendFactorZero);
-        blDesc.RenderTarget[0].SrcBlend = BLEND_FACTOR_TABLE[srcFac];
-        blDesc.RenderTarget[0].DestBlend = BLEND_FACTOR_TABLE[dstFac];
+        blDesc.RenderTarget[0].BlendEnable = (dstFac != BlendFactor::Zero);
+        blDesc.RenderTarget[0].SrcBlend = BLEND_FACTOR_TABLE[int(srcFac)];
+        blDesc.RenderTarget[0].DestBlend = BLEND_FACTOR_TABLE[int(dstFac)];
         ThrowIfFailed(ctx->m_dev->CreateBlendState(&blDesc, &m_blState));
 
         ThrowIfFailed(ctx->m_dev->CreateInputLayout(vtxFmt->m_elements.get(), vtxFmt->m_elementCount, 
@@ -421,12 +421,12 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
             ID3D11ShaderResourceView* srvs[8];
             for (int i=0 ; i<8 && i<m_texCount ; ++i)
             {
-                if (m_texs[i]->type() == ITexture::TextureDynamic)
+                if (m_texs[i]->type() == TextureType::Dynamic)
                 {
                     D3D11TextureD* ctex = static_cast<D3D11TextureD*>(m_texs[i]);
                     srvs[i] = ctex->m_srvs[b].Get();
                 }
-                else if (m_texs[i]->type() == ITexture::TextureStatic)
+                else if (m_texs[i]->type() == TextureType::Static)
                 {
                     D3D11TextureS* ctex = static_cast<D3D11TextureS*>(m_texs[i]);
                     srvs[i] = ctex->m_srv.Get();
@@ -439,7 +439,7 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
 
 struct D3D11CommandQueue : IGraphicsCommandQueue
 {
-    Platform platform() const {return IGraphicsDataFactory::PlatformD3D11;}
+    Platform platform() const {return IGraphicsDataFactory::Platform::D3D11;}
     const SystemChar* platformName() const {return _S("D3D11");}
     D3D11Context* m_ctx;
     D3D11Context::Window* m_windowCtx;
@@ -609,9 +609,9 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
 
     void setDrawPrimitive(Primitive prim)
     {
-        if (prim == PrimitiveTriangles)
+        if (prim == Primitive::Triangles)
             m_deferredCtx->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        else if (prim == PrimitiveTriStrips)
+        else if (prim == Primitive::TriStrips)
             m_deferredCtx->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     }
 
@@ -714,7 +714,7 @@ public:
     {}
     ~D3D11DataFactory() = default;
 
-    Platform platform() const {return PlatformD3D11;}
+    Platform platform() const {return Platform::D3D11;}
     const SystemChar* platformName() const {return _S("D3D11");}
 
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)

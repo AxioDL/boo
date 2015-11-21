@@ -33,7 +33,7 @@ class HIDDeviceWinUSB final : public IHIDDevice
     const std::string& m_devPath;
     std::mutex m_initMutex;
     std::condition_variable m_initCond;
-    std::thread* m_thread;
+    std::thread m_thread;
 
     bool _sendUSBInterruptTransfer(const uint8_t* data, size_t length)
     {
@@ -196,13 +196,13 @@ public:
     {
         devImp.m_hidDev = this;
         std::unique_lock<std::mutex> lk(m_initMutex);
-        DeviceToken::TDeviceType dType = token.getDeviceType();
-        if (dType == DeviceToken::DEVTYPE_USB)
-            m_thread = new std::thread(_threadProcUSBLL, this);
-        else if (dType == DeviceToken::DEVTYPE_BLUETOOTH)
-            m_thread = new std::thread(_threadProcBTLL, this);
-        else if (dType == DeviceToken::DEVTYPE_GENERICHID)
-            m_thread = new std::thread(_threadProcHID, this);
+        DeviceToken::DeviceType dType = token.getDeviceType();
+        if (dType == DeviceToken::DeviceType::USB)
+            m_thread = std::thread(_threadProcUSBLL, this);
+        else if (dType == DeviceToken::DeviceType::Bluetooth)
+            m_thread = std::thread(_threadProcBTLL, this);
+        else if (dType == DeviceToken::DeviceType::GenericHID)
+            m_thread = std::thread(_threadProcHID, this);
         else
             throw std::runtime_error("invalid token supplied to device constructor");
         m_initCond.wait(lk);
@@ -211,8 +211,7 @@ public:
     ~HIDDeviceWinUSB()
     {
         m_runningTransferLoop = false;
-        m_thread->join();
-        delete m_thread;
+        m_thread.join();
     }
 
 

@@ -225,7 +225,7 @@ public:
     
     EPlatformType getPlatformType() const
     {
-        return PLAT_WIN32;
+        return EPlatformType::Win32;
     }
     
     LRESULT winHwndHandler(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -362,8 +362,8 @@ int ApplicationRun(IApplication::EPlatformType platform,
 {
     if (APP)
         return 1;
-    if (platform != IApplication::PLAT_WIN32 &&
-        platform != IApplication::PLAT_AUTO)
+    if (platform != IApplication::EPlatformType::Win32 &&
+        platform != IApplication::EPlatformType::Auto)
         return 1;
 
     /* One class for *all* boo windows */

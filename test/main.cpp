@@ -308,8 +308,8 @@ struct TestApplicationCallback : IApplicationCallback
                                               true, true, false);
         }
 #if _WIN32
-        else if (factory->platform() == IGraphicsDataFactory::PlatformD3D12 ||
-                 factory->platform() == IGraphicsDataFactory::PlatformD3D11)
+        else if (factory->platform() == IGraphicsDataFactory::Platform::D3D12 ||
+                 factory->platform() == IGraphicsDataFactory::Platform::D3D11)
         {
             ID3DDataFactory* d3dF = dynamic_cast<ID3DDataFactory*>(factory);
 
@@ -337,7 +337,7 @@ struct TestApplicationCallback : IApplicationCallback
             ComPtr<ID3DBlob> psCompile;
             ComPtr<ID3DBlob> cachedPipeline;
             pipeline = d3dF->newShaderPipeline(VS, PS, vsCompile, psCompile, cachedPipeline, vfmt,
-                                               BlendFactorOne, BlendFactorZero, true, true, false);
+                                               BlendFactor::One, BlendFactor::Zero, true, true, false);
         }
 #elif BOO_HAS_METAL
         else if (factory->platform() == IGraphicsDataFactory::Platform::Metal)

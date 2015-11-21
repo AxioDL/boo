@@ -142,7 +142,7 @@ class HIDListenerWinUSB final : public IHIDListener
 
             /* Whew!! that's a single device enumerated!! */
             if (!m_finder._hasToken(DeviceInterfaceDetailData.wtf.DevicePath))
-                m_finder._insertToken(DeviceToken(DeviceToken::DEVTYPE_USB,
+                m_finder._insertToken(DeviceToken(DeviceToken::DeviceType::USB,
                                                   vid, pid, manuf, product,
                                                   DeviceInterfaceDetailData.wtf.DevicePath));
 

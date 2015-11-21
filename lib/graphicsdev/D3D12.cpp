@@ -65,7 +65,7 @@ class D3D12GraphicsBufferS : public IGraphicsBufferS
     size_t m_sz;
     D3D12_RESOURCE_DESC m_gpuDesc;
     D3D12GraphicsBufferS(BufferUse use, D3D12Context* ctx, const void* data, size_t stride, size_t count)
-    : m_state(USE_TABLE[use]), m_stride(stride), m_count(count), m_sz(stride * count)
+    : m_state(USE_TABLE[int(use)]), m_stride(stride), m_count(count), m_sz(stride * count)
     {
         m_gpuDesc = CD3DX12_RESOURCE_DESC::Buffer(m_sz);
         size_t reqSz = GetRequiredIntermediateSize(ctx->m_dev.Get(), &m_gpuDesc, 0, 1);
@@ -109,7 +109,7 @@ class D3D12GraphicsBufferD : public IGraphicsBufferD
     size_t m_mappedSz;
     void* m_mappedBuf = nullptr;
     D3D12GraphicsBufferD(D3D12CommandQueue* q, BufferUse use, D3D12Context* ctx, size_t stride, size_t count)
-    : m_state(USE_TABLE[use]), m_q(q), m_stride(stride), m_count(count)
+    : m_state(USE_TABLE[int(use)]), m_q(q), m_stride(stride), m_count(count)
     {
         size_t sz = stride * count;
         D3D12_RESOURCE_DESC desc = CD3DX12_RESOURCE_DESC::Buffer(sz);
@@ -373,12 +373,12 @@ struct D3D12VertexFormat : IVertexFormat
         {
             const VertexElementDescriptor* elemin = &elements[i];
             D3D12_INPUT_ELEMENT_DESC& elem = m_elements[i];
-            elem.SemanticName = SEMANTIC_NAME_TABLE[elemin->semantic];
+            elem.SemanticName = SEMANTIC_NAME_TABLE[int(elemin->semantic)];
             elem.SemanticIndex = elemin->semanticIdx;
-            elem.Format = SEMANTIC_TYPE_TABLE[elemin->semantic];
+            elem.Format = SEMANTIC_TYPE_TABLE[int(elemin->semantic)];
             elem.AlignedByteOffset = offset;
             elem.InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-            offset += SEMANTIC_SIZE_TABLE[elemin->semantic];
+            offset += SEMANTIC_SIZE_TABLE[int(elemin->semantic)];
         }
     }
 };
@@ -410,11 +410,11 @@ class D3D12ShaderPipeline : public IShaderPipeline
         desc.VS = {vert->GetBufferPointer(), vert->GetBufferSize()};
         desc.PS = {pixel->GetBufferPointer(), pixel->GetBufferSize()};
         desc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-        if (dstFac != BlendFactorZero)
+        if (dstFac != BlendFactor::Zero)
         {
             desc.BlendState.RenderTarget[0].BlendEnable = true;
-            desc.BlendState.RenderTarget[0].SrcBlend = BLEND_FACTOR_TABLE[srcFac];
-            desc.BlendState.RenderTarget[0].DestBlend = BLEND_FACTOR_TABLE[dstFac];
+            desc.BlendState.RenderTarget[0].SrcBlend = BLEND_FACTOR_TABLE[int(srcFac)];
+            desc.BlendState.RenderTarget[0].DestBlend = BLEND_FACTOR_TABLE[int(dstFac)];
         }
         desc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
         if (!backfaceCulling)
@@ -456,9 +456,9 @@ static UINT64 PlaceBufferForGPU(IGraphicsBuffer* buf, D3D12Context* ctx, ID3D12H
 
 static UINT64 PlaceTextureForGPU(ITexture* tex, D3D12Context* ctx, ID3D12Heap* gpuHeap, UINT64 offset)
 {
-    if (tex->type() == ITexture::TextureDynamic)
+    if (tex->type() == TextureType::Dynamic)
         return static_cast<D3D12TextureD*>(tex)->placeForGPU(ctx, gpuHeap, offset);
-    else if (tex->type() == ITexture::TextureStatic)
+    else if (tex->type() == TextureType::Static)
         return static_cast<D3D12TextureS*>(tex)->placeForGPU(ctx, gpuHeap, offset);
     return offset;
 }
@@ -526,12 +526,12 @@ static ID3D12Resource* GetBufferGPUResource(const IGraphicsBuffer* buf, int idx,
 
 static ID3D12Resource* GetTextureGPUResource(const ITexture* tex, int idx)
 {
-    if (tex->type() == ITexture::TextureDynamic)
+    if (tex->type() == TextureType::Dynamic)
     {
         const D3D12TextureD* ctex = static_cast<const D3D12TextureD*>(tex);
         return ctex->m_gpuTexs[0].Get();
     }
-    else if (tex->type() == ITexture::TextureStatic)
+    else if (tex->type() == TextureType::Static)
     {
         const D3D12TextureS* ctex = static_cast<const D3D12TextureS*>(tex);
         return ctex->m_gpuTex.Get();
@@ -651,7 +651,7 @@ static ID3D12GraphicsCommandList* WaitForLoadList(D3D12Context* ctx)
 
 struct D3D12CommandQueue : IGraphicsCommandQueue
 {
-    Platform platform() const {return IGraphicsDataFactory::PlatformD3D12;}
+    Platform platform() const {return IGraphicsDataFactory::Platform::D3D12;}
     const SystemChar* platformName() const {return _S("D3D12");}
     D3D12Context* m_ctx;
     D3D12Context::Window* m_windowCtx;
@@ -762,9 +762,9 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
 
     void setDrawPrimitive(Primitive prim)
     {
-        if (prim == PrimitiveTriangles)
+        if (prim == Primitive::Triangles)
             m_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        else if (prim == PrimitiveTriStrips)
+        else if (prim == Primitive::TriStrips)
             m_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     }
 
@@ -1005,7 +1005,7 @@ public:
     }
     ~D3D12DataFactory() = default;
 
-    Platform platform() const {return PlatformD3D12;}
+    Platform platform() const {return Platform::D3D12;}
     const SystemChar* platformName() const {return _S("D3D12");}
 
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
