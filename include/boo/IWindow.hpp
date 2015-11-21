@@ -173,18 +173,7 @@ enum class EWindowStyle
 
     Default = Titlebar | Resize | Close
 };
-
-inline EWindowStyle operator|(EWindowStyle a, EWindowStyle b)
-{
-    using T = std::underlying_type_t<EWindowStyle>;
-    return EWindowStyle(static_cast<T>(a) | static_cast<T>(b));
-}
-
-inline EWindowStyle operator&(EWindowStyle a, EWindowStyle b)
-{
-    using T = std::underlying_type_t<EWindowStyle>;
-    return EWindowStyle(static_cast<T>(a) & static_cast<T>(b));
-}
+ENABLE_BITWISE_ENUM(EWindowStyle)
 
 class IWindow
 {

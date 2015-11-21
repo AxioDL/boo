@@ -116,7 +116,7 @@ public:
     
     EPlatformType getPlatformType() const
     {
-        return PLAT_COCOA;
+        return EPlatformType::Cocoa;
     }
     
     std::thread m_clientThread;
@@ -192,8 +192,8 @@ int ApplicationRun(IApplication::EPlatformType platform,
     {
         if (!APP)
         {
-            if (platform != IApplication::PLAT_COCOA &&
-                platform != IApplication::PLAT_AUTO)
+            if (platform != IApplication::EPlatformType::Cocoa &&
+                platform != IApplication::EPlatformType::Auto)
                 return 1;
             APP = new ApplicationCocoa(cb, uniqueName, friendlyName, pname, args);
         }

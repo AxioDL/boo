@@ -247,7 +247,7 @@ struct MetalVertexFormat : IVertexFormat
         for (size_t i=0 ; i<elementCount ; ++i)
         {
             const VertexElementDescriptor* elemin = &elements[i];
-            stride += SEMANTIC_SIZE_TABLE[elemin->semantic];
+            stride += SEMANTIC_SIZE_TABLE[int(elemin->semantic)];
         }
         
         m_vdesc = [MTLVertexDescriptor vertexDescriptor];
@@ -261,10 +261,10 @@ struct MetalVertexFormat : IVertexFormat
         {
             const VertexElementDescriptor* elemin = &elements[i];
             MTLVertexAttributeDescriptor* attrDesc = m_vdesc.get().attributes[i];
-            attrDesc.format = SEMANTIC_TYPE_TABLE[elemin->semantic];
+            attrDesc.format = SEMANTIC_TYPE_TABLE[int(elemin->semantic)];
             attrDesc.offset = offset;
             attrDesc.bufferIndex = 0;
-            offset += SEMANTIC_SIZE_TABLE[elemin->semantic];
+            offset += SEMANTIC_SIZE_TABLE[int(elemin->semantic)];
         }
     }
 };
@@ -302,9 +302,9 @@ class MetalShaderPipeline : public IShaderPipeline
         desc.get().vertexDescriptor = vtxFmt->m_vdesc.get();
         desc.get().sampleCount = target->samples();
         desc.get().colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
-        desc.get().colorAttachments[0].blendingEnabled = dstFac != BlendFactorZero;
-        desc.get().colorAttachments[0].sourceRGBBlendFactor = BLEND_FACTOR_TABLE[srcFac];
-        desc.get().colorAttachments[0].destinationRGBBlendFactor = BLEND_FACTOR_TABLE[dstFac];
+        desc.get().colorAttachments[0].blendingEnabled = dstFac != BlendFactor::Zero;
+        desc.get().colorAttachments[0].sourceRGBBlendFactor = BLEND_FACTOR_TABLE[int(srcFac)];
+        desc.get().colorAttachments[0].destinationRGBBlendFactor = BLEND_FACTOR_TABLE[int(dstFac)];
         desc.get().depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;
         desc.get().inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
         NSError* err = nullptr;
@@ -350,17 +350,17 @@ static id<MTLBuffer> GetBufferGPUResource(const IGraphicsBuffer* buf, int idx)
 
 static id<MTLTexture> GetTextureGPUResource(const ITexture* tex, int idx)
 {
-    if (tex->type() == ITexture::TextureDynamic)
+    if (tex->type() == TextureType::Dynamic)
     {
         const MetalTextureD* ctex = static_cast<const MetalTextureD*>(tex);
         return ctex->m_texs[idx].get();
     }
-    else if (tex->type() == ITexture::TextureStatic)
+    else if (tex->type() == TextureType::Static)
     {
         const MetalTextureS* ctex = static_cast<const MetalTextureS*>(tex);
         return ctex->m_tex.get();
     }
-    else if (tex->type() == ITexture::TextureRender)
+    else if (tex->type() == TextureType::Render)
     {
         const MetalTextureR* ctex = static_cast<const MetalTextureR*>(tex);
         return ctex->m_tex.get();
@@ -409,7 +409,7 @@ struct MetalShaderDataBinding : IShaderDataBinding
 
 struct MetalCommandQueue : IGraphicsCommandQueue
 {
-    Platform platform() const {return IGraphicsDataFactory::PlatformMetal;}
+    Platform platform() const {return IGraphicsDataFactory::Platform::Metal;}
     const char* platformName() const {return "Metal";}
     MetalContext* m_ctx;
     IWindow* m_parentWindow;
@@ -484,9 +484,9 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     MTLPrimitiveType m_primType = MTLPrimitiveTypeTriangle;
     void setDrawPrimitive(Primitive prim)
     {
-        if (prim == PrimitiveTriangles)
+        if (prim == Primitive::Triangles)
             m_primType = MTLPrimitiveTypeTriangle;
-        else if (prim == PrimitiveTriStrips)
+        else if (prim == Primitive::TriStrips)
             m_primType = MTLPrimitiveTypeTriangleStrip;
     }
     

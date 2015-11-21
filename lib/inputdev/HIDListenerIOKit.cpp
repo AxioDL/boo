@@ -111,7 +111,7 @@ class HIDListenerIOKit : public IHIDListener
             getUSBStringDescriptor(dev, vstridx, vstr);
             getUSBStringDescriptor(dev, pstridx, pstr);
 
-            if (!listener->m_finder._insertToken(DeviceToken(DeviceToken::DEVTYPE_USB,
+            if (!listener->m_finder._insertToken(DeviceToken(DeviceToken::DeviceType::USB,
                                                              vid, pid, vstr, pstr, devPath)))
             {
                 /* Matched-insertion failed; see if generic HID interface is available */

@@ -169,7 +169,7 @@ public:
     NSOpenGLContext* m_lastCtx = nullptr;
     
     GraphicsContextCocoaGL(EGraphicsAPI api, IWindow* parentWindow, NSOpenGLContext* lastGLCtx)
-    : GraphicsContextCocoa(api, PF_RGBA8, parentWindow),
+    : GraphicsContextCocoa(api, EPixelFormat::RGBA8, parentWindow),
       m_lastCtx(lastGLCtx)
     {
         m_dataFactory = new GLDataFactory(this);
@@ -200,7 +200,7 @@ public:
     
     void setPixelFormat(EPixelFormat pf)
     {
-        if (pf > PF_RGBAF32_Z24)
+        if (pf > EPixelFormat::RGBAF32_Z24)
             return;
         m_pf = pf;
     }
@@ -240,7 +240,7 @@ public:
     {
         if (!m_mainCtx)
         {
-            NSOpenGLPixelFormat* nspf = [[NSOpenGLPixelFormat alloc] initWithAttributes:PF_TABLE[m_pf]];
+            NSOpenGLPixelFormat* nspf = [[NSOpenGLPixelFormat alloc] initWithAttributes:PF_TABLE[int(m_pf)]];
             m_mainCtx = [[NSOpenGLContext alloc] initWithFormat:nspf shareContext:[m_nsContext openGLContext]];
             [nspf release];
             if (!m_mainCtx)
@@ -254,7 +254,7 @@ public:
     {
         if (!m_loadCtx)
         {
-            NSOpenGLPixelFormat* nspf = [[NSOpenGLPixelFormat alloc] initWithAttributes:PF_TABLE[m_pf]];
+            NSOpenGLPixelFormat* nspf = [[NSOpenGLPixelFormat alloc] initWithAttributes:PF_TABLE[int(m_pf)]];
             m_loadCtx = [[NSOpenGLContext alloc] initWithFormat:nspf shareContext:[m_nsContext openGLContext]];
             [nspf release];
             if (!m_loadCtx)
@@ -274,7 +274,7 @@ public:
 IGraphicsContext* _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI api,
                                              IWindow* parentWindow, NSOpenGLContext* lastGLCtx)
 {
-    if (api != IGraphicsContext::API_OPENGL_3_3 && api != IGraphicsContext::API_OPENGL_4_2)
+    if (api != IGraphicsContext::EGraphicsAPI::OpenGL3_3 && api != IGraphicsContext::EGraphicsAPI::OpenGL4_2)
         return NULL;
     
     /* Create temporary context to query GL version */
@@ -300,9 +300,9 @@ IGraphicsContext* _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI api,
         return NULL;
     
     if (major > 4 || (major == 4 && minor >= 2))
-        api = IGraphicsContext::API_OPENGL_4_2;
+        api = IGraphicsContext::EGraphicsAPI::OpenGL4_2;
     else if (major == 3 && minor >= 3)
-        if (api == IGraphicsContext::API_OPENGL_4_2)
+        if (api == IGraphicsContext::EGraphicsAPI::OpenGL4_2)
             return NULL;
     
     return new GraphicsContextCocoaGL(api, parentWindow, lastGLCtx);
@@ -321,7 +321,7 @@ public:
 
     GraphicsContextCocoaMetal(EGraphicsAPI api, IWindow* parentWindow,
                               MetalContext* metalCtx)
-    : GraphicsContextCocoa(api, PF_RGBA8, parentWindow),
+    : GraphicsContextCocoa(api, EPixelFormat::RGBA8, parentWindow),
       m_metalCtx(metalCtx)
     {
         m_dataFactory = new MetalDataFactory(this, metalCtx);
@@ -352,7 +352,7 @@ public:
     
     void setPixelFormat(EPixelFormat pf)
     {
-        if (pf > PF_RGBAF32_Z24)
+        if (pf > EPixelFormat::RGBAF32_Z24)
             return;
         m_pf = pf;
     }
@@ -409,7 +409,7 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
                                                 IWindow* parentWindow,
                                                 MetalContext* metalCtx)
 {
-    if (api != IGraphicsContext::API_METAL)
+    if (api != IGraphicsContext::EGraphicsAPI::Metal)
         return nullptr;
     return new GraphicsContextCocoaMetal(api, parentWindow, metalCtx);
 }
@@ -428,28 +428,28 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 static inline boo::EModifierKey getMod(NSUInteger flags)
 {
-    int ret = boo::MKEY_NONE;
+    boo::EModifierKey ret = boo::EModifierKey::None;
     if (flags & NSControlKeyMask)
-        ret |= boo::MKEY_CTRL;
+        ret |= boo::EModifierKey::Ctrl;
     if (flags & NSAlternateKeyMask)
-        ret |= boo::MKEY_ALT;
+        ret |= boo::EModifierKey::Alt;
     if (flags & NSShiftKeyMask)
-        ret |= boo::MKEY_SHIFT;
+        ret |= boo::EModifierKey::Shift;
     if (flags & NSCommandKeyMask)
-        ret |= boo::MKEY_COMMAND;
-    return static_cast<boo::EModifierKey>(ret);
+        ret |= boo::EModifierKey::Command;
+    return ret;
 }
 
 static inline boo::EMouseButton getButton(NSEvent* event)
 {
     NSInteger buttonNumber = event.buttonNumber;
     if (buttonNumber == 3)
-        return boo::BUTTON_MIDDLE;
+        return boo::EMouseButton::Middle;
     else if (buttonNumber == 4)
-        return boo::BUTTON_AUX1;
+        return boo::EMouseButton::Aux1;
     else if (buttonNumber == 5)
-        return boo::BUTTON_AUX2;
-    return boo::BUTTON_NONE;
+        return boo::EMouseButton::Aux2;
+    return boo::EMouseButton::None;
 }
 
 - (void)mouseDown:(NSEvent*)theEvent
@@ -465,7 +465,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
         {(unsigned)liw.x, (unsigned)liw.y},
         {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
     };
-    booContext->m_callback->mouseDown(coord, boo::BUTTON_PRIMARY,
+    booContext->m_callback->mouseDown(coord, boo::EMouseButton::Primary,
                                       getMod([theEvent modifierFlags]));
 }
 
@@ -482,7 +482,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
         {(unsigned)liw.x, (unsigned)liw.y},
         {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
     };
-    booContext->m_callback->mouseUp(coord, boo::BUTTON_PRIMARY,
+    booContext->m_callback->mouseUp(coord, boo::EMouseButton::Primary,
                                     getMod([theEvent modifierFlags]));
 }
 
@@ -499,7 +499,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
         {(unsigned)liw.x, (unsigned)liw.y},
         {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
     };
-    booContext->m_callback->mouseDown(coord, boo::BUTTON_SECONDARY,
+    booContext->m_callback->mouseDown(coord, boo::EMouseButton::Secondary,
                                       getMod([theEvent modifierFlags]));
 }
 
@@ -516,7 +516,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
         {(unsigned)liw.x, (unsigned)liw.y},
         {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
     };
-    booContext->m_callback->mouseUp(coord, boo::BUTTON_SECONDARY,
+    booContext->m_callback->mouseUp(coord, boo::EMouseButton::Secondary,
                                     getMod([theEvent modifierFlags]));
 }
 
@@ -525,7 +525,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
     if (!booContext->m_callback)
         return;
     boo::EMouseButton button = getButton(theEvent);
-    if (!button)
+    if (button == boo::EMouseButton::None)
         return;
     NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
     float pixelFactor = [[parentView window] backingScaleFactor];
@@ -544,7 +544,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
     if (!booContext->m_callback)
         return;
     boo::EMouseButton button = getButton(theEvent);
-    if (!button)
+    if (button == boo::EMouseButton::None)
         return;
     NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
     float pixelFactor = [[parentView window] backingScaleFactor];
@@ -728,55 +728,55 @@ static boo::ESpecialKey translateKeycode(short code)
 {
     switch (code) {
         case kVK_F1:
-            return boo::KEY_F1;
+            return boo::ESpecialKey::F1;
         case kVK_F2:
-            return boo::KEY_F2;
+            return boo::ESpecialKey::F2;
         case kVK_F3:
-            return boo::KEY_F3;
+            return boo::ESpecialKey::F3;
         case kVK_F4:
-            return boo::KEY_F4;
+            return boo::ESpecialKey::F4;
         case kVK_F5:
-            return boo::KEY_F5;
+            return boo::ESpecialKey::F5;
         case kVK_F6:
-            return boo::KEY_F6;
+            return boo::ESpecialKey::F6;
         case kVK_F7:
-            return boo::KEY_F7;
+            return boo::ESpecialKey::F7;
         case kVK_F8:
-            return boo::KEY_F8;
+            return boo::ESpecialKey::F8;
         case kVK_F9:
-            return boo::KEY_F9;
+            return boo::ESpecialKey::F9;
         case kVK_F10:
-            return boo::KEY_F10;
+            return boo::ESpecialKey::F10;
         case kVK_F11:
-            return boo::KEY_F11;
+            return boo::ESpecialKey::F11;
         case kVK_F12:
-            return boo::KEY_F12;
+            return boo::ESpecialKey::F12;
         case kVK_Escape:
-            return boo::KEY_ESC;
+            return boo::ESpecialKey::Esc;
         case kVK_Return:
-            return boo::KEY_ENTER;
+            return boo::ESpecialKey::Enter;
         case kVK_Delete:
-            return boo::KEY_BACKSPACE;
+            return boo::ESpecialKey::Backspace;
         case kVK_ForwardDelete:
-            return boo::KEY_DELETE;
+            return boo::ESpecialKey::Delete;
         case kVK_Home:
-            return boo::KEY_HOME;
+            return boo::ESpecialKey::Home;
         case kVK_End:
-            return boo::KEY_END;
+            return boo::ESpecialKey::End;
         case kVK_PageUp:
-            return boo::KEY_PGUP;
+            return boo::ESpecialKey::PgUp;
         case kVK_PageDown:
-            return boo::KEY_PGDOWN;
+            return boo::ESpecialKey::PgDown;
         case kVK_LeftArrow:
-            return boo::KEY_LEFT;
+            return boo::ESpecialKey::Left;
         case kVK_RightArrow:
-            return boo::KEY_RIGHT;
+            return boo::ESpecialKey::Right;
         case kVK_UpArrow:
-            return boo::KEY_UP;
+            return boo::ESpecialKey::Up;
         case kVK_DownArrow:
-            return boo::KEY_DOWN;
+            return boo::ESpecialKey::Down;
         default:
-            return boo::KEY_NONE;
+            return boo::ESpecialKey::None;
     }
 }
 
@@ -821,23 +821,23 @@ static boo::ESpecialKey translateKeycode(short code)
         
         NSUInteger downFlags = changedFlags & modFlags;
         if (downFlags & NSControlKeyMask)
-            booContext->m_callback->modKeyDown(boo::MKEY_CTRL, false);
+            booContext->m_callback->modKeyDown(boo::EModifierKey::Ctrl, false);
         if (downFlags & NSAlternateKeyMask)
-            booContext->m_callback->modKeyDown(boo::MKEY_ALT, false);
+            booContext->m_callback->modKeyDown(boo::EModifierKey::Alt, false);
         if (downFlags & NSShiftKeyMask)
-            booContext->m_callback->modKeyDown(boo::MKEY_SHIFT, false);
+            booContext->m_callback->modKeyDown(boo::EModifierKey::Shift, false);
         if (downFlags & NSCommandKeyMask)
-            booContext->m_callback->modKeyDown(boo::MKEY_COMMAND, false);
+            booContext->m_callback->modKeyDown(boo::EModifierKey::Command, false);
         
         NSUInteger upFlags = changedFlags & ~modFlags;
         if (upFlags & NSControlKeyMask)
-            booContext->m_callback->modKeyUp(boo::MKEY_CTRL);
+            booContext->m_callback->modKeyUp(boo::EModifierKey::Ctrl);
         if (upFlags & NSAlternateKeyMask)
-            booContext->m_callback->modKeyUp(boo::MKEY_ALT);
+            booContext->m_callback->modKeyUp(boo::EModifierKey::Alt);
         if (upFlags & NSShiftKeyMask)
-            booContext->m_callback->modKeyUp(boo::MKEY_SHIFT);
+            booContext->m_callback->modKeyUp(boo::EModifierKey::Shift);
         if (upFlags & NSCommandKeyMask)
-            booContext->m_callback->modKeyUp(boo::MKEY_COMMAND);
+            booContext->m_callback->modKeyUp(boo::EModifierKey::Command);
         
         lastModifiers = modFlags;
     }
@@ -860,7 +860,7 @@ static boo::ESpecialKey translateKeycode(short code)
 {
     resp = [[BooCocoaResponder alloc] initWithBooContext:bctx View:self];
     boo::IGraphicsContext::EPixelFormat pf = bctx->getPixelFormat();
-    NSOpenGLPixelFormat* nspf = [[NSOpenGLPixelFormat alloc] initWithAttributes:PF_TABLE[pf]];
+    NSOpenGLPixelFormat* nspf = [[NSOpenGLPixelFormat alloc] initWithAttributes:PF_TABLE[int(pf)]];
     self = [self initWithFrame:NSMakeRect(0, 0, 100, 100) pixelFormat:nspf];
     if (bctx->m_lastCtx)
     {
@@ -965,10 +965,10 @@ public:
             m_nsWindow = [[WindowCocoaInternal alloc] initWithBooWindow:this title:title];
 #if BOO_HAS_METAL
             if (metalCtx->m_dev)
-                m_gfxCtx = _GraphicsContextCocoaMetalNew(IGraphicsContext::API_METAL, this, metalCtx);
+                m_gfxCtx = _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI::Metal, this, metalCtx);
             else
 #endif
-                m_gfxCtx = _GraphicsContextCocoaGLNew(IGraphicsContext::API_OPENGL_3_3, this, lastGLCtx);
+                m_gfxCtx = _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI::OpenGL3_3, this, lastGLCtx);
             m_gfxCtx->initializeContext();
         });
     }
@@ -1089,24 +1089,24 @@ public:
     
     ETouchType getTouchType() const
     {
-        return TOUCH_TRACKPAD;
+        return ETouchType::Trackpad;
     }
     
     void setStyle(EWindowStyle style)
     {
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
-        if (style & STYLE_TITLEBAR)
+        if ((style & EWindowStyle::Titlebar) != EWindowStyle::None)
             m_nsWindow.titleVisibility = NSWindowTitleVisible;
         else
             m_nsWindow.titleVisibility = NSWindowTitleHidden;
 #endif
         
-        if (style & STYLE_CLOSE)
+        if ((style & EWindowStyle::Close) != EWindowStyle::None)
             m_nsWindow.styleMask |= NSClosableWindowMask;
         else
             m_nsWindow.styleMask &= ~NSClosableWindowMask;
         
-        if (style & STYLE_RESIZE)
+        if ((style & EWindowStyle::Resize) != EWindowStyle::None)
             m_nsWindow.styleMask |= NSResizableWindowMask;
         else
             m_nsWindow.styleMask &= ~NSResizableWindowMask;
@@ -1114,15 +1114,15 @@ public:
     
     EWindowStyle getStyle() const
     {
-        int retval = 0;
+        EWindowStyle retval = EWindowStyle::None;
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
-        retval |= m_nsWindow.titleVisibility == NSWindowTitleVisible ? STYLE_TITLEBAR : 0;
+        retval |= m_nsWindow.titleVisibility == NSWindowTitleVisible ? EWindowStyle::Titlebar : EWindowStyle::None;
 #else
-        retval |= STYLE_TITLEBAR;
+        retval |= EWindowStyle::Titlebar;
 #endif
-        retval |= (m_nsWindow.styleMask & NSClosableWindowMask) ? STYLE_CLOSE : 0;
-        retval |= (m_nsWindow.styleMask & NSResizableWindowMask) ? STYLE_RESIZE: 0;
-        return EWindowStyle(retval);
+        retval |= (m_nsWindow.styleMask & NSClosableWindowMask) ? EWindowStyle::Close : EWindowStyle::None;
+        retval |= (m_nsWindow.styleMask & NSResizableWindowMask) ? EWindowStyle::Resize: EWindowStyle::None;
+        return retval;
     }
     
     void waitForRetrace()

@@ -1,5 +1,11 @@
 #ifndef GDEV_METAL_HPP
 #define GDEV_METAL_HPP
+#ifdef __APPLE__
+
+#include <Availability.h>
+
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101100
+#define BOO_HAS_METAL 1
 
 #include "IGraphicsDataFactory.hpp"
 #include "IGraphicsCommandQueue.hpp"
@@ -22,7 +28,7 @@ public:
     MetalDataFactory(IGraphicsContext* parent, MetalContext* ctx);
     ~MetalDataFactory() {}
     
-    Platform platform() const {return PlatformMetal;}
+    Platform platform() const {return Platform::Metal;}
     const char* platformName() const {return "Metal";}
     
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
@@ -59,4 +65,9 @@ public:
 
 }
 
+#else
+#define BOO_HAS_METAL 0
+#endif
+
+#endif // __APPLE__
 #endif // GDEV_METAL_HPP

@@ -339,8 +339,8 @@ struct TestApplicationCallback : IApplicationCallback
             pipeline = d3dF->newShaderPipeline(VS, PS, vsCompile, psCompile, cachedPipeline, vfmt,
                                                BlendFactorOne, BlendFactorZero, true, true, false);
         }
-#elif __APPLE__
-        else if (factory->platform() == IGraphicsDataFactory::PlatformMetal)
+#elif BOO_HAS_METAL
+        else if (factory->platform() == IGraphicsDataFactory::Platform::Metal)
         {
             MetalDataFactory* metalF = dynamic_cast<MetalDataFactory*>(factory);
             
@@ -368,11 +368,9 @@ struct TestApplicationCallback : IApplicationCallback
             "}\n";
             
             pipeline = metalF->newShaderPipeline(VS, FS, vfmt, self->m_renderTarget,
-                                                 BlendFactorOne, BlendFactorZero, true, true, false);
+                                                 BlendFactor::One, BlendFactor::Zero, true, true, false);
         }
 #endif
-
-
 
         /* Make shader data binding */
         self->m_binding =
@@ -388,12 +386,10 @@ struct TestApplicationCallback : IApplicationCallback
         /* Wait for exit */
         while (self->running)
         {
-            {
-                std::unique_lock<std::mutex> lk(self->m_mt);
-                self->m_cv.wait(lk);
-                if (!self->running)
-                    break;
-            }
+            std::unique_lock<std::mutex> lk(self->m_mt);
+            self->m_cv.wait(lk);
+            if (!self->running)
+                break;
         }
     }
 
