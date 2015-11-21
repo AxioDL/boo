@@ -7,28 +7,30 @@
 namespace boo
 {
 
-enum EDolphinControllerType
+enum class EDolphinControllerType
 {
-    DOL_TYPE_NONE     = 0,
-    DOL_TYPE_NORMAL   = 0x10,
-    DOL_TYPE_WAVEBIRD = 0x20,
+    None     = 0,
+    Normal   = 0x10,
+    Wavebird = 0x20,
 };
+ENABLE_BITWISE_ENUM(EDolphinControllerType)
 
-enum EDolphinControllerButtons
+enum class EDolphinControllerButtons
 {
-    DOL_START  = 1<<0,
-    DOL_Z      = 1<<1,
-    DOL_L      = 1<<2,
-    DOL_R      = 1<<3,
-    DOL_A      = 1<<8,
-    DOL_B      = 1<<9,
-    DOL_X      = 1<<10,
-    DOL_Y      = 1<<11,
-    DOL_LEFT   = 1<<12,
-    DOL_RIGHT  = 1<<13,
-    DOL_DOWN   = 1<<14,
-    DOL_UP     = 1<<15
+    Start  = 1<<0,
+    Z      = 1<<1,
+    L      = 1<<2,
+    R      = 1<<3,
+    A      = 1<<8,
+    B      = 1<<9,
+    X      = 1<<10,
+    Y      = 1<<11,
+    Left   = 1<<12,
+    Right  = 1<<13,
+    Down   = 1<<14,
+    Up     = 1<<15
 };
+ENABLE_BITWISE_ENUM(EDolphinControllerButtons)
 
 struct DolphinControllerState
 {

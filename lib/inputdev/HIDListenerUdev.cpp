@@ -34,11 +34,11 @@ class HIDListenerUdev final : public IHIDListener
 
         /* Filter to USB/BT */
         const char* dt = udev_device_get_devtype(device);
-        DeviceToken::TDeviceType type;
+        DeviceToken::DeviceType type;
         if (!strcmp(dt, "usb_device"))
-            type = DeviceToken::DEVTYPE_USB;
+            type = DeviceToken::DeviceType::USB;
         else if (!strcmp(dt, "bluetooth_device"))
-            type = DeviceToken::DEVTYPE_BLUETOOTH;
+            type = DeviceToken::DeviceType::Bluetooth;
         else
             return;
 
@@ -82,9 +82,9 @@ class HIDListenerUdev final : public IHIDListener
         {
             /* Matched-insertion failed; see if generic HID interface is available */
             udev_list_entry* devInterfaces = nullptr;
-            if (type == DeviceToken::DEVTYPE_USB)
+            if (type == DeviceToken::DeviceType::USB)
                 devInterfaces = udev_list_entry_get_by_name(attrs, "ID_USB_INTERFACES");
-            else if (type == DeviceToken::DEVTYPE_BLUETOOTH)
+            else if (type == DeviceToken::DeviceType::Bluetooth)
                 devInterfaces = udev_list_entry_get_by_name(attrs, "ID_BLUETOOTH_INTERFACES");
             if (devInterfaces)
             {
@@ -101,7 +101,7 @@ class HIDListenerUdev final : public IHIDListener
                     {
                         const char* hidPath = udev_list_entry_get_name(hidEnt);
                         if (!listener->m_finder._hasToken(hidPath))
-                            listener->m_finder._insertToken(DeviceToken(DeviceToken::DEVTYPE_GENERICHID,
+                            listener->m_finder._insertToken(DeviceToken(DeviceToken::DeviceType::GenericHID,
                                                                          vid, pid, manuf, product, hidPath));
                     }
                     udev_enumerate_unref(hidEnum);

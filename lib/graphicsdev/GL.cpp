@@ -40,7 +40,7 @@ class GLGraphicsBufferS : public IGraphicsBufferS
     GLenum m_target;
     GLGraphicsBufferS(BufferUse use, const void* data, size_t sz)
     {
-        m_target = USE_TABLE[use];
+        m_target = USE_TABLE[int(use)];
         glGenBuffers(1, &m_buf);
         glBindBuffer(m_target, m_buf);
         glBufferData(m_target, sz, data, GL_STATIC_DRAW);
@@ -68,7 +68,7 @@ class GLGraphicsBufferD : public IGraphicsBufferD
     GLGraphicsBufferD(GLCommandQueue* q, BufferUse use)
     : m_q(q)
     {
-        m_target = USE_TABLE[use];
+        m_target = USE_TABLE[int(use)];
         glGenBuffers(3, m_bufs);
     }
 public:
@@ -105,7 +105,7 @@ class GLTextureS : public ITextureS
     friend class GLDataFactory;
     GLuint m_tex;
     GLTextureS(size_t width, size_t height, size_t mips,
-                  TextureFormat fmt, const void* data, size_t sz)
+               TextureFormat fmt, const void* data, size_t sz)
     {
         const uint8_t* dataIt = static_cast<const uint8_t*>(data);
         glGenTextures(1, &m_tex);
@@ -115,7 +115,7 @@ class GLTextureS : public ITextureS
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         else
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        if (fmt == TextureFormatRGBA8)
+        if (fmt == TextureFormat::RGBA8)
         {
             for (size_t i=0 ; i<mips ; ++i)
             {
@@ -326,8 +326,8 @@ IShaderPipeline* GLDataFactory::newShaderPipeline
         Log.report(LogVisor::Error, "unable to create shader objects\n");
         return nullptr;
     }
-    shader.m_sfactor = BLEND_FACTOR_TABLE[srcFac];
-    shader.m_dfactor = BLEND_FACTOR_TABLE[dstFac];
+    shader.m_sfactor = BLEND_FACTOR_TABLE[int(srcFac)];
+    shader.m_dfactor = BLEND_FACTOR_TABLE[int(dstFac)];
     shader.m_depthTest = depthTest;
     shader.m_depthWrite = depthWrite;
     shader.m_backfaceCulling = backfaceCulling;
@@ -456,9 +456,9 @@ struct GLShaderDataBinding : IShaderDataBinding
         for (size_t i=0 ; i<m_texCount ; ++i)
         {
             ITexture* tex = m_texs[i];
-            if (tex->type() == ITexture::TextureDynamic)
+            if (tex->type() == TextureType::Dynamic)
                 static_cast<GLTextureD*>(tex)->bind(i);
-            else if (tex->type() == ITexture::TextureStatic)
+            else if (tex->type() == TextureType::Static)
                 static_cast<GLTextureS*>(tex)->bind(i);
         }
     }
@@ -541,25 +541,25 @@ static const GLenum SEMANTIC_TYPE_TABLE[] =
 
 struct GLCommandQueue : IGraphicsCommandQueue
 {
-    Platform platform() const {return IGraphicsDataFactory::PlatformOGL;}
+    Platform platform() const {return IGraphicsDataFactory::Platform::OGL;}
     const SystemChar* platformName() const {return _S("OGL");}
     IGraphicsContext* m_parent = nullptr;
 
     struct Command
     {
-        enum Op
+        enum class Op
         {
-            OpSetShaderDataBinding,
-            OpSetRenderTarget,
-            OpSetViewport,
-            OpSetClearColor,
-            OpClearTarget,
-            OpSetDrawPrimitive,
-            OpDraw,
-            OpDrawIndexed,
-            OpDrawInstances,
-            OpDrawInstancesIndexed,
-            OpPresent
+            SetShaderDataBinding,
+            SetRenderTarget,
+            SetViewport,
+            SetClearColor,
+            ClearTarget,
+            SetDrawPrimitive,
+            Draw,
+            DrawIndexed,
+            DrawInstances,
+            DrawInstancesIndexed,
+            Present
         } m_op;
         union
         {
@@ -614,7 +614,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
         for (size_t i=0 ; i<fmt->m_elementCount ; ++i)
         {
             const VertexElementDescriptor* desc = &fmt->m_elements[i];
-            stride += SEMANTIC_SIZE_TABLE[desc->semantic];
+            stride += SEMANTIC_SIZE_TABLE[int(desc->semantic)];
         }
 
         size_t offset = 0;
@@ -641,9 +641,9 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     static_cast<const GLGraphicsBufferS*>(lastEBO)->bindIndex();
             }
             glEnableVertexAttribArray(i);
-            glVertexAttribPointer(i, SEMANTIC_COUNT_TABLE[desc->semantic],
-                    SEMANTIC_TYPE_TABLE[desc->semantic], GL_TRUE, stride, (void*)offset);
-            offset += SEMANTIC_SIZE_TABLE[desc->semantic];
+            glVertexAttribPointer(i, SEMANTIC_COUNT_TABLE[int(desc->semantic)],
+                    SEMANTIC_TYPE_TABLE[int(desc->semantic)], GL_TRUE, stride, (void*)offset);
+            offset += SEMANTIC_SIZE_TABLE[int(desc->semantic)];
         }
     }
 
@@ -715,10 +715,10 @@ struct GLCommandQueue : IGraphicsCommandQueue
             {
                 switch (cmd.m_op)
                 {
-                case Command::OpSetShaderDataBinding:
+                case Command::Op::SetShaderDataBinding:
                     static_cast<const GLShaderDataBinding*>(cmd.binding)->bind();
                     break;
-                case Command::OpSetRenderTarget:
+                case Command::Op::SetRenderTarget:
                 {
                     const GLTextureR* tex = static_cast<const GLTextureR*>(cmd.target);
                     if (!tex)
@@ -727,32 +727,32 @@ struct GLCommandQueue : IGraphicsCommandQueue
                         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex->m_fbo);
                     break;
                 }
-                case Command::OpSetViewport:
+                case Command::Op::SetViewport:
                     glViewport(cmd.rect.location[0], cmd.rect.location[1],
                                cmd.rect.size[0], cmd.rect.size[1]);
                     break;
-                case Command::OpSetClearColor:
+                case Command::Op::SetClearColor:
                     glClearColor(cmd.rgba[0], cmd.rgba[1], cmd.rgba[2], cmd.rgba[3]);
                     break;
-                case Command::OpClearTarget:
+                case Command::Op::ClearTarget:
                     glClear(cmd.flags);
                     break;
-                case Command::OpSetDrawPrimitive:
+                case Command::Op::SetDrawPrimitive:
                     prim = cmd.prim;
                     break;
-                case Command::OpDraw:
+                case Command::Op::Draw:
                     glDrawArrays(prim, cmd.start, cmd.count);
                     break;
-                case Command::OpDrawIndexed:
+                case Command::Op::DrawIndexed:
                     glDrawElements(prim, cmd.count, GL_UNSIGNED_INT, (void*)cmd.start);
                     break;
-                case Command::OpDrawInstances:
+                case Command::Op::DrawInstances:
                     glDrawArraysInstanced(prim, cmd.start, cmd.count, cmd.instCount);
                     break;
-                case Command::OpDrawInstancesIndexed:
+                case Command::Op::DrawInstancesIndexed:
                     glDrawElementsInstanced(prim, cmd.count, GL_UNSIGNED_INT, (void*)cmd.start, cmd.instCount);
                     break;
-                case Command::OpPresent:
+                case Command::Op::Present:
                 {
                     const GLTextureR* tex = static_cast<const GLTextureR*>(cmd.source);
                     if (tex)
@@ -791,21 +791,21 @@ struct GLCommandQueue : IGraphicsCommandQueue
     void setShaderDataBinding(IShaderDataBinding* binding)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpSetShaderDataBinding);
+        cmds.emplace_back(Command::Op::SetShaderDataBinding);
         cmds.back().binding = binding;
     }
 
     void setRenderTarget(ITextureR* target)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpSetRenderTarget);
+        cmds.emplace_back(Command::Op::SetRenderTarget);
         cmds.back().target = target;
     }
 
     void setViewport(const SWindowRect& rect)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpSetViewport);
+        cmds.emplace_back(Command::Op::SetViewport);
         cmds.back().rect = rect;
     }
     
@@ -824,7 +824,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
     void setClearColor(const float rgba[4])
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpSetClearColor);
+        cmds.emplace_back(Command::Op::SetClearColor);
         cmds.back().rgba[0] = rgba[0];
         cmds.back().rgba[1] = rgba[1];
         cmds.back().rgba[2] = rgba[2];
@@ -834,7 +834,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
     void clearTarget(bool render=true, bool depth=true)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpClearTarget);
+        cmds.emplace_back(Command::Op::ClearTarget);
         cmds.back().flags = 0;
         if (render)
             cmds.back().flags |= GL_COLOR_BUFFER_BIT;
@@ -845,17 +845,17 @@ struct GLCommandQueue : IGraphicsCommandQueue
     void setDrawPrimitive(Primitive prim)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpSetDrawPrimitive);
-        if (prim == PrimitiveTriangles)
+        cmds.emplace_back(Command::Op::SetDrawPrimitive);
+        if (prim == Primitive::Triangles)
             cmds.back().prim = GL_TRIANGLES;
-        else if (prim == PrimitiveTriStrips)
+        else if (prim == Primitive::TriStrips)
             cmds.back().prim = GL_TRIANGLE_STRIP;
     }
 
     void draw(size_t start, size_t count)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpDraw);
+        cmds.emplace_back(Command::Op::Draw);
         cmds.back().start = start;
         cmds.back().count = count;
     }
@@ -863,7 +863,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
     void drawIndexed(size_t start, size_t count)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpDrawIndexed);
+        cmds.emplace_back(Command::Op::DrawIndexed);
         cmds.back().start = start;
         cmds.back().count = count;
     }
@@ -871,7 +871,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
     void drawInstances(size_t start, size_t count, size_t instCount)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpDrawInstances);
+        cmds.emplace_back(Command::Op::DrawInstances);
         cmds.back().start = start;
         cmds.back().count = count;
         cmds.back().instCount = instCount;
@@ -880,7 +880,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
     void drawInstancesIndexed(size_t start, size_t count, size_t instCount)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpDrawInstancesIndexed);
+        cmds.emplace_back(Command::Op::DrawInstancesIndexed);
         cmds.back().start = start;
         cmds.back().count = count;
         cmds.back().instCount = instCount;
@@ -889,7 +889,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
     void resolveDisplay(ITextureR* source)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::OpPresent);
+        cmds.emplace_back(Command::Op::Present);
         cmds.back().source = source;
     }
     

@@ -2,6 +2,7 @@
 #include "boo/IGraphicsContext.hpp"
 
 #include <X11/Xlib.h>
+#undef None
 
 namespace boo
 {
@@ -18,7 +19,7 @@ public:
 
     GraphicsContextWayland(EGraphicsAPI api, IWindow* parentWindow)
     : m_api(api),
-      m_pf(PF_RGBA8),
+      m_pf(EPixelFormat::RGBA8),
       m_parentWindow(parentWindow)
     {}
 
@@ -44,7 +45,7 @@ public:
 
     void setPixelFormat(EPixelFormat pf)
     {
-        if (pf > PF_RGBAF32_Z24)
+        if (pf > EPixelFormat::RGBAF32_Z24)
             return;
         m_pf = pf;
     }
@@ -93,7 +94,7 @@ struct WindowWayland : IWindow
     GraphicsContextWayland m_gfxCtx;
 
     WindowWayland(const std::string& title)
-    : m_gfxCtx(IGraphicsContext::API_OPENGL_3_3, this)
+        : m_gfxCtx(IGraphicsContext::EGraphicsAPI::OpenGL3_3, this)
     {
         
     }
@@ -163,7 +164,7 @@ struct WindowWayland : IWindow
 
     EWindowStyle getStyle() const
     {
-        return STYLE_NONE;
+        return EWindowStyle::None;
     }
 
     bool isFullscreen() const
@@ -187,7 +188,7 @@ struct WindowWayland : IWindow
     
     ETouchType getTouchType() const
     {
-        return TOUCH_NONE;
+        return ETouchType::None;
     }
     
 

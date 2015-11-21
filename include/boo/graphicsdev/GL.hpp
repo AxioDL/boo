@@ -20,7 +20,7 @@ public:
     GLDataFactory(IGraphicsContext* parent);
     ~GLDataFactory() {}
 
-    Platform platform() const {return PlatformOGL;}
+    Platform platform() const {return Platform::OGL;}
     const SystemChar* platformName() const {return _S("OGL");}
 
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);

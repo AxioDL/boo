@@ -62,8 +62,8 @@ class DualshockPadCallback : public IDualshockPadCallback
         {
             if (timeDif >= 1) // wait 30 seconds before issuing another rumble event
             {
-                ctrl->startRumble(DS3_MOTOR_LEFT);
-                ctrl->startRumble(DS3_MOTOR_RIGHT, 100);
+                ctrl->startRumble(EDualshockMotor::Left);
+                ctrl->startRumble(EDualshockMotor::Right, 100);
                 lastTime = timeTotal;
             }
         }
@@ -101,7 +101,7 @@ public:
         if (ds3)
         {
             ds3->setCallback(&m_ds3CB);
-            ds3->setLED(DS3_LED_1);
+            ds3->setLED(EDualshockLED::LED_1);
         }
     }
     void deviceDisconnected(DeviceToken&, DeviceBase* device)
@@ -136,11 +136,11 @@ struct CTestWindowCallback : IWindowCallback
 
     void mouseDown(const SWindowCoord& coord, EMouseButton button, EModifierKey mods)
     {
-        fprintf(stderr, "Mouse Down %d (%f,%f)\n", button, coord.norm[0], coord.norm[1]);
+        fprintf(stderr, "Mouse Down %d (%f,%f)\n", int(button), coord.norm[0], coord.norm[1]);
     }
     void mouseUp(const SWindowCoord& coord, EMouseButton button, EModifierKey mods)
     {
-        fprintf(stderr, "Mouse Up %d (%f,%f)\n", button, coord.norm[0], coord.norm[1]);
+        fprintf(stderr, "Mouse Up %d (%f,%f)\n", int(button), coord.norm[0], coord.norm[1]);
     }
     void mouseMove(const SWindowCoord& coord)
     {
@@ -182,7 +182,7 @@ struct CTestWindowCallback : IWindowCallback
     }
     void specialKeyDown(ESpecialKey key, EModifierKey mods, bool isRepeat)
     {
-        if (key == boo::KEY_ENTER && (mods & boo::MKEY_ALT))
+        if (key == ESpecialKey::Enter && (mods & EModifierKey::Alt) != EModifierKey::None)
             m_fullscreenToggleRequested = true;
     }
     void specialKeyUp(ESpecialKey key, EModifierKey mods)
@@ -251,13 +251,13 @@ struct TestApplicationCallback : IApplicationCallback
             {{-0.5,-0.5},{0.0,0.0}}
         };
         IGraphicsBuffer* vbo =
-        factory->newStaticBuffer(BufferUseVertex, quad, sizeof(Vert), 4);
+        factory->newStaticBuffer(BufferUse::Vertex, quad, sizeof(Vert), 4);
 
         /* Make vertex format */
         VertexElementDescriptor descs[2] =
         {
-            {vbo, nullptr, VertexSemanticPosition},
-            {vbo, nullptr, VertexSemanticUV}
+            {vbo, nullptr, VertexSemantic::Position},
+            {vbo, nullptr, VertexSemantic::UV}
         };
         IVertexFormat* vfmt = factory->newVertexFormat(2, descs);
 
@@ -273,11 +273,11 @@ struct TestApplicationCallback : IApplicationCallback
                 tex[i][j][3] = 0xff;
             }
         ITexture* texture =
-        factory->newStaticTexture(256, 256, 1, TextureFormatRGBA8, tex, 256*256*4);
+        factory->newStaticTexture(256, 256, 1, TextureFormat::RGBA8, tex, 256*256*4);
 
         /* Make shader pipeline */
         IShaderPipeline* pipeline = nullptr;
-        if (factory->platform() == IGraphicsDataFactory::PlatformOGL)
+        if (factory->platform() == IGraphicsDataFactory::Platform::OGL)
         {
             GLDataFactory* glF = dynamic_cast<GLDataFactory*>(factory);
 
@@ -304,7 +304,7 @@ struct TestApplicationCallback : IApplicationCallback
             "}\n";
 
             pipeline = glF->newShaderPipeline(VS, FS, 1, "texs", 0, nullptr,
-                                              BlendFactorOne, BlendFactorZero,
+                                              BlendFactor::One, BlendFactor::Zero,
                                               true, true, false);
         }
 #if _WIN32
@@ -444,7 +444,7 @@ struct TestApplicationCallback : IApplicationCallback
             float rgba[] = {sinf(frameIdx / 60.0), cosf(frameIdx / 60.0), 0.0, 1.0};
             gfxQ->setClearColor(rgba);
             gfxQ->clearTarget();
-            gfxQ->setDrawPrimitive(PrimitiveTriStrips);
+            gfxQ->setDrawPrimitive(Primitive::TriStrips);
 
             gfxQ->setShaderDataBinding(m_binding);
             gfxQ->draw(0, 4);
@@ -486,11 +486,15 @@ struct TestApplicationCallback : IApplicationCallback
 
 }
 
+#if _WIN32
+int wmain(int argc, const boo::SystemChar** argv)
+#else
 int main(int argc, const boo::SystemChar** argv)
+#endif
 {
     LogVisor::RegisterConsoleLogger();
     boo::TestApplicationCallback appCb;
-    int ret = ApplicationRun(boo::IApplication::PLAT_AUTO,
+    int ret = ApplicationRun(boo::IApplication::EPlatformType::Auto,
         appCb, _S("boo"), _S("Boo"), argc, argv);
     printf("IM DYING!!\n");
     return ret;
@@ -509,9 +513,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int)
         booArgv[i+1] = argv[i];
 
     LogVisor::CreateWin32Console();
-    return main(argc+1, booArgv);
+    return wmain(argc+1, booArgv);
 }
-#else
-
 #endif
 

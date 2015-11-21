@@ -35,32 +35,27 @@ protected:
 };
 
 /** Supported buffer uses */
-enum BufferUse
+enum class BufferUse
 {
-    BufferUseNull,
-    BufferUseVertex,
-    BufferUseIndex,
-    BufferUseUniform
+    Null,
+    Vertex,
+    Index,
+    Uniform
 };
 
-enum TextureType
+enum class TextureType
 {
-    TextureStatic,
-    Texture
+    Static,
+    Dynamic,
+    Render
 };
 
 struct ITexture
 {
-    enum Type
-    {
-        TextureStatic,
-        TextureDynamic,
-        TextureRender
-    };
-    Type type() const {return m_type;}
+    TextureType type() const {return m_type;}
 protected:
-    Type m_type;
-    ITexture(Type type) : m_type(type) {}
+    TextureType m_type;
+    ITexture(TextureType type) : m_type(type) {}
     virtual ~ITexture() {}
 };
 
@@ -68,7 +63,7 @@ protected:
 struct ITextureS : ITexture
 {
 protected:
-    ITextureS() : ITexture(TextureStatic) {}
+    ITextureS() : ITexture(TextureType::Static) {}
 };
 
 /** Dynamic resource buffer for textures */
@@ -78,22 +73,22 @@ struct ITextureD : ITexture
     virtual void* map(size_t sz)=0;
     virtual void unmap()=0;
 protected:
-    ITextureD() : ITexture(TextureDynamic) {}
+    ITextureD() : ITexture(TextureType::Dynamic) {}
 };
 
 /** Resource buffer for render-target textures */
 struct ITextureR : ITexture
 {
 protected:
-    ITextureR() : ITexture(TextureRender) {}
+    ITextureR() : ITexture(TextureType::Render) {}
 };
 
 /** Supported texture formats */
-enum TextureFormat
+enum class TextureFormat
 {
-    TextureFormatRGBA8,
-    TextureFormatDXT1,
-    TextureFormatPVRTC4
+    RGBA8,
+    DXT1,
+    PVRTC4
 };
 
 /** Opaque token for representing the data layout of a vertex
@@ -102,13 +97,13 @@ enum TextureFormat
 struct IVertexFormat {};
 
 /** Types of vertex attributes */
-enum VertexSemantic
+enum class VertexSemantic
 {
-    VertexSemanticPosition,
-    VertexSemanticNormal,
-    VertexSemanticColor,
-    VertexSemanticUV,
-    VertexSemanticWeight
+    Position,
+    Normal,
+    Color,
+    UV,
+    Weight
 };
 
 /** Used to create IVertexFormat */
@@ -140,18 +135,18 @@ struct IGraphicsData
 };
 
 /** Used by platform shader pipeline constructors */
-enum BlendFactor
+enum class BlendFactor
 {
-    BlendFactorZero,
-    BlendFactorOne,
-    BlendFactorSrcColor,
-    BlendFactorInvSrcColor,
-    BlendFactorDstColor,
-    BlendFactorInvDstColor,
-    BlendFactorSrcAlpha,
-    BlendFactorInvSrcAlpha,
-    BlendFactorDstAlpha,
-    BlendFactorInvDstAlpha
+    Zero,
+    One,
+    SrcColor,
+    InvSrcColor,
+    DstColor,
+    InvDstColor,
+    SrcAlpha,
+    InvSrcAlpha,
+    DstAlpha,
+    InvDstAlpha
 };
 
 /** Factory object for creating batches of resources as an IGraphicsData token */
@@ -159,15 +154,15 @@ struct IGraphicsDataFactory
 {
     virtual ~IGraphicsDataFactory() {}
 
-    enum Platform
+    enum class Platform
     {
-        PlatformNull,
-        PlatformOGL,
-        PlatformD3D11,
-        PlatformD3D12,
-        PlatformMetal,
-        PlatformGX,
-        PlatformGX2
+        Null,
+        OGL,
+        D3D11,
+        D3D12,
+        Metal,
+        GX,
+        GX2
     };
     virtual Platform platform() const=0;
     virtual const SystemChar* platformName() const=0;

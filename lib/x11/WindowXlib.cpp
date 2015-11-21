@@ -42,6 +42,7 @@
 #define MWM_FUNC_MAXIMIZE     (1L<<4)
 #define MWM_FUNC_CLOSE        (1L<<5)
 
+#undef None
 
 typedef GLXContext (*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
 static glXCreateContextAttribsARBProc glXCreateContextAttribsARB = 0;
@@ -54,7 +55,7 @@ static const int ContextAttribs[] =
     GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
     //GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_DEBUG_BIT_ARB,
     //GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
-    None
+    0
 };
 
 namespace boo
@@ -67,75 +68,78 @@ void GLXEnableVSync(Display* disp, GLXWindow drawable);
 
 extern int XINPUT_OPCODE;
 
-static uint32_t translateKeysym(KeySym sym, int& specialSym, int& modifierSym)
+static uint32_t translateKeysym(KeySym sym, ESpecialKey& specialSym, EModifierKey& modifierSym)
 {
-    specialSym = KEY_NONE;
-    modifierSym = MKEY_NONE;
+    specialSym = ESpecialKey::None;
+    modifierSym = EModifierKey::None;
     if (sym >= XK_F1 && sym <= XK_F12)
-        specialSym = KEY_F1 + sym - XK_F1;
+        specialSym = ESpecialKey(int(ESpecialKey::F1) + sym - XK_F1);
     else if (sym == XK_Escape)
-        specialSym = KEY_ESC;
+        specialSym = ESpecialKey::Esc;
     else if (sym == XK_Return)
-        specialSym = KEY_ENTER;
+        specialSym = ESpecialKey::Enter;
     else if (sym == XK_BackSpace)
-        specialSym = KEY_BACKSPACE;
+        specialSym = ESpecialKey::Backspace;
     else if (sym == XK_Insert)
-        specialSym = KEY_INSERT;
+        specialSym = ESpecialKey::Insert;
     else if (sym == XK_Delete)
-        specialSym = KEY_DELETE;
+        specialSym = ESpecialKey::Delete;
     else if (sym == XK_Home)
-        specialSym = KEY_HOME;
+        specialSym = ESpecialKey::Home;
     else if (sym == XK_End)
-        specialSym = KEY_END;
+        specialSym = ESpecialKey::End;
     else if (sym == XK_Page_Up)
-        specialSym = KEY_PGUP;
+        specialSym = ESpecialKey::PgUp;
     else if (sym == XK_Page_Down)
-        specialSym = KEY_PGDOWN;
+        specialSym = ESpecialKey::PgDown;
     else if (sym == XK_Left)
-        specialSym = KEY_LEFT;
+        specialSym = ESpecialKey::Left;
     else if (sym == XK_Right)
-        specialSym = KEY_RIGHT;
+        specialSym = ESpecialKey::Right;
     else if (sym == XK_Up)
-        specialSym = KEY_UP;
+        specialSym = ESpecialKey::Up;
     else if (sym == XK_Down)
-        specialSym = KEY_DOWN;
+        specialSym = ESpecialKey::Down;
     else if (sym == XK_Shift_L || sym == XK_Shift_R)
-        modifierSym = MKEY_SHIFT;
+        modifierSym = EModifierKey::Shift;
     else if (sym == XK_Control_L || sym == XK_Control_R)
-        modifierSym = MKEY_CTRL;
+        modifierSym = EModifierKey::Ctrl;
     else if (sym == XK_Alt_L || sym == XK_Alt_R)
-        modifierSym = MKEY_ALT;
+        modifierSym = EModifierKey::Alt;
     else
         return xkb_keysym_to_utf32(sym);
     return 0;
 }
 
-static int translateModifiers(unsigned state)
+static EModifierKey translateModifiers(unsigned state)
 {
-    int retval = 0;
+    EModifierKey retval = EModifierKey::None;
     if (state & ShiftMask)
-        retval |= MKEY_SHIFT;
+        retval |= EModifierKey::Shift;
     if (state & ControlMask)
-        retval |= MKEY_CTRL;
+        retval |= EModifierKey::Ctrl;
     if (state & Mod1Mask)
-        retval |= MKEY_ALT;
+        retval |= EModifierKey::Alt;
     return retval;
 }
 
-static int translateButton(unsigned detail)
+static EMouseButton translateButton(unsigned detail)
 {
-    int retval = 0;
-    if (detail == 1)
-        retval = BUTTON_PRIMARY;
-    else if (detail == 3)
-        retval = BUTTON_SECONDARY;
-    else if (detail == 2)
-        retval = BUTTON_MIDDLE;
-    else if (detail == 8)
-        retval = BUTTON_AUX1;
-    else if (detail == 9)
-        retval = BUTTON_AUX2;
-    return retval;
+    switch (detail)
+    {
+    case 1:
+        return EMouseButton::Primary;
+    case 3:
+        return EMouseButton::Secondary;
+    case 2:
+        return EMouseButton::Middle;
+    case 8:
+        return EMouseButton::Aux1;
+    case 9:
+        return EMouseButton::Aux2;
+    default: break;
+    }
+    return EMouseButton::None;
 }
 
 struct XCBAtoms
@@ -198,7 +202,7 @@ public:
                        Display* display, int defaultScreen,
                        GLXContext lastCtx, uint32_t& visualIdOut)
     : m_api(api),
-      m_pf(PF_RGBA8_Z24),
+      m_pf(EPixelFormat::RGBA8_Z24),
       m_parentWindow(parentWindow),
       m_xDisp(display),
       m_lastCtx(lastCtx)
@@ -228,25 +232,25 @@ public:
             if (!doubleBuffer)
                 continue;
 
-            if (m_pf == PF_RGBA8 && colorSize >= 32)
+            if (m_pf == EPixelFormat::RGBA8 && colorSize >= 32)
             {
                 m_fbconfig = config;
                 m_visualid = visualId;
                 break;
             }
-            else if (m_pf == PF_RGBA8_Z24 && colorSize >= 32 && depthSize >= 24)
+            else if (m_pf == EPixelFormat::RGBA8_Z24 && colorSize >= 32 && depthSize >= 24)
             {
                 m_fbconfig = config;
                 m_visualid = visualId;
                 break;
             }
-            else if (m_pf == PF_RGBAF32 && colorSize >= 128)
+            else if (m_pf == EPixelFormat::RGBAF32 && colorSize >= 128)
             {
                 m_fbconfig = config;
                 m_visualid = visualId;
                 break;
             }
-            else if (m_pf == PF_RGBAF32_Z24 && colorSize >= 128 && depthSize >= 24)
+            else if (m_pf == EPixelFormat::RGBAF32_Z24 && colorSize >= 128 && depthSize >= 24)
             {
                 m_fbconfig = config;
                 m_visualid = visualId;
@@ -293,7 +297,7 @@ public:
 
     void setPixelFormat(EPixelFormat pf)
     {
-        if (pf > PF_RGBAF32_Z24)
+        if (pf > EPixelFormat::RGBAF32_Z24)
             return;
         m_pf = pf;
     }
@@ -342,7 +346,7 @@ public:
                 if (!vsyncDisp)
                     Log.report(LogVisor::FatalError, "unable to open new vsync display");
 
-                static int attributeList[] = { GLX_RGBA, GLX_DOUBLEBUFFER, GLX_RED_SIZE, 1, GLX_GREEN_SIZE, 1, GLX_BLUE_SIZE, 1, None };
+                static int attributeList[] = { GLX_RGBA, GLX_DOUBLEBUFFER, GLX_RED_SIZE, 1, GLX_GREEN_SIZE, 1, GLX_BLUE_SIZE, 1, 0 };
                 XVisualInfo *vi = glXChooseVisual(vsyncDisp, DefaultScreen(vsyncDisp),attributeList);
 
                 vsyncCtx = glXCreateContext(vsyncDisp, vi, nullptr, True);
@@ -363,7 +367,7 @@ public:
                 m_vsynccv.notify_one();
             }
 
-            glXMakeCurrent(vsyncDisp, None, nullptr);
+            glXMakeCurrent(vsyncDisp, 0, nullptr);
             glXDestroyContext(vsyncDisp, vsyncCtx);
             XCloseDisplay(vsyncDisp);
         });
@@ -448,7 +452,7 @@ class WindowXlib : public IWindow
 
     /* Last known input device id (0xffff if not yet set) */
     int m_lastInputID = 0xffff;
-    ETouchType m_touchType = TOUCH_NONE;
+    ETouchType m_touchType = ETouchType::None;
 
     /* Scroll valuators */
     int m_hScrollValuator = -1;
@@ -470,7 +474,7 @@ public:
               Display* display, int defaultScreen,
               GLXContext lastCtx)
     : m_xDisp(display), m_callback(nullptr),
-      m_gfxCtx(IGraphicsContext::API_OPENGL_3_3,
+      m_gfxCtx(IGraphicsContext::EGraphicsAPI::OpenGL3_3,
                this, display, defaultScreen,
                lastCtx, m_visualId)
     {
@@ -504,7 +508,7 @@ public:
         genFrameDefault(screen, x, y, w, h);
         XSetWindowAttributes swa;
         swa.colormap = m_colormapId;
-        swa.border_pixmap = None;
+        swa.border_pixmap = 0;
         swa.event_mask = FocusChangeMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask | ExposureMask | StructureNotifyMask | LeaveWindowMask | EnterWindowMask;
 
         m_windowId = XCreateWindow(display, screen->root, x, y, w, h, 10,
@@ -538,7 +542,7 @@ public:
         XMapWindow(m_xDisp, m_windowId);
         XFlush(m_xDisp);
 
-        setStyle(STYLE_DEFAULT);
+        setStyle(EWindowStyle::Default);
 
         m_gfxCtx.initializeContext();
     }
@@ -701,18 +705,18 @@ public:
         if (S_ATOMS->m_motifWmHints)
         {
             wmHints.flags = MWM_HINTS_DECORATIONS | MWM_HINTS_FUNCTIONS;
-            if (style & STYLE_TITLEBAR)
+            if ((style & EWindowStyle::Titlebar) != EWindowStyle::None)
             {
                 wmHints.decorations |= MWM_DECOR_BORDER | MWM_DECOR_TITLE | MWM_DECOR_MINIMIZE | MWM_DECOR_MENU;
                 wmHints.functions  |= MWM_FUNC_MOVE | MWM_FUNC_MINIMIZE;
             }
-            if (style & STYLE_RESIZE)
+            if ((style & EWindowStyle::Resize) != EWindowStyle::None)
             {
                 wmHints.decorations |= MWM_DECOR_MAXIMIZE | MWM_DECOR_RESIZEH;
                 wmHints.functions  |= MWM_FUNC_RESIZE | MWM_FUNC_MAXIMIZE;
             }
 
-            if (style & STYLE_CLOSE)
+            if ((style & EWindowStyle::Close) != EWindowStyle::None)
                 wmHints.functions |= MWM_FUNC_CLOSE;
 
             XLockDisplay(m_xDisp);
@@ -813,11 +817,11 @@ public:
                 {
                     XITouchClassInfo* touchClass = (XITouchClassInfo*)dclass;
                     if (touchClass->mode == XIDirectTouch)
-                        m_touchType = TOUCH_DISPLAY;
+                        m_touchType = ETouchType::Display;
                     else if (touchClass->mode == XIDependentTouch)
-                        m_touchType = TOUCH_TRACKPAD;
+                        m_touchType = ETouchType::Trackpad;
                     else
-                        m_touchType = TOUCH_NONE;
+                        m_touchType = ETouchType::None;
                 }
             }
         }
@@ -880,19 +884,17 @@ public:
         {
             if (m_callback)
             {
-                int specialKey;
-                int modifierKey;
+                ESpecialKey specialKey;
+                EModifierKey modifierKey;
                 uint32_t charCode = translateKeysym(XLookupKeysym(&event->xkey, 0),
                                                     specialKey, modifierKey);
-                int modifierMask = translateModifiers(event->xkey.state);
+                EModifierKey modifierMask = translateModifiers(event->xkey.state);
                 if (charCode)
-                    m_callback->charKeyDown(charCode,
-                                            (EModifierKey)modifierMask, false);
-                else if (specialKey)
-                    m_callback->specialKeyDown((ESpecialKey)specialKey,
-                                               (EModifierKey)modifierMask, false);
-                else if (modifierKey)
-                    m_callback->modKeyDown((EModifierKey)modifierKey, false);
+                    m_callback->charKeyDown(charCode, modifierMask, false);
+                else if (specialKey != ESpecialKey::None)
+                    m_callback->specialKeyDown(specialKey, modifierMask, false);
+                else if (modifierKey != EModifierKey::None)
+                    m_callback->modKeyDown(modifierKey, false);
             }
             return;
         }
@@ -900,19 +902,17 @@ public:
         {
             if (m_callback)
             {
-                int specialKey;
-                int modifierKey;
+                ESpecialKey specialKey;
+                EModifierKey modifierKey;
                 uint32_t charCode = translateKeysym(XLookupKeysym(&event->xkey, 0),
                                                     specialKey, modifierKey);
-                int modifierMask = translateModifiers(event->xkey.state);
+                EModifierKey modifierMask = translateModifiers(event->xkey.state);
                 if (charCode)
-                    m_callback->charKeyUp(charCode,
-                                          (EModifierKey)modifierMask);
-                else if (specialKey)
-                    m_callback->specialKeyUp((ESpecialKey)specialKey,
-                                             (EModifierKey)modifierMask);
-                else if (modifierKey)
-                    m_callback->modKeyUp((EModifierKey)modifierKey);
+                    m_callback->charKeyUp(charCode, modifierMask);
+                else if (specialKey != ESpecialKey::None)
+                    m_callback->specialKeyUp(specialKey, modifierMask);
+                else if (modifierKey != EModifierKey::None)
+                    m_callback->modKeyUp(modifierKey);
             }
             return;
         }
@@ -921,10 +921,10 @@ public:
             if (m_callback)
             {
                 getWindowFrame(m_wx, m_wy, m_ww, m_wh);
-                int button = translateButton(event->xbutton.button);
-                if (button)
+                EMouseButton button = translateButton(event->xbutton.button);
+                if (button != EMouseButton::None)
                 {
-                    int modifierMask = translateModifiers(event->xbutton.state);
+                    EModifierKey modifierMask = translateModifiers(event->xbutton.state);
                     SWindowCoord coord =
                     {
                         {(unsigned)event->xbutton.x, (unsigned)event->xbutton.y},
@@ -968,10 +968,10 @@ public:
             if (m_callback)
             {
                 getWindowFrame(m_wx, m_wy, m_ww, m_wh);
-                int button = translateButton(event->xbutton.button);
-                if (button)
+                EMouseButton button = translateButton(event->xbutton.button);
+                if (button != EMouseButton::None)
                 {
-                    int modifierMask = translateModifiers(event->xbutton.state);
+                    EModifierKey modifierMask = translateModifiers(event->xbutton.state);
                     SWindowCoord coord =
                     {
                         {(unsigned)event->xbutton.x, (unsigned)event->xbutton.y},

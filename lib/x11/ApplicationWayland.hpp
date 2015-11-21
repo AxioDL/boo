@@ -43,7 +43,7 @@ public:
     
     EPlatformType getPlatformType() const
     {
-        return PLAT_WAYLAND;
+        return EPlatformType::Wayland;
     }
     
     int run()

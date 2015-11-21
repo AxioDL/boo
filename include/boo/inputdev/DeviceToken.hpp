@@ -11,16 +11,16 @@ namespace boo
 class DeviceToken
 {
 public:
-    enum TDeviceType
+    enum class DeviceType
     {
-        DEVTYPE_NONE       = 0,
-        DEVTYPE_USB        = 1,
-        DEVTYPE_BLUETOOTH  = 2,
-        DEVTYPE_GENERICHID = 3
+        None       = 0,
+        USB        = 1,
+        Bluetooth  = 2,
+        GenericHID = 3
     };
 
 private:
-    TDeviceType m_devType;
+    DeviceType m_devType;
     unsigned m_vendorId;
     unsigned m_productId;
     std::string m_vendorName;
@@ -50,7 +50,7 @@ public:
       m_devPath(other.m_devPath),
       m_connectedDev(other.m_connectedDev)
     {}
-    inline DeviceToken(enum TDeviceType devType, unsigned vid, unsigned pid, const char* vname, const char* pname, const char* path)
+    inline DeviceToken(DeviceType devType, unsigned vid, unsigned pid, const char* vname, const char* pname, const char* path)
     : m_devType(devType),
       m_vendorId(vid),
       m_productId(pid),
@@ -63,7 +63,7 @@ public:
             m_productName = pname;
     }
     
-    inline TDeviceType getDeviceType() const {return m_devType;}
+    inline DeviceType getDeviceType() const {return m_devType;}
     inline unsigned getVendorId() const {return m_vendorId;}
     inline unsigned getProductId() const {return m_productId;}
     inline const std::string& getVendorName() const {return m_vendorName;}

@@ -20,14 +20,15 @@ DolphinSmashAdapter::~DolphinSmashAdapter()
 
 static inline EDolphinControllerType parseType(unsigned char status)
 {
-    unsigned char type = status & (DOL_TYPE_NORMAL | DOL_TYPE_WAVEBIRD);
+    EDolphinControllerType type = EDolphinControllerType(status) &
+            (EDolphinControllerType::Normal | EDolphinControllerType::Wavebird);
     switch (type)
     {
-        case DOL_TYPE_NORMAL:
-        case DOL_TYPE_WAVEBIRD:
-            return (EDolphinControllerType)type;
+        case EDolphinControllerType::Normal:
+        case EDolphinControllerType::Wavebird:
+            return type;
         default:
-            return DOL_TYPE_NONE;
+            return EDolphinControllerType::None;
     }
 }
 
@@ -77,12 +78,12 @@ void DolphinSmashAdapter::transferCycle()
         DolphinControllerState state;
         bool rumble = false;
         EDolphinControllerType type = parseState(&state, controller, rumble);
-        if (type && !(m_knownControllers & 1<<i))
+        if (type != EDolphinControllerType::None && !(m_knownControllers & 1<<i))
         {
             m_knownControllers |= 1<<i;
             m_callback->controllerConnected(i, type);
         }
-        else if (!type && (m_knownControllers & 1<<i))
+        else if (type == EDolphinControllerType::None && (m_knownControllers & 1<<i))
         {
             m_knownControllers &= ~(1<<i);
             m_callback->controllerDisconnected(i);

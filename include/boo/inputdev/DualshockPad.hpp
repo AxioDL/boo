@@ -39,40 +39,43 @@ union DualshockOutReport
     uint8_t buf[36];
 };
 
-enum EDualshockPadButtons
+enum class EDualshockPadButtons
 {
-    DS3_SELECT   = 1<< 0,
-    DS3_L3       = 1<< 1,
-    DS3_R3       = 1<< 2,
-    DS3_START    = 1<< 3,
-    DS3_UP       = 1<< 4,
-    DS3_RIGHT    = 1<< 5,
-    DS3_DOWN     = 1<< 6,
-    DS3_LEFT     = 1<< 7,
-    DS3_L2       = 1<< 8,
-    DS3_R2       = 1<< 9,
-    DS3_L1       = 1<<10,
-    DS3_R1       = 1<<11,
-    DS3_TRIANGLE = 1<<12,
-    DS3_CIRCLE   = 1<<13,
-    DS3_CROSS    = 1<<14,
-    DS3_SQUARE   = 1<<15
+    Select   = 1<< 0,
+    L3       = 1<< 1,
+    R3       = 1<< 2,
+    Start    = 1<< 3,
+    Up       = 1<< 4,
+    Right    = 1<< 5,
+    Down     = 1<< 6,
+    Left     = 1<< 7,
+    L2       = 1<< 8,
+    R2       = 1<< 9,
+    L1       = 1<<10,
+    R1       = 1<<11,
+    Triangle = 1<<12,
+    Circle   = 1<<13,
+    Cross    = 1<<14,
+    Square   = 1<<15
 };
 
-enum EDualshockMotor : int
+enum class EDualshockMotor : uint8_t
 {
-    DS3_MOTOR_RIGHT = 1<<0,
-    DS3_MOTOR_LEFT  = 1<<1,
+    None  = 0,
+    Right = 1<<0,
+    Left  = 1<<1,
 };
+ENABLE_BITWISE_ENUM(EDualshockMotor)
 
-enum EDualshockLED
+enum class EDualshockLED
 {
-    DS3_LED_OFF = 0,
-    DS3_LED_1   = 1<<1,
-    DS3_LED_2   = 1<<2,
-    DS3_LED_3   = 1<<3,
-    DS3_LED_4   = 1<<4
+    LED_OFF = 0,
+    LED_1   = 1<<1,
+    LED_2   = 1<<2,
+    LED_3   = 1<<3,
+    LED_4   = 1<<4
 };
+ENABLE_BITWISE_ENUM(EDualshockLED)
 
 struct DualshockPadState
 {
@@ -120,11 +123,11 @@ struct IDualshockPadCallback
 class DualshockPad final : public DeviceBase
 {
     IDualshockPadCallback* m_callback;
-    uint8_t m_rumbleRequest;
-    uint8_t m_rumbleState;
+    EDualshockMotor m_rumbleRequest;
+    EDualshockMotor m_rumbleState;
     uint8_t m_rumbleDuration[2];
     uint8_t m_rumbleIntensity[2];
-    uint8_t m_led;
+    EDualshockLED m_led;
     DualshockOutReport m_report;
     uint8_t m_btAddress[6];
     void deviceDisconnected();
@@ -135,45 +138,45 @@ public:
     DualshockPad(DeviceToken* token);
     ~DualshockPad();
 
-    inline void setCallback(IDualshockPadCallback* cb)
+    void setCallback(IDualshockPadCallback* cb)
     { m_callback = cb; if (m_callback) m_callback->ctrl = this; }
 
-    inline void startRumble(int motor, uint8_t duration = 254, uint8_t intensity=255)
+    void startRumble(EDualshockMotor motor, uint8_t duration = 254, uint8_t intensity=255)
     {
         m_rumbleRequest |= motor;
-        if (motor & DS3_MOTOR_LEFT)
+        if ((EDualshockMotor(motor) & EDualshockMotor::Left) != EDualshockMotor::None)
         {
             m_rumbleDuration[0] = duration;
             m_rumbleIntensity[0] = intensity;
         }
-        if (motor & DS3_MOTOR_RIGHT)
+        if ((EDualshockMotor(motor) & EDualshockMotor::Right) != EDualshockMotor::None)
         {
             m_rumbleDuration[1] = duration;
             m_rumbleIntensity[1] = intensity;
         }
     }
 
-    inline void stopRumble(int motor)
+    void stopRumble(int motor)
     {
-        m_rumbleRequest &= ~motor;
+        m_rumbleRequest &= ~EDualshockMotor(motor);
     }
 
-    inline int getLED()
+    EDualshockLED getLED()
     {
         return m_led;
     }
 
-    inline void setLED(int led, bool on = true)
+    void setLED(EDualshockLED led, bool on = true)
     {
         if (on)
             m_led |= led;
         else
             m_led &= ~led;
 
-        setRawLED(led);
+        setRawLED(int(led));
     }
 
-    inline void setRawLED(int led)
+    void setRawLED(int led)
     {
         m_report.leds = led;
         sendHIDReport(m_report.buf, sizeof(m_report), 0x0201);

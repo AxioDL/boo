@@ -8,14 +8,14 @@ namespace boo
 struct IGraphicsCommandQueue;
 struct IGraphicsDataFactory;
 
-enum EMouseButton
+enum class EMouseButton
 {
-    BUTTON_NONE      = 0,
-    BUTTON_PRIMARY   = 1,
-    BUTTON_SECONDARY = 2,
-    BUTTON_MIDDLE    = 3,
-    BUTTON_AUX1      = 4,
-    BUTTON_AUX2      = 5
+    None      = 0,
+    Primary   = 1,
+    Secondary = 2,
+    Middle    = 3,
+    Aux1      = 4,
+    Aux2      = 5
 };
 
 struct SWindowRect
@@ -48,44 +48,69 @@ struct SScrollDelta
     void zeroOut() {delta[0] = 0.0; delta[1] = 0.0;}
 };
 
-enum ESpecialKey
+enum class ESpecialKey
 {
-    KEY_NONE       = 0,
-    KEY_F1         = 1,
-    KEY_F2         = 2,
-    KEY_F3         = 3,
-    KEY_F4         = 4,
-    KEY_F5         = 5,
-    KEY_F6         = 6,
-    KEY_F7         = 7,
-    KEY_F8         = 8,
-    KEY_F9         = 9,
-    KEY_F10        = 10,
-    KEY_F11        = 11,
-    KEY_F12        = 12,
-    KEY_ESC        = 13,
-    KEY_ENTER      = 14,
-    KEY_BACKSPACE  = 15,
-    KEY_INSERT     = 16,
-    KEY_DELETE     = 17,
-    KEY_HOME       = 18,
-    KEY_END        = 19,
-    KEY_PGUP       = 20,
-    KEY_PGDOWN     = 21,
-    KEY_LEFT       = 22,
-    KEY_RIGHT      = 23,
-    KEY_UP         = 24,
-    KEY_DOWN       = 25
+    None       = 0,
+    F1         = 1,
+    F2         = 2,
+    F3         = 3,
+    F4         = 4,
+    F5         = 5,
+    F6         = 6,
+    F7         = 7,
+    F8         = 8,
+    F9         = 9,
+    F10        = 10,
+    F11        = 11,
+    F12        = 12,
+    Esc        = 13,
+    Enter      = 14,
+    Backspace  = 15,
+    Insert     = 16,
+    Delete     = 17,
+    Home       = 18,
+    End        = 19,
+    PgUp       = 20,
+    PgDown     = 21,
+    Left       = 22,
+    Right      = 23,
+    Up         = 24,
+    Down       = 25
 };
 
-enum EModifierKey
+enum class EModifierKey
 {
-    MKEY_NONE    = 0,
-    MKEY_CTRL    = 1<<0,
-    MKEY_ALT     = 1<<2,
-    MKEY_SHIFT   = 1<<3,
-    MKEY_COMMAND = 1<<4
+    None    = 0,
+    Ctrl    = 1<<0,
+    Alt     = 1<<2,
+    Shift   = 1<<3,
+    Command = 1<<4
 };
+
+inline EModifierKey operator|(EModifierKey a, EModifierKey b)
+{
+    using T = std::underlying_type_t<EModifierKey>;
+    return EModifierKey(static_cast<T>(a) | static_cast<T>(b));
+}
+
+inline EModifierKey operator&(EModifierKey a, EModifierKey b)
+{
+    using T = std::underlying_type_t<EModifierKey>;
+    return EModifierKey(static_cast<T>(a) & static_cast<T>(b));
+}
+
+inline EModifierKey& operator|=(EModifierKey& a, const EModifierKey& b)
+{
+    using T = std::underlying_type_t<EModifierKey>;
+    a = EModifierKey(static_cast<T>(a) | static_cast<T>(b));
+    return a;
+}
+
+inline EModifierKey operator~(const EModifierKey& key)
+{
+    using T = std::underlying_type_t<EModifierKey>;
+    return EModifierKey(~static_cast<T>(key));
+}
 
 class IWindowCallback
 {
@@ -132,22 +157,34 @@ public:
     {}
 };
 
-enum ETouchType
+enum class ETouchType
 {
-    TOUCH_NONE     = 0,
-    TOUCH_DISPLAY  = 1,
-    TOUCH_TRACKPAD = 2
+    None     = 0,
+    Display  = 1,
+    Trackpad = 2
 };
 
-enum EWindowStyle
+enum class EWindowStyle
 {
-    STYLE_NONE     = 0,
-    STYLE_TITLEBAR = 1<<0,
-    STYLE_RESIZE   = 1<<1,
-    STYLE_CLOSE    = 1<<2,
+    None     = 0,
+    Titlebar = 1<<0,
+    Resize   = 1<<1,
+    Close    = 1<<2,
 
-    STYLE_DEFAULT = STYLE_TITLEBAR | STYLE_RESIZE | STYLE_CLOSE
+    Default = Titlebar | Resize | Close
 };
+
+inline EWindowStyle operator|(EWindowStyle a, EWindowStyle b)
+{
+    using T = std::underlying_type_t<EWindowStyle>;
+    return EWindowStyle(static_cast<T>(a) | static_cast<T>(b));
+}
+
+inline EWindowStyle operator&(EWindowStyle a, EWindowStyle b)
+{
+    using T = std::underlying_type_t<EWindowStyle>;
+    return EWindowStyle(static_cast<T>(a) & static_cast<T>(b));
+}
 
 class IWindow
 {

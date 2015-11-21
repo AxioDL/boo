@@ -58,10 +58,10 @@ int ApplicationRun(IApplication::EPlatformType platform,
 {
     if (APP)
         return 1;
-    if (platform == IApplication::PLAT_WAYLAND)
+    if (platform == IApplication::EPlatformType::Wayland)
         APP = new ApplicationWayland(cb, uniqueName, friendlyName, pname, args, singleInstance);
-    else if (platform == IApplication::PLAT_XLIB ||
-             platform == IApplication::PLAT_AUTO)
+    else if (platform == IApplication::EPlatformType::Xlib ||
+             platform == IApplication::EPlatformType::Auto)
         APP = new ApplicationXlib(cb, uniqueName, friendlyName, pname, args, singleInstance);
     else
         return 1;

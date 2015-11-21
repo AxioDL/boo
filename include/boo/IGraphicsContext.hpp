@@ -17,27 +17,27 @@ class IGraphicsContext
 
 public:
     
-    enum EGraphicsAPI
+    enum class EGraphicsAPI
     {
-        API_NONE       = 0,
-        API_OPENGL_3_3 = 1,
-        API_OPENGL_4_2 = 2,
-        API_OPENGLES_3 = 3,
-        API_VULKAN     = 4,
-        API_D3D11      = 5,
-        API_D3D12      = 6,
-        API_METAL      = 7,
-        API_GX         = 8,
-        API_GX2        = 9
+        None       = 0,
+        OpenGL3_3  = 1,
+        OpenGL4_2  = 2,
+        OpenGLES3  = 3,
+        Vulkan     = 4,
+        D3D11      = 5,
+        D3D12      = 6,
+        Metal      = 7,
+        GX         = 8,
+        GX2        = 9
     };
     
-    enum EPixelFormat
+    enum class EPixelFormat
     {
-        PF_NONE        = 0,
-        PF_RGBA8       = 1, /* Default */
-        PF_RGBA8_Z24   = 2,
-        PF_RGBAF32     = 3,
-        PF_RGBAF32_Z24 = 4
+        None        = 0,
+        RGBA8       = 1, /* Default */
+        RGBA8_Z24   = 2,
+        RGBAF32     = 3,
+        RGBAF32_Z24 = 4
     };
     
     virtual ~IGraphicsContext() {}

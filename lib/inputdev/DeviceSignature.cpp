@@ -11,7 +11,7 @@ extern const DeviceSignature BOO_DEVICE_SIGS[];
 
 bool DeviceSignature::DeviceMatchToken(const DeviceToken& token, const TDeviceSignatureSet& sigSet)
 {
-    if (token.getDeviceType() == DeviceToken::DEVTYPE_GENERICHID)
+    if (token.getDeviceType() == DeviceToken::DeviceType::GenericHID)
         return true;
     for (const DeviceSignature* sig : sigSet)
     {
@@ -27,7 +27,7 @@ DeviceBase* DeviceSignature::DeviceNew(DeviceToken& token)
     DeviceBase* retval = NULL;
 
     /* Early-return for generic HID devices */
-    if (token.getDeviceType() == DeviceToken::DEVTYPE_GENERICHID)
+    if (token.getDeviceType() == DeviceToken::DeviceType::GenericHID)
     {
         retval = new GenericPad(&token);
         if (!retval)

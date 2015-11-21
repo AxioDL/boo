@@ -49,8 +49,8 @@ static const uint8_t defaultReport[35] = {
 DualshockPad::DualshockPad(DeviceToken* token)
     : DeviceBase(token),
       m_callback(nullptr),
-      m_rumbleRequest(0),
-      m_rumbleState(0)
+      m_rumbleRequest(EDualshockMotor::None),
+      m_rumbleState(EDualshockMotor::None)
 {
     memcpy(m_report.buf, defaultReport, 35);
 }
@@ -96,7 +96,7 @@ void DualshockPad::transferCycle()
 
     if (m_rumbleRequest != m_rumbleState)
     {
-        if (m_rumbleRequest & DS3_MOTOR_LEFT)
+        if ((m_rumbleRequest & EDualshockMotor::Left) != EDualshockMotor::None)
         {
             m_report.rumble.leftDuration = m_rumbleDuration[0];
             m_report.rumble.leftForce = m_rumbleIntensity[0];
@@ -107,7 +107,7 @@ void DualshockPad::transferCycle()
             m_report.rumble.leftForce = 0;
         }
 
-        if (m_rumbleRequest & DS3_MOTOR_RIGHT)
+        if ((m_rumbleRequest & EDualshockMotor::Right) != EDualshockMotor::None)
         {
             m_report.rumble.rightDuration = m_rumbleDuration[0];
             m_report.rumble.rightOn = true;
@@ -123,9 +123,9 @@ void DualshockPad::transferCycle()
     else
     {
         if (state.m_reserved5[8] & 0x80)
-            m_rumbleRequest &= ~DS3_MOTOR_RIGHT;
+            m_rumbleRequest &= ~EDualshockMotor::Right;
         if (state.m_reserved5[7] & 0x01)
-            m_rumbleRequest &= ~DS3_MOTOR_LEFT;
+            m_rumbleRequest &= ~EDualshockMotor::Left;
         m_rumbleState = m_rumbleRequest;
         const double zeroG = 511.5; // 1.65/3.3*1023 (1,65V);
         float accXval = -((double)state.m_accelerometer[0] - zeroG);

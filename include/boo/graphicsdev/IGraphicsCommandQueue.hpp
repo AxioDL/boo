@@ -6,10 +6,10 @@
 
 namespace boo
 {
-enum Primitive
+enum class Primitive
 {
-    PrimitiveTriangles,
-    PrimitiveTriStrips
+    Triangles,
+    TriStrips
 };
 
 struct IGraphicsCommandQueue

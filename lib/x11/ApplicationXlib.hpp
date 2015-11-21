@@ -220,7 +220,7 @@ public:
     
     EPlatformType getPlatformType() const
     {
-        return PLAT_XLIB;
+        return EPlatformType::Xlib;
     }
     
     /* Empty handler for SIGINT */

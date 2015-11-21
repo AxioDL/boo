@@ -29,18 +29,18 @@ class IApplication
 public:
     virtual ~IApplication() {}
     
-    enum EPlatformType
+    enum class EPlatformType : uint8_t
     {
-        PLAT_AUTO        = 0,
-        PLAT_WAYLAND     = 1,
-        PLAT_XLIB        = 2,
-        PLAT_ANDROID     = 3,
-        PLAT_COCOA       = 4,
-        PLAT_COCOA_TOUCH = 5,
-        PLAT_WIN32       = 6,
-        PLAT_WINRT       = 7,
-        PLAT_REVOLUTION  = 8,
-        PLAT_CAFE        = 9
+        Auto        = 0,
+        Wayland     = 1,
+        Xlib        = 2,
+        Android     = 3,
+        Cocoa       = 4,
+        CocoaTouch  = 5,
+        Win32       = 6,
+        WinRT       = 7,
+        Revolution  = 8,
+        Cafe        = 9
     };
     virtual EPlatformType getPlatformType() const=0;
     

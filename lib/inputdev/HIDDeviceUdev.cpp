@@ -243,12 +243,12 @@ public:
     {
         devImp.m_hidDev = this;
         std::unique_lock<std::mutex> lk(m_initMutex);
-        DeviceToken::TDeviceType dType = token.getDeviceType();
-        if (dType == DeviceToken::DEVTYPE_USB)
+        DeviceToken::DeviceType dType = token.getDeviceType();
+        if (dType == DeviceToken::DeviceType::USB)
             m_thread = new std::thread(_threadProcUSBLL, this);
-        else if (dType == DeviceToken::DEVTYPE_BLUETOOTH)
+        else if (dType == DeviceToken::DeviceType::Bluetooth)
             m_thread = new std::thread(_threadProcBTLL, this);
-        else if (dType == DeviceToken::DEVTYPE_GENERICHID)
+        else if (dType == DeviceToken::DeviceType::GenericHID)
             m_thread = new std::thread(_threadProcHID, this);
         else
         {
