@@ -3,6 +3,7 @@
 
 #include <string>
 
+#ifndef ENABLE_BITWISE_ENUM
 #define ENABLE_BITWISE_ENUM(type)\
 inline type operator|(type a, type b)\
 {\
@@ -31,6 +32,7 @@ inline type operator~(const type& key)\
     using T = std::underlying_type_t<type>;\
     return type(~static_cast<T>(key));\
 }
+#endif
 
 namespace boo
 {
