@@ -87,6 +87,7 @@ protected:
 enum class TextureFormat
 {
     RGBA8,
+    I8,
     DXT1,
     PVRTC4
 };
@@ -180,6 +181,9 @@ struct IGraphicsDataFactory
     virtual ITextureS*
     newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                      std::unique_ptr<uint8_t[]>&& data, size_t sz)=0;
+    virtual ITextureS*
+    newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
+                          const void* data, size_t sz)=0;
     virtual ITextureD*
     newDynamicTexture(size_t width, size_t height, TextureFormat fmt)=0;
     virtual ITextureR*
