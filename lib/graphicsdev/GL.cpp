@@ -346,7 +346,9 @@ static const GLenum BLEND_FACTOR_TABLE[] =
     GL_SRC_ALPHA,
     GL_ONE_MINUS_SRC_ALPHA,
     GL_DST_ALPHA,
-    GL_ONE_MINUS_DST_ALPHA
+    GL_ONE_MINUS_DST_ALPHA,
+    GL_SRC1_COLOR,
+    GL_ONE_MINUS_SRC1_COLOR
 };
 
 IShaderPipeline* GLDataFactory::newShaderPipeline
@@ -503,7 +505,7 @@ struct GLShaderDataBinding : IShaderDataBinding
 IShaderDataBinding*
 GLDataFactory::newShaderDataBinding(IShaderPipeline* pipeline,
                                        IVertexFormat* vtxFormat,
-                                       IGraphicsBuffer*, IGraphicsBuffer*,
+                                       IGraphicsBuffer*, IGraphicsBuffer*, IGraphicsBuffer*,
                                        size_t ubufCount, IGraphicsBuffer** ubufs,
                                        size_t texCount, ITexture** texs)
 {
@@ -550,27 +552,33 @@ void GLDataFactory::destroyAllData()
 
 static const GLint SEMANTIC_COUNT_TABLE[] =
 {
+    0,
     3,
     3,
     4,
     2,
+    4,
     4
 };
 
 static const size_t SEMANTIC_SIZE_TABLE[] =
 {
+    0,
     12,
     12,
     4,
     8,
+    16,
     16
 };
 
 static const GLenum SEMANTIC_TYPE_TABLE[] =
 {
+    GL_INVALID_ENUM,
     GL_FLOAT,
     GL_FLOAT,
     GL_UNSIGNED_BYTE,
+    GL_FLOAT,
     GL_FLOAT,
     GL_FLOAT
 };
@@ -647,13 +655,18 @@ struct GLCommandQueue : IGraphicsCommandQueue
         glGenVertexArrays(1, &fmt->m_vao);
 
         size_t stride = 0;
+        size_t instStride = 0;
         for (size_t i=0 ; i<fmt->m_elementCount ; ++i)
         {
             const VertexElementDescriptor* desc = &fmt->m_elements[i];
-            stride += SEMANTIC_SIZE_TABLE[int(desc->semantic)];
+            if ((desc->semantic & VertexSemantic::Instanced) != VertexSemantic::None)
+                instStride += SEMANTIC_SIZE_TABLE[int(desc->semantic & VertexSemantic::SemanticMask)];
+            else
+                stride += SEMANTIC_SIZE_TABLE[int(desc->semantic & VertexSemantic::SemanticMask)];
         }
 
         size_t offset = 0;
+        size_t instOffset = 0;
         glBindVertexArray(fmt->m_vao);
         const IGraphicsBuffer* lastVBO = nullptr;
         const IGraphicsBuffer* lastEBO = nullptr;
@@ -677,9 +690,20 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     static_cast<const GLGraphicsBufferS*>(lastEBO)->bindIndex();
             }
             glEnableVertexAttribArray(i);
-            glVertexAttribPointer(i, SEMANTIC_COUNT_TABLE[int(desc->semantic)],
-                    SEMANTIC_TYPE_TABLE[int(desc->semantic)], GL_TRUE, stride, (void*)offset);
-            offset += SEMANTIC_SIZE_TABLE[int(desc->semantic)];
+            int maskedSem = int(desc->semantic & VertexSemantic::SemanticMask);
+            if ((desc->semantic & VertexSemantic::Instanced) != VertexSemantic::None)
+            {
+                glVertexAttribPointer(i, SEMANTIC_COUNT_TABLE[maskedSem],
+                        SEMANTIC_TYPE_TABLE[maskedSem], GL_TRUE, instStride, (void*)instOffset);
+                glVertexAttribDivisor(i, 1);
+                instOffset += SEMANTIC_SIZE_TABLE[maskedSem];
+            }
+            else
+            {
+                glVertexAttribPointer(i, SEMANTIC_COUNT_TABLE[maskedSem],
+                        SEMANTIC_TYPE_TABLE[maskedSem], GL_TRUE, stride, (void*)offset);
+                offset += SEMANTIC_SIZE_TABLE[maskedSem];
+            }
         }
     }
 
@@ -845,6 +869,11 @@ struct GLCommandQueue : IGraphicsCommandQueue
         cmds.back().rect = rect;
     }
     
+    int pendingDynamicSlot()
+    {
+        return m_fillBuf;
+    }
+
     void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)
     {
         std::unique_lock<std::mutex> lk(m_mt);

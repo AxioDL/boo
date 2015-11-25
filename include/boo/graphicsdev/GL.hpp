@@ -48,7 +48,7 @@ public:
     IShaderDataBinding*
     newShaderDataBinding(IShaderPipeline* pipeline,
                          IVertexFormat* vtxFormat,
-                         IGraphicsBuffer* vbo, IGraphicsBuffer* ibo,
+                         IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
                          size_t ubufCount, IGraphicsBuffer** ubufs,
                          size_t texCount, ITexture** texs);
 

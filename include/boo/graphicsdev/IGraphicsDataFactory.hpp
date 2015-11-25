@@ -100,12 +100,18 @@ struct IVertexFormat {};
 /** Types of vertex attributes */
 enum class VertexSemantic
 {
+    None = 0,
     Position,
     Normal,
     Color,
     UV,
-    Weight
+    UV4,
+    Weight,
+    ModelView,
+    SemanticMask = 0xf,
+    Instanced = 0x10
 };
+ENABLE_BITWISE_ENUM(VertexSemantic)
 
 /** Used to create IVertexFormat */
 struct VertexElementDescriptor
@@ -147,7 +153,9 @@ enum class BlendFactor
     SrcAlpha,
     InvSrcAlpha,
     DstAlpha,
-    InvDstAlpha
+    InvDstAlpha,
+    SrcColor1,
+    InvSrcColor1
 };
 
 /** Factory object for creating batches of resources as an IGraphicsData token */
@@ -196,7 +204,7 @@ struct IGraphicsDataFactory
     virtual IShaderDataBinding*
     newShaderDataBinding(IShaderPipeline* pipeline,
                          IVertexFormat* vtxFormat,
-                         IGraphicsBuffer* vbo, IGraphicsBuffer* ibo,
+                         IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
                          size_t ubufCount, IGraphicsBuffer** ubufs,
                          size_t texCount, ITexture** texs)=0;
 

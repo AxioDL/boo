@@ -374,7 +374,7 @@ struct TestApplicationCallback : IApplicationCallback
 
         /* Make shader data binding */
         self->m_binding =
-        factory->newShaderDataBinding(pipeline, vfmt, vbo, nullptr, 0, nullptr, 1, &texture);
+        factory->newShaderDataBinding(pipeline, vfmt, vbo, nullptr, nullptr, 0, nullptr, 1, &texture);
 
         /* Commit objects */
         IGraphicsData* data = factory->commit();

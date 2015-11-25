@@ -24,6 +24,12 @@ struct IGraphicsCommandQueue
     virtual void setRenderTarget(ITextureR* target)=0;
     virtual void setViewport(const SWindowRect& rect)=0;
     
+    /**
+     * @brief Which dynamic buffer slot is being populated for pending command list
+     * @return Index [0,2] indicating the buffer slot
+     */
+    virtual int pendingDynamicSlot()=0;
+
     virtual void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)=0;
     virtual void flushBufferUpdates()=0;
 
