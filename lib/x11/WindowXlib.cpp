@@ -838,7 +838,10 @@ public:
         case ClientMessage:
         {
             if (event->xclient.data.l[0] == S_ATOMS->m_wmDeleteWindow && m_callback)
+            {
                 m_callback->destroyed();
+                m_callback = nullptr;
+            }
             return;
         }
         case Expose:

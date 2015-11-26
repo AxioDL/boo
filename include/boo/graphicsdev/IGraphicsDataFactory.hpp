@@ -46,6 +46,7 @@ enum class BufferUse
 enum class TextureType
 {
     Static,
+    StaticArray,
     Dynamic,
     Render
 };
@@ -64,6 +65,13 @@ struct ITextureS : ITexture
 {
 protected:
     ITextureS() : ITexture(TextureType::Static) {}
+};
+
+/** Static-array resource buffer for array textures */
+struct ITextureSA : ITexture
+{
+protected:
+    ITextureSA() : ITexture(TextureType::StaticArray) {}
 };
 
 /** Dynamic resource buffer for textures */
@@ -192,7 +200,7 @@ struct IGraphicsDataFactory
     virtual ITextureS*
     newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                      std::unique_ptr<uint8_t[]>&& data, size_t sz)=0;
-    virtual ITextureS*
+    virtual ITextureSA*
     newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
                           const void* data, size_t sz)=0;
     virtual ITextureD*

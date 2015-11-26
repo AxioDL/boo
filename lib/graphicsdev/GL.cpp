@@ -19,7 +19,7 @@ struct GLData : IGraphicsData
     std::vector<std::unique_ptr<class GLGraphicsBufferS>> m_SBufs;
     std::vector<std::unique_ptr<class GLGraphicsBufferD>> m_DBufs;
     std::vector<std::unique_ptr<class GLTextureS>> m_STexs;
-    std::vector<std::unique_ptr<class GLArrayTextureS>> m_SATexs;
+    std::vector<std::unique_ptr<class GLTextureSA>> m_SATexs;
     std::vector<std::unique_ptr<class GLTextureD>> m_DTexs;
     std::vector<std::unique_ptr<class GLTextureR>> m_RTexs;
     std::vector<std::unique_ptr<struct GLVertexFormat>> m_VFmts;
@@ -137,12 +137,12 @@ public:
     }
 };
 
-class GLArrayTextureS : public ITextureS
+class GLTextureSA : public ITextureSA
 {
     friend class GLDataFactory;
     GLuint m_tex;
-    GLArrayTextureS(size_t width, size_t height, size_t layers,
-                    TextureFormat fmt, const void* data, size_t sz)
+    GLTextureSA(size_t width, size_t height, size_t layers,
+                TextureFormat fmt, const void* data, size_t sz)
     {
         glGenTextures(1, &m_tex);
         glBindTexture(GL_TEXTURE_2D_ARRAY, m_tex);
@@ -154,7 +154,7 @@ class GLArrayTextureS : public ITextureS
             glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_R8, width, height, layers, 0, GL_RED, GL_UNSIGNED_BYTE, data);
     }
 public:
-    ~GLArrayTextureS() {glDeleteTextures(1, &m_tex);}
+    ~GLTextureSA() {glDeleteTextures(1, &m_tex);}
 
     void bind(size_t idx) const
     {
@@ -234,11 +234,11 @@ GLDataFactory::newStaticTexture(size_t width, size_t height, size_t mips, Textur
     return retval;
 }
 
-ITextureS*
+ITextureSA*
 GLDataFactory::newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
                                      const void *data, size_t sz)
 {
-    GLArrayTextureS* retval = new GLArrayTextureS(width, height, layers, fmt, data, sz);
+    GLTextureSA* retval = new GLTextureSA(width, height, layers, fmt, data, sz);
     static_cast<GLData*>(m_deferredData)->m_SATexs.emplace_back(retval);
     return retval;
 }
@@ -494,10 +494,19 @@ struct GLShaderDataBinding : IShaderDataBinding
         for (size_t i=0 ; i<m_texCount ; ++i)
         {
             ITexture* tex = m_texs[i];
-            if (tex->type() == TextureType::Dynamic)
+            switch (tex->type())
+            {
+            case TextureType::Dynamic:
                 static_cast<GLTextureD*>(tex)->bind(i);
-            else if (tex->type() == TextureType::Static)
+                break;
+            case TextureType::Static:
                 static_cast<GLTextureS*>(tex)->bind(i);
+                break;
+            case TextureType::StaticArray:
+                static_cast<GLTextureSA*>(tex)->bind(i);
+                break;
+            default: break;
+            }
         }
     }
 };
