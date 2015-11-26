@@ -11,9 +11,15 @@ The only per-platform responsibility of the client code is providing the
 shaders' source. Drawing, resource-management and state-switching are
 performed using the unified API; these may be written once for all platforms.
 
+Client code is entered via the `appMain` method supplied in a callback object.
+This code executes on a dedicated thread with graphics command context available.
+The API may be used to synchronize loops on the client thread with the display
+refresh-rate.
+
 #### Supported Backends
 
 * OpenGL 3.3+
 * Direct3D 11/12
-* Apple Metal 1.1 (OS X 10.11 only for now)
+* Metal 1.1 (OS X 10.11 only for now, iOS coming soon)
+* **[Coming soon]** OpenGL ES 3.0
 * **[Coming soon]** Vulkan
