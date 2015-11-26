@@ -554,9 +554,13 @@ static const GLint SEMANTIC_COUNT_TABLE[] =
 {
     0,
     3,
+    4,
     3,
     4,
+    4,
+    4,
     2,
+    4,
     4,
     4
 };
@@ -565,9 +569,13 @@ static const size_t SEMANTIC_SIZE_TABLE[] =
 {
     0,
     12,
+    16,
     12,
+    16,
+    16,
     4,
     8,
+    16,
     16,
     16
 };
@@ -577,7 +585,11 @@ static const GLenum SEMANTIC_TYPE_TABLE[] =
     GL_INVALID_ENUM,
     GL_FLOAT,
     GL_FLOAT,
+    GL_FLOAT,
+    GL_FLOAT,
+    GL_FLOAT,
     GL_UNSIGNED_BYTE,
+    GL_FLOAT,
     GL_FLOAT,
     GL_FLOAT,
     GL_FLOAT
@@ -596,6 +608,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
             SetShaderDataBinding,
             SetRenderTarget,
             SetViewport,
+            SetScissor,
             SetClearColor,
             ClearTarget,
             SetDrawPrimitive,
@@ -791,6 +804,16 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     glViewport(cmd.rect.location[0], cmd.rect.location[1],
                                cmd.rect.size[0], cmd.rect.size[1]);
                     break;
+                case Command::Op::SetScissor:
+                    if (cmd.rect.size[0] == 0 && cmd.rect.size[1] == 0)
+                        glDisable(GL_SCISSOR_TEST);
+                    else
+                    {
+                        glEnable(GL_SCISSOR_TEST);
+                        glScissor(cmd.rect.location[0], cmd.rect.location[1],
+                                  cmd.rect.size[0], cmd.rect.size[1]);
+                    }
+                    break;
                 case Command::Op::SetClearColor:
                     glClearColor(cmd.rgba[0], cmd.rgba[1], cmd.rgba[2], cmd.rgba[3]);
                     break;
@@ -866,6 +889,13 @@ struct GLCommandQueue : IGraphicsCommandQueue
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::Op::SetViewport);
+        cmds.back().rect = rect;
+    }
+
+    void setScissor(const SWindowRect& rect)
+    {
+        std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
+        cmds.emplace_back(Command::Op::SetScissor);
         cmds.back().rect = rect;
     }
     

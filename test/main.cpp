@@ -256,8 +256,8 @@ struct TestApplicationCallback : IApplicationCallback
         /* Make vertex format */
         VertexElementDescriptor descs[2] =
         {
-            {vbo, nullptr, VertexSemantic::Position},
-            {vbo, nullptr, VertexSemantic::UV}
+            {vbo, nullptr, VertexSemantic::Position3},
+            {vbo, nullptr, VertexSemantic::UV2}
         };
         IVertexFormat* vfmt = factory->newVertexFormat(2, descs);
 

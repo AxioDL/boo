@@ -101,10 +101,13 @@ struct IVertexFormat {};
 enum class VertexSemantic
 {
     None = 0,
-    Position,
-    Normal,
+    Position3,
+    Position4,
+    Normal3,
+    Normal4,
     Color,
-    UV,
+    ColorUNorm,
+    UV2,
     UV4,
     Weight,
     ModelView,
