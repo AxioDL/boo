@@ -33,6 +33,7 @@ struct D3D11Data : IGraphicsData
     std::vector<std::unique_ptr<class D3D11GraphicsBufferS>> m_SBufs;
     std::vector<std::unique_ptr<class D3D11GraphicsBufferD>> m_DBufs;
     std::vector<std::unique_ptr<class D3D11TextureS>> m_STexs;
+    std::vector<std::unique_ptr<class D3D11TextureSA>> m_SATexs;
     std::vector<std::unique_ptr<class D3D11TextureD>> m_DTexs;
     std::vector<std::unique_ptr<class D3D11TextureR>> m_RTexs;
     std::vector<std::unique_ptr<struct D3D11VertexFormat>> m_VFmts;
@@ -121,6 +122,50 @@ public:
     ComPtr<ID3D11Texture2D> m_tex;
     ComPtr<ID3D11ShaderResourceView> m_srv;
     ~D3D11TextureS() = default;
+};
+
+class D3D11TextureSA : public ITextureSA
+{
+    friend class D3D11DataFactory;
+    size_t m_sz;
+    D3D11TextureSA(D3D11Context* ctx, size_t width, size_t height, size_t layers,
+                  TextureFormat fmt, const void* data, size_t sz)
+    : m_sz(sz)
+    {
+        size_t pixelPitch;
+        DXGI_FORMAT pixelFmt;
+        if (fmt == TextureFormat::RGBA8)
+        {
+            pixelPitch = 4;
+            pixelFmt = DXGI_FORMAT_R8G8B8A8_UNORM;
+        }
+        else if (fmt == TextureFormat::I8)
+        {
+            pixelPitch = 1;
+            pixelFmt = DXGI_FORMAT_R8_UNORM;
+        }
+
+        CD3D11_TEXTURE2D_DESC desc(pixelFmt, width, height, layers, 1,
+                                   D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_IMMUTABLE);
+
+        const uint8_t* dataIt = static_cast<const uint8_t*>(data);
+        D3D11_SUBRESOURCE_DATA upData[16] = {};
+        for (size_t i=0 ; i<layers && i<16 ; ++i)
+        {
+            upData[i].pSysMem = dataIt;
+            upData[i].SysMemPitch = width * pixelPitch;
+            upData[i].SysMemSlicePitch = upData[i].SysMemPitch * height;
+            dataIt += upData[i].SysMemSlicePitch;
+        }
+
+        ThrowIfFailed(ctx->m_dev->CreateTexture2D(&desc, upData, &m_tex));
+        ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_tex.Get(),
+            &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_tex.Get(), D3D_SRV_DIMENSION_TEXTURE2DARRAY, pixelFmt), &m_srv));
+    }
+public:
+    ComPtr<ID3D11Texture2D> m_tex;
+    ComPtr<ID3D11ShaderResourceView> m_srv;
+    ~D3D11TextureSA() = default;
 };
 
 class D3D11TextureD : public ITextureD
@@ -218,28 +263,46 @@ public:
 
 static const size_t SEMANTIC_SIZE_TABLE[] =
 {
+    0,
     12,
+    16,
     12,
+    16,
+    16,
     4,
     8,
+    16,
+    16,
     16
 };
 
 static const char* SEMANTIC_NAME_TABLE[] =
 {
+    nullptr,
+    "POSITION",
     "POSITION",
     "NORMAL",
+    "NORMAL",
+    "COLOR",
     "COLOR",
     "UV",
-    "WEIGHT"
+    "UV",
+    "WEIGHT",
+    "MODELVIEW"
 };
 
 static const DXGI_FORMAT SEMANTIC_TYPE_TABLE[] =
 {
+    DXGI_FORMAT_UNKNOWN,
     DXGI_FORMAT_R32G32B32_FLOAT,
+    DXGI_FORMAT_R32G32B32A32_FLOAT,
     DXGI_FORMAT_R32G32B32_FLOAT,
+    DXGI_FORMAT_R32G32B32A32_FLOAT,
+    DXGI_FORMAT_R32G32B32A32_FLOAT,
     DXGI_FORMAT_R8G8B8A8_UNORM,
     DXGI_FORMAT_R32G32_FLOAT,
+    DXGI_FORMAT_R32G32B32A32_FLOAT,
+    DXGI_FORMAT_R32G32B32A32_FLOAT,
     DXGI_FORMAT_R32G32B32A32_FLOAT
 };
 
@@ -253,16 +316,29 @@ struct D3D11VertexFormat : IVertexFormat
     {
         memset(m_elements.get(), 0, elementCount * sizeof(D3D11_INPUT_ELEMENT_DESC));
         size_t offset = 0;
+        size_t instOffset = 0;
         for (size_t i=0 ; i<elementCount ; ++i)
         {
             const VertexElementDescriptor* elemin = &elements[i];
             D3D11_INPUT_ELEMENT_DESC& elem = m_elements[i];
-            elem.SemanticName = SEMANTIC_NAME_TABLE[int(elemin->semantic)];
+            int semantic = int(elemin->semantic & boo::VertexSemantic::SemanticMask);
+            elem.SemanticName = SEMANTIC_NAME_TABLE[semantic];
             elem.SemanticIndex = elemin->semanticIdx;
-            elem.Format = SEMANTIC_TYPE_TABLE[int(elemin->semantic)];
-            elem.AlignedByteOffset = offset;
-            elem.InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
-            offset += SEMANTIC_SIZE_TABLE[int(elemin->semantic)];
+            elem.Format = SEMANTIC_TYPE_TABLE[semantic];
+            if ((elemin->semantic & boo::VertexSemantic::Instanced) != boo::VertexSemantic::None)
+            {
+                elem.InputSlotClass = D3D11_INPUT_PER_INSTANCE_DATA;
+                elem.InstanceDataStepRate = 1;
+                elem.InputSlot = 1;
+                elem.AlignedByteOffset = instOffset;
+                instOffset += SEMANTIC_SIZE_TABLE[semantic];
+            }
+            else
+            {
+                elem.InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
+                elem.AlignedByteOffset = offset;
+                offset += SEMANTIC_SIZE_TABLE[semantic];
+            }
         }
     }
 };
@@ -278,7 +354,9 @@ static const D3D11_BLEND BLEND_FACTOR_TABLE[] =
     D3D11_BLEND_SRC_ALPHA,
     D3D11_BLEND_INV_SRC_ALPHA,
     D3D11_BLEND_DEST_ALPHA,
-    D3D11_BLEND_INV_DEST_ALPHA
+    D3D11_BLEND_INV_DEST_ALPHA,
+    D3D11_BLEND_SRC1_COLOR,
+    D3D11_BLEND_INV_SRC1_COLOR
 };
 
 class D3D11ShaderPipeline : public IShaderPipeline
@@ -338,6 +416,7 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
 {
     D3D11ShaderPipeline* m_pipeline;
     IGraphicsBuffer* m_vbuf;
+    IGraphicsBuffer* m_instVbuf;
     IGraphicsBuffer* m_ibuf;
     size_t m_ubufCount;
     std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
@@ -345,11 +424,12 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
     std::unique_ptr<ITexture*[]> m_texs;
     D3D11ShaderDataBinding(D3D11Context* ctx,
                            IShaderPipeline* pipeline,
-                           IGraphicsBuffer* vbuf, IGraphicsBuffer* ibuf,
+                           IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbuf, IGraphicsBuffer* ibuf,
                            size_t ubufCount, IGraphicsBuffer** ubufs,
                            size_t texCount, ITexture** texs)
     : m_pipeline(static_cast<D3D11ShaderPipeline*>(pipeline)),
       m_vbuf(vbuf),
+      m_instVbuf(instVbuf),
       m_ibuf(ibuf),
       m_ubufCount(ubufCount),
       m_ubufs(new IGraphicsBuffer*[ubufCount]),
@@ -366,22 +446,43 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
     {
         m_pipeline->bind(ctx);
 
-        if (m_vbuf->dynamic())
+        ID3D11Buffer* bufs[2] = {};
+        UINT strides[2] = {};
+        UINT offsets[2] = {0,0};
+
+        if (m_vbuf)
         {
-            D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_vbuf);
-            ID3D11Buffer* buf[] = {cbuf->m_bufs[b].Get()};
-            UINT strides[] = {UINT(cbuf->m_stride)};
-            UINT offsets[] = {0};
-            ctx->IASetVertexBuffers(0, 1, buf, strides, offsets);
+            if (m_vbuf->dynamic())
+            {
+                D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_vbuf);
+                bufs[0] = cbuf->m_bufs[b].Get();
+                strides[0] = UINT(cbuf->m_stride);
+            }
+            else
+            {
+                D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_vbuf);
+                bufs[0] = cbuf->m_buf.Get();
+                strides[0] = UINT(cbuf->m_stride);
+            }
         }
-        else
+
+        if (m_instVbuf)
         {
-            D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_vbuf);
-            ID3D11Buffer* buf[] = {cbuf->m_buf.Get()};
-            UINT strides[] = {UINT(cbuf->m_stride)};
-            UINT offsets[] = {0};
-            ctx->IASetVertexBuffers(0, 1, buf, strides, offsets);
+            if (m_instVbuf->dynamic())
+            {
+                D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_instVbuf);
+                bufs[1] = cbuf->m_bufs[b].Get();
+                strides[1] = UINT(cbuf->m_stride);
+            }
+            else
+            {
+                D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_instVbuf);
+                bufs[1] = cbuf->m_buf.Get();
+                strides[1] = UINT(cbuf->m_stride);
+            }
         }
+
+        ctx->IASetVertexBuffers(0, 2, bufs, strides, offsets);
 
         if (m_ibuf)
         {
@@ -421,15 +522,32 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
             ID3D11ShaderResourceView* srvs[8];
             for (int i=0 ; i<8 && i<m_texCount ; ++i)
             {
-                if (m_texs[i]->type() == TextureType::Dynamic)
+                switch (m_texs[i]->type())
+                {
+                case TextureType::Dynamic:
                 {
                     D3D11TextureD* ctex = static_cast<D3D11TextureD*>(m_texs[i]);
                     srvs[i] = ctex->m_srvs[b].Get();
+                    break;
                 }
-                else if (m_texs[i]->type() == TextureType::Static)
+                case TextureType::Static:
                 {
                     D3D11TextureS* ctex = static_cast<D3D11TextureS*>(m_texs[i]);
                     srvs[i] = ctex->m_srv.Get();
+                    break;
+                }
+                case TextureType::StaticArray:
+                {
+                    D3D11TextureSA* ctex = static_cast<D3D11TextureSA*>(m_texs[i]);
+                    srvs[i] = ctex->m_srv.Get();
+                    break;
+                }
+                case TextureType::Render:
+                {
+                    D3D11TextureR* ctex = static_cast<D3D11TextureR*>(m_texs[i]);
+                    srvs[i] = ctex->m_srv.Get();
+                    break;
+                }
                 }
             }
             ctx->PSSetShaderResources(0, m_texCount, srvs);
@@ -577,6 +695,14 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         D3D11_VIEWPORT vp = {FLOAT(rect.location[0]), FLOAT(rect.location[1]), FLOAT(rect.size[0]), FLOAT(rect.size[1]), 0.0, 1.0};
         m_deferredCtx->RSSetViewports(1, &vp);
     }
+
+    void setScissor(const SWindowRect& rect)
+    {
+        D3D11_RECT d3drect = {rect.location[0], rect.location[1], rect.size[0], rect.size[1]};
+        m_deferredCtx->RSSetScissorRects(1, &d3drect);
+    }
+
+    int pendingDynamicSlot() {return m_fillBuf;}
 
     void flushBufferUpdates() {}
 
@@ -757,6 +883,14 @@ public:
         return retval;
     }
 
+    ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
+                                      const void* data, size_t sz)
+    {
+        D3D11TextureSA* retval = new D3D11TextureSA(m_ctx, width, height, layers, fmt, data, sz);
+        static_cast<D3D11Data*>(m_deferredData)->m_SATexs.emplace_back(retval);
+        return retval;
+    }
+
     ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
     {
         D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent->getCommandQueue());
@@ -825,12 +959,12 @@ public:
 
     IShaderDataBinding* newShaderDataBinding(IShaderPipeline* pipeline,
         IVertexFormat* vtxFormat,
-        IGraphicsBuffer* vbuf, IGraphicsBuffer* ibuf,
+        IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibuf,
         size_t ubufCount, IGraphicsBuffer** ubufs,
         size_t texCount, ITexture** texs)
     {
         D3D11ShaderDataBinding* retval =
-            new D3D11ShaderDataBinding(m_ctx, pipeline, vbuf, ibuf, ubufCount, ubufs, texCount, texs);
+            new D3D11ShaderDataBinding(m_ctx, pipeline, vbuf, instVbo, ibuf, ubufCount, ubufs, texCount, texs);
         static_cast<D3D11Data*>(m_deferredData)->m_SBinds.emplace_back(retval);
         return retval;
     }
