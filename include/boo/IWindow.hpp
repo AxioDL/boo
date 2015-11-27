@@ -200,7 +200,7 @@ public:
     }
     virtual void setWindowFrame(float x, float y, float w, float h)=0;
     virtual void setWindowFrame(int x, int y, int w, int h)=0;
-    virtual void getWindowFrame(const SWindowRect& rect)
+    virtual void setWindowFrame(const SWindowRect& rect)
     {
         setWindowFrame(rect.location[0], rect.location[1], rect.size[0], rect.size[1]);
     }
