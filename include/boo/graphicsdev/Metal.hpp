@@ -39,6 +39,8 @@ public:
                                 const void* data, size_t sz);
     ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                                 std::unique_ptr<uint8_t[]>&& data, size_t sz);
+    ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
+                                      const void* data, size_t sz);
     ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
     ITextureR* newRenderTexture(size_t width, size_t height, size_t samples);
     
@@ -46,14 +48,14 @@ public:
     IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
     
     IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
-                                       IVertexFormat* vtxFmt, ITextureR* target,
+                                       IVertexFormat* vtxFmt, unsigned targetSamples,
                                        BlendFactor srcFac, BlendFactor dstFac,
                                        bool depthTest, bool depthWrite, bool backfaceCulling);
     
     IShaderDataBinding*
     newShaderDataBinding(IShaderPipeline* pipeline,
                          IVertexFormat* vtxFormat,
-                         IGraphicsBuffer* vbo, IGraphicsBuffer* ibo,
+                         IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
                          size_t ubufCount, IGraphicsBuffer** ubufs,
                          size_t texCount, ITexture** texs);
     
