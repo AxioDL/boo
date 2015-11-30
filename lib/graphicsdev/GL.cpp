@@ -5,6 +5,7 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <array>
 
 #include <LogVisor/LogVisor.hpp>
 
@@ -79,9 +80,9 @@ public:
     void* map(size_t sz);
     void unmap();
 
-    void bindVertex() const;
-    void bindIndex() const;
-    void bindUniform(size_t idx) const;
+    void bindVertex(int b) const;
+    void bindIndex(int b) const;
+    void bindUniform(size_t idx, int b) const;
 };
 
 IGraphicsBufferS*
@@ -445,13 +446,13 @@ IShaderPipeline* GLDataFactory::newShaderPipeline
 struct GLVertexFormat : IVertexFormat
 {
     GLCommandQueue* m_q;
-    GLuint m_vao = 0;
+    GLuint m_vao[3] = {};
     size_t m_elementCount;
     std::unique_ptr<VertexElementDescriptor[]> m_elements;
     GLVertexFormat(GLCommandQueue* q, size_t elementCount,
-                      const VertexElementDescriptor* elements);
+                   const VertexElementDescriptor* elements);
     ~GLVertexFormat();
-    void bind() const {glBindVertexArray(m_vao);}
+    void bind(int idx) const {glBindVertexArray(m_vao[idx]);}
 };
 
 struct GLShaderDataBinding : IShaderDataBinding
@@ -478,15 +479,15 @@ struct GLShaderDataBinding : IShaderDataBinding
         for (size_t i=0 ; i<texCount ; ++i)
             m_texs[i] = texs[i];
     }
-    void bind() const
+    void bind(int b) const
     {
         GLuint prog = m_pipeline->bind();
-        m_vtxFormat->bind();
+        m_vtxFormat->bind(b);
         for (size_t i=0 ; i<m_ubufCount ; ++i)
         {
             IGraphicsBuffer* ubuf = m_ubufs[i];
             if (ubuf->dynamic())
-                static_cast<GLGraphicsBufferD*>(ubuf)->bindUniform(i);
+                static_cast<GLGraphicsBufferD*>(ubuf)->bindUniform(i, b);
             else
                 static_cast<GLGraphicsBufferS*>(ubuf)->bindUniform(i);
             glUniformBlockBinding(prog, m_pipeline->m_uniLocs.at(i), i);
@@ -668,13 +669,13 @@ struct GLCommandQueue : IGraphicsCommandQueue
     /* These members are locked for multithreaded access */
     std::vector<RenderTextureResize> m_pendingResizes;
     std::vector<GLVertexFormat*> m_pendingFmtAdds;
-    std::vector<GLuint> m_pendingFmtDels;
+    std::vector<std::array<GLuint, 3>> m_pendingFmtDels;
     std::vector<GLTextureR*> m_pendingFboAdds;
     std::vector<GLuint> m_pendingFboDels;
 
     static void ConfigureVertexFormat(GLVertexFormat* fmt)
     {
-        glGenVertexArrays(1, &fmt->m_vao);
+        glGenVertexArrays(3, fmt->m_vao);
 
         size_t stride = 0;
         size_t instStride = 0;
@@ -687,44 +688,47 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 stride += SEMANTIC_SIZE_TABLE[int(desc->semantic & VertexSemantic::SemanticMask)];
         }
 
-        size_t offset = 0;
-        size_t instOffset = 0;
-        glBindVertexArray(fmt->m_vao);
-        const IGraphicsBuffer* lastVBO = nullptr;
-        const IGraphicsBuffer* lastEBO = nullptr;
-        for (size_t i=0 ; i<fmt->m_elementCount ; ++i)
+        for (int b=0 ; b<3 ; ++b)
         {
-            const VertexElementDescriptor* desc = &fmt->m_elements[i];
-            if (desc->vertBuffer != lastVBO)
+            size_t offset = 0;
+            size_t instOffset = 0;
+            glBindVertexArray(fmt->m_vao[b]);
+            const IGraphicsBuffer* lastVBO = nullptr;
+            const IGraphicsBuffer* lastEBO = nullptr;
+            for (size_t i=0 ; i<fmt->m_elementCount ; ++i)
             {
-                lastVBO = desc->vertBuffer;
-                if (lastVBO->dynamic())
-                    static_cast<const GLGraphicsBufferD*>(lastVBO)->bindVertex();
+                const VertexElementDescriptor* desc = &fmt->m_elements[i];
+                if (desc->vertBuffer != lastVBO)
+                {
+                    lastVBO = desc->vertBuffer;
+                    if (lastVBO->dynamic())
+                        static_cast<const GLGraphicsBufferD*>(lastVBO)->bindVertex(b);
+                    else
+                        static_cast<const GLGraphicsBufferS*>(lastVBO)->bindVertex();
+                }
+                if (desc->indexBuffer != lastEBO)
+                {
+                    lastEBO = desc->indexBuffer;
+                    if (lastEBO->dynamic())
+                        static_cast<const GLGraphicsBufferD*>(lastEBO)->bindIndex(b);
+                    else
+                        static_cast<const GLGraphicsBufferS*>(lastEBO)->bindIndex();
+                }
+                glEnableVertexAttribArray(i);
+                int maskedSem = int(desc->semantic & VertexSemantic::SemanticMask);
+                if ((desc->semantic & VertexSemantic::Instanced) != VertexSemantic::None)
+                {
+                    glVertexAttribPointer(i, SEMANTIC_COUNT_TABLE[maskedSem],
+                            SEMANTIC_TYPE_TABLE[maskedSem], GL_TRUE, instStride, (void*)instOffset);
+                    glVertexAttribDivisor(i, 1);
+                    instOffset += SEMANTIC_SIZE_TABLE[maskedSem];
+                }
                 else
-                    static_cast<const GLGraphicsBufferS*>(lastVBO)->bindVertex();
-            }
-            if (desc->indexBuffer != lastEBO)
-            {
-                lastEBO = desc->indexBuffer;
-                if (lastEBO->dynamic())
-                    static_cast<const GLGraphicsBufferD*>(lastEBO)->bindIndex();
-                else
-                    static_cast<const GLGraphicsBufferS*>(lastEBO)->bindIndex();
-            }
-            glEnableVertexAttribArray(i);
-            int maskedSem = int(desc->semantic & VertexSemantic::SemanticMask);
-            if ((desc->semantic & VertexSemantic::Instanced) != VertexSemantic::None)
-            {
-                glVertexAttribPointer(i, SEMANTIC_COUNT_TABLE[maskedSem],
-                        SEMANTIC_TYPE_TABLE[maskedSem], GL_TRUE, instStride, (void*)instOffset);
-                glVertexAttribDivisor(i, 1);
-                instOffset += SEMANTIC_SIZE_TABLE[maskedSem];
-            }
-            else
-            {
-                glVertexAttribPointer(i, SEMANTIC_COUNT_TABLE[maskedSem],
-                        SEMANTIC_TYPE_TABLE[maskedSem], GL_TRUE, stride, (void*)offset);
-                offset += SEMANTIC_SIZE_TABLE[maskedSem];
+                {
+                    glVertexAttribPointer(i, SEMANTIC_COUNT_TABLE[maskedSem],
+                            SEMANTIC_TYPE_TABLE[maskedSem], GL_TRUE, stride, (void*)offset);
+                    offset += SEMANTIC_SIZE_TABLE[maskedSem];
+                }
             }
         }
     }
@@ -772,8 +776,8 @@ struct GLCommandQueue : IGraphicsCommandQueue
 
                 if (self->m_pendingFmtDels.size())
                 {
-                    for (GLuint fmt : self->m_pendingFmtDels)
-                        glDeleteVertexArrays(1, &fmt);
+                    for (const auto& fmt : self->m_pendingFmtDels)
+                        glDeleteVertexArrays(3, fmt.data());
                     self->m_pendingFmtDels.clear();
                 }
 
@@ -798,7 +802,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 switch (cmd.m_op)
                 {
                 case Command::Op::SetShaderDataBinding:
-                    static_cast<const GLShaderDataBinding*>(cmd.binding)->bind();
+                    static_cast<const GLShaderDataBinding*>(cmd.binding)->bind(self->m_drawBuf);
                     break;
                 case Command::Op::SetRenderTarget:
                 {
@@ -1006,7 +1010,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
     void delVertexFormat(GLVertexFormat* fmt)
     {
         std::unique_lock<std::mutex> lk(m_mt);
-        m_pendingFmtDels.push_back(fmt->m_vao);
+        m_pendingFmtDels.push_back({fmt->m_vao[0], fmt->m_vao[1], fmt->m_vao[2]});
     }
 
     void addFBO(GLTextureR* tex)
@@ -1058,12 +1062,12 @@ void GLGraphicsBufferD::unmap()
     free(m_mappedBuf);
     m_mappedBuf = nullptr;
 }
-void GLGraphicsBufferD::bindVertex() const
-{glBindBuffer(GL_ARRAY_BUFFER, m_bufs[m_q->m_drawBuf]);}
-void GLGraphicsBufferD::bindIndex() const
-{glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_bufs[m_q->m_drawBuf]);}
-void GLGraphicsBufferD::bindUniform(size_t idx) const
-{glBindBufferBase(GL_UNIFORM_BUFFER, idx, m_bufs[m_q->m_drawBuf]);}
+void GLGraphicsBufferD::bindVertex(int b) const
+{glBindBuffer(GL_ARRAY_BUFFER, m_bufs[b]);}
+void GLGraphicsBufferD::bindIndex(int b) const
+{glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_bufs[b]);}
+void GLGraphicsBufferD::bindUniform(size_t idx, int b) const
+{glBindBufferBase(GL_UNIFORM_BUFFER, idx, m_bufs[b]);}
 
 IGraphicsBufferD*
 GLDataFactory::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
