@@ -175,6 +175,14 @@ enum class EWindowStyle
 };
 ENABLE_BITWISE_ENUM(EWindowStyle)
 
+enum class EMouseCursor
+{
+    None            = 0,
+    Pointer         = 1,
+    HorizontalArrow = 2,
+    VerticalArrow   = 3
+};
+
 class IWindow
 {
 public:
@@ -188,6 +196,9 @@ public:
     
     virtual SystemString getTitle()=0;
     virtual void setTitle(const SystemString& title)=0;
+
+    virtual void setCursor(EMouseCursor cursor)=0;
+    virtual void setWaitCursor(bool wait)=0;
 
     virtual void setWindowFrameDefault()=0;
     virtual void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const=0;

@@ -128,6 +128,14 @@ struct WindowWayland : IWindow
     {
         
     }
+
+    void setCursor(EMouseCursor cursor)
+    {
+    }
+
+    void setWaitCursor(bool wait)
+    {
+    }
     
     void setWindowFrameDefault()
     {

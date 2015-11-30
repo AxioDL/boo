@@ -23,6 +23,8 @@
 #include <X11/Xatom.h>
 #include <LogVisor/LogVisor.hpp>
 
+#include "XlibCommon.hpp"
+
 #define REF_DPMM 3.7824 /* 96 DPI */
 #define FS_ATOM "_NET_WM_STATE_FULLSCREEN"
 
@@ -468,6 +470,24 @@ class WindowXlib : public IWindow
     /* Cached window style */
     EWindowStyle m_styleFlags;
 
+    /* Current cursor enum */
+    EMouseCursor m_cursor = EMouseCursor::None;
+    bool m_cursorWait = false;
+    static Cursor GetXCursor(EMouseCursor cur)
+    {
+        switch (cur)
+        {
+        case EMouseCursor::Pointer:
+            return X_CURSORS.m_pointer;
+        case EMouseCursor::HorizontalArrow:
+            return X_CURSORS.m_hArrow;
+        case EMouseCursor::VerticalArrow:
+            return X_CURSORS.m_vArrow;
+        default: break;
+        }
+        return X_CURSORS.m_pointer;
+    }
+
 public:
     
     WindowXlib(const std::string& title,
@@ -540,9 +560,9 @@ public:
 
         /* Initialize context */
         XMapWindow(m_xDisp, m_windowId);
-        XFlush(m_xDisp);
-
         setStyle(EWindowStyle::Default);
+        setCursor(EMouseCursor::Pointer);
+        XFlush(m_xDisp);
 
         m_gfxCtx.initializeContext();
     }
@@ -603,6 +623,32 @@ public:
         XChangeProperty(m_xDisp, m_windowId, XA_WM_NAME, XA_STRING, 8,
                         PropModeReplace, c_title, title.length());
         XUnlockDisplay(m_xDisp);
+    }
+
+    void setCursor(EMouseCursor cursor)
+    {
+        if (cursor == m_cursor && !m_cursorWait)
+            return;
+        m_cursor = cursor;
+        XLockDisplay(m_xDisp);
+        XDefineCursor(m_xDisp, m_windowId, GetXCursor(cursor));
+        XUnlockDisplay(m_xDisp);
+    }
+
+    void setWaitCursor(bool wait)
+    {
+        if (wait && !m_cursorWait)
+        {
+            XLockDisplay(m_xDisp);
+            XDefineCursor(m_xDisp, m_windowId, X_CURSORS.m_wait);
+            XUnlockDisplay(m_xDisp);
+            m_cursorWait = true;
+        }
+        else if (!wait && m_cursorWait)
+        {
+            setCursor(m_cursor);
+            m_cursorWait = false;
+        }
     }
     
     void setWindowFrameDefault()
@@ -930,9 +976,9 @@ public:
                     EModifierKey modifierMask = translateModifiers(event->xbutton.state);
                     SWindowCoord coord =
                     {
-                        {(unsigned)event->xbutton.x, (unsigned)event->xbutton.y},
-                        {(unsigned)(event->xbutton.x / m_pixelFactor), (unsigned)(event->xbutton.y / m_pixelFactor)},
-                        {float(event->xbutton.x) / float(m_ww), float(event->xbutton.y) / float(m_wh)}
+                        {(unsigned)event->xbutton.x, (unsigned)(m_wh-event->xbutton.y)},
+                        {(unsigned)(event->xbutton.x / m_pixelFactor), (unsigned)((m_wh-event->xbutton.y) / m_pixelFactor)},
+                        {float(event->xbutton.x) / float(m_ww), float(m_wh-event->xbutton.y) / float(m_wh)}
                     };
                     m_callback->mouseDown(coord, (EMouseButton)button,
                                           (EModifierKey)modifierMask);
@@ -944,9 +990,9 @@ public:
                 {
                     SWindowCoord coord =
                     {
-                        {(unsigned)event->xbutton.x, (unsigned)event->xbutton.y},
-                        {(unsigned)(event->xbutton.x / m_pixelFactor), (unsigned)(event->xbutton.y / m_pixelFactor)},
-                        {(float)event->xbutton.x / (float)m_ww, (float)event->xbutton.y / (float)m_wh}
+                        {(unsigned)event->xbutton.x, (unsigned)(m_wh-event->xbutton.y)},
+                        {(unsigned)(event->xbutton.x / m_pixelFactor), (unsigned)((m_wh-event->xbutton.y) / m_pixelFactor)},
+                        {(float)event->xbutton.x / (float)m_ww, (float)(m_wh-event->xbutton.y) / (float)m_wh}
                     };
                     SScrollDelta scrollDelta =
                     {
@@ -977,9 +1023,9 @@ public:
                     EModifierKey modifierMask = translateModifiers(event->xbutton.state);
                     SWindowCoord coord =
                     {
-                        {(unsigned)event->xbutton.x, (unsigned)event->xbutton.y},
-                        {(unsigned)(event->xbutton.x / m_pixelFactor), (unsigned)(event->xbutton.y / m_pixelFactor)},
-                        {event->xbutton.x / (float)m_ww, event->xbutton.y / (float)m_wh}
+                        {(unsigned)event->xbutton.x, (unsigned)(m_wh-event->xbutton.y)},
+                        {(unsigned)(event->xbutton.x / m_pixelFactor), (unsigned)((m_wh-event->xbutton.y) / m_pixelFactor)},
+                        {event->xbutton.x / (float)m_ww, (m_wh-event->xbutton.y) / (float)m_wh}
                     };
                     m_callback->mouseUp(coord, (EMouseButton)button,
                                         (EModifierKey)modifierMask);
@@ -1006,9 +1052,9 @@ public:
                 getWindowFrame(m_wx, m_wy, m_ww, m_wh);
                 SWindowCoord coord =
                 {
-                    {(unsigned)event->xmotion.x, (unsigned)event->xmotion.y},
-                    {(unsigned)(event->xmotion.x / m_pixelFactor), (unsigned)(event->xmotion.y / m_pixelFactor)},
-                    {event->xmotion.x / (float)m_ww, event->xmotion.y / (float)m_wh}
+                    {(unsigned)event->xmotion.x, (unsigned)(m_wh-event->xmotion.y)},
+                    {(unsigned)(event->xmotion.x / m_pixelFactor), (unsigned)((m_wh-event->xmotion.y) / m_pixelFactor)},
+                    {event->xmotion.x / (float)m_ww, (m_wh-event->xmotion.y) / (float)m_wh}
                 };
                 m_callback->mouseMove(coord);
             }
@@ -1021,9 +1067,9 @@ public:
                 getWindowFrame(m_wx, m_wy, m_ww, m_wh);
                 SWindowCoord coord =
                 {
-                    {(unsigned)event->xcrossing.x, (unsigned)event->xcrossing.y},
-                    {(unsigned)(event->xcrossing.x / m_pixelFactor), (unsigned)(event->xmotion.y / m_pixelFactor)},
-                    {event->xcrossing.x / (float)m_ww, event->xcrossing.y / (float)m_wh}
+                    {(unsigned)event->xcrossing.x, (unsigned)(m_wh-event->xcrossing.y)},
+                    {(unsigned)(event->xcrossing.x / m_pixelFactor), (unsigned)((m_wh-event->xmotion.y) / m_pixelFactor)},
+                    {event->xcrossing.x / (float)m_ww, (m_wh-event->xcrossing.y) / (float)m_wh}
                 };
                 m_callback->mouseEnter(coord);
             }
@@ -1036,9 +1082,9 @@ public:
                 getWindowFrame(m_wx, m_wy, m_ww, m_wh);
                 SWindowCoord coord =
                 {
-                    {(unsigned)event->xcrossing.x, (unsigned)event->xcrossing.y},
-                    {(unsigned)(event->xcrossing.x / m_pixelFactor), (unsigned)(event->xmotion.y / m_pixelFactor)},
-                    {event->xcrossing.x / (float)m_ww, event->xcrossing.y / (float)m_wh}
+                    {(unsigned)event->xcrossing.x, (unsigned)m_wh-event->xcrossing.y},
+                    {(unsigned)(event->xcrossing.x / m_pixelFactor), (unsigned)((m_wh-event->xmotion.y) / m_pixelFactor)},
+                    {event->xcrossing.x / (float)m_ww, (m_wh-event->xcrossing.y) / (float)m_wh}
                 };
                 m_callback->mouseLeave(coord);
             }

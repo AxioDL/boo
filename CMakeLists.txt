@@ -62,6 +62,7 @@ elseif(APPLE)
                             ${QUARTZCORE_LIBRARY} ${COREVIDEO_LIBRARY})
 else(NOT GEKKO)
   list(APPEND PLAT_SRCS 
+       lib/x11/XlibCommon.hpp
        lib/x11/ApplicationUnix.cpp
        lib/x11/ApplicationXlib.hpp
        lib/x11/ApplicationWayland.hpp

@@ -20,9 +20,13 @@ DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
 #include <mutex>
 #include <condition_variable>
 
+#include "XlibCommon.hpp"
+#include <X11/cursorfont.h>
+
 namespace boo
 {
 static LogVisor::LogModule Log("boo::ApplicationXCB");
+XlibCursors X_CURSORS;
 
 int XCB_GLX_EVENT_BASE = 0;
 int XINPUT_OPCODE = 0;
@@ -198,7 +202,10 @@ public:
         }
 
         m_xDefaultScreen = DefaultScreen(m_xDisp);
-
+        X_CURSORS.m_pointer = XCreateFontCursor(m_xDisp, XC_left_ptr);
+        X_CURSORS.m_hArrow = XCreateFontCursor(m_xDisp, XC_sb_h_double_arrow);
+        X_CURSORS.m_vArrow = XCreateFontCursor(m_xDisp, XC_sb_v_double_arrow);
+        X_CURSORS.m_wait = XCreateFontCursor(m_xDisp, XC_watch);
 
         /* The xkb extension requests that the X server does not
          * send repeated keydown events when a key is held */
