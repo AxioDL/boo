@@ -955,6 +955,7 @@ class WindowCocoa : public IWindow
     
     WindowCocoaInternal* m_nsWindow;
     IGraphicsContext* m_gfxCtx;
+    EMouseCursor m_cursor = EMouseCursor::None;
 
 public:
 
@@ -1019,6 +1020,31 @@ public:
             [m_nsWindow setTitle:[[NSString stringWithUTF8String:title.c_str()] autorelease]];
         });
     }
+    
+    void setCursor(EMouseCursor cursor)
+    {
+        if (cursor == m_cursor)
+            return;
+        m_cursor = cursor;
+        dispatch_async(dispatch_get_main_queue(),
+        ^{
+            switch (cursor)
+            {
+            case EMouseCursor::Pointer:
+                [[NSCursor arrowCursor] set];
+                break;
+            case EMouseCursor::HorizontalArrow:
+                [[NSCursor resizeLeftRightCursor] set];
+                break;
+            case EMouseCursor::VerticalArrow:
+                [[NSCursor resizeUpDownCursor] set];
+                break;
+            default: break;
+            }
+        });
+    }
+    
+    void setWaitCursor(bool wait) {}
     
     void setWindowFrameDefault()
     {
