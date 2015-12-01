@@ -22,6 +22,14 @@ struct SWindowRect
 {
     int location[2];
     int size[2];
+    bool operator !=(const SWindowRect& other) const
+    {
+        return location[0] != other.location[0] ||
+               location[1] != other.location[1] ||
+               size[0] != other.size[0] ||
+               size[1] != other.size[1];
+    }
+    bool operator ==(const SWindowRect& other) const {return !(*this != other);}
 };
 
 struct SWindowCoord

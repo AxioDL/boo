@@ -57,6 +57,7 @@ static bool FindBestD3DCompile()
 namespace boo
 {
 static LogVisor::LogModule Log("boo::ApplicationWin32");
+Win32Cursors WIN32_CURSORS;
     
 IWindow* _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx);
 
@@ -92,6 +93,11 @@ public:
       m_args(args),
       m_singleInstance(singleInstance)
     {
+        WIN32_CURSORS.m_arrow = LoadCursor(nullptr, IDC_ARROW);
+        WIN32_CURSORS.m_hResize = LoadCursor(nullptr, IDC_SIZEWE);
+        WIN32_CURSORS.m_vResize = LoadCursor(nullptr, IDC_SIZENS);
+        WIN32_CURSORS.m_wait = LoadCursor(nullptr, IDC_WAIT);
+
         HMODULE dxgilib = LoadLibraryW(L"dxgi.dll");
         if (!dxgilib)
             Log.report(LogVisor::FatalError, "unable to load dxgi.dll");
@@ -298,6 +304,10 @@ public:
             case WM_USER+1:
                 /* Quit message from client thread */
                 PostQuitMessage(0);
+                continue;
+            case WM_USER+2:
+                /* SetCursor call from client thread */
+                SetCursor(HCURSOR(msg.wParam));
                 continue;
             default:
                 TranslateMessage(&msg);

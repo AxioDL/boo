@@ -563,6 +563,8 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
     D3D11Context::Window* m_windowCtx;
     IGraphicsContext* m_parent;
     ComPtr<ID3D11DeviceContext1> m_deferredCtx;
+    ComPtr<ID3D11DeviceContext1> m_dynamicCtx;
+    ComPtr<ID3D11CommandList> m_dynamicList;
 
     size_t m_fillBuf = 0;
     size_t m_completeBuf = 0;
@@ -594,6 +596,10 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
                     break;
                 self->m_drawBuf = self->m_completeBuf;
 
+                ID3D11CommandList* list = self->m_dynamicList.Get();
+                self->m_ctx->m_devCtx->ExecuteCommandList(list, false);
+                self->m_dynamicList.Reset();
+
                 if (self->m_texResizes.size())
                 {
                     for (const auto& resize : self->m_texResizes)
@@ -620,7 +626,8 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
 
                 if (self->m_windowCtx->m_needsResize)
                 {
-                    self->m_windowCtx->m_swapChain->ResizeBuffers(2, self->m_windowCtx->width, self->m_windowCtx->height, 
+                    self->m_windowCtx->m_swapChain->ResizeBuffers(2,
+                        self->m_windowCtx->width, self->m_windowCtx->height,
                         DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
                     self->m_windowCtx->m_needsResize = false;
                     self->m_cmdLists[self->m_drawBuf].Reset();
@@ -663,6 +670,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         m_initcv.wait(m_initlk);
         m_initlk.unlock();
         ThrowIfFailed(ctx->m_dev->CreateDeferredContext1(0, &m_deferredCtx));
+        ThrowIfFailed(ctx->m_dev->CreateDeferredContext1(0, &m_dynamicCtx));
     }
 
     ~D3D11CommandQueue()
@@ -703,8 +711,6 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
     }
 
     int pendingDynamicSlot() {return m_fillBuf;}
-
-    void flushBufferUpdates() {}
 
     std::unordered_map<D3D11TextureR*, std::pair<size_t, size_t>> m_texResizes;
     void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)
@@ -773,6 +779,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         m_workDoPresent[m_fillBuf] = m_doPresent;
         m_doPresent = nullptr;
         std::unique_lock<std::mutex> lk(m_mt);
+        ThrowIfFailed(m_dynamicCtx->FinishCommandList(false, &m_dynamicList));
         m_completeBuf = m_fillBuf;
         for (size_t i=0 ; i<3 ; ++i)
         {
@@ -790,42 +797,42 @@ void D3D11GraphicsBufferD::load(const void* data, size_t sz)
 {
     ID3D11Buffer* res = m_bufs[m_q->m_fillBuf].Get();
     D3D11_MAPPED_SUBRESOURCE d;
-    m_q->m_deferredCtx->Map(res, 0, D3D11_MAP_WRITE_DISCARD, 0, &d);
+    m_q->m_dynamicCtx->Map(res, 0, D3D11_MAP_WRITE_DISCARD, 0, &d);
     memcpy(d.pData, data, sz);
-    m_q->m_deferredCtx->Unmap(res, 0);
+    m_q->m_dynamicCtx->Unmap(res, 0);
 }
 void* D3D11GraphicsBufferD::map(size_t sz)
 {
     ID3D11Buffer* res = m_bufs[m_q->m_fillBuf].Get();
     D3D11_MAPPED_SUBRESOURCE d;
-    m_q->m_deferredCtx->Map(res, 0, D3D11_MAP_WRITE_DISCARD, 0, &d);
+    m_q->m_dynamicCtx->Map(res, 0, D3D11_MAP_WRITE_DISCARD, 0, &d);
     return d.pData;
 }
 void D3D11GraphicsBufferD::unmap()
 {
     ID3D11Buffer* res = m_bufs[m_q->m_fillBuf].Get();
-    m_q->m_deferredCtx->Unmap(res, 0);
+    m_q->m_dynamicCtx->Unmap(res, 0);
 }
 
 void D3D11TextureD::load(const void* data, size_t sz)
 {
     ID3D11Texture2D* res = m_texs[m_q->m_fillBuf].Get();
     D3D11_MAPPED_SUBRESOURCE d;
-    m_q->m_deferredCtx->Map(res, 0, D3D11_MAP_WRITE_DISCARD, 0, &d);
+    m_q->m_dynamicCtx->Map(res, 0, D3D11_MAP_WRITE_DISCARD, 0, &d);
     memcpy(d.pData, data, sz);
-    m_q->m_deferredCtx->Unmap(res, 0);
+    m_q->m_dynamicCtx->Unmap(res, 0);
 }
 void* D3D11TextureD::map(size_t sz)
 {
     ID3D11Texture2D* res = m_texs[m_q->m_fillBuf].Get();
     D3D11_MAPPED_SUBRESOURCE d;
-    m_q->m_deferredCtx->Map(res, 0, D3D11_MAP_WRITE_DISCARD, 0, &d);
+    m_q->m_dynamicCtx->Map(res, 0, D3D11_MAP_WRITE_DISCARD, 0, &d);
     return d.pData;
 }
 void D3D11TextureD::unmap()
 {
     ID3D11Texture2D* res = m_texs[m_q->m_fillBuf].Get();
-    m_q->m_deferredCtx->Unmap(res, 0);
+    m_q->m_dynamicCtx->Unmap(res, 0);
 }
 
 class D3D11DataFactory : public ID3DDataFactory

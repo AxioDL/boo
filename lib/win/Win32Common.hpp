@@ -255,4 +255,16 @@ struct HWNDEvent
     : uMsg(m), wParam(w), lParam(l) {}
 };
 
+struct Win32Cursors
+{
+    HCURSOR m_arrow;
+    HCURSOR m_hResize;
+    HCURSOR m_vResize;
+    HCURSOR m_wait;
+};
+namespace boo
+{
+extern Win32Cursors WIN32_CURSORS;
+}
+
 #endif // BOO_WIN32COMMON_HPP

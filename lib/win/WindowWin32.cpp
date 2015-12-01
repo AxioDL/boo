@@ -442,6 +442,22 @@ class WindowWin32 : public IWindow
     HWND m_hwnd;
     std::unique_ptr<GraphicsContextWin32> m_gfxCtx;
     IWindowCallback* m_callback = nullptr;
+    EMouseCursor m_cursor = EMouseCursor::None;
+    bool m_cursorWait = false;
+    static HCURSOR GetWin32Cursor(EMouseCursor cur)
+    {
+        switch (cur)
+        {
+        case EMouseCursor::Pointer:
+            return WIN32_CURSORS.m_arrow;
+        case EMouseCursor::HorizontalArrow:
+            return WIN32_CURSORS.m_hResize;
+        case EMouseCursor::VerticalArrow:
+            return WIN32_CURSORS.m_vResize;
+        default: break;
+        }
+        return WIN32_CURSORS.m_arrow;
+    }
 
 public:
 
@@ -493,6 +509,33 @@ public:
     void setTitle(const SystemString& title)
     {
         SetWindowTextW(m_hwnd, title.c_str());
+    }
+
+    static void _setCursor(HCURSOR cur)
+    {
+        PostThreadMessageW(g_mainThreadId, WM_USER+2, WPARAM(cur), 0);
+    }
+
+    void setCursor(EMouseCursor cursor)
+    {
+        if (cursor == m_cursor && !m_cursorWait)
+            return;
+        m_cursor = cursor;
+        _setCursor(GetWin32Cursor(cursor));
+    }
+
+    void setWaitCursor(bool wait)
+    {
+        if (wait && !m_cursorWait)
+        {
+            _setCursor(WIN32_CURSORS.m_wait);
+            m_cursorWait = true;
+        }
+        else if (!wait && m_cursorWait)
+        {
+            setCursor(m_cursor);
+            m_cursorWait = false;
+        }
     }
 
     void setWindowFrameDefault()
@@ -576,9 +619,9 @@ public:
             EModifierKey modifierMask = translateModifiers(e.uMsg);
             SWindowCoord coord =
             {
-                {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam)},
-                {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam)},
-                {float(GET_X_LPARAM(e.lParam)) / float(w), float(GET_Y_LPARAM(e.lParam)) / float(h)}
+                {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)(h-GET_Y_LPARAM(e.lParam))},
+                {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)(h-GET_Y_LPARAM(e.lParam))},
+                {float(GET_X_LPARAM(e.lParam)) / float(w), float(h-GET_Y_LPARAM(e.lParam)) / float(h)}
             };
             m_callback->mouseDown(coord, button, modifierMask);
         }
@@ -593,9 +636,9 @@ public:
             EModifierKey modifierMask = translateModifiers(e.uMsg);
             SWindowCoord coord =
             {
-                {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam)},
-                {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam)},
-                {float(GET_X_LPARAM(e.lParam)) / float(w), float(GET_Y_LPARAM(e.lParam)) / float(h)}
+                {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)(h-GET_Y_LPARAM(e.lParam))},
+                {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)(h-GET_Y_LPARAM(e.lParam))},
+                {float(GET_X_LPARAM(e.lParam)) / float(w), float(h-GET_Y_LPARAM(e.lParam)) / float(h)}
             };
             m_callback->mouseUp(coord, button, modifierMask);
         }
@@ -732,9 +775,9 @@ public:
                 getWindowFrame(x, y, w, h);
                 SWindowCoord coord =
                 {
-                    {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam)},
-                    {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam)},
-                    {float(GET_X_LPARAM(e.lParam)) / float(w), float(GET_Y_LPARAM(e.lParam)) / float(h)}
+                    {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)(h-GET_Y_LPARAM(e.lParam))},
+                    {(unsigned)GET_X_LPARAM(e.lParam), (unsigned)(h-GET_Y_LPARAM(e.lParam))},
+                    {float(GET_X_LPARAM(e.lParam)) / float(w), float(h-GET_Y_LPARAM(e.lParam)) / float(h)}
                 };
                 if (!mouseTracking)
                 {
@@ -757,9 +800,9 @@ public:
                 getWindowFrame(x, y, w, h);
                 SWindowCoord coord =
                 {
-                    { (unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam) },
-                    { (unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam) },
-                    { float(GET_X_LPARAM(e.lParam)) / float(w), float(GET_Y_LPARAM(e.lParam)) / float(h) }
+                    { (unsigned)GET_X_LPARAM(e.lParam), (unsigned)(h-GET_Y_LPARAM(e.lParam)) },
+                    { (unsigned)GET_X_LPARAM(e.lParam), (unsigned)(h-GET_Y_LPARAM(e.lParam)) },
+                    { float(GET_X_LPARAM(e.lParam)) / float(w), float(h-GET_Y_LPARAM(e.lParam)) / float(h) }
                 };
                 m_callback->mouseLeave(coord);
                 mouseTracking = false;
@@ -775,9 +818,9 @@ public:
                 getWindowFrame(x, y, w, h);
                 SWindowCoord coord =
                 {
-                    { (unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam) },
-                    { (unsigned)GET_X_LPARAM(e.lParam), (unsigned)GET_Y_LPARAM(e.lParam) },
-                    { float(GET_X_LPARAM(e.lParam)) / float(w), float(GET_Y_LPARAM(e.lParam)) / float(h) }
+                    { (unsigned)GET_X_LPARAM(e.lParam), (unsigned)(h-GET_Y_LPARAM(e.lParam)) },
+                    { (unsigned)GET_X_LPARAM(e.lParam), (unsigned)(h-GET_Y_LPARAM(e.lParam)) },
+                    { float(GET_X_LPARAM(e.lParam)) / float(w), float(h-GET_Y_LPARAM(e.lParam)) / float(h) }
                 };
                 m_callback->mouseEnter(coord);
             }

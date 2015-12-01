@@ -32,7 +32,6 @@ struct IGraphicsCommandQueue
     virtual int pendingDynamicSlot()=0;
 
     virtual void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)=0;
-    virtual void flushBufferUpdates()=0;
 
     virtual void setClearColor(const float rgba[4])=0;
     virtual void clearTarget(bool render=true, bool depth=true)=0;

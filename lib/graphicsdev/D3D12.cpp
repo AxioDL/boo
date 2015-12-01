@@ -109,6 +109,7 @@ class D3D12GraphicsBufferD : public IGraphicsBufferD
     D3D12_RESOURCE_STATES m_state;
     size_t m_mappedSz;
     void* m_mappedBuf = nullptr;
+    unsigned m_loaded[2] = {};
     D3D12GraphicsBufferD(D3D12CommandQueue* q, BufferUse use, D3D12Context* ctx, size_t stride, size_t count)
     : m_state(USE_TABLE[int(use)]), m_q(q), m_stride(stride), m_count(count)
     {
@@ -527,6 +528,7 @@ class D3D12ShaderPipeline : public IShaderPipeline
         if (!backfaceCulling)
             desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
         desc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+        desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
         if (!depthTest)
             desc.DepthStencilState.DepthEnable = false;
         if (!depthWrite)
@@ -840,10 +842,6 @@ static ID3D12GraphicsCommandList* WaitForLoadList(D3D12Context* ctx)
     {
         ThrowIfFailed(ctx->m_loadfence->SetEventOnCompletion(ctx->m_loadfenceval, ctx->m_loadfencehandle));
         WaitForSingleObject(ctx->m_loadfencehandle, INFINITE);
-
-        /* Reset allocator and list */
-        ThrowIfFailed(ctx->m_loadqalloc->Reset());
-        ThrowIfFailed(ctx->m_loadlist->Reset(ctx->m_loadqalloc.Get(), nullptr));
     }
     return ctx->m_loadlist.Get();
 }
@@ -858,6 +856,14 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
     ComPtr<ID3D12GraphicsCommandList> m_cmdList;
     ComPtr<ID3D12Fence> m_fence;
 
+    ComPtr<ID3D12CommandAllocator> m_dynamicCmdAlloc[2];
+    ComPtr<ID3D12CommandQueue> m_dynamicCmdQueue;
+    ComPtr<ID3D12GraphicsCommandList> m_dynamicCmdList;
+    UINT64 m_dynamicBufFenceVal = 0;
+    ComPtr<ID3D12Fence> m_dynamicBufFence;
+    HANDLE m_dynamicBufFenceHandle;
+    bool m_dynamicNeedsReset = false;
+
     size_t m_fillBuf = 0;
     size_t m_drawBuf = 0;
 
@@ -866,6 +872,27 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         ThrowIfFailed(m_ctx->m_qalloc[m_fillBuf]->Reset());
         ThrowIfFailed(m_cmdList->Reset(m_ctx->m_qalloc[m_fillBuf].Get(), nullptr));
         m_cmdList->SetGraphicsRootSignature(m_ctx->m_rs.Get());
+    }
+
+    void resetDynamicCommandList()
+    {
+        ThrowIfFailed(m_dynamicCmdAlloc[m_fillBuf]->Reset());
+        ThrowIfFailed(m_dynamicCmdList->Reset(m_dynamicCmdAlloc[m_fillBuf].Get(), nullptr));
+        m_dynamicNeedsReset = false;
+    }
+
+    void stallDynamicUpload()
+    {
+        if (m_dynamicNeedsReset)
+        {
+            if (m_dynamicBufFence->GetCompletedValue() < m_dynamicBufFenceVal)
+            {
+                ThrowIfFailed(m_dynamicBufFence->SetEventOnCompletion(m_dynamicBufFenceVal,
+                                                                      m_dynamicBufFenceHandle));
+                WaitForSingleObject(m_dynamicBufFenceHandle, INFINITE);
+            }
+            resetDynamicCommandList();
+        }
     }
 
     D3D12CommandQueue(D3D12Context* ctx, D3D12Context::Window* windowCtx, IGraphicsContext* parent,
@@ -890,6 +917,15 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         ThrowIfFailed(ctx->m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, ctx->m_qalloc[0].Get(), 
                                                     nullptr, __uuidof(ID3D12GraphicsCommandList), &m_cmdList));
         m_cmdList->SetGraphicsRootSignature(m_ctx->m_rs.Get());
+
+        ThrowIfFailed(ctx->m_dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), &m_dynamicBufFence));
+        m_dynamicBufFenceHandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        ThrowIfFailed(ctx->m_dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                         __uuidof(ID3D12CommandAllocator), &m_dynamicCmdAlloc[0]));
+        ThrowIfFailed(ctx->m_dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                         __uuidof(ID3D12CommandAllocator), &m_dynamicCmdAlloc[1]));
+        ThrowIfFailed(ctx->m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_dynamicCmdAlloc[0].Get(),
+                                                    nullptr, __uuidof(ID3D12GraphicsCommandList), &m_dynamicCmdList));
     }
 
     void setShaderDataBinding(IShaderDataBinding* binding)
@@ -930,8 +966,6 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
     }
 
     int pendingDynamicSlot() {return m_fillBuf;}
-
-    void flushBufferUpdates() {}
 
     std::unordered_map<D3D12TextureR*, std::pair<size_t, size_t>> m_texResizes;
     void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)
@@ -1065,12 +1099,23 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
     UINT64 m_submittedFenceVal = 0;
     void execute()
     {
+        /* Perform dynamic uploads */
+        if (!m_dynamicNeedsReset)
+        {
+            m_dynamicCmdList->Close();
+            ID3D12CommandList* dcl[] = {m_dynamicCmdList.Get()};
+            m_ctx->m_q->ExecuteCommandLists(1, dcl);
+            ++m_dynamicBufFenceVal;
+            ThrowIfFailed(m_ctx->m_q->Signal(m_dynamicBufFence.Get(), m_dynamicBufFenceVal));
+        }
+
         /* Check on fence */
         if (m_fence->GetCompletedValue() < m_submittedFenceVal)
         {
             /* Abandon this list (renderer too slow) */
             m_cmdList->Close();
             resetCommandList();
+            m_dynamicNeedsReset = true;
             m_doPresent = false;
             return;
         }
@@ -1083,14 +1128,13 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
             m_texResizes.clear();
             m_cmdList->Close();
             resetCommandList();
+            m_dynamicNeedsReset = true;
             m_doPresent = false;
             return;
         }
         
         m_drawBuf = m_fillBuf;
-        ++m_fillBuf;
-        if (m_fillBuf == 2)
-            m_fillBuf = 0;
+        m_fillBuf ^= 1;
 
         m_cmdList->Close();
         ID3D12CommandList* cl[] = {m_cmdList.Get()};
@@ -1107,19 +1151,21 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         ThrowIfFailed(m_ctx->m_q->Signal(m_fence.Get(), m_submittedFenceVal));
 
         resetCommandList();
+        resetDynamicCommandList();
     }
 };
 
 void D3D12GraphicsBufferD::load(const void* data, size_t sz)
 {
+    m_q->stallDynamicUpload();
     ID3D12Resource* res = m_bufs[m_q->m_fillBuf].Get();
     ID3D12Resource* gpuRes = m_gpuBufs[m_q->m_fillBuf].Get();
     D3D12_SUBRESOURCE_DATA d = {data, LONG_PTR(sz), LONG_PTR(sz)};
-    m_q->m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+    m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
         m_state, D3D12_RESOURCE_STATE_COPY_DEST));
-    if (!UpdateSubresources<1>(m_q->m_cmdList.Get(), gpuRes, res, 0, 0, 1, &d))
+    if (!UpdateSubresources<1>(m_q->m_dynamicCmdList.Get(), gpuRes, res, 0, 0, 1, &d))
         Log.report(LogVisor::FatalError, "unable to update dynamic buffer data");
-    m_q->m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+    m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
         D3D12_RESOURCE_STATE_COPY_DEST, m_state));
 }
 void* D3D12GraphicsBufferD::map(size_t sz)
@@ -1132,29 +1178,31 @@ void* D3D12GraphicsBufferD::map(size_t sz)
 }
 void D3D12GraphicsBufferD::unmap()
 {
+    m_q->stallDynamicUpload();
     ID3D12Resource* res = m_bufs[m_q->m_fillBuf].Get();
     ID3D12Resource* gpuRes = m_gpuBufs[m_q->m_fillBuf].Get();
     D3D12_SUBRESOURCE_DATA data = {m_mappedBuf, LONG_PTR(m_mappedSz), LONG_PTR(m_mappedSz)};
-    m_q->m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+    m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
         m_state, D3D12_RESOURCE_STATE_COPY_DEST));
-    if (!UpdateSubresources<1>(m_q->m_cmdList.Get(), gpuRes, res, 0, 0, 1, &data))
+    if (!UpdateSubresources<1>(m_q->m_dynamicCmdList.Get(), gpuRes, res, 0, 0, 1, &data))
         Log.report(LogVisor::FatalError, "unable to update dynamic buffer data");
     free(m_mappedBuf);
     m_mappedBuf = nullptr;
-    m_q->m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+    m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
         D3D12_RESOURCE_STATE_COPY_DEST, m_state));
 }
 
 void D3D12TextureD::load(const void* data, size_t sz)
 {
+    m_q->stallDynamicUpload();
     ID3D12Resource* res = m_texs[m_q->m_fillBuf].Get();
     ID3D12Resource* gpuRes = m_gpuTexs[m_q->m_fillBuf].Get();
     D3D12_SUBRESOURCE_DATA d = {data, LONG_PTR(m_width * 4), LONG_PTR(sz)};
-    m_q->m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+    m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
         D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST));
-    if (!UpdateSubresources<1>(m_q->m_cmdList.Get(), gpuRes, res, 0, 0, 1, &d))
+    if (!UpdateSubresources<1>(m_q->m_dynamicCmdList.Get(), gpuRes, res, 0, 0, 1, &d))
         Log.report(LogVisor::FatalError, "unable to update dynamic texture data");
-    m_q->m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+    m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
         D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
 }
 void* D3D12TextureD::map(size_t sz)
@@ -1167,16 +1215,17 @@ void* D3D12TextureD::map(size_t sz)
 }
 void D3D12TextureD::unmap()
 {
+    m_q->stallDynamicUpload();
     ID3D12Resource* res = m_texs[m_q->m_fillBuf].Get();
     ID3D12Resource* gpuRes = m_gpuTexs[m_q->m_fillBuf].Get();
     D3D12_SUBRESOURCE_DATA data = {m_mappedBuf, LONG_PTR(m_width * 4), LONG_PTR(m_mappedSz)};
-    m_q->m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+    m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
         D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST));
-    if (!UpdateSubresources<1>(m_q->m_cmdList.Get(), gpuRes, res, 0, 0, 1, &data))
+    if (!UpdateSubresources<1>(m_q->m_dynamicCmdList.Get(), gpuRes, res, 0, 0, 1, &data))
         Log.report(LogVisor::FatalError, "unable to update dynamic buffer data");
     free(m_mappedBuf);
     m_mappedBuf = nullptr;
-    m_q->m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+    m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
         D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
 }
 
@@ -1429,6 +1478,10 @@ public:
 
         /* Block handle return until data is ready on GPU */
         WaitForLoadList(m_ctx);
+
+        /* Reset allocator and list */
+        ThrowIfFailed(m_ctx->m_loadqalloc->Reset());
+        ThrowIfFailed(m_ctx->m_loadlist->Reset(m_ctx->m_loadqalloc.Get(), nullptr));
 
         /* Delete static upload heaps */
         for (std::unique_ptr<D3D12GraphicsBufferS>& buf : retval->m_SBufs)

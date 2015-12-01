@@ -924,11 +924,6 @@ struct GLCommandQueue : IGraphicsCommandQueue
         m_pendingResizes.push_back({texgl, width, height});
     }
 
-    void flushBufferUpdates()
-    {
-        glFlush();
-    }
-
     void setClearColor(const float rgba[4])
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
@@ -1027,6 +1022,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
 
     void execute()
     {
+        glFlush();
         std::unique_lock<std::mutex> lk(m_mt);
         m_completeBuf = m_fillBuf;
         for (size_t i=0 ; i<3 ; ++i)
