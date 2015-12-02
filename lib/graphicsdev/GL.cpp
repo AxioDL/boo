@@ -9,6 +9,9 @@
 
 #include <LogVisor/LogVisor.hpp>
 
+#undef min
+#undef max
+
 namespace boo
 {
 static LogVisor::LogModule Log("boo::GL");

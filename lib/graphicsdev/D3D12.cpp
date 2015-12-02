@@ -7,9 +7,13 @@
 #include "d3dx12.h"
 #include <d3dcompiler.h>
 #include <comdef.h>
+#include <algorithm>
 
 #define MAX_UNIFORM_COUNT 8
 #define MAX_TEXTURE_COUNT 8
+
+#undef min
+#undef max
 
 extern PFN_D3D12_SERIALIZE_ROOT_SIGNATURE D3D12SerializeRootSignaturePROC;
 extern pD3DCompile D3DCompilePROC;
@@ -107,14 +111,15 @@ class D3D12GraphicsBufferD : public IGraphicsBufferD
     friend struct D3D12CommandQueue;
     D3D12CommandQueue* m_q;
     D3D12_RESOURCE_STATES m_state;
-    size_t m_mappedSz;
-    void* m_mappedBuf = nullptr;
-    unsigned m_loaded[2] = {};
+    std::unique_ptr<uint8_t[]> m_cpuBuf;
+    size_t m_cpuSz;
+    int m_validSlots = 0;
     D3D12GraphicsBufferD(D3D12CommandQueue* q, BufferUse use, D3D12Context* ctx, size_t stride, size_t count)
     : m_state(USE_TABLE[int(use)]), m_q(q), m_stride(stride), m_count(count)
     {
-        size_t sz = stride * count;
-        D3D12_RESOURCE_DESC desc = CD3DX12_RESOURCE_DESC::Buffer(sz);
+        m_cpuSz = stride * count;
+        m_cpuBuf.reset(new uint8_t[m_cpuSz]);
+        D3D12_RESOURCE_DESC desc = CD3DX12_RESOURCE_DESC::Buffer(m_cpuSz);
         size_t reqSz = GetRequiredIntermediateSize(ctx->m_dev.Get(), &desc, 0, 1);
         desc = CD3DX12_RESOURCE_DESC::Buffer(reqSz);
         for (int i=0 ; i<2 ; ++i)
@@ -125,6 +130,7 @@ class D3D12GraphicsBufferD : public IGraphicsBufferD
                 D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, __uuidof(ID3D12Resource), &m_bufs[i]));
         }
     }
+    void update(int b);
 public:
     size_t m_stride;
     size_t m_count;
@@ -213,17 +219,20 @@ class D3D12TextureSA : public ITextureSA
                    TextureFormat fmt, const void* data, size_t sz)
     : m_fmt(fmt), m_layers(layers), m_sz(sz)
     {
-        size_t pixelPitch;
+        size_t pxPitch;
         DXGI_FORMAT pixelFmt;
-        if (fmt == TextureFormat::RGBA8)
+        switch (fmt)
         {
-            pixelPitch = 4;
+        case TextureFormat::RGBA8:
+            pxPitch = 4;
             pixelFmt = DXGI_FORMAT_R8G8B8A8_UNORM;
-        }
-        else if (fmt == TextureFormat::I8)
-        {
-            pixelPitch = 1;
+            break;
+        case TextureFormat::I8:
+            pxPitch = 1;
             pixelFmt = DXGI_FORMAT_R8_UNORM;
+            break;
+        default:
+            Log.report(LogVisor::FatalError, "unsupported tex format");
         }
 
         m_gpuDesc = CD3DX12_RESOURCE_DESC::Tex2D(pixelFmt, width, height, layers, 1);
@@ -238,7 +247,7 @@ class D3D12TextureSA : public ITextureSA
         for (size_t i=0 ; i<layers && i<16 ; ++i)
         {
             upData[i].pData = dataIt;
-            upData[i].RowPitch = width * pixelPitch;
+            upData[i].RowPitch = width * pxPitch;
             upData[i].SlicePitch = upData[i].RowPitch * height;
             dataIt += upData[i].SlicePitch;
         }
@@ -277,12 +286,26 @@ class D3D12TextureD : public ITextureD
     TextureFormat m_fmt;
     D3D12CommandQueue* m_q;
     D3D12_RESOURCE_DESC m_gpuDesc;
-    size_t m_mappedSz;
-    void* m_mappedBuf = nullptr;
+    std::unique_ptr<uint8_t[]> m_cpuBuf;
+    size_t m_cpuSz;
+    int m_validSlots = 0;
     D3D12TextureD(D3D12CommandQueue* q, D3D12Context* ctx, size_t width, size_t height, TextureFormat fmt)
     : m_fmt(fmt), m_q(q)
     {
-        m_gpuDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height);
+        DXGI_FORMAT pixelFmt;
+        switch (fmt)
+        {
+        case TextureFormat::RGBA8:
+            pixelFmt = DXGI_FORMAT_R8G8B8A8_UNORM;
+            break;
+        case TextureFormat::I8:
+            pixelFmt = DXGI_FORMAT_R8_UNORM;
+            break;
+        default:
+            Log.report(LogVisor::FatalError, "unsupported tex format");
+        }
+
+        m_gpuDesc = CD3DX12_RESOURCE_DESC::Tex2D(pixelFmt, width, height);
         size_t reqSz = GetRequiredIntermediateSize(ctx->m_dev.Get(), &m_gpuDesc, 0, 1);
         for (int i=0 ; i<2 ; ++i)
         {
@@ -293,6 +316,7 @@ class D3D12TextureD : public ITextureD
                 D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, __uuidof(ID3D12Resource), &m_texs[i]));
         }
     }
+    void update(int b);
 public:
     ComPtr<ID3D12Resource> m_texs[2];
     ComPtr<ID3D12Resource> m_gpuTexs[2];
@@ -965,8 +989,6 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         m_cmdList->RSSetScissorRects(1, &d3drect);
     }
 
-    int pendingDynamicSlot() {return m_fillBuf;}
-
     std::unordered_map<D3D12TextureR*, std::pair<size_t, size_t>> m_texResizes;
     void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)
     {
@@ -1097,144 +1119,87 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
     }
 
     UINT64 m_submittedFenceVal = 0;
-    void execute()
-    {
-        /* Perform dynamic uploads */
-        if (!m_dynamicNeedsReset)
-        {
-            m_dynamicCmdList->Close();
-            ID3D12CommandList* dcl[] = {m_dynamicCmdList.Get()};
-            m_ctx->m_q->ExecuteCommandLists(1, dcl);
-            ++m_dynamicBufFenceVal;
-            ThrowIfFailed(m_ctx->m_q->Signal(m_dynamicBufFence.Get(), m_dynamicBufFenceVal));
-        }
-
-        /* Check on fence */
-        if (m_fence->GetCompletedValue() < m_submittedFenceVal)
-        {
-            /* Abandon this list (renderer too slow) */
-            m_cmdList->Close();
-            resetCommandList();
-            m_dynamicNeedsReset = true;
-            m_doPresent = false;
-            return;
-        }
-
-        /* Perform texture resizes */
-        if (m_texResizes.size())
-        {
-            for (const auto& resize : m_texResizes)
-                resize.first->resize(m_ctx, resize.second.first, resize.second.second);
-            m_texResizes.clear();
-            m_cmdList->Close();
-            resetCommandList();
-            m_dynamicNeedsReset = true;
-            m_doPresent = false;
-            return;
-        }
-        
-        m_drawBuf = m_fillBuf;
-        m_fillBuf ^= 1;
-
-        m_cmdList->Close();
-        ID3D12CommandList* cl[] = {m_cmdList.Get()};
-        m_ctx->m_q->ExecuteCommandLists(1, cl);
-
-        if (m_doPresent)
-        {
-            ThrowIfFailed(m_windowCtx->m_swapChain->Present(1, 0));
-            m_windowCtx->m_backBuf = m_windowCtx->m_swapChain->GetCurrentBackBufferIndex();
-            m_doPresent = false;
-        }
-
-        ++m_submittedFenceVal;
-        ThrowIfFailed(m_ctx->m_q->Signal(m_fence.Get(), m_submittedFenceVal));
-
-        resetCommandList();
-        resetDynamicCommandList();
-    }
+    void execute();
 };
+
+void D3D12GraphicsBufferD::update(int b)
+{
+    int slot = 1 << b;
+    if ((slot & m_validSlots) == 0)
+    {
+        m_q->stallDynamicUpload();
+        ID3D12Resource* res = m_bufs[b].Get();
+        ID3D12Resource* gpuRes = m_gpuBufs[b].Get();
+        D3D12_SUBRESOURCE_DATA d = {m_cpuBuf.get(), LONG_PTR(m_cpuSz), LONG_PTR(m_cpuSz)};
+        m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+            m_state, D3D12_RESOURCE_STATE_COPY_DEST));
+        if (!UpdateSubresources<1>(m_q->m_dynamicCmdList.Get(), gpuRes, res, 0, 0, 1, &d))
+            Log.report(LogVisor::FatalError, "unable to update dynamic buffer data");
+        m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+            D3D12_RESOURCE_STATE_COPY_DEST, m_state));
+        m_validSlots |= slot;
+    }
+}
 
 void D3D12GraphicsBufferD::load(const void* data, size_t sz)
 {
-    m_q->stallDynamicUpload();
-    ID3D12Resource* res = m_bufs[m_q->m_fillBuf].Get();
-    ID3D12Resource* gpuRes = m_gpuBufs[m_q->m_fillBuf].Get();
-    D3D12_SUBRESOURCE_DATA d = {data, LONG_PTR(sz), LONG_PTR(sz)};
-    m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
-        m_state, D3D12_RESOURCE_STATE_COPY_DEST));
-    if (!UpdateSubresources<1>(m_q->m_dynamicCmdList.Get(), gpuRes, res, 0, 0, 1, &d))
-        Log.report(LogVisor::FatalError, "unable to update dynamic buffer data");
-    m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
-        D3D12_RESOURCE_STATE_COPY_DEST, m_state));
+    size_t bufSz = std::min(sz, m_cpuSz);
+    memcpy(m_cpuBuf.get(), data, bufSz);
+    m_validSlots = 0;
 }
 void* D3D12GraphicsBufferD::map(size_t sz)
 {
-    if (m_mappedBuf)
-        free(m_mappedBuf);
-    m_mappedSz = sz;
-    m_mappedBuf = malloc(sz);
-    return m_mappedBuf;
+    if (sz > m_cpuSz)
+        return nullptr;
+    return m_cpuBuf.get();
 }
 void D3D12GraphicsBufferD::unmap()
 {
-    m_q->stallDynamicUpload();
-    ID3D12Resource* res = m_bufs[m_q->m_fillBuf].Get();
-    ID3D12Resource* gpuRes = m_gpuBufs[m_q->m_fillBuf].Get();
-    D3D12_SUBRESOURCE_DATA data = {m_mappedBuf, LONG_PTR(m_mappedSz), LONG_PTR(m_mappedSz)};
-    m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
-        m_state, D3D12_RESOURCE_STATE_COPY_DEST));
-    if (!UpdateSubresources<1>(m_q->m_dynamicCmdList.Get(), gpuRes, res, 0, 0, 1, &data))
-        Log.report(LogVisor::FatalError, "unable to update dynamic buffer data");
-    free(m_mappedBuf);
-    m_mappedBuf = nullptr;
-    m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
-        D3D12_RESOURCE_STATE_COPY_DEST, m_state));
+    m_validSlots = 0;
 }
 
+void D3D12TextureD::update(int b)
+{
+    int slot = 1 << b;
+    if ((slot & m_validSlots) == 0)
+    {
+        m_q->stallDynamicUpload();
+        ID3D12Resource* res = m_texs[b].Get();
+        ID3D12Resource* gpuRes = m_gpuTexs[b].Get();
+        D3D12_SUBRESOURCE_DATA d = {m_cpuBuf.get(), LONG_PTR(m_width * 4), LONG_PTR(m_cpuSz)};
+        m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST));
+        if (!UpdateSubresources<1>(m_q->m_dynamicCmdList.Get(), gpuRes, res, 0, 0, 1, &d))
+            Log.report(LogVisor::FatalError, "unable to update dynamic texture data");
+        m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+            D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+        m_validSlots |= slot;
+    }
+}
 void D3D12TextureD::load(const void* data, size_t sz)
 {
-    m_q->stallDynamicUpload();
-    ID3D12Resource* res = m_texs[m_q->m_fillBuf].Get();
-    ID3D12Resource* gpuRes = m_gpuTexs[m_q->m_fillBuf].Get();
-    D3D12_SUBRESOURCE_DATA d = {data, LONG_PTR(m_width * 4), LONG_PTR(sz)};
-    m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
-        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST));
-    if (!UpdateSubresources<1>(m_q->m_dynamicCmdList.Get(), gpuRes, res, 0, 0, 1, &d))
-        Log.report(LogVisor::FatalError, "unable to update dynamic texture data");
-    m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
-        D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+    size_t bufSz = std::min(sz, m_cpuSz);
+    memcpy(m_cpuBuf.get(), data, bufSz);
+    m_validSlots = 0;
 }
 void* D3D12TextureD::map(size_t sz)
 {
-    if (m_mappedBuf)
-        free(m_mappedBuf);
-    m_mappedSz = sz;
-    m_mappedBuf = malloc(sz);
-    return m_mappedBuf;
+    if (sz > m_cpuSz)
+        return nullptr;
+    return m_cpuBuf.get();
 }
 void D3D12TextureD::unmap()
 {
-    m_q->stallDynamicUpload();
-    ID3D12Resource* res = m_texs[m_q->m_fillBuf].Get();
-    ID3D12Resource* gpuRes = m_gpuTexs[m_q->m_fillBuf].Get();
-    D3D12_SUBRESOURCE_DATA data = {m_mappedBuf, LONG_PTR(m_width * 4), LONG_PTR(m_mappedSz)};
-    m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
-        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST));
-    if (!UpdateSubresources<1>(m_q->m_dynamicCmdList.Get(), gpuRes, res, 0, 0, 1, &data))
-        Log.report(LogVisor::FatalError, "unable to update dynamic buffer data");
-    free(m_mappedBuf);
-    m_mappedBuf = nullptr;
-    m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
-        D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+    m_validSlots = 0;
 }
 
 class D3D12DataFactory : public ID3DDataFactory
 {
+    friend struct D3D12CommandQueue;
     IGraphicsContext* m_parent;
-    IGraphicsData* m_deferredData = nullptr;
+    D3D12Data* m_deferredData = nullptr;
     struct D3D12Context* m_ctx;
-    std::unordered_set<IGraphicsData*> m_committedData;
+    std::unordered_set<D3D12Data*> m_committedData;
 public:
     D3D12DataFactory(IGraphicsContext* parent, D3D12Context* ctx)
     : m_parent(parent), m_deferredData(new struct D3D12Data()), m_ctx(ctx)
@@ -1513,6 +1478,77 @@ public:
         m_committedData.clear();
     }
 };
+
+void D3D12CommandQueue::execute()
+{
+    /* Stage dynamic uploads */
+    D3D12DataFactory* gfxF = static_cast<D3D12DataFactory*>(m_parent->getDataFactory());
+    for (D3D12Data* d : gfxF->m_committedData)
+    {
+        for (std::unique_ptr<D3D12GraphicsBufferD>& b : d->m_DBufs)
+            b->update(m_fillBuf);
+        for (std::unique_ptr<D3D12TextureD>& t : d->m_DTexs)
+            t->update(m_fillBuf);
+    }
+    for (std::unique_ptr<D3D12GraphicsBufferD>& b : gfxF->m_deferredData->m_DBufs)
+        b->update(m_fillBuf);
+    for (std::unique_ptr<D3D12TextureD>& t : gfxF->m_deferredData->m_DTexs)
+        t->update(m_fillBuf);
+
+    /* Perform dynamic uploads */
+    if (!m_dynamicNeedsReset)
+    {
+        m_dynamicCmdList->Close();
+        ID3D12CommandList* dcl[] = {m_dynamicCmdList.Get()};
+        m_ctx->m_q->ExecuteCommandLists(1, dcl);
+        ++m_dynamicBufFenceVal;
+        ThrowIfFailed(m_ctx->m_q->Signal(m_dynamicBufFence.Get(), m_dynamicBufFenceVal));
+    }
+
+    /* Check on fence */
+    if (m_fence->GetCompletedValue() < m_submittedFenceVal)
+    {
+        /* Abandon this list (renderer too slow) */
+        m_cmdList->Close();
+        resetCommandList();
+        m_dynamicNeedsReset = true;
+        m_doPresent = false;
+        return;
+    }
+
+    /* Perform texture resizes */
+    if (m_texResizes.size())
+    {
+        for (const auto& resize : m_texResizes)
+            resize.first->resize(m_ctx, resize.second.first, resize.second.second);
+        m_texResizes.clear();
+        m_cmdList->Close();
+        resetCommandList();
+        m_dynamicNeedsReset = true;
+        m_doPresent = false;
+        return;
+    }
+
+    m_drawBuf = m_fillBuf;
+    m_fillBuf ^= 1;
+
+    m_cmdList->Close();
+    ID3D12CommandList* cl[] = {m_cmdList.Get()};
+    m_ctx->m_q->ExecuteCommandLists(1, cl);
+
+    if (m_doPresent)
+    {
+        ThrowIfFailed(m_windowCtx->m_swapChain->Present(1, 0));
+        m_windowCtx->m_backBuf = m_windowCtx->m_swapChain->GetCurrentBackBufferIndex();
+        m_doPresent = false;
+    }
+
+    ++m_submittedFenceVal;
+    ThrowIfFailed(m_ctx->m_q->Signal(m_fence.Get(), m_submittedFenceVal));
+
+    resetCommandList();
+    resetDynamicCommandList();
+}
 
 IGraphicsCommandQueue* _NewD3D12CommandQueue(D3D12Context* ctx, D3D12Context::Window* windowCtx, IGraphicsContext* parent,
                                              ID3D12CommandQueue** cmdQueueOut)
