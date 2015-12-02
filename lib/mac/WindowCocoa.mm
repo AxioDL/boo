@@ -882,7 +882,8 @@ static boo::ESpecialKey translateKeycode(short code)
 {
     boo::SWindowRect rect = {{int(self.frame.origin.x), int(self.frame.origin.y)},
                              {int(self.frame.size.width), int(self.frame.size.height)}};
-    resp->booContext->m_callback->resized(rect);
+    if (resp->booContext->m_callback)
+        resp->booContext->m_callback->resized(rect);
     [super reshape];
 }
 
