@@ -51,12 +51,16 @@ class MetalGraphicsBufferD : public IGraphicsBufferD
     friend class MetalDataFactory;
     friend struct MetalCommandQueue;
     MetalCommandQueue* m_q;
+    std::unique_ptr<uint8_t[]> m_cpuBuf;
+    int m_validSlots = 0;
     MetalGraphicsBufferD(MetalCommandQueue* q, BufferUse use, MetalContext* ctx, size_t stride, size_t count)
     : m_q(q), m_stride(stride), m_count(count), m_sz(stride * count)
     {
+        m_cpuBuf.reset(new uint8_t[m_sz]);
         m_bufs[0] = [ctx->m_dev.get() newBufferWithLength:m_sz options:MTL_DYNAMIC];
         m_bufs[1] = [ctx->m_dev.get() newBufferWithLength:m_sz options:MTL_DYNAMIC];
     }
+    void update(int b);
 public:
     size_t m_stride;
     size_t m_count;
@@ -65,8 +69,6 @@ public:
     MetalGraphicsBufferD() = default;
     
     void load(const void* data, size_t sz);
-    
-    size_t m_mappedSz;
     void* map(size_t sz);
     void unmap();
 };
@@ -167,14 +169,35 @@ class MetalTextureD : public ITextureD
     MetalCommandQueue* m_q;
     size_t m_width = 0;
     size_t m_height = 0;
-    void* m_mappedBuf;
+    std::unique_ptr<uint8_t[]> m_cpuBuf;
+    size_t m_cpuSz;
+    size_t m_pxPitch;
+    int m_validSlots = 0;
     MetalTextureD(MetalCommandQueue* q, MetalContext* ctx, size_t width, size_t height, TextureFormat fmt)
     : m_q(q), m_width(width), m_height(height)
     {
+        MTLPixelFormat format;
+        switch (fmt)
+        {
+        case TextureFormat::RGBA8:
+            format = MTLPixelFormatRGBA8Unorm;
+            m_pxPitch = 4;
+            break;
+        case TextureFormat::I8:
+            format = MTLPixelFormatR8Unorm;
+            m_pxPitch = 1;
+            break;
+        default:
+            Log.report(LogVisor::FatalError, "unsupported tex format");
+        }
+        
+        m_cpuSz = width * height * m_pxPitch;
+        m_cpuBuf.reset(new uint8_t[m_cpuSz]);
+        
         NSPtr<MTLTextureDescriptor*> desc;
         @autoreleasepool
         {
-            desc = [[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+            desc = [[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format
                                                                        width:width height:height
                                                                    mipmapped:NO] retain];
         }
@@ -182,6 +205,7 @@ class MetalTextureD : public ITextureD
         m_texs[0] = [ctx->m_dev.get() newTextureWithDescriptor:desc.get()];
         m_texs[1] = [ctx->m_dev.get() newTextureWithDescriptor:desc.get()];
     }
+    void update(int b);
 public:
     NSPtr<id<MTLTexture>> m_texs[2];
     ~MetalTextureD() = default;
@@ -566,9 +590,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             NSUInteger(rect.size[0]), NSUInteger(rect.size[1])};
         [m_enc.get() setScissorRect:scissor];
     }
-    
-    int pendingDynamicSlot() {return m_fillBuf;}
-    
+        
     std::unordered_map<MetalTextureR*, std::pair<size_t, size_t>> m_texResizes;
     void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)
     {
@@ -664,6 +686,20 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     bool m_inProgress = false;
     void execute()
     {
+        /* Update dynamic data here */
+        MetalDataFactory* gfxF = static_cast<MetalDataFactory*>(m_parent->getDataFactory());
+        for (MetalData* d : gfxF->m_committedData)
+        {
+            for (std::unique_ptr<MetalGraphicsBufferD>& b : d->m_DBufs)
+                b->update(m_fillBuf);
+            for (std::unique_ptr<MetalTextureD>& t : d->m_DTexs)
+                t->update(m_fillBuf);
+        }
+        for (std::unique_ptr<MetalGraphicsBufferD>& b : gfxF->m_deferredData->m_DBufs)
+            b->update(m_fillBuf);
+        for (std::unique_ptr<MetalTextureD>& t : gfxF->m_deferredData->m_DTexs)
+            t->update(m_fillBuf);
+        
         @autoreleasepool
         {
             /* Abandon if in progress (renderer too slow) */
@@ -684,9 +720,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             }
             
             m_drawBuf = m_fillBuf;
-            ++m_fillBuf;
-            if (m_fillBuf == 2)
-                m_fillBuf = 0;
+            m_fillBuf ^= 1;
             
             [m_cmdBuf.get() addCompletedHandler:^(id<MTLCommandBuffer> buf) {m_inProgress = false;}];
             m_inProgress = true;
@@ -696,36 +730,59 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     }
 };
     
+void MetalGraphicsBufferD::update(int b)
+{
+    int slot = 1 << b;
+    if ((slot & m_validSlots) == 0)
+    {
+        id<MTLBuffer> res = m_bufs[b].get();
+        memcpy(res.contents, m_cpuBuf.get(), m_sz);
+        m_validSlots |= slot;
+    }
+}
 void MetalGraphicsBufferD::load(const void* data, size_t sz)
 {
-    id<MTLBuffer> res = m_bufs[m_q->m_fillBuf].get();
-    memcpy(res.contents, data, sz);
+    size_t bufSz = std::min(sz, m_sz);
+    memcpy(m_cpuBuf.get(), data, bufSz);
+    m_validSlots = 0;
 }
 void* MetalGraphicsBufferD::map(size_t sz)
 {
-    m_mappedSz = sz;
-    id<MTLBuffer> res = m_bufs[m_q->m_fillBuf].get();
-    return res.contents;
+    if (sz > m_sz)
+        return nullptr;
+    return m_cpuBuf.get();
 }
-void MetalGraphicsBufferD::unmap() {}
+void MetalGraphicsBufferD::unmap()
+{
+    m_validSlots = 0;
+}
 
+void MetalTextureD::update(int b)
+{
+    int slot = 1 << b;
+    if ((slot & m_validSlots) == 0)
+    {
+        id<MTLTexture> res = m_texs[b].get();
+        [res replaceRegion:MTLRegionMake2D(0, 0, m_width, m_height)
+               mipmapLevel:0 withBytes:m_cpuBuf.get() bytesPerRow:m_width*m_pxPitch];
+        m_validSlots |= slot;
+    }
+}
 void MetalTextureD::load(const void* data, size_t sz)
 {
-    id<MTLTexture> res = m_texs[m_q->m_fillBuf].get();
-    [res replaceRegion:MTLRegionMake2D(0, 0, m_width, m_height)
-           mipmapLevel:0 withBytes:data bytesPerRow:m_width*4];
+    size_t bufSz = std::min(sz, m_cpuSz);
+    memcpy(m_cpuBuf.get(), data, bufSz);
+    m_validSlots = 0;
 }
 void* MetalTextureD::map(size_t sz)
 {
-    m_mappedBuf = malloc(sz);
-    return m_mappedBuf;
+    if (sz > m_cpuSz)
+        return nullptr;
+    return m_cpuBuf.get();
 }
 void MetalTextureD::unmap()
 {
-    id<MTLTexture> res = m_texs[m_q->m_fillBuf].get();
-    [res replaceRegion:MTLRegionMake2D(0, 0, m_width, m_height)
-           mipmapLevel:0 withBytes:m_mappedBuf bytesPerRow:m_width*4];
-    free(m_mappedBuf);
+    m_validSlots = 0;
 }
     
 MetalDataFactory::MetalDataFactory(IGraphicsContext* parent, MetalContext* ctx)

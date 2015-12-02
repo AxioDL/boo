@@ -20,9 +20,10 @@ struct MetalContext;
     
 class MetalDataFactory : public IGraphicsDataFactory
 {
+    friend struct MetalCommandQueue;
     IGraphicsContext* m_parent;
-    IGraphicsData* m_deferredData = nullptr;
-    std::unordered_set<IGraphicsData*> m_committedData;
+    struct MetalData* m_deferredData = nullptr;
+    std::unordered_set<struct MetalData*> m_committedData;
     struct MetalContext* m_ctx;
 public:
     MetalDataFactory(IGraphicsContext* parent, MetalContext* ctx);
