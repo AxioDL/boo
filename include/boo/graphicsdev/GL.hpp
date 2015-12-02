@@ -12,9 +12,10 @@ namespace boo
 
 class GLDataFactory : public IGraphicsDataFactory
 {
+    friend struct GLCommandQueue;
     IGraphicsContext* m_parent;
-    IGraphicsData* m_deferredData = nullptr;
-    std::unordered_set<IGraphicsData*> m_committedData;
+    struct GLData* m_deferredData = nullptr;
+    std::unordered_set<struct GLData*> m_committedData;
     std::vector<int> m_texUnis;
 public:
     GLDataFactory(IGraphicsContext* parent);

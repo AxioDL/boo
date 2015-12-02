@@ -65,14 +65,15 @@ class GLGraphicsBufferD : public IGraphicsBufferD
     struct GLCommandQueue* m_q;
     GLuint m_bufs[3];
     GLenum m_target;
-    void* m_mappedBuf = nullptr;
-    size_t m_mappedSize = 0;
-    GLGraphicsBufferD(GLCommandQueue* q, BufferUse use)
-    : m_q(q)
+    std::unique_ptr<uint8_t[]> m_cpuBuf;
+    size_t m_cpuSz = 0;
+    int m_validMask = 0;
+    GLGraphicsBufferD(GLCommandQueue* q, BufferUse use, size_t sz)
+    : m_q(q), m_target(USE_TABLE[int(use)]), m_cpuBuf(new uint8_t[sz]), m_cpuSz(sz)
     {
-        m_target = USE_TABLE[int(use)];
         glGenBuffers(3, m_bufs);
     }
+    void update(int b);
 public:
     ~GLGraphicsBufferD() {glDeleteBuffers(3, m_bufs);}
 
@@ -80,9 +81,9 @@ public:
     void* map(size_t sz);
     void unmap();
 
-    void bindVertex(int b) const;
-    void bindIndex(int b) const;
-    void bindUniform(size_t idx, int b) const;
+    void bindVertex(int b);
+    void bindIndex(int b);
+    void bindUniform(size_t idx, int b);
 };
 
 IGraphicsBufferS*
@@ -117,15 +118,31 @@ class GLTextureS : public ITextureS
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         else
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        if (fmt == TextureFormat::RGBA8)
+
+        GLenum intFormat, format;
+        int pxPitch;
+        switch (fmt)
         {
-            for (size_t i=0 ; i<mips ; ++i)
-            {
-                glTexImage2D(GL_TEXTURE_2D, i, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, dataIt);
-                dataIt += width * height * 4;
-                width /= 2;
-                height /= 2;
-            }
+        case TextureFormat::RGBA8:
+            intFormat = GL_RGBA;
+            format = GL_RGBA;
+            pxPitch = 4;
+            break;
+        case TextureFormat::I8:
+            intFormat = GL_R8;
+            format = GL_RED;
+            pxPitch = 1;
+            break;
+        default:
+            Log.report(LogVisor::FatalError, "unsupported tex format");
+        }
+
+        for (size_t i=0 ; i<mips ; ++i)
+        {
+            glTexImage2D(GL_TEXTURE_2D, i, intFormat, width, height, 0, format, GL_UNSIGNED_BYTE, dataIt);
+            dataIt += width * height * pxPitch;
+            width /= 2;
+            height /= 2;
         }
     }
 public:
@@ -170,11 +187,14 @@ class GLTextureD : public ITextureD
     friend struct GLCommandQueue;
     struct GLCommandQueue* m_q;
     GLuint m_texs[3];
-    void* m_mappedBuf = nullptr;
-    size_t m_mappedSize = 0;
+    std::unique_ptr<uint8_t[]> m_cpuBuf;
+    size_t m_cpuSz = 0;
+    GLenum m_intFormat, m_format;
     size_t m_width = 0;
     size_t m_height = 0;
+    int m_validMask = 0;
     GLTextureD(GLCommandQueue* q, size_t width, size_t height, TextureFormat fmt);
+    void update(int b);
 public:
     ~GLTextureD();
 
@@ -182,7 +202,7 @@ public:
     void* map(size_t sz);
     void unmap();
 
-    void bind(size_t idx) const;
+    void bind(size_t idx, int b);
 };
 
 class GLTextureR : public ITextureR
@@ -498,7 +518,7 @@ struct GLShaderDataBinding : IShaderDataBinding
             switch (tex->type())
             {
             case TextureType::Dynamic:
-                static_cast<GLTextureD*>(tex)->bind(i);
+                static_cast<GLTextureD*>(tex)->bind(i, b);
                 break;
             case TextureType::Static:
                 static_cast<GLTextureS*>(tex)->bind(i);
@@ -514,10 +534,10 @@ struct GLShaderDataBinding : IShaderDataBinding
 
 IShaderDataBinding*
 GLDataFactory::newShaderDataBinding(IShaderPipeline* pipeline,
-                                       IVertexFormat* vtxFormat,
-                                       IGraphicsBuffer*, IGraphicsBuffer*, IGraphicsBuffer*,
-                                       size_t ubufCount, IGraphicsBuffer** ubufs,
-                                       size_t texCount, ITexture** texs)
+                                    IVertexFormat* vtxFormat,
+                                    IGraphicsBuffer*, IGraphicsBuffer*, IGraphicsBuffer*,
+                                    size_t ubufCount, IGraphicsBuffer** ubufs,
+                                    size_t texCount, ITexture** texs)
 {
     GLShaderDataBinding* retval =
     new GLShaderDataBinding(pipeline, vtxFormat, ubufCount, ubufs, texCount, texs);
@@ -536,7 +556,7 @@ void GLDataFactory::reset()
 
 IGraphicsData* GLDataFactory::commit()
 {
-    IGraphicsData* retval = m_deferredData;
+    GLData* retval = m_deferredData;
     m_deferredData = new struct GLData();
     m_committedData.insert(retval);
     /* Let's go ahead and flush to ensure our data gets to the GPU
@@ -693,8 +713,8 @@ struct GLCommandQueue : IGraphicsCommandQueue
             size_t offset = 0;
             size_t instOffset = 0;
             glBindVertexArray(fmt->m_vao[b]);
-            const IGraphicsBuffer* lastVBO = nullptr;
-            const IGraphicsBuffer* lastEBO = nullptr;
+            IGraphicsBuffer* lastVBO = nullptr;
+            IGraphicsBuffer* lastEBO = nullptr;
             for (size_t i=0 ; i<fmt->m_elementCount ; ++i)
             {
                 const VertexElementDescriptor* desc = &fmt->m_elements[i];
@@ -702,17 +722,17 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 {
                     lastVBO = desc->vertBuffer;
                     if (lastVBO->dynamic())
-                        static_cast<const GLGraphicsBufferD*>(lastVBO)->bindVertex(b);
+                        static_cast<GLGraphicsBufferD*>(lastVBO)->bindVertex(b);
                     else
-                        static_cast<const GLGraphicsBufferS*>(lastVBO)->bindVertex();
+                        static_cast<GLGraphicsBufferS*>(lastVBO)->bindVertex();
                 }
                 if (desc->indexBuffer != lastEBO)
                 {
                     lastEBO = desc->indexBuffer;
                     if (lastEBO->dynamic())
-                        static_cast<const GLGraphicsBufferD*>(lastEBO)->bindIndex(b);
+                        static_cast<GLGraphicsBufferD*>(lastEBO)->bindIndex(b);
                     else
-                        static_cast<const GLGraphicsBufferS*>(lastEBO)->bindIndex();
+                        static_cast<GLGraphicsBufferS*>(lastEBO)->bindIndex();
                 }
                 glEnableVertexAttribArray(i);
                 int maskedSem = int(desc->semantic & VertexSemantic::SemanticMask);
@@ -911,11 +931,6 @@ struct GLCommandQueue : IGraphicsCommandQueue
         cmds.emplace_back(Command::Op::SetScissor);
         cmds.back().rect = rect;
     }
-    
-    int pendingDynamicSlot()
-    {
-        return m_fillBuf;
-    }
 
     void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)
     {
@@ -1022,7 +1037,6 @@ struct GLCommandQueue : IGraphicsCommandQueue
 
     void execute()
     {
-        glFlush();
         std::unique_lock<std::mutex> lk(m_mt);
         m_completeBuf = m_fillBuf;
         for (size_t i=0 ; i<3 ; ++i)
@@ -1032,44 +1046,67 @@ struct GLCommandQueue : IGraphicsCommandQueue
             m_fillBuf = i;
             break;
         }
+
+        /* Update dynamic data here */
+        GLDataFactory* gfxF = static_cast<GLDataFactory*>(m_parent->getDataFactory());
+        for (GLData* d : gfxF->m_committedData)
+        {
+            for (std::unique_ptr<GLGraphicsBufferD>& b : d->m_DBufs)
+                b->update(m_completeBuf);
+            for (std::unique_ptr<GLTextureD>& t : d->m_DTexs)
+                t->update(m_completeBuf);
+        }
+        for (std::unique_ptr<GLGraphicsBufferD>& b : gfxF->m_deferredData->m_DBufs)
+            b->update(m_completeBuf);
+        for (std::unique_ptr<GLTextureD>& t : gfxF->m_deferredData->m_DTexs)
+            t->update(m_completeBuf);
+        glFlush();
+
         lk.unlock();
         m_cv.notify_one();
         m_cmdBufs[m_fillBuf].clear();
     }
 };
 
+void GLGraphicsBufferD::update(int b)
+{
+    int slot = 1 << b;
+    if ((slot & m_validMask) == 0)
+    {
+        glBindBuffer(m_target, m_bufs[b]);
+        glBufferData(m_target, m_cpuSz, m_cpuBuf.get(), GL_DYNAMIC_DRAW);
+        m_validMask |= slot;
+    }
+}
+
 void GLGraphicsBufferD::load(const void* data, size_t sz)
 {
-    glBindBuffer(m_target, m_bufs[m_q->m_fillBuf]);
-    glBufferData(m_target, sz, data, GL_DYNAMIC_DRAW);
+    size_t bufSz = std::min(sz, m_cpuSz);
+    memcpy(m_cpuBuf.get(), data, bufSz);
+    m_validMask = 0;
 }
 void* GLGraphicsBufferD::map(size_t sz)
 {
-    if (m_mappedBuf)
-        free(m_mappedBuf);
-    m_mappedBuf = malloc(sz);
-    m_mappedSize = sz;
-    return m_mappedBuf;
+    if (sz < m_cpuSz)
+        return nullptr;
+    return m_cpuBuf.get();
 }
 void GLGraphicsBufferD::unmap()
 {
-    glBindBuffer(m_target, m_bufs[m_q->m_fillBuf]);
-    glBufferData(m_target, m_mappedSize, m_mappedBuf, GL_DYNAMIC_DRAW);
-    free(m_mappedBuf);
-    m_mappedBuf = nullptr;
+    m_validMask = 0;
 }
-void GLGraphicsBufferD::bindVertex(int b) const
+void GLGraphicsBufferD::bindVertex(int b)
 {glBindBuffer(GL_ARRAY_BUFFER, m_bufs[b]);}
-void GLGraphicsBufferD::bindIndex(int b) const
+void GLGraphicsBufferD::bindIndex(int b)
 {glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_bufs[b]);}
-void GLGraphicsBufferD::bindUniform(size_t idx, int b) const
+void GLGraphicsBufferD::bindUniform(size_t idx, int b)
 {glBindBufferBase(GL_UNIFORM_BUFFER, idx, m_bufs[b]);}
 
 IGraphicsBufferD*
 GLDataFactory::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
 {
     GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
-    GLGraphicsBufferD* retval = new GLGraphicsBufferD(q, use);
+    GLGraphicsBufferD* retval = new GLGraphicsBufferD(q, use, stride * count);
     static_cast<GLData*>(m_deferredData)->m_DBufs.emplace_back(retval);
     return retval;
 }
@@ -1077,41 +1114,67 @@ GLDataFactory::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
 GLTextureD::GLTextureD(GLCommandQueue* q, size_t width, size_t height, TextureFormat fmt)
 : m_q(q), m_width(width), m_height(height)
 {
+    int pxPitch;
+    switch (fmt)
+    {
+    case TextureFormat::RGBA8:
+        m_intFormat = GL_RGBA;
+        m_format = GL_RGBA;
+        pxPitch = 4;
+        break;
+    case TextureFormat::I8:
+        m_intFormat = GL_R8;
+        m_format = GL_RED;
+        pxPitch = 1;
+        break;
+    default:
+        Log.report(LogVisor::FatalError, "unsupported tex format");
+    }
+    m_cpuSz = width * height * pxPitch;
+    m_cpuBuf.reset(new uint8_t[m_cpuSz]);
+
     glGenTextures(3, m_texs);
     glBindTexture(GL_TEXTURE_2D, m_texs[0]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, width, height, 0, m_format, GL_UNSIGNED_BYTE, nullptr);
     glBindTexture(GL_TEXTURE_2D, m_texs[1]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, width, height, 0, m_format, GL_UNSIGNED_BYTE, nullptr);
     glBindTexture(GL_TEXTURE_2D, m_texs[2]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, width, height, 0, m_format, GL_UNSIGNED_BYTE, nullptr);
 }
 GLTextureD::~GLTextureD() {glDeleteTextures(3, m_texs);}
 
+void GLTextureD::update(int b)
+{
+    int slot = 1 << b;
+    if ((slot & m_validMask) == 0)
+    {
+        glBindTexture(GL_TEXTURE_2D, m_texs[b]);
+        glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, m_width, m_height, 0, m_format, GL_UNSIGNED_BYTE, m_cpuBuf.get());
+        m_validMask |= slot;
+    }
+}
+
 void GLTextureD::load(const void* data, size_t sz)
 {
-    glBindTexture(GL_TEXTURE_2D, m_texs[m_q->m_fillBuf]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_width, m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    size_t bufSz = std::min(sz, m_cpuSz);
+    memcpy(m_cpuBuf.get(), data, bufSz);
+    m_validMask = 0;
 }
 void* GLTextureD::map(size_t sz)
 {
-    if (m_mappedBuf)
-        free(m_mappedBuf);
-    m_mappedBuf = malloc(sz);
-    m_mappedSize = sz;
-    return m_mappedBuf;
+    if (sz > m_cpuSz)
+        return nullptr;
+    return m_cpuBuf.get();
 }
 void GLTextureD::unmap()
 {
-    glBindTexture(GL_TEXTURE_2D, m_texs[m_q->m_fillBuf]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_width, m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, m_mappedBuf);
-    free(m_mappedBuf);
-    m_mappedBuf = nullptr;
+    m_validMask = 0;
 }
 
-void GLTextureD::bind(size_t idx) const
+void GLTextureD::bind(size_t idx, int b)
 {
     glActiveTexture(GL_TEXTURE0 + idx);
-    glBindTexture(GL_TEXTURE_2D, m_texs[0]);
+    glBindTexture(GL_TEXTURE_2D, m_texs[b]);
 }
 
 ITextureD*
