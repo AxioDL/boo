@@ -34,8 +34,8 @@ struct SWindowRect
 
 struct SWindowCoord
 {
-    unsigned pixel[2];
-    unsigned virtualPixel[2];
+    int pixel[2];
+    int virtualPixel[2];
     float norm[2];
 };
 
