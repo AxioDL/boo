@@ -461,9 +461,9 @@ static inline boo::EMouseButton getButton(NSEvent* event)
     NSRect frame = [parentView frame];
     boo::SWindowCoord coord =
     {
-        {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
-        {(unsigned)liw.x, (unsigned)liw.y},
-        {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
+        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
+        {int(liw.x), int(liw.y)},
+        {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
     };
     booContext->m_callback->mouseDown(coord, boo::EMouseButton::Primary,
                                       getMod([theEvent modifierFlags]));
@@ -478,9 +478,9 @@ static inline boo::EMouseButton getButton(NSEvent* event)
     NSRect frame = [parentView frame];
     boo::SWindowCoord coord =
     {
-        {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
-        {(unsigned)liw.x, (unsigned)liw.y},
-        {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
+        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
+        {int(liw.x), int(liw.y)},
+        {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
     };
     booContext->m_callback->mouseUp(coord, boo::EMouseButton::Primary,
                                     getMod([theEvent modifierFlags]));
@@ -495,9 +495,9 @@ static inline boo::EMouseButton getButton(NSEvent* event)
     NSRect frame = [parentView frame];
     boo::SWindowCoord coord =
     {
-        {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
-        {(unsigned)liw.x, (unsigned)liw.y},
-        {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
+        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
+        {int(liw.x), int(liw.y)},
+        {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
     };
     booContext->m_callback->mouseDown(coord, boo::EMouseButton::Secondary,
                                       getMod([theEvent modifierFlags]));
@@ -512,9 +512,9 @@ static inline boo::EMouseButton getButton(NSEvent* event)
     NSRect frame = [parentView frame];
     boo::SWindowCoord coord =
     {
-        {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
-        {(unsigned)liw.x, (unsigned)liw.y},
-        {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
+        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
+        {int(liw.x), int(liw.y)},
+        {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
     };
     booContext->m_callback->mouseUp(coord, boo::EMouseButton::Secondary,
                                     getMod([theEvent modifierFlags]));
@@ -532,9 +532,9 @@ static inline boo::EMouseButton getButton(NSEvent* event)
     NSRect frame = [parentView frame];
     boo::SWindowCoord coord =
     {
-        {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
-        {(unsigned)liw.x, (unsigned)liw.y},
-        {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
+        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
+        {int(liw.x), int(liw.y)},
+        {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
     };
     booContext->m_callback->mouseDown(coord, button, getMod([theEvent modifierFlags]));
 }
@@ -551,9 +551,9 @@ static inline boo::EMouseButton getButton(NSEvent* event)
     NSRect frame = [parentView frame];
     boo::SWindowCoord coord =
     {
-        {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
-        {(unsigned)liw.x, (unsigned)liw.y},
-        {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
+        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
+        {int(liw.x), int(liw.y)},
+        {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
     };
     booContext->m_callback->mouseUp(coord, button, getMod([theEvent modifierFlags]));
 }
@@ -569,9 +569,9 @@ static inline boo::EMouseButton getButton(NSEvent* event)
         NSRect frame = [parentView frame];
         boo::SWindowCoord coord =
         {
-            {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
-            {(unsigned)liw.x, (unsigned)liw.y},
-            {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
+            {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
+            {int(liw.x), int(liw.y)},
+            {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
         };
         booContext->m_callback->mouseMove(coord);
     }
@@ -601,9 +601,9 @@ static inline boo::EMouseButton getButton(NSEvent* event)
     NSRect frame = [parentView frame];
     boo::SWindowCoord coord =
     {
-        {(unsigned)(liw.x * pixelFactor), (unsigned)(liw.y * pixelFactor)},
-        {(unsigned)liw.x, (unsigned)liw.y},
-        {(float)(liw.x / frame.size.width), (float)(liw.y / frame.size.height)}
+        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
+        {int(liw.x), int(liw.y)},
+        {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
     };
     boo::SScrollDelta scroll =
     {
