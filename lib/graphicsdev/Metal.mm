@@ -544,6 +544,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     IGraphicsContext* m_parent;
     NSPtr<id<MTLCommandBuffer>> m_cmdBuf;
     NSPtr<id<MTLRenderCommandEncoder>> m_enc;
+    bool m_running = true;
     
     size_t m_fillBuf = 0;
     size_t m_drawBuf = 0;
@@ -555,6 +556,18 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         {
             m_cmdBuf = [[ctx->m_q.get() commandBufferWithUnretainedReferences] retain];
         }
+    }
+    
+    void stopRenderer()
+    {
+        m_running = false;
+        if (m_inProgress)
+            [m_cmdBuf.get() waitUntilCompleted];
+    }
+    
+    ~MetalCommandQueue()
+    {
+        if (m_running) stopRenderer();
     }
     
     MetalShaderDataBinding* m_boundData = nullptr;
@@ -686,6 +699,9 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     bool m_inProgress = false;
     void execute()
     {
+        if (!m_running)
+            return;
+        
         /* Update dynamic data here */
         MetalDataFactory* gfxF = static_cast<MetalDataFactory*>(m_parent->getDataFactory());
         for (MetalData* d : gfxF->m_committedData)
@@ -900,12 +916,12 @@ void MetalDataFactory::reset()
     delete static_cast<MetalData*>(m_deferredData);
     m_deferredData = new struct MetalData();
 }
-IGraphicsData* MetalDataFactory::commit()
+IGraphicsDataToken MetalDataFactory::commit()
 {
     MetalData* retval = static_cast<MetalData*>(m_deferredData);
     m_deferredData = new struct MetalData();
     m_committedData.insert(retval);
-    return retval;
+    return IGraphicsDataToken(this, retval);
 }
 void MetalDataFactory::destroyData(IGraphicsData* d)
 {
