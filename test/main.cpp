@@ -377,7 +377,7 @@ struct TestApplicationCallback : IApplicationCallback
         factory->newShaderDataBinding(pipeline, vfmt, vbo, nullptr, nullptr, 0, nullptr, 1, &texture);
 
         /* Commit objects */
-        IGraphicsData* data = factory->commit();
+        IGraphicsDataToken data = factory->commit();
         
         /* Return control to client */
         lk.unlock();
@@ -458,6 +458,7 @@ struct TestApplicationCallback : IApplicationCallback
             }
         }
 
+        gfxQ->stopRenderer();
         m_cv.notify_one();
         loaderThread.join();
         return 0;

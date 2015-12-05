@@ -7,6 +7,7 @@
 
 namespace boo
 {
+struct IGraphicsCommandQueue;
 
 struct IGraphicsBuffer
 {
@@ -145,12 +146,9 @@ struct IShaderPipeline {};
  *  as a reference */
 struct IShaderDataBinding {};
 
-/** Opaque token for maintaining ownership of factory-created resources
- *  deletion of this token triggers mass-deallocation of the factory's
- *  resource batch. */
-struct IGraphicsData
-{
-};
+/** Opaque object for maintaining ownership of factory-created resources */
+struct IGraphicsData {};
+class IGraphicsDataToken;
 
 /** Used by platform shader pipeline constructors */
 enum class BlendFactor
@@ -220,9 +218,53 @@ struct IGraphicsDataFactory
                          size_t texCount, ITexture** texs)=0;
 
     virtual void reset()=0;
-    virtual IGraphicsData* commit()=0;
+    virtual IGraphicsDataToken commit()=0;
+
+private:
+    friend class IGraphicsDataToken;
     virtual void destroyData(IGraphicsData*)=0;
     virtual void destroyAllData()=0;
+};
+
+/** Opaque token for maintaining ownership of factory-created resources
+ *  deletion of this token triggers mass-deallocation of the factory's
+ *  IGraphicsData. */
+class IGraphicsDataToken
+{
+    friend class GLDataFactory;
+    friend class D3D12DataFactory;
+    friend class D3D11DataFactory;
+    friend class MetalDataFactory;
+    IGraphicsDataFactory* m_factory = nullptr;
+    IGraphicsData* m_data = nullptr;
+    IGraphicsDataToken(IGraphicsDataFactory* factory, IGraphicsData* data)
+    : m_factory(factory), m_data(data) {}
+    void doDestroy()
+    {
+        if (m_factory && m_data)
+            m_factory->destroyData(m_data);
+    }
+public:
+    IGraphicsDataToken() = default;
+    IGraphicsDataToken(const IGraphicsDataToken& other) = delete;
+    IGraphicsDataToken(IGraphicsDataToken&& other)
+    {
+        m_factory = other.m_factory;
+        other.m_factory = nullptr;
+        m_data = other.m_data;
+        other.m_data = nullptr;
+    }
+    IGraphicsDataToken& operator=(const IGraphicsDataToken& other) = delete;
+    IGraphicsDataToken& operator=(IGraphicsDataToken&& other)
+    {
+        doDestroy();
+        m_factory = other.m_factory;
+        other.m_factory = nullptr;
+        m_data = other.m_data;
+        other.m_data = nullptr;
+        return *this;
+    }
+    ~IGraphicsDataToken() {doDestroy();}
 };
 
 }

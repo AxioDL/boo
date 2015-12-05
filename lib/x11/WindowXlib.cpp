@@ -25,7 +25,7 @@
 
 #include "XlibCommon.hpp"
 
-#define REF_DPMM 3.7824 /* 96 DPI */
+#define REF_DPMM 3.78138
 #define FS_ATOM "_NET_WM_STATE_FULLSCREEN"
 
 #define MWM_HINTS_FUNCTIONS   (1L << 0)

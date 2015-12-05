@@ -58,7 +58,6 @@ public:
 
     /* Creates a new context on current thread!! Call from client loading thread */
     virtual IGraphicsDataFactory* getLoadContextDataFactory()=0;
-
 };
     
 }

@@ -18,25 +18,31 @@ enum class EMouseButton
     Aux2      = 5
 };
 
+struct SWindowCoord
+{
+    int pixel[2];
+    int virtualPixel[2];
+    float norm[2];
+};
+
 struct SWindowRect
 {
     int location[2];
     int size[2];
-    bool operator !=(const SWindowRect& other) const
+    bool operator!=(const SWindowRect& other) const
     {
         return location[0] != other.location[0] ||
                location[1] != other.location[1] ||
                size[0] != other.size[0] ||
                size[1] != other.size[1];
     }
-    bool operator ==(const SWindowRect& other) const {return !(*this != other);}
-};
+    bool operator==(const SWindowRect& other) const {return !(*this != other);}
 
-struct SWindowCoord
-{
-    int pixel[2];
-    int virtualPixel[2];
-    float norm[2];
+    bool coordInRect(const SWindowCoord& coord) const
+    {
+        return coord.pixel[0] >= location[0] && coord.pixel[0] < location[0] + size[0] &&
+               coord.pixel[1] >= location[1] && coord.pixel[1] < location[1] + size[1];
+    }
 };
 
 struct STouchCoord
@@ -246,7 +252,6 @@ public:
 
     /* Creates a new context on current thread!! Call from client loading thread */
     virtual IGraphicsDataFactory* getLoadContextDataFactory()=0;
-    
 };
     
 }

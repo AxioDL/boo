@@ -557,7 +557,7 @@ void GLDataFactory::reset()
     m_deferredData = new struct GLData();
 }
 
-IGraphicsData* GLDataFactory::commit()
+IGraphicsDataToken GLDataFactory::commit()
 {
     GLData* retval = m_deferredData;
     m_deferredData = new struct GLData();
@@ -566,7 +566,7 @@ IGraphicsData* GLDataFactory::commit()
        While this isn't strictly required, some drivers might behave
        differently */
     glFlush();
-    return retval;
+    return IGraphicsDataToken(this, retval);
 }
     
 void GLDataFactory::destroyData(IGraphicsData* d)
@@ -900,11 +900,16 @@ struct GLCommandQueue : IGraphicsCommandQueue
         m_initlk.unlock();
     }
 
-    ~GLCommandQueue()
+    void stopRenderer()
     {
         m_running = false;
         m_cv.notify_one();
         m_thr.join();
+    }
+
+    ~GLCommandQueue()
+    {
+        if (m_running) stopRenderer();
     }
 
     void setShaderDataBinding(IShaderDataBinding* binding)

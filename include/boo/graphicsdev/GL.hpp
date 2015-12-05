@@ -17,9 +17,11 @@ class GLDataFactory : public IGraphicsDataFactory
     struct GLData* m_deferredData = nullptr;
     std::unordered_set<struct GLData*> m_committedData;
     std::vector<int> m_texUnis;
+    void destroyData(IGraphicsData*);
+    void destroyAllData();
 public:
     GLDataFactory(IGraphicsContext* parent);
-    ~GLDataFactory() {}
+    ~GLDataFactory() {destroyAllData();}
 
     Platform platform() const {return Platform::OGL;}
     const SystemChar* platformName() const {return _S("OGL");}
@@ -54,9 +56,7 @@ public:
                          size_t texCount, ITexture** texs);
 
     void reset();
-    IGraphicsData* commit();
-    void destroyData(IGraphicsData*);
-    void destroyAllData();
+    IGraphicsDataToken commit();
 };
 
 }

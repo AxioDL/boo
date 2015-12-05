@@ -60,7 +60,7 @@ static Window GetWindowOfEvent(XEvent* event, bool& windowEvent)
     case ButtonRelease:
     {
         windowEvent = true;
-        return event->xbutton.window;;
+        return event->xbutton.window;
     }
     case MotionNotify:
     {
@@ -290,7 +290,6 @@ public:
                     XNextEvent(m_xDisp, &event);
                     bool windowEvent;
                     Window evWindow = GetWindowOfEvent(&event, windowEvent);
-                    //fprintf(stderr, "EVENT %d\n", XCB_EVENT_RESPONSE_TYPE(event));
                     if (windowEvent)
                     {
                         auto window = m_windows.find(evWindow);

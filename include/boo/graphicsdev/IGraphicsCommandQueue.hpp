@@ -38,6 +38,8 @@ struct IGraphicsCommandQueue
 
     virtual void resolveDisplay(ITextureR* source)=0;
     virtual void execute()=0;
+
+    virtual void stopRenderer()=0;
 };
 
 }
