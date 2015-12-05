@@ -22,6 +22,7 @@ namespace boo
 class ID3DDataFactory : public IGraphicsDataFactory
 {
 public:
+    virtual ~ID3DDataFactory() {}
     bool bindingNeedsVertexFormat() const {return false;}
     virtual IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
                                                ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,

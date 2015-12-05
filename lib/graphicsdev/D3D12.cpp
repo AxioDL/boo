@@ -888,6 +888,9 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
     HANDLE m_dynamicBufFenceHandle;
     bool m_dynamicNeedsReset = false;
 
+    HANDLE m_renderFenceHandle;
+    bool m_running = true;
+
     size_t m_fillBuf = 0;
     size_t m_drawBuf = 0;
 
@@ -940,6 +943,7 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         ThrowIfFailed(ctx->m_dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), &m_fence));
         ThrowIfFailed(ctx->m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, ctx->m_qalloc[0].Get(), 
                                                     nullptr, __uuidof(ID3D12GraphicsCommandList), &m_cmdList));
+        m_renderFenceHandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
         m_cmdList->SetGraphicsRootSignature(m_ctx->m_rs.Get());
 
         ThrowIfFailed(ctx->m_dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), &m_dynamicBufFence));
@@ -950,6 +954,21 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
                                                          __uuidof(ID3D12CommandAllocator), &m_dynamicCmdAlloc[1]));
         ThrowIfFailed(ctx->m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_dynamicCmdAlloc[0].Get(),
                                                     nullptr, __uuidof(ID3D12GraphicsCommandList), &m_dynamicCmdList));
+    }
+
+    void stopRenderer()
+    {
+        m_running = false;
+        if (m_fence->GetCompletedValue() < m_submittedFenceVal)
+        {
+            ThrowIfFailed(m_fence->SetEventOnCompletion(m_submittedFenceVal, m_renderFenceHandle));
+            WaitForSingleObject(m_renderFenceHandle, INFINITE);
+        }
+    }
+
+    ~D3D12CommandQueue()
+    {
+        if (m_running) stopRenderer();
     }
 
     void setShaderDataBinding(IShaderDataBinding* binding)
@@ -1200,6 +1219,20 @@ class D3D12DataFactory : public ID3DDataFactory
     D3D12Data* m_deferredData = nullptr;
     struct D3D12Context* m_ctx;
     std::unordered_set<D3D12Data*> m_committedData;
+
+    void destroyData(IGraphicsData* d)
+    {
+        D3D12Data* data = static_cast<D3D12Data*>(d);
+        m_committedData.erase(data);
+        delete data;
+    }
+
+    void destroyAllData()
+    {
+        for (IGraphicsData* data : m_committedData)
+            delete static_cast<D3D12Data*>(data);
+        m_committedData.clear();
+    }
 public:
     D3D12DataFactory(IGraphicsContext* parent, D3D12Context* ctx)
     : m_parent(parent), m_deferredData(new struct D3D12Data()), m_ctx(ctx)
@@ -1222,7 +1255,7 @@ public:
         ThrowIfFailed(ctx->m_dev->CreateRootSignature(0, rsOutBlob->GetBufferPointer(), 
             rsOutBlob->GetBufferSize(), __uuidof(ID3D12RootSignature), &ctx->m_rs));
     }
-    ~D3D12DataFactory() = default;
+    ~D3D12DataFactory() {destroyAllData();}
 
     Platform platform() const {return Platform::D3D12;}
     const SystemChar* platformName() const {return _S("D3D12");}
@@ -1360,7 +1393,7 @@ public:
         m_deferredData = new struct D3D12Data();
     }
 
-    IGraphicsData* commit()
+    IGraphicsDataToken commit()
     {
         D3D12Data* retval = static_cast<D3D12Data*>(m_deferredData);
 
@@ -1461,26 +1494,15 @@ public:
         /* All set! */
         m_deferredData = new struct D3D12Data();
         m_committedData.insert(retval);
-        return retval;
-    }
-
-    void destroyData(IGraphicsData* d)
-    {
-        D3D12Data* data = static_cast<D3D12Data*>(d);
-        m_committedData.erase(data);
-        delete data;
-    }
-
-    void destroyAllData()
-    {
-        for (IGraphicsData* data : m_committedData)
-            delete static_cast<D3D12Data*>(data);
-        m_committedData.clear();
+        return IGraphicsDataToken(this, retval);
     }
 };
 
 void D3D12CommandQueue::execute()
 {
+    if (!m_running)
+        return;
+
     /* Stage dynamic uploads */
     D3D12DataFactory* gfxF = static_cast<D3D12DataFactory*>(m_parent->getDataFactory());
     for (D3D12Data* d : gfxF->m_committedData)
