@@ -25,6 +25,9 @@ class MetalDataFactory : public IGraphicsDataFactory
     struct MetalData* m_deferredData = nullptr;
     std::unordered_set<struct MetalData*> m_committedData;
     struct MetalContext* m_ctx;
+    
+    void destroyData(IGraphicsData*);
+    void destroyAllData();
 public:
     MetalDataFactory(IGraphicsContext* parent, MetalContext* ctx);
     ~MetalDataFactory() {}
@@ -61,9 +64,7 @@ public:
                          size_t texCount, ITexture** texs);
     
     void reset();
-    IGraphicsData* commit();
-    void destroyData(IGraphicsData*);
-    void destroyAllData();
+    IGraphicsDataToken commit();
 };
 
 }

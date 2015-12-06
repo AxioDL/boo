@@ -705,11 +705,16 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         ThrowIfFailed(ctx->m_dev->CreateDeferredContext1(0, &m_dynamicCtx));
     }
 
-    ~D3D11CommandQueue()
+    void stopRenderer()
     {
         m_running = false;
         m_cv.notify_one();
         m_thr.join();
+    }
+
+    ~D3D11CommandQueue()
+    {
+        if (m_running) stopRenderer();
     }
 
     void setShaderDataBinding(IShaderDataBinding* binding)
@@ -873,11 +878,25 @@ class D3D11DataFactory : public ID3DDataFactory
     D3D11Data* m_deferredData = nullptr;
     struct D3D11Context* m_ctx;
     std::unordered_set<D3D11Data*> m_committedData;
+
+    void destroyData(IGraphicsData* d)
+    {
+        D3D11Data* data = static_cast<D3D11Data*>(d);
+        m_committedData.erase(data);
+        delete data;
+    }
+
+    void destroyAllData()
+    {
+        for (IGraphicsData* data : m_committedData)
+            delete static_cast<D3D11Data*>(data);
+        m_committedData.clear();
+    }
 public:
     D3D11DataFactory(IGraphicsContext* parent, D3D11Context* ctx)
     : m_parent(parent), m_deferredData(new struct D3D11Data()), m_ctx(ctx)
     {}
-    ~D3D11DataFactory() = default;
+    ~D3D11DataFactory() {destroyAllData();}
 
     Platform platform() const {return Platform::D3D11;}
     const SystemChar* platformName() const {return _S("D3D11");}
@@ -1014,26 +1033,12 @@ public:
         m_deferredData = new struct D3D11Data();
     }
 
-    IGraphicsData* commit()
+    IGraphicsDataToken commit()
     {
         D3D11Data* retval = m_deferredData;
         m_deferredData = new struct D3D11Data();
         m_committedData.insert(retval);
-        return retval;
-    }
-
-    void destroyData(IGraphicsData* d)
-    {
-        D3D11Data* data = static_cast<D3D11Data*>(d);
-        m_committedData.erase(data);
-        delete data;
-    }
-
-    void destroyAllData()
-    {
-        for (IGraphicsData* data : m_committedData)
-            delete static_cast<D3D11Data*>(data);
-        m_committedData.clear();
+        return IGraphicsDataToken(this, retval);
     }
 };
 
