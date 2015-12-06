@@ -270,17 +270,31 @@ public:
         visualIdOut = m_visualid;
     }
 
-    ~GraphicsContextGLX()
+    void destroy()
     {
         if (m_glxCtx)
+        {
             glXDestroyContext(m_xDisp, m_glxCtx);
+            m_glxCtx = nullptr;
+        }
         if (m_glxWindow)
+        {
             glXDestroyWindow(m_xDisp, m_glxWindow);
+            m_glxWindow = 0;
+        }
         if (m_loadCtx)
+        {
             glXDestroyContext(m_xDisp, m_loadCtx);
-        m_vsyncRunning = false;
-        m_vsyncThread.join();
+            m_loadCtx = nullptr;
+        }
+        if (m_vsyncRunning)
+        {
+            m_vsyncRunning = false;
+            m_vsyncThread.join();
+        }
     }
+
+    ~GraphicsContextGLX() {destroy();}
 
     void _setCallback(IWindowCallback* cb)
     {
@@ -574,6 +588,7 @@ public:
     ~WindowXlib()
     {
         XLockDisplay(m_xDisp);
+        m_gfxCtx.destroy();
         XUnmapWindow(m_xDisp, m_windowId);
         XDestroyWindow(m_xDisp, m_windowId);
         XFreeColormap(m_xDisp, m_colormapId);
