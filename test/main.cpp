@@ -367,7 +367,7 @@ struct TestApplicationCallback : IApplicationCallback
             "    return tex.sample(samp, d.out_uv);\n"
             "}\n";
             
-            pipeline = metalF->newShaderPipeline(VS, FS, vfmt, self->m_renderTarget,
+            pipeline = metalF->newShaderPipeline(VS, FS, vfmt, 1,
                                                  BlendFactor::One, BlendFactor::Zero, true, true, false);
         }
 #endif
