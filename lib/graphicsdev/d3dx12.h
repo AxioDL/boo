@@ -1540,15 +1540,48 @@ inline UINT64 PrepSubresources(
 }
 
 //------------------------------------------------------------------------------------------------
-// Stack-allocating UpdateSubresources implementation
+// Heap-allocating PrepSubresources implementation
+inline UINT64 PrepSubresources(
+    _In_ ID3D12Device* pDevice,
+    _In_ D3D12_RESOURCE_DESC* DestinationDesc,
+    _In_ ID3D12Resource* pIntermediate,
+    UINT64 IntermediateOffset,
+    _In_range_(0,D3D12_REQ_SUBRESOURCES) UINT FirstSubresource,
+    _In_range_(0,D3D12_REQ_SUBRESOURCES-FirstSubresource) UINT NumSubresources,
+    _In_reads_(NumSubresources) D3D12_SUBRESOURCE_DATA* pSrcData)
+{
+    UINT64 RequiredSize = 0;
+    UINT64 MemToAlloc = static_cast<UINT64>(sizeof(D3D12_PLACED_SUBRESOURCE_FOOTPRINT) + sizeof(UINT) + sizeof(UINT64)) * NumSubresources;
+    if (MemToAlloc > SIZE_MAX)
+    {
+       return 0;
+    }
+    void* pMem = HeapAlloc(GetProcessHeap(), 0, static_cast<SIZE_T>(MemToAlloc));
+    if (pMem == NULL)
+    {
+       return 0;
+    }
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT* pLayouts = reinterpret_cast<D3D12_PLACED_SUBRESOURCE_FOOTPRINT*>(pMem);
+    UINT64* pRowSizesInBytes = reinterpret_cast<UINT64*>(pLayouts + NumSubresources);
+    UINT* pNumRows = reinterpret_cast<UINT*>(pRowSizesInBytes + NumSubresources);
+
+    pDevice->GetCopyableFootprints(DestinationDesc, FirstSubresource, NumSubresources, IntermediateOffset, pLayouts, pNumRows, pRowSizesInBytes, &RequiredSize);
+
+    UINT64 result = PrepSubresources(pDevice, DestinationDesc, pIntermediate, FirstSubresource, NumSubresources, RequiredSize, pLayouts, pNumRows, pRowSizesInBytes, pSrcData);
+    HeapFree(GetProcessHeap(), 0, pMem);
+    return result;
+}
+
+//------------------------------------------------------------------------------------------------
+// Stack-allocating PrepSubresources implementation
 template <UINT MaxSubresources>
 inline UINT64 PrepSubresources( 
     _In_ ID3D12Device* pDevice,
     _In_ D3D12_RESOURCE_DESC* DestinationDesc,
     _In_ ID3D12Resource* pIntermediate,
     UINT64 IntermediateOffset,
-    _In_range_(0, MaxSubresources) UINT FirstSubresource,
-    _In_range_(1, MaxSubresources - FirstSubresource) UINT NumSubresources,
+    _In_range_(0,D3D12_REQ_SUBRESOURCES) UINT FirstSubresource,
+    _In_range_(0,D3D12_REQ_SUBRESOURCES-FirstSubresource) UINT NumSubresources,
     _In_reads_(NumSubresources) D3D12_SUBRESOURCE_DATA* pSrcData)
 {
     UINT64 RequiredSize = 0;
@@ -1561,6 +1594,56 @@ inline UINT64 PrepSubresources(
     return PrepSubresources(pDevice, DestinationDesc, pIntermediate, FirstSubresource, NumSubresources, RequiredSize, Layouts, NumRows, RowSizesInBytes, pSrcData);
 }
 
+//------------------------------------------------------------------------------------------------
+// Heap-allocating CommandSubresourcesTransfer implementation
+inline void CommandSubresourcesTransfer(
+    _In_ ID3D12Device* pDevice,
+    _In_ ID3D12GraphicsCommandList* pCmdList,
+    _In_ ID3D12Resource* pDestinationResource,
+    _In_ ID3D12Resource* pIntermediate,
+    UINT64 IntermediateOffset,
+    _In_range_(0, MaxSubresources) UINT FirstSubresource,
+    _In_range_(1, MaxSubresources - FirstSubresource) UINT NumSubresources)
+{
+    UINT64 RequiredSize = 0;
+    UINT64 MemToAlloc = static_cast<UINT64>(sizeof(D3D12_PLACED_SUBRESOURCE_FOOTPRINT) + sizeof(UINT) + sizeof(UINT64)) * NumSubresources;
+    if (MemToAlloc > SIZE_MAX)
+    {
+       return;
+    }
+    void* pMem = HeapAlloc(GetProcessHeap(), 0, static_cast<SIZE_T>(MemToAlloc));
+    if (pMem == NULL)
+    {
+       return;
+    }
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT* pLayouts = reinterpret_cast<D3D12_PLACED_SUBRESOURCE_FOOTPRINT*>(pMem);
+    UINT64* pRowSizesInBytes = reinterpret_cast<UINT64*>(pLayouts + NumSubresources);
+    UINT* pNumRows = reinterpret_cast<UINT*>(pRowSizesInBytes + NumSubresources);
+
+    D3D12_RESOURCE_DESC Desc = pDestinationResource->GetDesc();
+    pDevice->GetCopyableFootprints(&Desc, FirstSubresource, NumSubresources, IntermediateOffset, pLayouts, pNumRows, pRowSizesInBytes, &RequiredSize);
+
+    if (Desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
+    {
+        CD3DX12_BOX SrcBox( UINT( pLayouts[0].Offset ), UINT( pLayouts[0].Offset + pLayouts[0].Footprint.Width ) );
+        pCmdList->CopyBufferRegion(
+            pDestinationResource, 0, pIntermediate, pLayouts[0].Offset, pLayouts[0].Footprint.Width);
+    }
+    else
+    {
+        for (UINT i = 0; i < NumSubresources; ++i)
+        {
+            CD3DX12_TEXTURE_COPY_LOCATION Dst(pDestinationResource, i + FirstSubresource);
+            CD3DX12_TEXTURE_COPY_LOCATION Src(pIntermediate, pLayouts[i]);
+            pCmdList->CopyTextureRegion(&Dst, 0, 0, 0, &Src, nullptr);
+        }
+    }
+
+    HeapFree(GetProcessHeap(), 0, pMem);
+}
+
+//------------------------------------------------------------------------------------------------
+// Stack-allocating CommandSubresourcesTransfer implementation
 template <UINT MaxSubresources>
 inline void CommandSubresourcesTransfer(
     _In_ ID3D12Device* pDevice,

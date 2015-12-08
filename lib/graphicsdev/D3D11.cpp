@@ -158,16 +158,31 @@ class D3D11TextureSA : public ITextureSA
                                    D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_IMMUTABLE);
 
         const uint8_t* dataIt = static_cast<const uint8_t*>(data);
-        D3D11_SUBRESOURCE_DATA upData[16] = {};
-        for (size_t i=0 ; i<layers && i<16 ; ++i)
+        if (layers > 16)
         {
-            upData[i].pSysMem = dataIt;
-            upData[i].SysMemPitch = width * pixelPitch;
-            upData[i].SysMemSlicePitch = upData[i].SysMemPitch * height;
-            dataIt += upData[i].SysMemSlicePitch;
+            std::unique_ptr<D3D11_SUBRESOURCE_DATA[]> upData(new D3D11_SUBRESOURCE_DATA[layers]);
+            for (size_t i=0 ; i<layers ; ++i)
+            {
+                upData[i].pSysMem = dataIt;
+                upData[i].SysMemPitch = width * pixelPitch;
+                upData[i].SysMemSlicePitch = upData[i].SysMemPitch * height;
+                dataIt += upData[i].SysMemSlicePitch;
+            }
+            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&desc, upData.get(), &m_tex));
+        }
+        else
+        {
+            D3D11_SUBRESOURCE_DATA upData[16] = {};
+            for (size_t i=0 ; i<layers ; ++i)
+            {
+                upData[i].pSysMem = dataIt;
+                upData[i].SysMemPitch = width * pixelPitch;
+                upData[i].SysMemSlicePitch = upData[i].SysMemPitch * height;
+                dataIt += upData[i].SysMemSlicePitch;
+            }
+            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&desc, upData, &m_tex));
         }
 
-        ThrowIfFailed(ctx->m_dev->CreateTexture2D(&desc, upData, &m_tex));
         ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_tex.Get(),
             &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_tex.Get(), D3D_SRV_DIMENSION_TEXTURE2DARRAY, pixelFmt), &m_srv));
     }
@@ -628,6 +643,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
                     break;
                 self->m_drawBuf = self->m_completeBuf;
 
+                /* Process dynamic loads */
                 ID3D11CommandList* list = self->m_dynamicList.Get();
                 self->m_ctx->m_devCtx->ExecuteCommandList(list, false);
                 self->m_dynamicList.Reset();
@@ -1061,8 +1077,14 @@ void D3D11CommandQueue::execute()
     ThrowIfFailed(m_deferredCtx->FinishCommandList(false, &m_cmdLists[m_fillBuf]));
     m_workDoPresent[m_fillBuf] = m_doPresent;
     m_doPresent = nullptr;
+
+    /* Wait for worker thread to become ready */
     std::unique_lock<std::mutex> lk(m_mt);
+
+    /* Gather dynamic uploads for worker thread */
     ThrowIfFailed(m_dynamicCtx->FinishCommandList(false, &m_dynamicList));
+
+    /* Ready for next frame */
     m_completeBuf = m_fillBuf;
     for (size_t i=0 ; i<3 ; ++i)
     {
@@ -1071,6 +1093,8 @@ void D3D11CommandQueue::execute()
         m_fillBuf = i;
         break;
     }
+
+    /* Return control to worker thread */
     lk.unlock();
     m_cv.notify_one();
 }

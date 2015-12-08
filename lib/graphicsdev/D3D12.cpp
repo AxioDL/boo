@@ -243,17 +243,33 @@ class D3D12TextureSA : public ITextureSA
             D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, __uuidof(ID3D12Resource), &m_tex));
 
         const uint8_t* dataIt = static_cast<const uint8_t*>(data);
-        D3D12_SUBRESOURCE_DATA upData[16] = {};
-        for (size_t i=0 ; i<layers && i<16 ; ++i)
-        {
-            upData[i].pData = dataIt;
-            upData[i].RowPitch = width * pxPitch;
-            upData[i].SlicePitch = upData[i].RowPitch * height;
-            dataIt += upData[i].SlicePitch;
-        }
 
-        if (!PrepSubresources<16>(ctx->m_dev.Get(), &m_gpuDesc, m_tex.Get(), 0, 0, layers, upData))
-            Log.report(LogVisor::FatalError, "error preparing resource for upload");
+        if (layers > 16)
+        {
+            std::unique_ptr<D3D12_SUBRESOURCE_DATA[]> upData(new D3D12_SUBRESOURCE_DATA[layers]);
+            for (size_t i=0 ; i<layers ; ++i)
+            {
+                upData[i].pData = dataIt;
+                upData[i].RowPitch = width * pxPitch;
+                upData[i].SlicePitch = upData[i].RowPitch * height;
+                dataIt += upData[i].SlicePitch;
+            }
+            if (!PrepSubresources(ctx->m_dev.Get(), &m_gpuDesc, m_tex.Get(), 0, 0, layers, upData.get()))
+                Log.report(LogVisor::FatalError, "error preparing resource for upload");
+        }
+        else
+        {
+            D3D12_SUBRESOURCE_DATA upData[16] = {};
+            for (size_t i=0 ; i<layers ; ++i)
+            {
+                upData[i].pData = dataIt;
+                upData[i].RowPitch = width * pxPitch;
+                upData[i].SlicePitch = upData[i].RowPitch * height;
+                dataIt += upData[i].SlicePitch;
+            }
+            if (!PrepSubresources<16>(ctx->m_dev.Get(), &m_gpuDesc, m_tex.Get(), 0, 0, layers, upData))
+                Log.report(LogVisor::FatalError, "error preparing resource for upload");
+        }
     }
 public:
     ComPtr<ID3D12Resource> m_tex;
@@ -266,9 +282,18 @@ public:
             D3D12_RESOURCE_STATE_COPY_DEST,
             nullptr, __uuidof(ID3D12Resource), &m_gpuTex));
 
-        CommandSubresourcesTransfer<16>(ctx->m_dev.Get(), ctx->m_loadlist.Get(), m_gpuTex.Get(), m_tex.Get(), 0, 0, m_gpuDesc.DepthOrArraySize);
-        ctx->m_loadlist->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_gpuTex.Get(),
-            D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+        if (m_gpuDesc.DepthOrArraySize > 16)
+        {
+            CommandSubresourcesTransfer(ctx->m_dev.Get(), ctx->m_loadlist.Get(), m_gpuTex.Get(), m_tex.Get(), 0, 0, m_gpuDesc.DepthOrArraySize);
+            ctx->m_loadlist->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_gpuTex.Get(),
+                D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+        }
+        else
+        {
+            CommandSubresourcesTransfer<16>(ctx->m_dev.Get(), ctx->m_loadlist.Get(), m_gpuTex.Get(), m_tex.Get(), 0, 0, m_gpuDesc.DepthOrArraySize);
+            ctx->m_loadlist->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_gpuTex.Get(),
+                D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+        }
 
         return NextHeapOffset(offset, ctx->m_dev->GetResourceAllocationInfo(0, 1, &m_gpuDesc));
     }
