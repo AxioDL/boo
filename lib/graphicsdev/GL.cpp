@@ -793,7 +793,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 if (self->m_pendingFmtAdds.size())
                 {
                     for (GLVertexFormat* fmt : self->m_pendingFmtAdds)
-                        ConfigureVertexFormat(fmt);
+                        if (fmt) ConfigureVertexFormat(fmt);
                     self->m_pendingFmtAdds.clear();
                 }
 
@@ -1028,7 +1028,16 @@ struct GLCommandQueue : IGraphicsCommandQueue
     void delVertexFormat(GLVertexFormat* fmt)
     {
         std::unique_lock<std::mutex> lk(m_mt);
-        m_pendingFmtDels.push_back({fmt->m_vao[0], fmt->m_vao[1], fmt->m_vao[2]});
+        bool foundAdd = false;
+        for (GLVertexFormat*& afmt : m_pendingFmtAdds)
+            if (afmt == fmt)
+            {
+                foundAdd = true;
+                afmt = nullptr;
+                break;
+            }
+        if (!foundAdd)
+            m_pendingFmtDels.push_back({fmt->m_vao[0], fmt->m_vao[1], fmt->m_vao[2]});
     }
 
     void addFBO(GLTextureR* tex)
@@ -1217,7 +1226,7 @@ GLDataFactory::newRenderTexture(size_t width, size_t height, size_t samples)
 }
 
 GLVertexFormat::GLVertexFormat(GLCommandQueue* q, size_t elementCount,
-                                     const VertexElementDescriptor* elements)
+                               const VertexElementDescriptor* elements)
 : m_q(q),
   m_elementCount(elementCount),
   m_elements(new VertexElementDescriptor[elementCount])

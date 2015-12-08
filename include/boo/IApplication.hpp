@@ -29,7 +29,7 @@ class IApplication
 public:
     virtual ~IApplication() {}
     
-    enum class EPlatformType : uint8_t
+    enum class EPlatformType
     {
         Auto        = 0,
         Wayland     = 1,
