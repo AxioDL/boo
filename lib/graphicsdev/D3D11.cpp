@@ -102,7 +102,7 @@ class D3D11GraphicsBufferD : public IGraphicsBufferD
             ThrowIfFailed(ctx->m_dev->CreateBuffer(&CD3D11_BUFFER_DESC(m_cpuSz, USE_TABLE[int(use)],
                           D3D11_USAGE_DYNAMIC, D3D11_CPU_ACCESS_WRITE), nullptr, &m_bufs[i]));
     }
-    void update(int b);
+    void update(ID3D11DeviceContext* ctx, int b);
 public:
     size_t m_stride;
     size_t m_count;
@@ -249,7 +249,7 @@ class D3D11TextureD : public ITextureD
                 &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_texs[i].Get(), D3D_SRV_DIMENSION_TEXTURE2D, pixelFmt), &m_srvs[i]));
         }
     }
-    void update(int b);
+    void update(ID3D11DeviceContext* ctx, int b);
 public:
     ComPtr<ID3D11Texture2D> m_texs[3];
     ComPtr<ID3D11ShaderResourceView> m_srvs[3];
@@ -626,8 +626,6 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
     D3D11Context::Window* m_windowCtx;
     IGraphicsContext* m_parent;
     ComPtr<ID3D11DeviceContext1> m_deferredCtx;
-    ComPtr<ID3D11DeviceContext1> m_dynamicCtx;
-    ComPtr<ID3D11CommandList> m_dynamicList;
 
     size_t m_fillBuf = 0;
     size_t m_completeBuf = 0;
@@ -644,6 +642,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
     ComPtr<ID3D11CommandList> m_cmdLists[3];
     D3D11TextureR* m_workDoPresent[3];
 
+    void ProcessDynamicLoads(ID3D11DeviceContext* ctx);
     static void RenderingWorker(D3D11CommandQueue* self)
     {
         {
@@ -659,10 +658,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
                     break;
                 self->m_drawBuf = self->m_completeBuf;
 
-                /* Process dynamic loads */
-                ID3D11CommandList* list = self->m_dynamicList.Get();
-                self->m_ctx->m_devCtx->ExecuteCommandList(list, false);
-                self->m_dynamicList.Reset();
+                self->ProcessDynamicLoads(self->m_ctx->m_devCtx.Get());
 
                 if (self->m_texResizes.size())
                 {
@@ -734,7 +730,6 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         m_initcv.wait(m_initlk);
         m_initlk.unlock();
         ThrowIfFailed(ctx->m_dev->CreateDeferredContext1(0, &m_deferredCtx));
-        ThrowIfFailed(ctx->m_dev->CreateDeferredContext1(0, &m_dynamicCtx));
     }
 
     void stopRenderer()
@@ -843,16 +838,16 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
     void execute();
 };
 
-void D3D11GraphicsBufferD::update(int b)
+void D3D11GraphicsBufferD::update(ID3D11DeviceContext* ctx, int b)
 {
     int slot = 1 << b;
     if ((slot & m_validSlots) == 0)
     {
         ID3D11Buffer* res = m_bufs[b].Get();
         D3D11_MAPPED_SUBRESOURCE d;
-        m_q->m_dynamicCtx->Map(res, 0, D3D11_MAP_WRITE_DISCARD, 0, &d);
+        ctx->Map(res, 0, D3D11_MAP_WRITE_DISCARD, 0, &d);
         memcpy(d.pData, m_cpuBuf.get(), m_cpuSz);
-        m_q->m_dynamicCtx->Unmap(res, 0);
+        ctx->Unmap(res, 0);
         m_validSlots |= slot;
     }
 }
@@ -873,16 +868,16 @@ void D3D11GraphicsBufferD::unmap()
     m_validSlots = 0;
 }
 
-void D3D11TextureD::update(int b)
+void D3D11TextureD::update(ID3D11DeviceContext* ctx, int b)
 {
     int slot = 1 << b;
     if ((slot & m_validSlots) == 0)
     {
         ID3D11Texture2D* res = m_texs[b].Get();
         D3D11_MAPPED_SUBRESOURCE d;
-        m_q->m_dynamicCtx->Map(res, 0, D3D11_MAP_WRITE_DISCARD, 0, &d);
+        ctx->Map(res, 0, D3D11_MAP_WRITE_DISCARD, 0, &d);
         memcpy(d.pData, m_cpuBuf.get(), m_cpuSz);
-        m_q->m_dynamicCtx->Unmap(res, 0);
+        ctx->Unmap(res, 0);
         m_validSlots |= slot;
     }
 }
@@ -1101,17 +1096,6 @@ void D3D11CommandQueue::execute()
     /* Stage dynamic uploads */
     D3D11DataFactory* gfxF = static_cast<D3D11DataFactory*>(m_parent->getDataFactory());
     gfxF->procDeletes();
-    for (D3D11Data* d : gfxF->m_committedData)
-    {
-        for (std::unique_ptr<D3D11GraphicsBufferD>& b : d->m_DBufs)
-            b->update(m_fillBuf);
-        for (std::unique_ptr<D3D11TextureD>& t : d->m_DTexs)
-            t->update(m_fillBuf);
-    }
-    for (std::unique_ptr<D3D11GraphicsBufferD>& b : gfxF->m_deferredData->m_DBufs)
-        b->update(m_fillBuf);
-    for (std::unique_ptr<D3D11TextureD>& t : gfxF->m_deferredData->m_DTexs)
-        t->update(m_fillBuf);
 
     ThrowIfFailed(m_deferredCtx->FinishCommandList(false, &m_cmdLists[m_fillBuf]));
     m_workDoPresent[m_fillBuf] = m_doPresent;
@@ -1119,9 +1103,6 @@ void D3D11CommandQueue::execute()
 
     /* Wait for worker thread to become ready */
     std::unique_lock<std::mutex> lk(m_mt);
-
-    /* Gather dynamic uploads for worker thread */
-    ThrowIfFailed(m_dynamicCtx->FinishCommandList(false, &m_dynamicList));
 
     /* Ready for next frame */
     m_completeBuf = m_fillBuf;
@@ -1136,6 +1117,22 @@ void D3D11CommandQueue::execute()
     /* Return control to worker thread */
     lk.unlock();
     m_cv.notify_one();
+}
+
+void D3D11CommandQueue::ProcessDynamicLoads(ID3D11DeviceContext* ctx)
+{
+    D3D11DataFactory* gfxF = static_cast<D3D11DataFactory*>(m_parent->getDataFactory());
+    for (D3D11Data* d : gfxF->m_committedData)
+    {
+        for (std::unique_ptr<D3D11GraphicsBufferD>& b : d->m_DBufs)
+            b->update(ctx, m_fillBuf);
+        for (std::unique_ptr<D3D11TextureD>& t : d->m_DTexs)
+            t->update(ctx, m_fillBuf);
+    }
+    for (std::unique_ptr<D3D11GraphicsBufferD>& b : gfxF->m_deferredData->m_DBufs)
+        b->update(ctx, m_fillBuf);
+    for (std::unique_ptr<D3D11TextureD>& t : gfxF->m_deferredData->m_DTexs)
+        t->update(ctx, m_fillBuf);
 }
 
 IGraphicsCommandQueue* _NewD3D11CommandQueue(D3D11Context* ctx, D3D11Context::Window* windowCtx, IGraphicsContext* parent)
