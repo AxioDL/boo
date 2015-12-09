@@ -642,6 +642,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
     ComPtr<ID3D11CommandList> m_cmdLists[3];
     D3D11TextureR* m_workDoPresent[3];
 
+    std::mutex m_dynamicLock;
     void ProcessDynamicLoads(ID3D11DeviceContext* ctx);
     static void RenderingWorker(D3D11CommandQueue* self)
     {
@@ -853,6 +854,7 @@ void D3D11GraphicsBufferD::update(ID3D11DeviceContext* ctx, int b)
 }
 void D3D11GraphicsBufferD::load(const void* data, size_t sz)
 {
+    std::unique_lock<std::mutex> lk(m_q->m_dynamicLock);
     size_t bufSz = std::min(sz, m_cpuSz);
     memcpy(m_cpuBuf.get(), data, bufSz);
     m_validSlots = 0;
@@ -861,11 +863,13 @@ void* D3D11GraphicsBufferD::map(size_t sz)
 {
     if (sz > m_cpuSz)
         return nullptr;
+    m_q->m_dynamicLock.lock();
     return m_cpuBuf.get();
 }
 void D3D11GraphicsBufferD::unmap()
 {
     m_validSlots = 0;
+    m_q->m_dynamicLock.unlock();
 }
 
 void D3D11TextureD::update(ID3D11DeviceContext* ctx, int b)
@@ -883,6 +887,7 @@ void D3D11TextureD::update(ID3D11DeviceContext* ctx, int b)
 }
 void D3D11TextureD::load(const void* data, size_t sz)
 {
+    std::unique_lock<std::mutex> lk(m_q->m_dynamicLock);
     size_t bufSz = std::min(sz, m_cpuSz);
     memcpy(m_cpuBuf.get(), data, bufSz);
     m_validSlots = 0;
@@ -891,11 +896,13 @@ void* D3D11TextureD::map(size_t sz)
 {
     if (sz > m_cpuSz)
         return nullptr;
+    m_q->m_dynamicLock.lock();
     return m_cpuBuf.get();
 }
 void D3D11TextureD::unmap()
 {
     m_validSlots = 0;
+    m_q->m_dynamicLock.unlock();
 }
 
 class D3D11DataFactory : public ID3DDataFactory
@@ -1122,6 +1129,8 @@ void D3D11CommandQueue::execute()
 void D3D11CommandQueue::ProcessDynamicLoads(ID3D11DeviceContext* ctx)
 {
     D3D11DataFactory* gfxF = static_cast<D3D11DataFactory*>(m_parent->getDataFactory());
+    std::unique_lock<std::mutex> lk(m_dynamicLock);
+
     for (D3D11Data* d : gfxF->m_committedData)
     {
         for (std::unique_ptr<D3D11GraphicsBufferD>& b : d->m_DBufs)
