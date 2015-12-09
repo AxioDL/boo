@@ -9,6 +9,8 @@
 #include <d3dcompiler.h>
 #include <comdef.h>
 #include <algorithm>
+#include <atomic>
+#include <forward_list>
 
 #undef min
 #undef max
@@ -32,6 +34,7 @@ static inline void ThrowIfFailed(HRESULT hr)
 
 struct D3D11Data : IGraphicsData
 {
+    std::atomic_size_t m_refCount = 4;
     std::vector<std::unique_ptr<class D3D11ShaderPipeline>> m_SPs;
     std::vector<std::unique_ptr<struct D3D11ShaderDataBinding>> m_SBinds;
     std::vector<std::unique_ptr<class D3D11GraphicsBufferS>> m_SBufs;
@@ -41,6 +44,19 @@ struct D3D11Data : IGraphicsData
     std::vector<std::unique_ptr<class D3D11TextureD>> m_DTexs;
     std::vector<std::unique_ptr<class D3D11TextureR>> m_RTexs;
     std::vector<std::unique_ptr<struct D3D11VertexFormat>> m_VFmts;
+
+    bool decref()
+    {
+        size_t res = std::atomic_fetch_sub(&m_refCount, 1);
+        if (!res)
+            Log.report(LogVisor::FatalError, "Can't decrement 0-data");
+        if (res == 1)
+        {
+            delete this;
+            return true;
+        }
+        return false;
+    }
 };
 
 static const D3D11_BIND_FLAG USE_TABLE[] =
@@ -894,20 +910,42 @@ class D3D11DataFactory : public ID3DDataFactory
     D3D11Data* m_deferredData = nullptr;
     struct D3D11Context* m_ctx;
     std::unordered_set<D3D11Data*> m_committedData;
+    std::unordered_set<D3D11Data*> m_deletedData;
 
     void destroyData(IGraphicsData* d)
     {
         D3D11Data* data = static_cast<D3D11Data*>(d);
         m_committedData.erase(data);
-        delete data;
+        m_deletedData.insert(data);
     }
 
     void destroyAllData()
     {
         for (IGraphicsData* data : m_committedData)
-            delete static_cast<D3D11Data*>(data);
+            m_deletedData.insert(static_cast<D3D11Data*>(data));
         m_committedData.clear();
     }
+
+    std::vector<D3D11Data*> m_toDelete;
+    void procDeletes()
+    {
+        if (m_deletedData.size())
+        {
+            for (IGraphicsData* data : m_deletedData)
+            {
+                D3D11Data* cdata = static_cast<D3D11Data*>(data);
+                if (cdata->decref())
+                    m_toDelete.push_back(cdata);
+            }
+            if (m_toDelete.size())
+            {
+                for (D3D11Data* data : m_toDelete)
+                    m_deletedData.erase(data);
+                m_toDelete.clear();
+            }
+        }
+    }
+
 public:
     D3D11DataFactory(IGraphicsContext* parent, D3D11Context* ctx)
     : m_parent(parent), m_deferredData(new struct D3D11Data()), m_ctx(ctx)
@@ -1059,9 +1097,10 @@ public:
 };
 
 void D3D11CommandQueue::execute()
-{
+{   
     /* Stage dynamic uploads */
     D3D11DataFactory* gfxF = static_cast<D3D11DataFactory*>(m_parent->getDataFactory());
+    gfxF->procDeletes();
     for (D3D11Data* d : gfxF->m_committedData)
     {
         for (std::unique_ptr<D3D11GraphicsBufferD>& b : d->m_DBufs)
