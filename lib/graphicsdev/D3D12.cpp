@@ -426,8 +426,9 @@ class D3D12TextureR : public ITextureR
         }
     }
 
-    D3D12TextureR(D3D12Context* ctx, size_t width, size_t height, size_t samples)
-    : m_width(width), m_height(height), m_samples(samples) 
+    D3D12CommandQueue* m_q;
+    D3D12TextureR(D3D12Context* ctx, D3D12CommandQueue* q, size_t width, size_t height, size_t samples)
+    : m_q(q), m_width(width), m_height(height), m_samples(samples)
     {
         if (samples == 0) m_samples = 1;
         Setup(ctx, width, height, samples);
@@ -439,7 +440,7 @@ public:
     ComPtr<ID3D12Resource> m_depthTex;
     ComPtr<ID3D12DescriptorHeap> m_rtvHeap;
     ComPtr<ID3D12DescriptorHeap> m_dsvHeap;
-    ~D3D12TextureR() = default;
+    ~D3D12TextureR();
 
     void resize(D3D12Context* ctx, size_t width, size_t height)
     {
@@ -1166,6 +1167,12 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
     void execute();
 };
 
+D3D12TextureR::~D3D12TextureR()
+{
+    if (m_q->m_boundTarget == this)
+        m_q->m_boundTarget = nullptr;
+}
+
 void D3D12GraphicsBufferD::update(int b)
 {
     int slot = 1 << b;
@@ -1344,7 +1351,7 @@ public:
     ITextureR* newRenderTexture(size_t width, size_t height, size_t samples)
     {
         D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent->getCommandQueue());
-        D3D12TextureR* retval = new D3D12TextureR(m_ctx, width, height, samples);
+        D3D12TextureR* retval = new D3D12TextureR(m_ctx, q, width, height, samples);
         static_cast<D3D12Data*>(m_deferredData)->m_RTexs.emplace_back(retval);
         return retval;
     }
