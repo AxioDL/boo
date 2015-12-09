@@ -144,8 +144,10 @@ class GraphicsContextCocoaMetal;
 {
     BooCocoaResponder* resp;
     boo::MetalContext* m_ctx;
+    boo::IWindow* m_window;
 }
 - (id)initWithBooContext:(boo::GraphicsContextCocoaMetal*)bctx;
+- (void)reshapeHandler;
 @end
     
 namespace boo
@@ -317,12 +319,13 @@ class GraphicsContextCocoaMetal : public GraphicsContextCocoa
     IGraphicsDataFactory* m_dataFactory = nullptr;
     
 public:
+    IWindow* m_parentWindow;
     MetalContext* m_metalCtx;
 
     GraphicsContextCocoaMetal(EGraphicsAPI api, IWindow* parentWindow,
                               MetalContext* metalCtx)
     : GraphicsContextCocoa(api, EPixelFormat::RGBA8, parentWindow),
-      m_metalCtx(metalCtx)
+      m_parentWindow(parentWindow), m_metalCtx(metalCtx)
     {
         m_dataFactory = new MetalDataFactory(this, metalCtx);
     }
@@ -909,6 +912,7 @@ static boo::ESpecialKey translateKeycode(short code)
 - (id)initWithBooContext:(boo::GraphicsContextCocoaMetal*)bctx
 {
     m_ctx = bctx->m_metalCtx;
+    m_window = bctx->m_parentWindow;
     self = [self initWithFrame:NSMakeRect(0, 0, 100, 100)];
     [self setWantsLayer:YES];
     resp = [[BooCocoaResponder alloc] initWithBooContext:bctx View:self];
@@ -943,6 +947,36 @@ static boo::ESpecialKey translateKeycode(short code)
 - (NSResponder*)nextResponder
 {
     return resp;
+}
+
+- (void)reshapeHandler
+{
+    boo::SWindowRect rect = {{int(self.frame.origin.x), int(self.frame.origin.y)},
+        {int(self.frame.size.width), int(self.frame.size.height)}};
+    boo::MetalContext::Window& w = m_ctx->m_windows[m_window];
+    std::unique_lock<std::mutex> lk(w.m_resizeLock);
+    if (resp->booContext->m_callback)
+        resp->booContext->m_callback->resized(rect);
+    w.m_size = CGSizeMake(rect.size[0], rect.size[1]);
+    w.m_needsResize = YES;
+}
+
+- (void)setFrameSize:(NSSize)newSize
+{
+    [super setFrameSize:newSize];
+    [self reshapeHandler];
+}
+
+- (void)setBoundsSize:(NSSize)newSize
+{
+    [super setBoundsSize:newSize];
+    [self reshapeHandler];
+}
+
+- (void)viewDidChangeBackingProperties
+{
+    [super viewDidChangeBackingProperties];
+    [self reshapeHandler];
 }
 
 @end
@@ -1061,7 +1095,7 @@ public:
     
     void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const
     {
-        NSRect wFrame = m_nsWindow.frame;
+        NSRect wFrame = m_nsWindow.contentView.frame;
         xOut = wFrame.origin.x;
         yOut = wFrame.origin.y;
         wOut = wFrame.size.width;
@@ -1070,7 +1104,7 @@ public:
     
     void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const
     {
-        NSRect wFrame = m_nsWindow.frame;
+        NSRect wFrame = m_nsWindow.contentView.frame;
         xOut = wFrame.origin.x;
         yOut = wFrame.origin.y;
         wOut = wFrame.size.width;
@@ -1081,8 +1115,8 @@ public:
     {
         dispatch_sync(dispatch_get_main_queue(),
         ^{
-            NSRect wFrame = NSMakeRect(x, y, w, h);
-            [m_nsWindow setFrame:wFrame display:NO];
+            [m_nsWindow setContentSize:NSMakeSize(w, h)];
+            [m_nsWindow setFrameOrigin:NSMakePoint(x, y)];
         });
     }
     
@@ -1090,8 +1124,8 @@ public:
     {
         dispatch_sync(dispatch_get_main_queue(),
         ^{
-            NSRect wFrame = NSMakeRect(x, y, w, h);
-            [m_nsWindow setFrame:wFrame display:NO];
+            [m_nsWindow setContentSize:NSMakeSize(w, h)];
+            [m_nsWindow setFrameOrigin:NSMakePoint(x, y)];
         });
     }
     

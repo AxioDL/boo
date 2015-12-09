@@ -28,6 +28,7 @@ public:
 #include <Metal/Metal.h>
 #include <QuartzCore/CAMetalLayer.h>
 #include <unordered_map>
+#include <mutex>
 
 namespace boo
 {
@@ -39,6 +40,9 @@ struct MetalContext
     struct Window
     {
         CAMetalLayer* m_metalLayer = nullptr;
+        std::mutex m_resizeLock;
+        bool m_needsResize;
+        CGSize m_size;
     };
     std::unordered_map<IWindow*, Window> m_windows;
 };

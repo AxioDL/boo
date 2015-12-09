@@ -554,7 +554,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     {
         @autoreleasepool
         {
-            m_cmdBuf = [[ctx->m_q.get() commandBufferWithUnretainedReferences] retain];
+            m_cmdBuf = [[ctx->m_q.get() commandBuffer] retain];
         }
     }
     
@@ -676,22 +676,35 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         m_enc.reset();
         @autoreleasepool
         {
+            {
+                std::unique_lock<std::mutex> lk(w.m_resizeLock);
+                if (w.m_needsResize)
+                {
+                    w.m_metalLayer.drawableSize = w.m_size;
+                    w.m_needsResize = NO;
+                    return;
+                }
+            }
             id<CAMetalDrawable> drawable = [w.m_metalLayer nextDrawable];
             if (drawable)
             {
                 id<MTLTexture> dest = drawable.texture;
-                id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf.get() blitCommandEncoder];
-                [blitEnc copyFromTexture:csource->m_tex.get()
-                             sourceSlice:0
-                             sourceLevel:0
-                            sourceOrigin:MTLOriginMake(0, 0, 0)
-                              sourceSize:MTLSizeMake(dest.width, dest.height, 1)
-                               toTexture:dest
-                        destinationSlice:0
-                        destinationLevel:0
-                       destinationOrigin:MTLOriginMake(0, 0, 0)];
-                [blitEnc endEncoding];
-                [m_cmdBuf.get() presentDrawable:drawable];
+                if (csource->m_tex.get().width == dest.width &&
+                    csource->m_tex.get().height == dest.height)
+                {
+                    id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf.get() blitCommandEncoder];
+                    [blitEnc copyFromTexture:csource->m_tex.get()
+                                 sourceSlice:0
+                                 sourceLevel:0
+                                sourceOrigin:MTLOriginMake(0, 0, 0)
+                                  sourceSize:MTLSizeMake(dest.width, dest.height, 1)
+                                   toTexture:dest
+                            destinationSlice:0
+                            destinationLevel:0
+                           destinationOrigin:MTLOriginMake(0, 0, 0)];
+                    [blitEnc endEncoding];
+                    [m_cmdBuf.get() presentDrawable:drawable];
+                }
             }
         }
     }
@@ -721,7 +734,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             /* Abandon if in progress (renderer too slow) */
             if (m_inProgress)
             {
-                m_cmdBuf = [[m_ctx->m_q.get() commandBufferWithUnretainedReferences] retain];
+                m_cmdBuf = [[m_ctx->m_q.get() commandBuffer] retain];
                 return;
             }
             
@@ -731,7 +744,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                 for (const auto& resize : m_texResizes)
                     resize.first->resize(m_ctx, resize.second.first, resize.second.second);
                 m_texResizes.clear();
-                m_cmdBuf = [[m_ctx->m_q.get() commandBufferWithUnretainedReferences] retain];
+                m_cmdBuf = [[m_ctx->m_q.get() commandBuffer] retain];
                 return;
             }
             
@@ -741,7 +754,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             [m_cmdBuf.get() addCompletedHandler:^(id<MTLCommandBuffer> buf) {m_inProgress = false;}];
             m_inProgress = true;
             [m_cmdBuf.get() commit];
-            m_cmdBuf = [[m_ctx->m_q.get() commandBufferWithUnretainedReferences] retain];
+            m_cmdBuf = [[m_ctx->m_q.get() commandBuffer] retain];
         }
     }
 };
