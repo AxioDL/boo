@@ -909,13 +909,15 @@ class D3D11DataFactory : public ID3DDataFactory
 {
     friend struct D3D11CommandQueue;
     IGraphicsContext* m_parent;
-    D3D11Data* m_deferredData = nullptr;
+    static thread_local D3D11Data* m_deferredData;
     struct D3D11Context* m_ctx;
     std::unordered_set<D3D11Data*> m_committedData;
+    std::mutex m_committedMutex;
     std::unordered_set<D3D11Data*> m_deletedData;
 
     void destroyData(IGraphicsData* d)
     {
+        std::unique_lock<std::mutex> lk(m_committedMutex);
         D3D11Data* data = static_cast<D3D11Data*>(d);
         m_committedData.erase(data);
         m_deletedData.insert(data);
@@ -923,6 +925,7 @@ class D3D11DataFactory : public ID3DDataFactory
 
     void destroyAllData()
     {
+        std::unique_lock<std::mutex> lk(m_committedMutex);
         for (IGraphicsData* data : m_committedData)
             m_deletedData.insert(static_cast<D3D11Data*>(data));
         m_committedData.clear();
@@ -950,7 +953,7 @@ class D3D11DataFactory : public ID3DDataFactory
 
 public:
     D3D11DataFactory(IGraphicsContext* parent, D3D11Context* ctx)
-    : m_parent(parent), m_deferredData(new struct D3D11Data()), m_ctx(ctx)
+    : m_parent(parent), m_ctx(ctx)
     {}
     ~D3D11DataFactory() {destroyAllData();}
 
@@ -960,6 +963,8 @@ public:
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
     {
         D3D11GraphicsBufferS* retval = new D3D11GraphicsBufferS(use, m_ctx, data, stride, count);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D11Data();
         static_cast<D3D11Data*>(m_deferredData)->m_SBufs.emplace_back(retval);
         return retval;
     }
@@ -968,6 +973,8 @@ public:
     {
         std::unique_ptr<uint8_t[]> d = std::move(data);
         D3D11GraphicsBufferS* retval = new D3D11GraphicsBufferS(use, m_ctx, d.get(), stride, count);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D11Data();
         static_cast<D3D11Data*>(m_deferredData)->m_SBufs.emplace_back(retval);
         return retval;
     }
@@ -976,6 +983,8 @@ public:
     {
         D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent->getCommandQueue());
         D3D11GraphicsBufferD* retval = new D3D11GraphicsBufferD(q, use, m_ctx, stride, count);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D11Data();
         static_cast<D3D11Data*>(m_deferredData)->m_DBufs.emplace_back(retval);
         return retval;
     }
@@ -984,6 +993,8 @@ public:
         const void* data, size_t sz)
     {
         D3D11TextureS* retval = new D3D11TextureS(m_ctx, width, height, mips, fmt, data, sz);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D11Data();
         static_cast<D3D11Data*>(m_deferredData)->m_STexs.emplace_back(retval);
         return retval;
     }
@@ -993,6 +1004,8 @@ public:
     {
         std::unique_ptr<uint8_t[]> d = std::move(data);
         D3D11TextureS* retval = new D3D11TextureS(m_ctx, width, height, mips, fmt, d.get(), sz);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D11Data();
         static_cast<D3D11Data*>(m_deferredData)->m_STexs.emplace_back(retval);
         return retval;
     }
@@ -1001,6 +1014,8 @@ public:
                                       const void* data, size_t sz)
     {
         D3D11TextureSA* retval = new D3D11TextureSA(m_ctx, width, height, layers, fmt, data, sz);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D11Data();
         static_cast<D3D11Data*>(m_deferredData)->m_SATexs.emplace_back(retval);
         return retval;
     }
@@ -1009,6 +1024,8 @@ public:
     {
         D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent->getCommandQueue());
         D3D11TextureD* retval = new D3D11TextureD(q, m_ctx, width, height, fmt);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D11Data();
         static_cast<D3D11Data*>(m_deferredData)->m_DTexs.emplace_back(retval);
         return retval;
     }
@@ -1017,6 +1034,8 @@ public:
     {
         D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent->getCommandQueue());
         D3D11TextureR* retval = new D3D11TextureR(m_ctx, width, height, samples);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D11Data();
         static_cast<D3D11Data*>(m_deferredData)->m_RTexs.emplace_back(retval);
         return retval;
     }
@@ -1025,6 +1044,8 @@ public:
     {
         D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent->getCommandQueue());
         D3D11VertexFormat* retval = new struct D3D11VertexFormat(elementCount, elements);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D11Data();
         static_cast<D3D11Data*>(m_deferredData)->m_VFmts.emplace_back(retval);
         return retval;
     }
@@ -1067,6 +1088,8 @@ public:
         D3D11ShaderPipeline* retval = new D3D11ShaderPipeline(m_ctx, vertBlobOut.Get(), fragBlobOut.Get(),
             static_cast<const D3D11VertexFormat*>(vtxFmt),
             srcFac, dstFac, depthTest, depthWrite, backfaceCulling);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D11Data();
         static_cast<D3D11Data*>(m_deferredData)->m_SPs.emplace_back(retval);
         return retval;
     }
@@ -1079,6 +1102,8 @@ public:
     {
         D3D11ShaderDataBinding* retval =
             new D3D11ShaderDataBinding(m_ctx, pipeline, vbuf, instVbo, ibuf, ubufCount, ubufs, texCount, texs);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D11Data();
         static_cast<D3D11Data*>(m_deferredData)->m_SBinds.emplace_back(retval);
         return retval;
     }
@@ -1086,17 +1111,21 @@ public:
     void reset()
     {
         delete static_cast<D3D11Data*>(m_deferredData);
-        m_deferredData = new struct D3D11Data();
+        m_deferredData = nullptr;
     }
 
     IGraphicsDataToken commit()
     {
+        if (!m_deferredData)
+            return IGraphicsDataToken(this, nullptr);
         D3D11Data* retval = m_deferredData;
-        m_deferredData = new struct D3D11Data();
+        m_deferredData = nullptr;
         m_committedData.insert(retval);
         return IGraphicsDataToken(this, retval);
     }
 };
+
+thread_local D3D11Data* D3D11DataFactory::m_deferredData;
 
 void D3D11CommandQueue::execute()
 {   
@@ -1130,6 +1159,7 @@ void D3D11CommandQueue::ProcessDynamicLoads(ID3D11DeviceContext* ctx)
 {
     D3D11DataFactory* gfxF = static_cast<D3D11DataFactory*>(m_parent->getDataFactory());
     std::unique_lock<std::mutex> lk(m_dynamicLock);
+    std::unique_lock<std::mutex> datalk(gfxF->m_committedMutex);
 
     for (D3D11Data* d : gfxF->m_committedData)
     {
@@ -1138,10 +1168,6 @@ void D3D11CommandQueue::ProcessDynamicLoads(ID3D11DeviceContext* ctx)
         for (std::unique_ptr<D3D11TextureD>& t : d->m_DTexs)
             t->update(ctx, m_fillBuf);
     }
-    for (std::unique_ptr<D3D11GraphicsBufferD>& b : gfxF->m_deferredData->m_DBufs)
-        b->update(ctx, m_fillBuf);
-    for (std::unique_ptr<D3D11TextureD>& t : gfxF->m_deferredData->m_DTexs)
-        t->update(ctx, m_fillBuf);
 }
 
 IGraphicsCommandQueue* _NewD3D11CommandQueue(D3D11Context* ctx, D3D11Context::Window* windowCtx, IGraphicsContext* parent)

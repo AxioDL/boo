@@ -8,6 +8,7 @@
 #include <d3dcompiler.h>
 #include <comdef.h>
 #include <algorithm>
+#include <mutex>
 
 #define MAX_UNIFORM_COUNT 8
 #define MAX_TEXTURE_COUNT 8
@@ -1248,12 +1249,14 @@ class D3D12DataFactory : public ID3DDataFactory
 {
     friend struct D3D12CommandQueue;
     IGraphicsContext* m_parent;
-    D3D12Data* m_deferredData = nullptr;
+    static thread_local D3D12Data* m_deferredData;
     struct D3D12Context* m_ctx;
     std::unordered_set<D3D12Data*> m_committedData;
+    std::mutex m_committedMutex;
 
     void destroyData(IGraphicsData* d)
     {
+        std::unique_lock<std::mutex> lk(m_committedMutex);
         D3D12Data* data = static_cast<D3D12Data*>(d);
         m_committedData.erase(data);
         delete data;
@@ -1261,13 +1264,14 @@ class D3D12DataFactory : public ID3DDataFactory
 
     void destroyAllData()
     {
+        std::unique_lock<std::mutex> lk(m_committedMutex);
         for (IGraphicsData* data : m_committedData)
             delete static_cast<D3D12Data*>(data);
         m_committedData.clear();
     }
 public:
     D3D12DataFactory(IGraphicsContext* parent, D3D12Context* ctx)
-    : m_parent(parent), m_deferredData(new struct D3D12Data()), m_ctx(ctx)
+    : m_parent(parent), m_ctx(ctx)
     {
         CD3DX12_DESCRIPTOR_RANGE ranges[] =
         {
@@ -1295,6 +1299,8 @@ public:
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
     {
         D3D12GraphicsBufferS* retval = new D3D12GraphicsBufferS(use, m_ctx, data, stride, count);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D12Data();
         static_cast<D3D12Data*>(m_deferredData)->m_SBufs.emplace_back(retval);
         return retval;
     }
@@ -1303,6 +1309,8 @@ public:
     {
         std::unique_ptr<uint8_t[]> d = std::move(data);
         D3D12GraphicsBufferS* retval = new D3D12GraphicsBufferS(use, m_ctx, d.get(), stride, count);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D12Data();
         static_cast<D3D12Data*>(m_deferredData)->m_SBufs.emplace_back(retval);
         return retval;
     }
@@ -1311,6 +1319,8 @@ public:
     {
         D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent->getCommandQueue());
         D3D12GraphicsBufferD* retval = new D3D12GraphicsBufferD(q, use, m_ctx, stride, count);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D12Data();
         static_cast<D3D12Data*>(m_deferredData)->m_DBufs.emplace_back(retval);
         return retval;
     }
@@ -1319,6 +1329,8 @@ public:
                                 const void* data, size_t sz)
     {
         D3D12TextureS* retval = new D3D12TextureS(m_ctx, width, height, mips, fmt, data, sz);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D12Data();
         static_cast<D3D12Data*>(m_deferredData)->m_STexs.emplace_back(retval);
         return retval;
     }
@@ -1328,6 +1340,8 @@ public:
     {
         std::unique_ptr<uint8_t[]> d = std::move(data);
         D3D12TextureS* retval = new D3D12TextureS(m_ctx, width, height, mips, fmt, d.get(), sz);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D12Data();
         static_cast<D3D12Data*>(m_deferredData)->m_STexs.emplace_back(retval);
         return retval;
     }
@@ -1336,6 +1350,8 @@ public:
                                       const void* data, size_t sz)
     {
         D3D12TextureSA* retval = new D3D12TextureSA(m_ctx, width, height, layers, fmt, data, sz);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D12Data();
         static_cast<D3D12Data*>(m_deferredData)->m_SATexs.emplace_back(retval);
         return retval;
     }
@@ -1344,6 +1360,8 @@ public:
     {
         D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent->getCommandQueue());
         D3D12TextureD* retval = new D3D12TextureD(q, m_ctx, width, height, fmt);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D12Data();
         static_cast<D3D12Data*>(m_deferredData)->m_DTexs.emplace_back(retval);
         return retval;
     }
@@ -1352,6 +1370,8 @@ public:
     {
         D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent->getCommandQueue());
         D3D12TextureR* retval = new D3D12TextureR(m_ctx, q, width, height, samples);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D12Data();
         static_cast<D3D12Data*>(m_deferredData)->m_RTexs.emplace_back(retval);
         return retval;
     }
@@ -1359,6 +1379,8 @@ public:
     IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)
     {
         D3D12VertexFormat* retval = new struct D3D12VertexFormat(elementCount, elements);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D12Data();
         static_cast<D3D12Data*>(m_deferredData)->m_VFmts.emplace_back(retval);
         return retval;
     }
@@ -1403,6 +1425,8 @@ public:
                                                               srcFac, dstFac, depthTest, depthWrite, backfaceCulling);
         if (!pipelineBlob)
             retval->m_state->GetCachedBlob(&pipelineBlob);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D12Data();
         static_cast<D3D12Data*>(m_deferredData)->m_SPs.emplace_back(retval);
         return retval;
     }
@@ -1415,6 +1439,8 @@ public:
     {
         D3D12ShaderDataBinding* retval =
             new D3D12ShaderDataBinding(m_ctx, pipeline, vbuf, instVbuf, ibuf, ubufCount, ubufs, texCount, texs);
+        if (!m_deferredData)
+            m_deferredData = new struct D3D12Data();
         static_cast<D3D12Data*>(m_deferredData)->m_SBinds.emplace_back(retval);
         return retval;
     }
@@ -1422,11 +1448,14 @@ public:
     void reset()
     {
         delete static_cast<D3D12Data*>(m_deferredData);
-        m_deferredData = new struct D3D12Data();
+        m_deferredData = nullptr;
     }
 
     IGraphicsDataToken commit()
     {
+        if (!m_deferredData)
+            return IGraphicsDataToken(this, nullptr);
+
         D3D12Data* retval = static_cast<D3D12Data*>(m_deferredData);
 
         /* Gather resource descriptions */
@@ -1524,11 +1553,13 @@ public:
             tex->m_tex.Reset();
 
         /* All set! */
-        m_deferredData = new struct D3D12Data();
+        m_deferredData = nullptr;
         m_committedData.insert(retval);
         return IGraphicsDataToken(this, retval);
     }
 };
+
+thread_local D3D12Data* D3D12DataFactory::m_deferredData;
 
 void D3D12CommandQueue::execute()
 {
@@ -1537,6 +1568,7 @@ void D3D12CommandQueue::execute()
 
     /* Stage dynamic uploads */
     D3D12DataFactory* gfxF = static_cast<D3D12DataFactory*>(m_parent->getDataFactory());
+    std::unique_lock<std::mutex> datalk(gfxF->m_committedMutex);
     for (D3D12Data* d : gfxF->m_committedData)
     {
         for (std::unique_ptr<D3D12GraphicsBufferD>& b : d->m_DBufs)
@@ -1544,10 +1576,7 @@ void D3D12CommandQueue::execute()
         for (std::unique_ptr<D3D12TextureD>& t : d->m_DTexs)
             t->update(m_fillBuf);
     }
-    for (std::unique_ptr<D3D12GraphicsBufferD>& b : gfxF->m_deferredData->m_DBufs)
-        b->update(m_fillBuf);
-    for (std::unique_ptr<D3D12TextureD>& t : gfxF->m_deferredData->m_DTexs)
-        t->update(m_fillBuf);
+    datalk.unlock();
 
     /* Perform dynamic uploads */
     if (!m_dynamicNeedsReset)

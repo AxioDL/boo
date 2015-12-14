@@ -322,8 +322,7 @@ public:
     void present() 
     {
         OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
-        if (!SwapBuffers(w.m_deviceContext))
-            Log.report(LogVisor::FatalError, "SwapBuffers err");
+        SwapBuffers(w.m_deviceContext);
     }
 
     IGraphicsCommandQueue* getCommandQueue()
