@@ -6,6 +6,7 @@
 #include "boo/IGraphicsContext.hpp"
 #include <vector>
 #include <unordered_set>
+#include <mutex>
 
 namespace boo
 {
@@ -14,8 +15,9 @@ class GLDataFactory : public IGraphicsDataFactory
 {
     friend struct GLCommandQueue;
     IGraphicsContext* m_parent;
-    struct GLData* m_deferredData = nullptr;
+    static thread_local struct GLData* m_deferredData;
     std::unordered_set<struct GLData*> m_committedData;
+    std::mutex m_committedMutex;
     std::vector<int> m_texUnis;
     void destroyData(IGraphicsData*);
     void destroyAllData();

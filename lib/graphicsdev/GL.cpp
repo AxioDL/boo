@@ -16,6 +16,7 @@ namespace boo
 {
 static LogVisor::LogModule Log("boo::GL");
 
+thread_local struct GLData* GLDataFactory::m_deferredData;
 struct GLData : IGraphicsData
 {
     std::vector<std::unique_ptr<class GLShaderPipeline>> m_SPs;
@@ -93,6 +94,8 @@ IGraphicsBufferS*
 GLDataFactory::newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
 {
     GLGraphicsBufferS* retval = new GLGraphicsBufferS(use, data, stride * count);
+    if (!m_deferredData)
+        m_deferredData = new struct GLData();
     static_cast<GLData*>(m_deferredData)->m_SBufs.emplace_back(retval);
     return retval;
 }
@@ -102,6 +105,8 @@ GLDataFactory::newStaticBuffer(BufferUse use, std::unique_ptr<uint8_t[]>&& data,
 {
     std::unique_ptr<uint8_t[]> d = std::move(data);
     GLGraphicsBufferS* retval = new GLGraphicsBufferS(use, d.get(), stride * count);
+    if (!m_deferredData)
+        m_deferredData = new struct GLData();
     static_cast<GLData*>(m_deferredData)->m_SBufs.emplace_back(retval);
     return retval;
 }
@@ -244,6 +249,8 @@ GLDataFactory::newStaticTexture(size_t width, size_t height, size_t mips, Textur
                                    const void* data, size_t sz)
 {
     GLTextureS* retval = new GLTextureS(width, height, mips, fmt, data, sz);
+    if (!m_deferredData)
+        m_deferredData = new struct GLData();
     static_cast<GLData*>(m_deferredData)->m_STexs.emplace_back(retval);
     return retval;
 }
@@ -254,6 +261,8 @@ GLDataFactory::newStaticTexture(size_t width, size_t height, size_t mips, Textur
 {
     std::unique_ptr<uint8_t[]> d = std::move(data);
     GLTextureS* retval = new GLTextureS(width, height, mips, fmt, d.get(), sz);
+    if (!m_deferredData)
+        m_deferredData = new struct GLData();
     static_cast<GLData*>(m_deferredData)->m_STexs.emplace_back(retval);
     return retval;
 }
@@ -263,6 +272,8 @@ GLDataFactory::newStaticArrayTexture(size_t width, size_t height, size_t layers,
                                      const void *data, size_t sz)
 {
     GLTextureSA* retval = new GLTextureSA(width, height, layers, fmt, data, sz);
+    if (!m_deferredData)
+        m_deferredData = new struct GLData();
     static_cast<GLData*>(m_deferredData)->m_SATexs.emplace_back(retval);
     return retval;
 }
@@ -462,6 +473,8 @@ IShaderPipeline* GLDataFactory::newShaderPipeline
     }
 
     GLShaderPipeline* retval = new GLShaderPipeline(std::move(shader));
+    if (!m_deferredData)
+        m_deferredData = new struct GLData();
     static_cast<GLData*>(m_deferredData)->m_SPs.emplace_back(retval);
     return retval;
 }
@@ -544,23 +557,28 @@ GLDataFactory::newShaderDataBinding(IShaderPipeline* pipeline,
 {
     GLShaderDataBinding* retval =
     new GLShaderDataBinding(pipeline, vtxFormat, ubufCount, ubufs, texCount, texs);
+    if (!m_deferredData)
+        m_deferredData = new struct GLData();
     static_cast<GLData*>(m_deferredData)->m_SBinds.emplace_back(retval);
     return retval;
 }
 
 GLDataFactory::GLDataFactory(IGraphicsContext* parent)
-: m_parent(parent), m_deferredData(new struct GLData()) {}
+: m_parent(parent) {}
 
 void GLDataFactory::reset()
 {
     delete static_cast<GLData*>(m_deferredData);
-    m_deferredData = new struct GLData();
+    m_deferredData = nullptr;
 }
 
 IGraphicsDataToken GLDataFactory::commit()
 {
+    if (!m_deferredData)
+        return IGraphicsDataToken(this, nullptr);
+    std::unique_lock<std::mutex> lk(m_committedMutex);
     GLData* retval = m_deferredData;
-    m_deferredData = new struct GLData();
+    m_deferredData = nullptr;
     m_committedData.insert(retval);
     /* Let's go ahead and flush to ensure our data gets to the GPU
        While this isn't strictly required, some drivers might behave
@@ -568,9 +586,10 @@ IGraphicsDataToken GLDataFactory::commit()
     glFlush();
     return IGraphicsDataToken(this, retval);
 }
-    
+
 void GLDataFactory::destroyData(IGraphicsData* d)
 {
+    std::unique_lock<std::mutex> lk(m_committedMutex);
     GLData* data = static_cast<GLData*>(d);
     m_committedData.erase(data);
     delete data;
@@ -578,6 +597,7 @@ void GLDataFactory::destroyData(IGraphicsData* d)
 
 void GLDataFactory::destroyAllData()
 {
+    std::unique_lock<std::mutex> lk(m_committedMutex);
     for (IGraphicsData* data : m_committedData)
         delete static_cast<GLData*>(data);
     m_committedData.clear();
@@ -1066,6 +1086,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
 
         /* Update dynamic data here */
         GLDataFactory* gfxF = static_cast<GLDataFactory*>(m_parent->getDataFactory());
+        std::unique_lock<std::mutex> datalk(gfxF->m_committedMutex);
         for (GLData* d : gfxF->m_committedData)
         {
             for (std::unique_ptr<GLGraphicsBufferD>& b : d->m_DBufs)
@@ -1073,10 +1094,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
             for (std::unique_ptr<GLTextureD>& t : d->m_DTexs)
                 t->update(m_completeBuf);
         }
-        for (std::unique_ptr<GLGraphicsBufferD>& b : gfxF->m_deferredData->m_DBufs)
-            b->update(m_completeBuf);
-        for (std::unique_ptr<GLTextureD>& t : gfxF->m_deferredData->m_DTexs)
-            t->update(m_completeBuf);
+        datalk.unlock();
         glFlush();
 
         lk.unlock();
@@ -1124,6 +1142,8 @@ GLDataFactory::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
 {
     GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
     GLGraphicsBufferD* retval = new GLGraphicsBufferD(q, use, stride * count);
+    if (!m_deferredData)
+        m_deferredData = new struct GLData();
     static_cast<GLData*>(m_deferredData)->m_DBufs.emplace_back(retval);
     return retval;
 }
@@ -1199,6 +1219,8 @@ GLDataFactory::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
 {
     GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
     GLTextureD* retval = new GLTextureD(q, width, height, fmt);
+    if (!m_deferredData)
+        m_deferredData = new struct GLData();
     static_cast<GLData*>(m_deferredData)->m_DTexs.emplace_back(retval);
     return retval;
 }
@@ -1221,6 +1243,8 @@ GLDataFactory::newRenderTexture(size_t width, size_t height, size_t samples)
     GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
     GLTextureR* retval = new GLTextureR(q, width, height, samples);
     q->resizeRenderTexture(retval, width, height);
+    if (!m_deferredData)
+        m_deferredData = new struct GLData();
     static_cast<GLData*>(m_deferredData)->m_RTexs.emplace_back(retval);
     return retval;
 }
@@ -1242,6 +1266,8 @@ IVertexFormat* GLDataFactory::newVertexFormat
 {
     GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
     GLVertexFormat* retval = new struct GLVertexFormat(q, elementCount, elements);
+    if (!m_deferredData)
+        m_deferredData = new struct GLData();
     static_cast<GLData*>(m_deferredData)->m_VFmts.emplace_back(retval);
     return retval;
 }
