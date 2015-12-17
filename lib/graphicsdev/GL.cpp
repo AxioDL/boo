@@ -590,8 +590,10 @@ IGraphicsDataToken GLDataFactory::commit()
         return IGraphicsDataToken(this, nullptr);
     std::unique_lock<std::mutex> lk(m_committedMutex);
     GLData* retval = m_deferredData;
+#ifndef NDEBUG
     for (std::unique_ptr<GLShaderDataBinding>& b : retval->m_SBinds)
         b->m_committed = true;
+#endif
     m_deferredData = nullptr;
     m_committedData.insert(retval);
     /* Let's go ahead and flush to ensure our data gets to the GPU
