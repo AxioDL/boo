@@ -499,6 +499,12 @@ struct GLShaderDataBinding : IShaderDataBinding
     std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
     size_t m_texCount;
     std::unique_ptr<ITexture*[]> m_texs;
+
+#ifndef NDEBUG
+    /* Debugging aids */
+    bool m_committed = false;
+#endif
+
     GLShaderDataBinding(IShaderPipeline* pipeline,
                         IVertexFormat* vtxFormat,
                         size_t ubufCount, IGraphicsBuffer** ubufs,
@@ -517,6 +523,12 @@ struct GLShaderDataBinding : IShaderDataBinding
     }
     void bind(int b) const
     {
+#ifndef NDEBUG
+        if (!m_committed)
+            Log.report(LogVisor::FatalError,
+                       "attempted to use uncommitted GLShaderDataBinding");
+#endif
+
         GLuint prog = m_pipeline->bind();
         m_vtxFormat->bind(b);
         for (size_t i=0 ; i<m_ubufCount ; ++i)
@@ -578,6 +590,8 @@ IGraphicsDataToken GLDataFactory::commit()
         return IGraphicsDataToken(this, nullptr);
     std::unique_lock<std::mutex> lk(m_committedMutex);
     GLData* retval = m_deferredData;
+    for (std::unique_ptr<GLShaderDataBinding>& b : retval->m_SBinds)
+        b->m_committed = true;
     m_deferredData = nullptr;
     m_committedData.insert(retval);
     /* Let's go ahead and flush to ensure our data gets to the GPU
