@@ -13,6 +13,7 @@ namespace boo
 static LogVisor::LogModule Log("boo::Metal");
 struct MetalCommandQueue;
 
+ThreadLocalPtr<struct MetalData> MetalDataFactory::m_deferredData;
 struct MetalData : IGraphicsData
 {
     std::vector<std::unique_ptr<class MetalShaderPipeline>> m_SPs;
@@ -717,6 +718,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         
         /* Update dynamic data here */
         MetalDataFactory* gfxF = static_cast<MetalDataFactory*>(m_parent->getDataFactory());
+        std::unique_lock<std::mutex> datalk(gfxF->m_committedMutex);
         for (MetalData* d : gfxF->m_committedData)
         {
             for (std::unique_ptr<MetalGraphicsBufferD>& b : d->m_DBufs)
@@ -724,10 +726,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             for (std::unique_ptr<MetalTextureD>& t : d->m_DTexs)
                 t->update(m_fillBuf);
         }
-        for (std::unique_ptr<MetalGraphicsBufferD>& b : gfxF->m_deferredData->m_DBufs)
-            b->update(m_fillBuf);
-        for (std::unique_ptr<MetalTextureD>& t : gfxF->m_deferredData->m_DTexs)
-            t->update(m_fillBuf);
+        datalk.unlock();
         
         @autoreleasepool
         {
@@ -815,26 +814,32 @@ void MetalTextureD::unmap()
 }
     
 MetalDataFactory::MetalDataFactory(IGraphicsContext* parent, MetalContext* ctx)
-: m_parent(parent), m_deferredData(new struct MetalData()), m_ctx(ctx) {}
+: m_parent(parent), m_ctx(ctx) {}
     
 IGraphicsBufferS* MetalDataFactory::newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
 {
     MetalGraphicsBufferS* retval = new MetalGraphicsBufferS(use, m_ctx, data, stride, count);
-    static_cast<MetalData*>(m_deferredData)->m_SBufs.emplace_back(retval);
+    if (!m_deferredData.get())
+        m_deferredData.reset(new struct MetalData());
+    m_deferredData->m_SBufs.emplace_back(retval);
     return retval;
 }
 IGraphicsBufferS* MetalDataFactory::newStaticBuffer(BufferUse use, std::unique_ptr<uint8_t[]>&& data, size_t stride, size_t count)
 {
     std::unique_ptr<uint8_t[]> d = std::move(data);
     MetalGraphicsBufferS* retval = new MetalGraphicsBufferS(use, m_ctx, d.get(), stride, count);
-    static_cast<MetalData*>(m_deferredData)->m_SBufs.emplace_back(retval);
+    if (!m_deferredData.get())
+        m_deferredData.reset(new struct MetalData());
+    m_deferredData->m_SBufs.emplace_back(retval);
     return retval;
 }
 IGraphicsBufferD* MetalDataFactory::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
 {
     MetalCommandQueue* q = static_cast<MetalCommandQueue*>(m_parent->getCommandQueue());
     MetalGraphicsBufferD* retval = new MetalGraphicsBufferD(q, use, m_ctx, stride, count);
-    static_cast<MetalData*>(m_deferredData)->m_DBufs.emplace_back(retval);
+    if (!m_deferredData.get())
+        m_deferredData.reset(new struct MetalData());
+    m_deferredData->m_DBufs.emplace_back(retval);
     return retval;
 }
 
@@ -842,7 +847,9 @@ ITextureS* MetalDataFactory::newStaticTexture(size_t width, size_t height, size_
                                               const void* data, size_t sz)
 {
     MetalTextureS* retval = new MetalTextureS(m_ctx, width, height, mips, fmt, data, sz);
-    static_cast<MetalData*>(m_deferredData)->m_STexs.emplace_back(retval);
+    if (!m_deferredData.get())
+        m_deferredData.reset(new struct MetalData());
+    m_deferredData->m_STexs.emplace_back(retval);
     return retval;
 }
 ITextureS* MetalDataFactory::newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
@@ -850,34 +857,44 @@ ITextureS* MetalDataFactory::newStaticTexture(size_t width, size_t height, size_
 {
     std::unique_ptr<uint8_t[]> d = std::move(data);
     MetalTextureS* retval = new MetalTextureS(m_ctx, width, height, mips, fmt, d.get(), sz);
-    static_cast<MetalData*>(m_deferredData)->m_STexs.emplace_back(retval);
+    if (!m_deferredData.get())
+        m_deferredData.reset(new struct MetalData());
+    m_deferredData->m_STexs.emplace_back(retval);
     return retval;
 }
 ITextureSA* MetalDataFactory::newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
                                                    const void* data, size_t sz)
 {
     MetalTextureSA* retval = new MetalTextureSA(m_ctx, width, height, layers, fmt, data, sz);
-    static_cast<MetalData*>(m_deferredData)->m_SATexs.emplace_back(retval);
+    if (!m_deferredData.get())
+        m_deferredData.reset(new struct MetalData());
+    m_deferredData->m_SATexs.emplace_back(retval);
     return retval;
 }
 ITextureD* MetalDataFactory::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
 {
     MetalCommandQueue* q = static_cast<MetalCommandQueue*>(m_parent->getCommandQueue());
     MetalTextureD* retval = new MetalTextureD(q, m_ctx, width, height, fmt);
-    static_cast<MetalData*>(m_deferredData)->m_DTexs.emplace_back(retval);
+    if (!m_deferredData.get())
+        m_deferredData.reset(new struct MetalData());
+    m_deferredData->m_DTexs.emplace_back(retval);
     return retval;
 }
 ITextureR* MetalDataFactory::newRenderTexture(size_t width, size_t height, size_t samples)
 {
     MetalTextureR* retval = new MetalTextureR(m_ctx, width, height, samples);
-    static_cast<MetalData*>(m_deferredData)->m_RTexs.emplace_back(retval);
+    if (!m_deferredData.get())
+        m_deferredData.reset(new struct MetalData());
+    m_deferredData->m_RTexs.emplace_back(retval);
     return retval;
 }
 
 IVertexFormat* MetalDataFactory::newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)
 {
     MetalVertexFormat* retval = new struct MetalVertexFormat(elementCount, elements);
-    static_cast<MetalData*>(m_deferredData)->m_VFmts.emplace_back(retval);
+    if (!m_deferredData.get())
+        m_deferredData.reset(new struct MetalData());
+    m_deferredData->m_VFmts.emplace_back(retval);
     return retval;
 }
 
@@ -907,7 +924,9 @@ IShaderPipeline* MetalDataFactory::newShaderPipeline(const char* vertSource, con
     MetalShaderPipeline* retval = new MetalShaderPipeline(m_ctx, vertFunc.get(), fragFunc.get(),
                                                           static_cast<const MetalVertexFormat*>(vtxFmt), targetSamples,
                                                           srcFac, dstFac, depthTest, depthWrite, backfaceCulling);
-    static_cast<MetalData*>(m_deferredData)->m_SPs.emplace_back(retval);
+    if (!m_deferredData.get())
+        m_deferredData.reset(new struct MetalData());
+    m_deferredData->m_SPs.emplace_back(retval);
     return retval;
 }
 
@@ -920,30 +939,37 @@ MetalDataFactory::newShaderDataBinding(IShaderPipeline* pipeline,
 {
     MetalShaderDataBinding* retval =
     new MetalShaderDataBinding(m_ctx, pipeline, vbuf, instVbo, ibuf, ubufCount, ubufs, texCount, texs);
-    static_cast<MetalData*>(m_deferredData)->m_SBinds.emplace_back(retval);
+    if (!m_deferredData.get())
+        m_deferredData.reset(new struct MetalData());
+    m_deferredData->m_SBinds.emplace_back(retval);
     return retval;
 }
 
 void MetalDataFactory::reset()
 {
-    delete static_cast<MetalData*>(m_deferredData);
-    m_deferredData = new struct MetalData();
+    delete m_deferredData.get();
+    m_deferredData.reset();
 }
-IGraphicsDataToken MetalDataFactory::commit()
+GraphicsDataToken MetalDataFactory::commit()
 {
-    MetalData* retval = static_cast<MetalData*>(m_deferredData);
-    m_deferredData = new struct MetalData();
+    if (!m_deferredData.get())
+        return GraphicsDataToken(this, nullptr);
+    std::unique_lock<std::mutex> lk(m_committedMutex);
+    MetalData* retval = m_deferredData.get();
+    m_deferredData.reset();
     m_committedData.insert(retval);
-    return IGraphicsDataToken(this, retval);
+    return GraphicsDataToken(this, retval);
 }
 void MetalDataFactory::destroyData(IGraphicsData* d)
 {
+    std::unique_lock<std::mutex> lk(m_committedMutex);
     MetalData* data = static_cast<MetalData*>(d);
     m_committedData.erase(data);
     delete data;
 }
 void MetalDataFactory::destroyAllData()
 {
+    std::unique_lock<std::mutex> lk(m_committedMutex);
     for (IGraphicsData* data : m_committedData)
         delete static_cast<MetalData*>(data);
     m_committedData.clear();

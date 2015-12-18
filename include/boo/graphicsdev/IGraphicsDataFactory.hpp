@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <stdint.h>
+#include <pthread.h>
 #include "boo/System.hpp"
 
 namespace boo
@@ -224,6 +225,28 @@ private:
     friend class GraphicsDataToken;
     virtual void destroyData(IGraphicsData*)=0;
     virtual void destroyAllData()=0;
+};
+
+/** Multiplatform TLS-pointer wrapper (for compilers without proper thread_local support) */
+template <class T>
+class ThreadLocalPtr
+{
+#if _WIN32
+    DWORD m_key;
+public:
+    ThreadLocalPtr() {m_key = TlsAlloc();}
+    ~ThreadLocalPtr() {TlsFree(m_key);}
+    T* get() {return static_cast<T*>(TlsGetValue(m_key));}
+    void reset(T* v=nullptr) {TlsSetValue(m_key, v);}
+#else
+    pthread_key_t m_key;
+public:
+    ThreadLocalPtr() {pthread_key_create(&m_key, nullptr);}
+    ~ThreadLocalPtr() {pthread_key_delete(m_key);}
+    T* get() {return static_cast<T*>(pthread_getspecific(m_key));}
+    void reset(T* v=nullptr) {pthread_setspecific(m_key, v);}
+#endif
+    T* operator->() {return get();}
 };
 
 /** Ownership token for maintaining lifetime of factory-created resources

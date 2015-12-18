@@ -11,6 +11,7 @@
 #include "IGraphicsCommandQueue.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include <vector>
+#include <mutex>
 #include <unordered_set>
 #include <unordered_map>
 
@@ -22,8 +23,9 @@ class MetalDataFactory : public IGraphicsDataFactory
 {
     friend struct MetalCommandQueue;
     IGraphicsContext* m_parent;
-    struct MetalData* m_deferredData = nullptr;
+    static ThreadLocalPtr<struct MetalData> m_deferredData;
     std::unordered_set<struct MetalData*> m_committedData;
+    std::mutex m_committedMutex;
     struct MetalContext* m_ctx;
     
     void destroyData(IGraphicsData*);
@@ -64,7 +66,7 @@ public:
                          size_t texCount, ITexture** texs);
     
     void reset();
-    IGraphicsDataToken commit();
+    GraphicsDataToken commit();
 };
 
 }

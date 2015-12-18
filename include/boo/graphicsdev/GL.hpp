@@ -15,7 +15,7 @@ class GLDataFactory : public IGraphicsDataFactory
 {
     friend struct GLCommandQueue;
     IGraphicsContext* m_parent;
-    static thread_local struct GLData* m_deferredData;
+    static ThreadLocalPtr<struct GLData> m_deferredData;
     std::unordered_set<struct GLData*> m_committedData;
     std::mutex m_committedMutex;
     std::vector<int> m_texUnis;
