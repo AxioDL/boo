@@ -879,7 +879,9 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
             }
         }
 
+#ifndef NDEBUG
         m_committed = true;
+#endif
     }
 
     void bind(ID3D12GraphicsCommandList* list, int b)
