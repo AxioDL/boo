@@ -3,8 +3,12 @@
 
 #include <memory>
 #include <stdint.h>
-#include <pthread.h>
 #include "boo/System.hpp"
+
+#if _WIN32
+#else
+#include <pthread.h>
+#endif
 
 namespace boo
 {
