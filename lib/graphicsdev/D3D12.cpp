@@ -809,6 +809,12 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
     std::unique_ptr<ITexture*[]> m_texs;
     D3D12_VERTEX_BUFFER_VIEW m_vboView[2][2] = {{},{}};
     D3D12_INDEX_BUFFER_VIEW m_iboView[2];
+
+#ifndef NDEBUG
+    /* Debugging aids */
+    bool m_committed = false;
+#endif
+
     D3D12ShaderDataBinding(D3D12Context* ctx,
                            IShaderPipeline* pipeline,
                            IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbuf, IGraphicsBuffer* ibuf,
@@ -872,10 +878,18 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
                 handle.Offset(1, incSz);
             }
         }
+
+        m_committed = true;
     }
 
     void bind(ID3D12GraphicsCommandList* list, int b)
     {
+#ifndef NDEBUG
+        if (!m_committed)
+            Log.report(LogVisor::FatalError,
+                       "attempted to use uncommitted D3D12ShaderDataBinding");
+#endif
+
         ID3D12DescriptorHeap* heap[] = {m_descHeap[b].Get()};
         list->SetDescriptorHeaps(1, heap);
         list->SetGraphicsRootDescriptorTable(0, m_descHeap[b]->GetGPUDescriptorHandleForHeapStart());
@@ -1451,10 +1465,10 @@ public:
         m_deferredData = nullptr;
     }
 
-    IGraphicsDataToken commit()
+    GraphicsDataToken commit()
     {
         if (!m_deferredData)
-            return IGraphicsDataToken(this, nullptr);
+            return GraphicsDataToken(this, nullptr);
 
         D3D12Data* retval = static_cast<D3D12Data*>(m_deferredData);
 
@@ -1555,7 +1569,7 @@ public:
         /* All set! */
         m_deferredData = nullptr;
         m_committedData.insert(retval);
-        return IGraphicsDataToken(this, retval);
+        return GraphicsDataToken(this, retval);
     }
 };
 

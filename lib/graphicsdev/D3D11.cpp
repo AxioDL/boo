@@ -485,6 +485,12 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
     std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
     size_t m_texCount;
     std::unique_ptr<ITexture*[]> m_texs;
+
+#ifndef NDEBUG
+    /* Debugging aids */
+    bool m_committed = false;
+#endif
+
     D3D11ShaderDataBinding(D3D11Context* ctx,
                            IShaderPipeline* pipeline,
                            IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbuf, IGraphicsBuffer* ibuf,
@@ -507,6 +513,12 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
 
     void bind(ID3D11DeviceContext* ctx, int b)
     {
+#ifndef NDEBUG
+        if (!m_committed)
+            Log.report(LogVisor::FatalError,
+                       "attempted to use uncommitted D3D11ShaderDataBinding");
+#endif
+
         m_pipeline->bind(ctx);
 
         ID3D11Buffer* bufs[2] = {};
@@ -1114,14 +1126,18 @@ public:
         m_deferredData = nullptr;
     }
 
-    IGraphicsDataToken commit()
+    GraphicsDataToken commit()
     {
         if (!m_deferredData)
-            return IGraphicsDataToken(this, nullptr);
+            return GraphicsDataToken(this, nullptr);
         D3D11Data* retval = m_deferredData;
+#ifndef NDEBUG
+        for (std::unique_ptr<D3D11ShaderDataBinding>& b : retval->m_SBinds)
+            b->m_committed = true;
+#endif
         m_deferredData = nullptr;
         m_committedData.insert(retval);
-        return IGraphicsDataToken(this, retval);
+        return GraphicsDataToken(this, retval);
     }
 };
 
