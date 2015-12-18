@@ -58,7 +58,7 @@ public:
                          size_t texCount, ITexture** texs);
 
     void reset();
-    IGraphicsDataToken commit();
+    GraphicsDataToken commit();
 };
 
 }

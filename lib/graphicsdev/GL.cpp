@@ -584,10 +584,10 @@ void GLDataFactory::reset()
     m_deferredData = nullptr;
 }
 
-IGraphicsDataToken GLDataFactory::commit()
+GraphicsDataToken GLDataFactory::commit()
 {
     if (!m_deferredData)
-        return IGraphicsDataToken(this, nullptr);
+        return GraphicsDataToken(this, nullptr);
     std::unique_lock<std::mutex> lk(m_committedMutex);
     GLData* retval = m_deferredData;
 #ifndef NDEBUG
@@ -600,7 +600,7 @@ IGraphicsDataToken GLDataFactory::commit()
        While this isn't strictly required, some drivers might behave
        differently */
     glFlush();
-    return IGraphicsDataToken(this, retval);
+    return GraphicsDataToken(this, retval);
 }
 
 void GLDataFactory::destroyData(IGraphicsData* d)

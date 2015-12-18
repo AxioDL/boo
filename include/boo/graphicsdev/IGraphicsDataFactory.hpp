@@ -148,7 +148,7 @@ struct IShaderDataBinding {};
 
 /** Opaque object for maintaining ownership of factory-created resources */
 struct IGraphicsData {};
-class IGraphicsDataToken;
+class GraphicsDataToken;
 
 /** Used by platform shader pipeline constructors */
 enum class BlendFactor
@@ -218,18 +218,18 @@ struct IGraphicsDataFactory
                          size_t texCount, ITexture** texs)=0;
 
     virtual void reset()=0;
-    virtual IGraphicsDataToken commit()=0;
+    virtual GraphicsDataToken commit()=0;
 
 private:
-    friend class IGraphicsDataToken;
+    friend class GraphicsDataToken;
     virtual void destroyData(IGraphicsData*)=0;
     virtual void destroyAllData()=0;
 };
 
-/** Opaque token for maintaining ownership of factory-created resources
+/** Ownership token for maintaining lifetime of factory-created resources
  *  deletion of this token triggers mass-deallocation of the factory's
- *  IGraphicsData. */
-class IGraphicsDataToken
+ *  IGraphicsData (please don't delete and draw contained resources in the same frame). */
+class GraphicsDataToken
 {
     friend class GLDataFactory;
     friend class D3D12DataFactory;
@@ -237,7 +237,7 @@ class IGraphicsDataToken
     friend class MetalDataFactory;
     IGraphicsDataFactory* m_factory = nullptr;
     IGraphicsData* m_data = nullptr;
-    IGraphicsDataToken(IGraphicsDataFactory* factory, IGraphicsData* data)
+    GraphicsDataToken(IGraphicsDataFactory* factory, IGraphicsData* data)
     : m_factory(factory), m_data(data) {}
     void doDestroy()
     {
@@ -245,17 +245,17 @@ class IGraphicsDataToken
             m_factory->destroyData(m_data);
     }
 public:
-    IGraphicsDataToken() = default;
-    IGraphicsDataToken(const IGraphicsDataToken& other) = delete;
-    IGraphicsDataToken(IGraphicsDataToken&& other)
+    GraphicsDataToken() = default;
+    GraphicsDataToken(const GraphicsDataToken& other) = delete;
+    GraphicsDataToken(GraphicsDataToken&& other)
     {
         m_factory = other.m_factory;
         other.m_factory = nullptr;
         m_data = other.m_data;
         other.m_data = nullptr;
     }
-    IGraphicsDataToken& operator=(const IGraphicsDataToken& other) = delete;
-    IGraphicsDataToken& operator=(IGraphicsDataToken&& other)
+    GraphicsDataToken& operator=(const GraphicsDataToken& other) = delete;
+    GraphicsDataToken& operator=(GraphicsDataToken&& other)
     {
         doDestroy();
         m_factory = other.m_factory;
@@ -264,7 +264,7 @@ public:
         other.m_data = nullptr;
         return *this;
     }
-    ~IGraphicsDataToken() {doDestroy();}
+    ~GraphicsDataToken() {doDestroy();}
 };
 
 }

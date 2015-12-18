@@ -377,7 +377,7 @@ struct TestApplicationCallback : IApplicationCallback
         factory->newShaderDataBinding(pipeline, vfmt, vbo, nullptr, nullptr, 0, nullptr, 1, &texture);
 
         /* Commit objects */
-        IGraphicsDataToken data = factory->commit();
+        GraphicsDataToken data = factory->commit();
         
         /* Return control to client */
         lk.unlock();
