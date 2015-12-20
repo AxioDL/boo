@@ -194,7 +194,8 @@ enum class EMouseCursor
     None            = 0,
     Pointer         = 1,
     HorizontalArrow = 2,
-    VerticalArrow   = 3
+    VerticalArrow   = 3,
+    IBeam           = 4
 };
 
 class IWindow
