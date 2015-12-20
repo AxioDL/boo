@@ -260,6 +260,7 @@ struct Win32Cursors
     HCURSOR m_arrow;
     HCURSOR m_hResize;
     HCURSOR m_vResize;
+    HCURSOR m_ibeam;
     HCURSOR m_wait;
 };
 namespace boo

@@ -410,23 +410,31 @@ static uint32_t translateKeysym(WPARAM sym, ESpecialKey& specialSym, EModifierKe
         specialSym = ESpecialKey::Up;
     else if (sym == VK_DOWN)
         specialSym = ESpecialKey::Down;
-    else if (sym == VK_LSHIFT || sym == VK_RSHIFT)
+    else if (sym == VK_SHIFT)
         modifierSym = EModifierKey::Shift;
-    else if (sym == VK_LCONTROL || sym == VK_RCONTROL)
+    else if (sym == VK_CONTROL)
         modifierSym = EModifierKey::Ctrl;
     else if (sym == VK_MENU)
         modifierSym = EModifierKey::Alt;
     else
-        return MapVirtualKey(sym, MAPVK_VK_TO_CHAR);
+    {
+        UINT vk = MapVirtualKey(sym, MAPVK_VK_TO_CHAR);
+        if (__isascii(vk))
+        {
+            if (!(((GetKeyState(VK_SHIFT) & 0x8000) != 0) ^ (GetKeyState(VK_CAPITAL) != 0)))
+                vk = tolower(vk);
+        }
+        return vk;
+    }
     return 0;
 }
 
 static EModifierKey translateModifiers(UINT msg)
 {
     EModifierKey retval = EModifierKey::None;
-    if ((GetKeyState(VK_LSHIFT) & 0x8000) != 0 || (GetKeyState(VK_RSHIFT) & 0x8000) != 0)
+    if ((GetKeyState(VK_SHIFT) & 0x8000) != 0)
         retval |= EModifierKey::Shift;
-    if ((GetKeyState(VK_LCONTROL) & 0x8000) != 0 || (GetKeyState(VK_RCONTROL) & 0x8000) != 0)
+    if ((GetKeyState(VK_CONTROL) & 0x8000) != 0)
         retval |= EModifierKey::Ctrl;
     if ((GetKeyState(VK_MENU) & 0x8000) != 0)
         retval |= EModifierKey::Alt;
@@ -453,6 +461,8 @@ class WindowWin32 : public IWindow
             return WIN32_CURSORS.m_hResize;
         case EMouseCursor::VerticalArrow:
             return WIN32_CURSORS.m_vResize;
+        case EMouseCursor::IBeam:
+            return WIN32_CURSORS.m_ibeam;
         default: break;
         }
         return WIN32_CURSORS.m_arrow;
