@@ -795,6 +795,11 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         m_texResizes[ctex] = std::make_pair(width, height);
     }
 
+    void schedulePostFrameHandler(std::function<void(void)>&& func)
+    {
+        func();
+    }
+
     float m_clearColor[4] = {0.0,0.0,0.0,1.0};
     void setClearColor(const float rgba[4])
     {
