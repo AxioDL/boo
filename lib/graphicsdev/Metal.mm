@@ -611,6 +611,11 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         MetalTextureR* ctex = static_cast<MetalTextureR*>(tex);
         m_texResizes[ctex] = std::make_pair(width, height);
     }
+
+    void schedulePostFrameHandler(std::function<void(void)>&& func)
+    {
+        func();
+    }
     
     void flushBufferUpdates() {}
     

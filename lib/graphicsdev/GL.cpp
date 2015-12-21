@@ -727,6 +727,8 @@ struct GLCommandQueue : IGraphicsCommandQueue
 
     /* These members are locked for multithreaded access */
     std::vector<RenderTextureResize> m_pendingResizes;
+    std::vector<std::function<void(void)>> m_pendingPosts1;
+    std::vector<std::function<void(void)>> m_pendingPosts2;
     std::vector<GLVertexFormat*> m_pendingFmtAdds;
     std::vector<std::array<GLuint, 3>> m_pendingFmtDels;
     std::vector<GLTextureR*> m_pendingFboAdds;
@@ -812,6 +814,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
         self->m_initcv.notify_one();
         while (self->m_running)
         {
+            std::vector<std::function<void(void)>> posts;
             {
                 std::unique_lock<std::mutex> lk(self->m_mt);
                 self->m_cv.wait(lk);
@@ -853,6 +856,9 @@ struct GLCommandQueue : IGraphicsCommandQueue
                         glDeleteFramebuffers(1, &fbo);
                     self->m_pendingFboDels.clear();
                 }
+
+                if (self->m_pendingPosts2.size())
+                    posts.swap(self->m_pendingPosts2);
             }
             std::vector<Command>& cmds = self->m_cmdBufs[self->m_drawBuf];
             GLenum prim = GL_TRIANGLES;
@@ -924,6 +930,8 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 }
             }
             cmds.clear();
+            for (auto& p : posts)
+                p();
         }
     }
 
@@ -981,6 +989,11 @@ struct GLCommandQueue : IGraphicsCommandQueue
         std::unique_lock<std::mutex> lk(m_mt);
         GLTextureR* texgl = static_cast<GLTextureR*>(tex);
         m_pendingResizes.push_back({texgl, width, height});
+    }
+
+    void schedulePostFrameHandler(std::function<void(void)>&& func)
+    {
+        m_pendingPosts1.push_back(std::move(func));
     }
 
     void setClearColor(const float rgba[4])
@@ -1112,6 +1125,10 @@ struct GLCommandQueue : IGraphicsCommandQueue
         }
         datalk.unlock();
         glFlush();
+
+        for (auto& p : m_pendingPosts1)
+            m_pendingPosts2.push_back(std::move(p));
+        m_pendingPosts1.clear();
 
         lk.unlock();
         m_cv.notify_one();

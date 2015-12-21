@@ -729,7 +729,8 @@ enum
 };
 static boo::ESpecialKey translateKeycode(short code)
 {
-    switch (code) {
+    switch (code)
+    {
         case kVK_F1:
             return boo::ESpecialKey::F1;
         case kVK_F2:
@@ -787,14 +788,13 @@ static boo::ESpecialKey translateKeycode(short code)
 {
     if (!booContext->m_callback)
         return;
+    boo::ESpecialKey special = translateKeycode(theEvent.keyCode);
     NSString* chars = theEvent.characters;
-    if ([chars length] == 0 ||
-        [chars characterAtIndex:0] == '\n' ||
-        [chars characterAtIndex:0] == '\r')
-        booContext->m_callback->specialKeyDown(translateKeycode(theEvent.keyCode),
+    if (special != boo::ESpecialKey::None)
+        booContext->m_callback->specialKeyDown(special,
                                                getMod(theEvent.modifierFlags),
                                                theEvent.isARepeat);
-    else
+    else if ([chars length])
         booContext->m_callback->charKeyDown([chars characterAtIndex:0],
                                             getMod(theEvent.modifierFlags),
                                             theEvent.isARepeat);
@@ -804,11 +804,12 @@ static boo::ESpecialKey translateKeycode(short code)
 {
     if (!booContext->m_callback)
         return;
+    boo::ESpecialKey special = translateKeycode(theEvent.keyCode);
     NSString* chars = theEvent.characters;
-    if ([chars length] == 0)
-        booContext->m_callback->specialKeyUp(translateKeycode(theEvent.keyCode),
+    if (special != boo::ESpecialKey::None)
+        booContext->m_callback->specialKeyUp(special,
                                              getMod(theEvent.modifierFlags));
-    else
+    else if ([chars length])
         booContext->m_callback->charKeyUp([chars characterAtIndex:0],
                                           getMod(theEvent.modifierFlags));
 }
@@ -1073,6 +1074,9 @@ public:
                 break;
             case EMouseCursor::VerticalArrow:
                 [[NSCursor resizeUpDownCursor] set];
+                break;
+            case EMouseCursor::IBeam:
+                [[NSCursor IBeamCursor] set];
                 break;
             default: break;
             }

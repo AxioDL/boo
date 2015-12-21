@@ -3,6 +3,7 @@
 
 #include "IGraphicsDataFactory.hpp"
 #include "boo/IWindow.hpp"
+#include <functional>
 
 namespace boo
 {
@@ -26,6 +27,7 @@ struct IGraphicsCommandQueue
     virtual void setScissor(const SWindowRect& rect)=0;
 
     virtual void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)=0;
+    virtual void schedulePostFrameHandler(std::function<void(void)>&& func)=0;
 
     virtual void setClearColor(const float rgba[4])=0;
     virtual void clearTarget(bool render=true, bool depth=true)=0;
