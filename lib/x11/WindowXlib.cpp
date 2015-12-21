@@ -962,7 +962,9 @@ public:
             {
                 SWindowRect rect =
                 { {m_wx, m_wy}, {m_ww, m_wh} };
+                XUnlockDisplay(m_xDisp);
                 m_callback->resized(rect);
+                XLockDisplay(m_xDisp);
             }
             return;
         }
