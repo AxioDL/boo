@@ -19,6 +19,7 @@
 #define XK_LATIN1
 #include <X11/keysymdef.h>
 #include <xkbcommon/xkbcommon.h>
+#include <X11/XKBlib.h>
 #include <X11/extensions/XInput2.h>
 #include <X11/Xatom.h>
 #include <LogVisor/LogVisor.hpp>
@@ -70,7 +71,8 @@ void GLXEnableVSync(Display* disp, GLXWindow drawable);
 
 extern int XINPUT_OPCODE;
 
-static uint32_t translateKeysym(KeySym sym, ESpecialKey& specialSym, EModifierKey& modifierSym)
+static uint32_t translateKeysym(KeySym sym, ESpecialKey& specialSym, EModifierKey& modifierSym,
+                                Display* d, unsigned state)
 {
     specialSym = ESpecialKey::None;
     modifierSym = EModifierKey::None;
@@ -109,7 +111,15 @@ static uint32_t translateKeysym(KeySym sym, ESpecialKey& specialSym, EModifierKe
     else if (sym == XK_Alt_L || sym == XK_Alt_R)
         modifierSym = EModifierKey::Alt;
     else
-        return xkb_keysym_to_utf32(sym);
+    {
+        unsigned n;
+        XkbGetIndicatorState(d, XkbUseCoreKbd, &n);
+        uint32_t utf = xkb_keysym_to_utf32(sym);
+        if ((n & 0x01) != 0 ^ (state & ShiftMask) != 0)
+            return toupper(utf);
+        else
+            return utf;
+    }
     return 0;
 }
 
@@ -995,7 +1005,7 @@ public:
                 ESpecialKey specialKey;
                 EModifierKey modifierKey;
                 uint32_t charCode = translateKeysym(XLookupKeysym(&event->xkey, 0),
-                                                    specialKey, modifierKey);
+                                                    specialKey, modifierKey, m_xDisp, event->xkey.state);
                 EModifierKey modifierMask = translateModifiers(event->xkey.state);
                 if (charCode)
                     m_callback->charKeyDown(charCode, modifierMask, false);
@@ -1013,7 +1023,7 @@ public:
                 ESpecialKey specialKey;
                 EModifierKey modifierKey;
                 uint32_t charCode = translateKeysym(XLookupKeysym(&event->xkey, 0),
-                                                    specialKey, modifierKey);
+                                                    specialKey, modifierKey, m_xDisp, event->xkey.state);
                 EModifierKey modifierMask = translateModifiers(event->xkey.state);
                 if (charCode)
                     m_callback->charKeyUp(charCode, modifierMask);

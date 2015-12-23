@@ -100,31 +100,7 @@ enum class EModifierKey
     Shift   = 1<<3,
     Command = 1<<4
 };
-
-inline EModifierKey operator|(EModifierKey a, EModifierKey b)
-{
-    using T = std::underlying_type_t<EModifierKey>;
-    return EModifierKey(static_cast<T>(a) | static_cast<T>(b));
-}
-
-inline EModifierKey operator&(EModifierKey a, EModifierKey b)
-{
-    using T = std::underlying_type_t<EModifierKey>;
-    return EModifierKey(static_cast<T>(a) & static_cast<T>(b));
-}
-
-inline EModifierKey& operator|=(EModifierKey& a, const EModifierKey& b)
-{
-    using T = std::underlying_type_t<EModifierKey>;
-    a = EModifierKey(static_cast<T>(a) | static_cast<T>(b));
-    return a;
-}
-
-inline EModifierKey operator~(const EModifierKey& key)
-{
-    using T = std::underlying_type_t<EModifierKey>;
-    return EModifierKey(~static_cast<T>(key));
-}
+ENABLE_BITWISE_ENUM(EModifierKey)
 
 class IWindowCallback
 {
