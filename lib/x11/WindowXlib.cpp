@@ -18,7 +18,6 @@
 #define XK_XKB_KEYS
 #define XK_LATIN1
 #include <X11/keysymdef.h>
-#include <xkbcommon/xkbcommon.h>
 #include <X11/XKBlib.h>
 #include <X11/extensions/XInput2.h>
 #include <X11/Xatom.h>
@@ -71,9 +70,10 @@ void GLXEnableVSync(Display* disp, GLXWindow drawable);
 
 extern int XINPUT_OPCODE;
 
-static uint32_t translateKeysym(KeySym sym, ESpecialKey& specialSym, EModifierKey& modifierSym,
-                                Display* d, unsigned state)
+static uint32_t translateKeysym(XKeyEvent* ev, ESpecialKey& specialSym, EModifierKey& modifierSym, XIC xIC)
 {
+    KeySym sym = XLookupKeysym(ev, 0);
+
     specialSym = ESpecialKey::None;
     modifierSym = EModifierKey::None;
     if (sym >= XK_F1 && sym <= XK_F12)
@@ -112,12 +112,20 @@ static uint32_t translateKeysym(KeySym sym, ESpecialKey& specialSym, EModifierKe
         modifierSym = EModifierKey::Alt;
     else
     {
+#if 0
         unsigned n;
         XkbGetIndicatorState(d, XkbUseCoreKbd, &n);
         uint32_t utf = xkb_keysym_to_utf32(sym);
         if ((n & 0x01) != 0 ^ (state & ShiftMask) != 0)
             return toupper(utf);
         else
+            return utf;
+#endif
+        uint32_t utf = 0;
+        KeySym sym;
+        Status stat;
+        XmbLookupString(xIC, ev, (char*)&utf, 4, &sym, &stat);
+        if (stat == XLookupChars || stat == XLookupBoth)
             return utf;
     }
     return 0;
@@ -154,7 +162,7 @@ static EMouseButton translateButton(unsigned detail)
     return EMouseButton::None;
 }
 
-struct XCBAtoms
+struct XlibAtoms
 {
     Atom m_wmProtocols = 0;
     Atom m_wmDeleteWindow = 0;
@@ -163,7 +171,12 @@ struct XCBAtoms
     Atom m_netwmStateAdd = 0;
     Atom m_netwmStateRemove = 0;
     Atom m_motifWmHints = 0;
-    XCBAtoms(Display* disp)
+    Atom m_targets = 0;
+    Atom m_clipboard = 0;
+    Atom m_clipdata = 0;
+    Atom m_utf8String = 0;
+    Atom m_imagePng = 0;
+    XlibAtoms(Display* disp)
     {
         m_wmProtocols = XInternAtom(disp, "WM_PROTOCOLS", True);
         m_wmDeleteWindow = XInternAtom(disp, "WM_DELETE_WINDOW", True);
@@ -172,9 +185,28 @@ struct XCBAtoms
         m_netwmStateAdd = XInternAtom(disp, "_NET_WM_STATE_ADD", False);
         m_netwmStateRemove = XInternAtom(disp, "_NET_WM_STATE_REMOVE", False);
         m_motifWmHints = XInternAtom(disp, "_MOTIF_WM_HINTS", True);
+        m_targets = XInternAtom(disp, "TARGETS", False);
+        m_clipboard = XInternAtom(disp, "CLIPBOARD", False);
+        m_clipdata = XInternAtom(disp, "CLIPDATA", False);
+        m_utf8String = XInternAtom(disp, "UTF8_STRING", False);
+        m_imagePng = XInternAtom(disp, "image/png", False);
     }
 };
-static XCBAtoms* S_ATOMS = NULL;
+static XlibAtoms* S_ATOMS = NULL;
+
+static Atom GetClipboardTypeAtom(EClipboardType t)
+{
+    switch (t)
+    {
+    case EClipboardType::String:
+        return XA_STRING;
+    case EClipboardType::UTF8String:
+        return S_ATOMS->m_utf8String;
+    case EClipboardType::PNGImage:
+        return S_ATOMS->m_imagePng;
+    default: return 0;
+    }
+}
 
 static void genFrameDefault(Screen* screen, int& xOut, int& yOut, int& wOut, int& hOut)
 {
@@ -477,6 +509,8 @@ class WindowXlib : public IWindow
     IWindowCallback* m_callback;
     Colormap m_colormapId;
     Window m_windowId;
+    XIMStyle m_bestStyle;
+    XIC m_xIC;
     GraphicsContextGLX m_gfxCtx;
     uint32_t m_visualId;
 
@@ -519,17 +553,17 @@ class WindowXlib : public IWindow
     }
 
 public:
-    
     WindowXlib(const std::string& title,
-              Display* display, int defaultScreen,
-              GLXContext lastCtx)
+               Display* display, int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
+               GLXContext lastCtx)
     : m_xDisp(display), m_callback(nullptr),
       m_gfxCtx(IGraphicsContext::EGraphicsAPI::OpenGL3_3,
                this, display, defaultScreen,
-               lastCtx, m_visualId)
+               lastCtx, m_visualId),
+      m_bestStyle(bestInputStyle)
     {
         if (!S_ATOMS)
-            S_ATOMS = new XCBAtoms(display);
+            S_ATOMS = new XlibAtoms(display);
 
         /* Default screen */
         Screen* screen = ScreenOfDisplay(display, defaultScreen);
@@ -565,6 +599,26 @@ public:
                                    CopyFromParent, CopyFromParent, selectedVisual,
                                    CWBorderPixel | CWEventMask | CWColormap, &swa);
 
+        /*
+         * Now go create an IC using the style we chose.
+         * Also set the window and fontset attributes now.
+         */
+        XVaNestedList list = XVaCreateNestedList(0, XNFontSet, fontset, nullptr);
+        m_xIC = XCreateIC(xIM, XNInputStyle, bestInputStyle,
+                          XNClientWindow, m_windowId,
+                          XNPreeditAttributes, list,
+                          XNStatusAttributes, list,
+                          nullptr);
+        XFree(list);
+        if (m_xIC == nullptr)
+        {
+            Log.report(LogVisor::FatalError, "Couldn't create input context.");
+            return;
+        }
+        long im_event_mask;
+        XGetICValues(m_xIC, XNFilterEvents, &im_event_mask, nullptr);
+        XSelectInput(display, m_windowId, swa.event_mask | im_event_mask);
+        XSetICFocus(m_xIC);
 
         /* The XInput 2.1 extension enables per-pixel smooth scrolling trackpads */
         XIEventMask mask = {XIAllMasterDevices, XIMaskLen(XI_LASTEVENT)};
@@ -832,6 +886,186 @@ public:
         m_inFs = fs;
     }
 
+    struct ClipData
+    {
+        EClipboardType m_type = EClipboardType::None;
+        std::unique_ptr<uint8_t[]> m_data;
+        size_t m_sz = 0;
+        void clear()
+        {
+            m_type = EClipboardType::None;
+            m_data.reset();
+            m_sz = 0;
+        }
+    } m_clipData;
+
+    void claimKeyboardFocus()
+    {
+        XLockDisplay(m_xDisp);
+        XSetICFocus(m_xIC);
+        XUnlockDisplay(m_xDisp);
+    }
+
+    bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz)
+    {
+        Atom xType = GetClipboardTypeAtom(type);
+        if (!xType)
+            return false;
+
+        XLockDisplay(m_xDisp);
+        m_clipData.m_type = type;
+        m_clipData.m_data.reset(new uint8_t[sz]);
+        m_clipData.m_sz = sz;
+        memcpy(m_clipData.m_data.get(), data, sz);
+        XSetSelectionOwner(m_xDisp, S_ATOMS->m_clipboard, m_windowId, CurrentTime);
+        XUnlockDisplay(m_xDisp);
+
+        return true;
+    }
+
+    std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz)
+    {
+        Atom xType = GetClipboardTypeAtom(type);
+        if (!xType)
+            return {};
+
+        XLockDisplay(m_xDisp);
+        XConvertSelection(m_xDisp, S_ATOMS->m_clipboard, xType, S_ATOMS->m_clipdata, m_windowId, CurrentTime);
+        XFlush(m_xDisp);
+        XEvent event;
+        for (int i=0 ; i<20; ++i)
+        {
+            if (XCheckTypedWindowEvent(m_xDisp, m_windowId, SelectionNotify, &event))
+            {
+                if (event.xselection.property != 0)
+                {
+                    XSync(m_xDisp, false);
+
+                    unsigned long nitems, rem;
+                    int format;
+                    unsigned char* data;
+                    Atom type;
+
+                    Atom t1 = S_ATOMS->m_clipboard;
+                    Atom t2 = S_ATOMS->m_clipdata;
+
+                    if (XGetWindowProperty(m_xDisp, m_windowId, S_ATOMS->m_clipdata, 0, 32, False, AnyPropertyType,
+                                           &type, &format, &nitems, &rem, &data))
+                    {
+                        Log.report(LogVisor::FatalError, "Clipboard allocation failed");
+                        XUnlockDisplay(m_xDisp);
+                        return {};
+                    }
+
+                    if (rem != 0)
+                    {
+                        Log.report(LogVisor::FatalError, "partial clipboard read");
+                        XUnlockDisplay(m_xDisp);
+                        return {};
+                    }
+
+                    sz = nitems * format / 8;
+                    std::unique_ptr<uint8_t[]> ret(new uint8_t[sz]);
+                    memcpy(ret.get(), data, sz);
+                    XFree(data);
+                    XUnlockDisplay(m_xDisp);
+                    return ret;
+                }
+                XUnlockDisplay(m_xDisp);
+                return {};
+            }
+            if (XCheckTypedWindowEvent(m_xDisp, m_windowId, SelectionRequest, &event) &&
+                event.xselectionrequest.owner == m_windowId)
+                handleSelectionRequest(&event.xselectionrequest);
+            if (XCheckTypedWindowEvent(m_xDisp, m_windowId, SelectionClear, &event) &&
+                event.xselectionclear.window == m_windowId)
+                m_clipData.clear();
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        XUnlockDisplay(m_xDisp);
+        return {};
+    }
+
+    void handleSelectionRequest(XSelectionRequestEvent* se)
+    {
+        XEvent reply;
+        reply.xselection.type      = SelectionNotify;
+        reply.xselection.display   = m_xDisp;
+        reply.xselection.requestor = se->requestor;
+        reply.xselection.selection = se->selection;
+        reply.xselection.target    = se->target;
+        reply.xselection.time      = se->time;
+        reply.xselection.property  = se->property;
+        if (se->target == S_ATOMS->m_targets)
+        {
+#if 0
+            if (se->selection == XA_PRIMARY)
+            {
+                std::vector<Atom> x(sel_formats.GetCount());
+                for (int i=0 ; i<sel_formats.GetCount() ; ++i)
+                {
+                    x[i] = XAtom(sel_formats[i]);
+                }
+                XChangeProperty(m_xDisp, se->requestor, se->property, XA_ATOM,
+                                32, 0, (unsigned char*)x.data(),
+                                sel_formats.GetCount());
+            }
+            else if (se->selection == S_ATOMS->m_clipboard)
+            {
+                std::vector<Atom> x(data.GetCount());
+                for (int i=0 ; i<data.GetCount() ; ++i)
+                {
+                    x[i] = data.GetKey(i);
+                }
+                XChangeProperty(m_xDisp, se->requestor, se->property, XA_ATOM,
+                                32, 0, (unsigned char*)x.data(),
+                                data.GetCount());
+            }
+#endif
+            Atom ValidTargets[] = {GetClipboardTypeAtom(m_clipData.m_type)};
+            XChangeProperty(m_xDisp, se->requestor, se->property, XA_ATOM,
+                            32, 0, (unsigned char*)ValidTargets, m_clipData.m_type != EClipboardType::None);
+        }
+        else
+        {
+#if 0
+            if (se->selection == XA_PRIMARY)
+            {
+                String fmt = XAtomName(se->target);
+                int i = sel_formats.Find(fmt);
+                if (i >= 0 && sel_ctrl)
+                {
+                    String d = sel_ctrl->GetSelectionData(fmt);
+                    XChangeProperty(m_xDisp, se->requestor, se->property, se->target, 8, PropModeReplace,
+                                    d, d.GetLength());
+                }
+                else
+                    reply.xselection.property = 0;
+            }
+            else if (se->selection == S_ATOMS->m_clipboard)
+            {
+                int i = data.Find(se->target);
+                if (i >= 0)
+                {
+                    String d = data[i].Render();
+                    XChangeProperty(m_xDisp, se->requestor, se->property, se->target, 8, PropModeReplace,
+                                    d, d.GetLength());
+                }
+                else
+                    reply.xselection.property = 0;
+            }
+#endif
+            if (se->target == GetClipboardTypeAtom(m_clipData.m_type))
+            {
+                XChangeProperty(m_xDisp, se->requestor, se->property, se->target, 8, PropModeReplace,
+                                m_clipData.m_data.get(), m_clipData.m_sz);
+            }
+            else
+                reply.xselection.property = 0;
+        }
+        XSendEvent(m_xDisp, se->requestor, False, 0, &reply);
+    }
+
     void waitForRetrace()
     {
         std::unique_lock<std::mutex> lk(m_gfxCtx.m_vsyncmt);
@@ -943,11 +1177,43 @@ public:
         };
     }
 
+    /* This procedure sets the application's size constraints and returns
+     * the IM's preferred size for either the Preedit or Status areas,
+     * depending on the value of the name argument.  The area argument is
+     * used to pass the constraints and to return the preferred size.
+     */
+    void GetPreferredGeometry(const char* name, XRectangle* area)
+    {
+        XVaNestedList list;
+        list = XVaCreateNestedList(0, XNAreaNeeded, area, nullptr);
+        /* set the constraints */
+        XSetICValues(m_xIC, name, list, nullptr);
+        /* query the preferred size */
+        XGetICValues(m_xIC, name, list, nullptr);
+        XFree(list);
+    }
+
+    /* This procedure sets the geometry of either the Preedit or Status
+     * Areas, depending on the value of the name argument.
+     */
+    void SetGeometry(const char* name, XRectangle* area)
+    {
+        XVaNestedList list;
+        list = XVaCreateNestedList(0, XNArea, area, nullptr);
+        XSetICValues(m_xIC, name, list, nullptr);
+        XFree(list);
+    }
+
     void _incomingEvent(void* e)
     {
         XEvent* event = (XEvent*)e;
         switch (event->type)
         {
+        case SelectionRequest:
+        {
+            handleSelectionRequest(&event->xselectionrequest);
+            return;
+        }
         case ClientMessage:
         {
             if (event->xclient.data.l[0] == S_ATOMS->m_wmDeleteWindow && m_callback)
@@ -990,6 +1256,27 @@ public:
             m_ww = event->xconfigure.width;
             m_wh = event->xconfigure.height;
 
+            if (m_bestStyle & XIMPreeditArea)
+            {
+                XRectangle preedit_area;
+                preedit_area.width = event->xconfigure.width*4/5;
+                preedit_area.height = 0;
+                GetPreferredGeometry(XNPreeditAttributes, &preedit_area);
+                preedit_area.x = event->xconfigure.width - preedit_area.width;
+                preedit_area.y = event->xconfigure.height - preedit_area.height;
+                SetGeometry(XNPreeditAttributes, &preedit_area);
+            }
+            if (m_bestStyle & XIMStatusArea)
+            {
+                XRectangle status_area;
+                status_area.width = event->xconfigure.width/5;
+                status_area.height = 0;
+                GetPreferredGeometry(XNStatusAttributes, &status_area);
+                status_area.x = 0;
+                status_area.y = event->xconfigure.height - status_area.height;
+                SetGeometry(XNStatusAttributes, &status_area);
+            }
+
             if (m_callback)
             {
                 SWindowRect rect =
@@ -1004,9 +1291,10 @@ public:
             {
                 ESpecialKey specialKey;
                 EModifierKey modifierKey;
-                uint32_t charCode = translateKeysym(XLookupKeysym(&event->xkey, 0),
-                                                    specialKey, modifierKey, m_xDisp, event->xkey.state);
-                EModifierKey modifierMask = translateModifiers(event->xkey.state);
+                unsigned int state = event->xkey.state;
+                event->xkey.state &= ~ControlMask;
+                uint32_t charCode = translateKeysym(&event->xkey, specialKey, modifierKey, m_xIC);
+                EModifierKey modifierMask = translateModifiers(state);
                 if (charCode)
                     m_callback->charKeyDown(charCode, modifierMask, false);
                 else if (specialKey != ESpecialKey::None)
@@ -1022,9 +1310,10 @@ public:
             {
                 ESpecialKey specialKey;
                 EModifierKey modifierKey;
-                uint32_t charCode = translateKeysym(XLookupKeysym(&event->xkey, 0),
-                                                    specialKey, modifierKey, m_xDisp, event->xkey.state);
-                EModifierKey modifierMask = translateModifiers(event->xkey.state);
+                unsigned int state = event->xkey.state;
+                event->xkey.state &= ~ControlMask;
+                uint32_t charCode = translateKeysym(&event->xkey, specialKey, modifierKey, m_xIC);
+                EModifierKey modifierMask = translateModifiers(state);
                 if (charCode)
                     m_callback->charKeyUp(charCode, modifierMask);
                 else if (specialKey != ESpecialKey::None)
@@ -1302,11 +1591,11 @@ public:
 };
 
 IWindow* _WindowXlibNew(const std::string& title,
-                       Display* display, int defaultScreen,
+                       Display* display, int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
                        GLXContext lastCtx)
 {
     XLockDisplay(display);
-    IWindow* ret = new WindowXlib(title, display, defaultScreen, lastCtx);
+    IWindow* ret = new WindowXlib(title, display, defaultScreen, xIM, bestInputStyle, fontset, lastCtx);
     XUnlockDisplay(display);
     return ret;
 }

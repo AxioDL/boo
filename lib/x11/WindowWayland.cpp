@@ -185,6 +185,20 @@ struct WindowWayland : IWindow
         
     }
 
+    void claimKeyboardFocus()
+    {
+    }
+
+    bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz)
+    {
+        return false;
+    }
+
+    std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz)
+    {
+        return std::unique_ptr<uint8_t[]>();
+    }
+
     void waitForRetrace()
     {
     }

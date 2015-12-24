@@ -2,6 +2,7 @@
 #define IWINDOW_HPP
 
 #include "System.hpp"
+#include <memory>
 
 namespace boo
 {
@@ -174,6 +175,14 @@ enum class EMouseCursor
     IBeam           = 4
 };
 
+enum class EClipboardType
+{
+    None       = 0,
+    String     = 1,
+    UTF8String = 2,
+    PNGImage   = 3
+};
+
 class IWindow
 {
 public:
@@ -210,6 +219,10 @@ public:
     
     virtual bool isFullscreen() const=0;
     virtual void setFullscreen(bool fs)=0;
+
+    virtual void claimKeyboardFocus()=0;
+    virtual bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz)=0;
+    virtual std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz)=0;
 
     virtual void waitForRetrace()=0;
     

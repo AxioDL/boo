@@ -117,7 +117,7 @@ else(NOT GEKKO)
   endif()
 
   include_directories(${DBUS_INCLUDE_DIR} ${DBUS_ARCH_INCLUDE_DIR})
-  list(APPEND _BOO_SYS_LIBS X11 Xi xkbcommon xkbcommon-x11 GL ${DBUS_LIBRARY} udev pthread)
+  list(APPEND _BOO_SYS_LIBS X11 Xi GL ${DBUS_LIBRARY} udev pthread)
 
 endif()
 

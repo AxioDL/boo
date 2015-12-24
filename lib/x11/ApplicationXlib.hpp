@@ -35,6 +35,11 @@ static Window GetWindowOfEvent(XEvent* event, bool& windowEvent)
 {
     switch (event->type)
     {
+    case SelectionRequest:
+    {
+        windowEvent = true;
+        return event->xselectionrequest.owner;
+    }
     case ClientMessage:
     {
         windowEvent = true;
@@ -103,8 +108,44 @@ static Window GetWindowOfEvent(XEvent* event, bool& windowEvent)
 }
     
 IWindow* _WindowXlibNew(const std::string& title,
-                       Display* display, int defaultScreen,
+                       Display* display, int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
                        GLXContext lastCtx);
+
+static XIMStyle ChooseBetterStyle(XIMStyle style1, XIMStyle style2)
+{
+    XIMStyle s,t;
+    XIMStyle preedit = XIMPreeditArea | XIMPreeditCallbacks |
+        XIMPreeditPosition | XIMPreeditNothing | XIMPreeditNone;
+    XIMStyle status = XIMStatusArea | XIMStatusCallbacks |
+        XIMStatusNothing | XIMStatusNone;
+    if (style1 == 0) return style2;
+    if (style2 == 0) return style1;
+    if ((style1 & (preedit | status)) == (style2 & (preedit | status)))
+        return style1;
+    s = style1 & preedit;
+    t = style2 & preedit;
+    if (s != t) {
+        if (s | t | XIMPreeditCallbacks)
+            return (s == XIMPreeditCallbacks)?style1:style2;
+        else if (s | t | XIMPreeditPosition)
+            return (s == XIMPreeditPosition)?style1:style2;
+        else if (s | t | XIMPreeditArea)
+            return (s == XIMPreeditArea)?style1:style2;
+        else if (s | t | XIMPreeditNothing)
+            return (s == XIMPreeditNothing)?style1:style2;
+    }
+    else { /* if preedit flags are the same, compare status flags */
+        s = style1 & status;
+        t = style2 & status;
+        if (s | t | XIMStatusCallbacks)
+            return (s == XIMStatusCallbacks)?style1:style2;
+        else if (s | t | XIMStatusArea)
+            return (s == XIMStatusArea)?style1:style2;
+        else if (s | t | XIMStatusNothing)
+            return (s == XIMStatusNothing)?style1:style2;
+    }
+    return 0;
+}
     
 class ApplicationXlib final : public IApplication
 {
@@ -122,6 +163,9 @@ class ApplicationXlib final : public IApplication
     std::unordered_map<Window, IWindow*> m_windows;
 
     Display* m_xDisp = nullptr;
+    XIM m_xIM;
+    XFontSet m_fontset;
+    XIMStyle m_bestStyle = 0;
     int m_xDefaultScreen = 0;
     int m_xcbFd, m_dbusFd, m_maxFd;
     
@@ -193,6 +237,12 @@ public:
             return;
         }
 
+        if (setlocale(LC_ALL, "") == nullptr)
+        {
+            Log.report(LogVisor::FatalError, "Can't setlocale");
+            return;
+        }
+
         /* Open Xlib Display */
         m_xDisp = XOpenDisplay(0);
         if (!m_xDisp)
@@ -200,6 +250,70 @@ public:
             Log.report(LogVisor::FatalError, "Can't open X display");
             return;
         }
+
+        /* Configure locale */
+        if (!XSupportsLocale()) {
+            Log.report(LogVisor::FatalError, "X does not support locale %s.",
+                       setlocale(LC_ALL, nullptr));
+            return;
+        }
+        if (XSetLocaleModifiers("") == nullptr)
+            Log.report(LogVisor::Warning, "Cannot set locale modifiers.");
+
+        if ((m_xIM = XOpenIM(m_xDisp, nullptr, nullptr, nullptr)) == nullptr)
+        {
+            Log.report(LogVisor::FatalError, "Couldn't open input method.");
+            return;
+        }
+
+        /* Create the fontset */
+        char** missing_charsets;
+        int num_missing_charsets = 0;
+        char* default_string;
+        m_fontset = XCreateFontSet(m_xDisp,
+                                   "-adobe-helvetica-*-r-*-*-*-120-*-*-*-*-*-*,\
+                                    -misc-fixed-*-r-*-*-*-130-*-*-*-*-*-*",
+                                   &missing_charsets, &num_missing_charsets,
+                                   &default_string);
+        /*
+         * if there are charsets for which no fonts can
+         * be found, print a warning message.
+         */
+        if (num_missing_charsets > 0)
+        {
+            std::string warn("The following charsets are missing:\n");
+
+            for(int i=0 ; i<num_missing_charsets ; ++i)
+                warn += std::string(missing_charsets[i]) + '\n';
+            XFreeStringList(missing_charsets);
+            warn += "The string '" + std::string(default_string) + "' will be used in place.";
+            Log.report(LogVisor::Warning, warn.c_str());
+        }
+
+        /* figure out which styles the IM can support */
+        XIMStyles* im_supported_styles;
+        XIMStyle app_supported_styles;
+        XGetIMValues(m_xIM, XNQueryInputStyle, &im_supported_styles, nullptr);
+        /* set flags for the styles our application can support */
+        app_supported_styles = XIMPreeditNone | XIMPreeditNothing | XIMPreeditArea;
+        app_supported_styles |= XIMStatusNone | XIMStatusNothing | XIMStatusArea;
+        /*
+         * now look at each of the IM supported styles, and
+         * chose the "best" one that we can support.
+         */
+        for (int i=0 ; i<im_supported_styles->count_styles ; ++i)
+        {
+            XIMStyle style = im_supported_styles->supported_styles[i];
+            if ((style & app_supported_styles) == style) /* if we can handle it */
+                m_bestStyle = ChooseBetterStyle(style, m_bestStyle);
+        }
+        /* if we couldn't support any of them, print an error and exit */
+        if (m_bestStyle == 0)
+        {
+            Log.report(LogVisor::FatalError, "interaction style not supported.");
+            return;
+        }
+        XFree(im_supported_styles);
 
         m_xDefaultScreen = DefaultScreen(m_xDisp);
         X_CURSORS.m_pointer = XCreateFontCursor(m_xDisp, XC_left_ptr);
@@ -289,6 +403,7 @@ public:
                 {
                     XEvent event;
                     XNextEvent(m_xDisp, &event);
+                    if (XFilterEvent(&event, None)) continue;
                     bool windowEvent;
                     Window evWindow = GetWindowOfEvent(&event, windowEvent);
                     if (windowEvent)
@@ -355,7 +470,7 @@ public:
     
     IWindow* newWindow(const std::string& title)
     {
-        IWindow* newWindow = _WindowXlibNew(title, m_xDisp, m_xDefaultScreen, m_lastGlxCtx);
+        IWindow* newWindow = _WindowXlibNew(title, m_xDisp, m_xDefaultScreen, m_xIM, m_bestStyle, m_fontset, m_lastGlxCtx);
         m_windows[(Window)newWindow->getPlatformHandle()] = newWindow;
         return newWindow;
     }
