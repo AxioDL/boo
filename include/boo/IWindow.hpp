@@ -139,6 +139,7 @@ public:
     virtual void modKeyDown(EModifierKey mod, bool isRepeat)
     {(void)mod;(void)isRepeat;}
     virtual void modKeyUp(EModifierKey mod) {(void)mod;}
+    virtual void utf8FragmentDown(const std::string& str) {(void)str;}
     virtual void focusLost() {}
     virtual void focusGained() {}
     virtual void windowMoved(const SWindowRect& rect)
@@ -220,7 +221,7 @@ public:
     virtual bool isFullscreen() const=0;
     virtual void setFullscreen(bool fs)=0;
 
-    virtual void claimKeyboardFocus()=0;
+    virtual void claimKeyboardFocus(const int coord[2])=0;
     virtual bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz)=0;
     virtual std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz)=0;
 

@@ -70,7 +70,18 @@ void GLXEnableVSync(Display* disp, GLXWindow drawable);
 
 extern int XINPUT_OPCODE;
 
-static uint32_t translateKeysym(XKeyEvent* ev, ESpecialKey& specialSym, EModifierKey& modifierSym, XIC xIC)
+static std::string translateUTF8(XKeyEvent* ev, XIC xIC)
+{
+    char chs[512];
+    KeySym ks;
+    Status stat;
+    int len = Xutf8LookupString(xIC, ev, chs, 512, &ks, &stat);
+    if (len > 1 && (stat == XLookupChars || stat == XLookupBoth))
+        return std::string(chs, len);
+    return std::string();
+}
+
+static char translateKeysym(XKeyEvent* ev, ESpecialKey& specialSym, EModifierKey& modifierSym)
 {
     KeySym sym = XLookupKeysym(ev, 0);
 
@@ -112,21 +123,10 @@ static uint32_t translateKeysym(XKeyEvent* ev, ESpecialKey& specialSym, EModifie
         modifierSym = EModifierKey::Alt;
     else
     {
-#if 0
-        unsigned n;
-        XkbGetIndicatorState(d, XkbUseCoreKbd, &n);
-        uint32_t utf = xkb_keysym_to_utf32(sym);
-        if ((n & 0x01) != 0 ^ (state & ShiftMask) != 0)
-            return toupper(utf);
-        else
-            return utf;
-#endif
-        uint32_t utf = 0;
-        KeySym sym;
-        Status stat;
-        XmbLookupString(xIC, ev, (char*)&utf, 4, &sym, &stat);
-        if (stat == XLookupChars || stat == XLookupBoth)
-            return utf;
+        char ch = 0;
+        KeySym ks;
+        XLookupString(ev, (char*)&ch, 1, &ks, nullptr);
+        return ch;
     }
     return 0;
 }
@@ -603,13 +603,17 @@ public:
          * Now go create an IC using the style we chose.
          * Also set the window and fontset attributes now.
          */
-        XVaNestedList list = XVaCreateNestedList(0, XNFontSet, fontset, nullptr);
+        XPoint pt = {0,0};
+        XVaNestedList nlist;
         m_xIC = XCreateIC(xIM, XNInputStyle, bestInputStyle,
                           XNClientWindow, m_windowId,
-                          XNPreeditAttributes, list,
-                          XNStatusAttributes, list,
+                          XNFocusWindow, m_windowId,
+                          XNPreeditAttributes, nlist = XVaCreateNestedList(0,
+                                                                           XNSpotLocation, &pt,
+                                                                           XNFontSet, fontset,
+                                                                           nullptr),
                           nullptr);
-        XFree(list);
+        XFree(nlist);
         if (m_xIC == nullptr)
         {
             Log.report(LogVisor::FatalError, "Couldn't create input context.");
@@ -899,9 +903,20 @@ public:
         }
     } m_clipData;
 
-    void claimKeyboardFocus()
+    void claimKeyboardFocus(const int coord[2])
     {
         XLockDisplay(m_xDisp);
+        if (!coord)
+        {
+            XUnsetICFocus(m_xIC);
+            XUnlockDisplay(m_xDisp);
+            return;
+        }
+        getWindowFrame(m_wx, m_wy, m_ww, m_wh);
+        XPoint pt = {short(coord[0]), short(m_wh - coord[1])};
+        XVaNestedList list = XVaCreateNestedList(0, XNSpotLocation, &pt, nullptr);
+        XSetICValues(m_xIC, XNPreeditAttributes, list, nullptr);
+        XFree(list);
         XSetICFocus(m_xIC);
         XUnlockDisplay(m_xDisp);
     }
@@ -998,63 +1013,12 @@ public:
         reply.xselection.property  = se->property;
         if (se->target == S_ATOMS->m_targets)
         {
-#if 0
-            if (se->selection == XA_PRIMARY)
-            {
-                std::vector<Atom> x(sel_formats.GetCount());
-                for (int i=0 ; i<sel_formats.GetCount() ; ++i)
-                {
-                    x[i] = XAtom(sel_formats[i]);
-                }
-                XChangeProperty(m_xDisp, se->requestor, se->property, XA_ATOM,
-                                32, 0, (unsigned char*)x.data(),
-                                sel_formats.GetCount());
-            }
-            else if (se->selection == S_ATOMS->m_clipboard)
-            {
-                std::vector<Atom> x(data.GetCount());
-                for (int i=0 ; i<data.GetCount() ; ++i)
-                {
-                    x[i] = data.GetKey(i);
-                }
-                XChangeProperty(m_xDisp, se->requestor, se->property, XA_ATOM,
-                                32, 0, (unsigned char*)x.data(),
-                                data.GetCount());
-            }
-#endif
             Atom ValidTargets[] = {GetClipboardTypeAtom(m_clipData.m_type)};
             XChangeProperty(m_xDisp, se->requestor, se->property, XA_ATOM,
                             32, 0, (unsigned char*)ValidTargets, m_clipData.m_type != EClipboardType::None);
         }
         else
         {
-#if 0
-            if (se->selection == XA_PRIMARY)
-            {
-                String fmt = XAtomName(se->target);
-                int i = sel_formats.Find(fmt);
-                if (i >= 0 && sel_ctrl)
-                {
-                    String d = sel_ctrl->GetSelectionData(fmt);
-                    XChangeProperty(m_xDisp, se->requestor, se->property, se->target, 8, PropModeReplace,
-                                    d, d.GetLength());
-                }
-                else
-                    reply.xselection.property = 0;
-            }
-            else if (se->selection == S_ATOMS->m_clipboard)
-            {
-                int i = data.Find(se->target);
-                if (i >= 0)
-                {
-                    String d = data[i].Render();
-                    XChangeProperty(m_xDisp, se->requestor, se->property, se->target, 8, PropModeReplace,
-                                    d, d.GetLength());
-                }
-                else
-                    reply.xselection.property = 0;
-            }
-#endif
             if (se->target == GetClipboardTypeAtom(m_clipData.m_type))
             {
                 XChangeProperty(m_xDisp, se->requestor, se->property, se->target, 8, PropModeReplace,
@@ -1256,27 +1220,6 @@ public:
             m_ww = event->xconfigure.width;
             m_wh = event->xconfigure.height;
 
-            if (m_bestStyle & XIMPreeditArea)
-            {
-                XRectangle preedit_area;
-                preedit_area.width = event->xconfigure.width*4/5;
-                preedit_area.height = 0;
-                GetPreferredGeometry(XNPreeditAttributes, &preedit_area);
-                preedit_area.x = event->xconfigure.width - preedit_area.width;
-                preedit_area.y = event->xconfigure.height - preedit_area.height;
-                SetGeometry(XNPreeditAttributes, &preedit_area);
-            }
-            if (m_bestStyle & XIMStatusArea)
-            {
-                XRectangle status_area;
-                status_area.width = event->xconfigure.width/5;
-                status_area.height = 0;
-                GetPreferredGeometry(XNStatusAttributes, &status_area);
-                status_area.x = 0;
-                status_area.y = event->xconfigure.height - status_area.height;
-                SetGeometry(XNStatusAttributes, &status_area);
-            }
-
             if (m_callback)
             {
                 SWindowRect rect =
@@ -1293,7 +1236,13 @@ public:
                 EModifierKey modifierKey;
                 unsigned int state = event->xkey.state;
                 event->xkey.state &= ~ControlMask;
-                uint32_t charCode = translateKeysym(&event->xkey, specialKey, modifierKey, m_xIC);
+                std::string utf8Frag = translateUTF8(&event->xkey, m_xIC);
+                if (utf8Frag.size())
+                {
+                    m_callback->utf8FragmentDown(utf8Frag);
+                    return;
+                }
+                char charCode = translateKeysym(&event->xkey, specialKey, modifierKey);
                 EModifierKey modifierMask = translateModifiers(state);
                 if (charCode)
                     m_callback->charKeyDown(charCode, modifierMask, false);
@@ -1312,7 +1261,7 @@ public:
                 EModifierKey modifierKey;
                 unsigned int state = event->xkey.state;
                 event->xkey.state &= ~ControlMask;
-                uint32_t charCode = translateKeysym(&event->xkey, specialKey, modifierKey, m_xIC);
+                char charCode = translateKeysym(&event->xkey, specialKey, modifierKey);
                 EModifierKey modifierMask = translateModifiers(state);
                 if (charCode)
                     m_callback->charKeyUp(charCode, modifierMask);

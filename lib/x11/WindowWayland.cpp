@@ -185,7 +185,7 @@ struct WindowWayland : IWindow
         
     }
 
-    void claimKeyboardFocus()
+    void claimKeyboardFocus(const int coord[2])
     {
     }
 

@@ -25,7 +25,7 @@ DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
 
 namespace boo
 {
-static LogVisor::LogModule Log("boo::ApplicationXCB");
+static LogVisor::LogModule Log("boo::ApplicationXlib");
 XlibCursors X_CURSORS;
 
 int XCB_GLX_EVENT_BASE = 0;
@@ -266,7 +266,6 @@ public:
             return;
         }
 
-        /* Create the fontset */
         char** missing_charsets;
         int num_missing_charsets = 0;
         char* default_string;
@@ -275,28 +274,14 @@ public:
                                     -misc-fixed-*-r-*-*-*-130-*-*-*-*-*-*",
                                    &missing_charsets, &num_missing_charsets,
                                    &default_string);
-        /*
-         * if there are charsets for which no fonts can
-         * be found, print a warning message.
-         */
-        if (num_missing_charsets > 0)
-        {
-            std::string warn("The following charsets are missing:\n");
-
-            for(int i=0 ; i<num_missing_charsets ; ++i)
-                warn += std::string(missing_charsets[i]) + '\n';
-            XFreeStringList(missing_charsets);
-            warn += "The string '" + std::string(default_string) + "' will be used in place.";
-            Log.report(LogVisor::Warning, warn.c_str());
-        }
 
         /* figure out which styles the IM can support */
         XIMStyles* im_supported_styles;
         XIMStyle app_supported_styles;
         XGetIMValues(m_xIM, XNQueryInputStyle, &im_supported_styles, nullptr);
         /* set flags for the styles our application can support */
-        app_supported_styles = XIMPreeditNone | XIMPreeditNothing | XIMPreeditArea;
-        app_supported_styles |= XIMStatusNone | XIMStatusNothing | XIMStatusArea;
+        app_supported_styles = XIMPreeditNone | XIMPreeditNothing | XIMPreeditPosition;
+        app_supported_styles |= XIMStatusNone | XIMStatusNothing;
         /*
          * now look at each of the IM supported styles, and
          * chose the "best" one that we can support.
