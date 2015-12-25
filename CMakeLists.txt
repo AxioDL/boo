@@ -37,7 +37,7 @@ if(WIN32)
 
   list(APPEND _BOO_SYS_DEFINES -DUNICODE -D_UNICODE)
 
-  list(APPEND _BOO_SYS_LIBS Winusb opengl32 Setupapi)
+  list(APPEND _BOO_SYS_LIBS Winusb opengl32 Setupapi Imm32)
 elseif(APPLE)
   list(APPEND PLAT_SRCS 
        lib/mac/ApplicationCocoa.mm

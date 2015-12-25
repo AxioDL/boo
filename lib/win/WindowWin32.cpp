@@ -378,7 +378,7 @@ static void genFrameDefault(MONITORINFO* screen, int& xOut, int& yOut, int& wOut
     hOut = height;
 }
 
-static uint32_t translateKeysym(WPARAM sym, ESpecialKey& specialSym, EModifierKey& modifierSym)
+static uint32_t translateKeysym(WPARAM sym, UINT scancode, ESpecialKey& specialSym, EModifierKey& modifierSym)
 {
     specialSym = ESpecialKey::None;
     modifierSym = EModifierKey::None;
@@ -418,13 +418,12 @@ static uint32_t translateKeysym(WPARAM sym, ESpecialKey& specialSym, EModifierKe
         modifierSym = EModifierKey::Alt;
     else
     {
-        UINT vk = MapVirtualKey(sym, MAPVK_VK_TO_CHAR);
-        if (__isascii(vk))
-        {
-            if (!(((GetKeyState(VK_SHIFT) & 0x8000) != 0) ^ (GetKeyState(VK_CAPITAL) != 0)))
-                vk = tolower(vk);
-        }
-        return vk;
+        BYTE kbState[256];
+        GetKeyboardState(kbState);
+        kbState[VK_CONTROL] = 0;
+        WORD ch = 0;
+        ToAscii(sym, scancode, kbState, &ch, 0);
+        return ch;
     }
     return 0;
 }
@@ -442,11 +441,247 @@ static EModifierKey translateModifiers(UINT msg)
         retval |= EModifierKey::Alt;
     return retval;
 }
+
+static HGLOBAL MakeANSICRLF(const char* data, size_t sz)
+{
+    size_t retSz = 1;
+    char lastCh = 0;
+    for (size_t i=0 ; i<sz ; ++i)
+    {
+        char ch = data[i];
+        if (ch == '\n' && lastCh != '\r')
+            retSz += 2;
+        else
+            retSz += 1;
+        lastCh = ch;
+    }
+    HGLOBAL ret = GlobalAlloc(GMEM_MOVEABLE, retSz);
+    char* retData = reinterpret_cast<char*>(GlobalLock(ret));
+    lastCh = 0;
+    for (size_t i=0 ; i<sz ; ++i)
+    {
+        char ch = data[i];
+        if (ch == '\n' && lastCh != '\r')
+        {
+            *retData = '\r';
+            ++retData;
+            *retData = '\n';
+            ++retData;
+        }
+        else
+        {
+            *retData = ch;
+            ++retData;
+        }
+        lastCh = ch;
+    }
+    *retData = '\0';
+    GlobalUnlock(ret);
+    return ret;
+}
+
+static std::unique_ptr<uint8_t[]> MakeANSILF(const char* data, size_t sz, size_t& szOut)
+{
+    szOut = 0;
+    char lastCh = 0;
+    for (size_t i=0 ; i<sz ; ++i)
+    {
+        char ch = data[i];
+        if (ch == '\n' && lastCh == '\r')
+        {}
+        else
+            szOut += 1;
+        lastCh = ch;
+    }
+    std::unique_ptr<uint8_t[]> ret(new uint8_t[szOut]);
+    uint8_t* retPtr = ret.get();
+    lastCh = 0;
+    for (size_t i=0 ; i<sz ; ++i)
+    {
+        char ch = data[i];
+        if (ch == '\n' && lastCh == '\r')
+            retPtr[-1] = uint8_t('\n');
+        else
+        {
+            *retPtr = uint8_t(ch);
+            ++retPtr;
+        }
+        lastCh = ch;
+    }
+    return ret;
+}
+
+/** Memory could not be allocated. */
+#define UTF8PROC_ERROR_NOMEM -1
+/** The given string is too long to be processed. */
+#define UTF8PROC_ERROR_OVERFLOW -2
+/** The given string is not a legal UTF-8 string. */
+#define UTF8PROC_ERROR_INVALIDUTF8 -3
+/** The @ref UTF8PROC_REJECTNA flag was set and an unassigned codepoint was found. */
+#define UTF8PROC_ERROR_NOTASSIGNED -4
+/** Invalid options have been used. */
+#define UTF8PROC_ERROR_INVALIDOPTS -5
+
+#define UTF8PROC_cont(ch)  (((ch) & 0xc0) == 0x80)
+
+static inline int utf8proc_iterate(const uint8_t *str, int strlen, int32_t *dst) {
+  uint32_t uc;
+  const uint8_t *end;
+
+  *dst = -1;
+  if (!strlen) return 0;
+  end = str + ((strlen < 0) ? 4 : strlen);
+  uc = *str++;
+  if (uc < 0x80) {
+    *dst = uc;
+    return 1;
+  }
+  // Must be between 0xc2 and 0xf4 inclusive to be valid
+  if ((uc - 0xc2) > (0xf4-0xc2)) return UTF8PROC_ERROR_INVALIDUTF8;
+  if (uc < 0xe0) {         // 2-byte sequence
+     // Must have valid continuation character
+     if (!UTF8PROC_cont(*str)) return UTF8PROC_ERROR_INVALIDUTF8;
+     *dst = ((uc & 0x1f)<<6) | (*str & 0x3f);
+     return 2;
+  }
+  if (uc < 0xf0) {        // 3-byte sequence
+     if ((str + 1 >= end) || !UTF8PROC_cont(*str) || !UTF8PROC_cont(str[1]))
+        return UTF8PROC_ERROR_INVALIDUTF8;
+     // Check for surrogate chars
+     if (uc == 0xed && *str > 0x9f)
+         return UTF8PROC_ERROR_INVALIDUTF8;
+     uc = ((uc & 0xf)<<12) | ((*str & 0x3f)<<6) | (str[1] & 0x3f);
+     if (uc < 0x800)
+         return UTF8PROC_ERROR_INVALIDUTF8;
+     *dst = uc;
+     return 3;
+  }
+  // 4-byte sequence
+  // Must have 3 valid continuation characters
+  if ((str + 2 >= end) || !UTF8PROC_cont(*str) || !UTF8PROC_cont(str[1]) || !UTF8PROC_cont(str[2]))
+     return UTF8PROC_ERROR_INVALIDUTF8;
+  // Make sure in correct range (0x10000 - 0x10ffff)
+  if (uc == 0xf0) {
+    if (*str < 0x90) return UTF8PROC_ERROR_INVALIDUTF8;
+  } else if (uc == 0xf4) {
+    if (*str > 0x8f) return UTF8PROC_ERROR_INVALIDUTF8;
+  }
+  *dst = ((uc & 7)<<18) | ((*str & 0x3f)<<12) | ((str[1] & 0x3f)<<6) | (str[2] & 0x3f);
+  return 4;
+}
+
+static HGLOBAL MakeUnicodeCRLF(const char* data, size_t sz)
+{
+    size_t retSz = 2;
+    int32_t lastCh = 0;
+    for (size_t i=0 ; i<sz ;)
+    {
+        int32_t ch;
+        int chSz = utf8proc_iterate(reinterpret_cast<const uint8_t*>(data+i), -1, &ch);
+        if (chSz < 0)
+            Log.report(LogVisor::FatalError, "invalid UTF-8 char");
+        if (ch <= 0xffff)
+        {
+            if (ch == '\n' && lastCh != '\r')
+                retSz += 4;
+            else
+                retSz += 2;
+            lastCh = ch;
+        }
+        i += chSz;
+    }
+    HGLOBAL ret = GlobalAlloc(GMEM_MOVEABLE, retSz);
+    wchar_t* retData = reinterpret_cast<wchar_t*>(GlobalLock(ret));
+    lastCh = 0;
+    for (size_t i=0 ; i<sz ;)
+    {
+        int32_t ch;
+        int chSz = utf8proc_iterate(reinterpret_cast<const uint8_t*>(data+i), -1, &ch);
+        if (ch <= 0xffff)
+        {
+            if (ch == '\n' && lastCh != '\r')
+            {
+                *retData = L'\r';
+                ++retData;
+                *retData = L'\n';
+                ++retData;
+            }
+            else
+            {
+                *retData = wchar_t(ch);
+                ++retData;
+            }
+            lastCh = ch;
+        }
+        i += chSz;
+    }
+    *retData = L'\0';
+    GlobalUnlock(ret);
+    return ret;
+}
+
+static inline int utf8proc_encode_char(int32_t uc, uint8_t *dst) {
+  if (uc < 0x00) {
+    return 0;
+  } else if (uc < 0x80) {
+    dst[0] = uc;
+    return 1;
+  } else if (uc < 0x800) {
+    dst[0] = 0xC0 + (uc >> 6);
+    dst[1] = 0x80 + (uc & 0x3F);
+    return 2;
+  // Note: we allow encoding 0xd800-0xdfff here, so as not to change
+  // the API, however, these are actually invalid in UTF-8
+  } else if (uc < 0x10000) {
+    dst[0] = 0xE0 + (uc >> 12);
+    dst[1] = 0x80 + ((uc >> 6) & 0x3F);
+    dst[2] = 0x80 + (uc & 0x3F);
+    return 3;
+  } else if (uc < 0x110000) {
+    dst[0] = 0xF0 + (uc >> 18);
+    dst[1] = 0x80 + ((uc >> 12) & 0x3F);
+    dst[2] = 0x80 + ((uc >> 6) & 0x3F);
+    dst[3] = 0x80 + (uc & 0x3F);
+    return 4;
+  } else return 0;
+}
+
+static std::unique_ptr<uint8_t[]> MakeUnicodeLF(const wchar_t* data, size_t sz, size_t& szOut)
+{
+    szOut = 0;
+    wchar_t lastCh = 0;
+    for (size_t i=0 ; i<sz ; ++i)
+    {
+        wchar_t ch = data[i];
+        if (ch == L'\n' && lastCh == L'\r')
+        {}
+        else
+        {
+            uint8_t dummy[4];
+            szOut += utf8proc_encode_char(ch, dummy);
+        }
+        lastCh = ch;
+    }
+    std::unique_ptr<uint8_t[]> ret(new uint8_t[szOut]);
+    uint8_t* retPtr = ret.get();
+    lastCh = 0;
+    for (size_t i=0 ; i<sz ; ++i)
+    {
+        wchar_t ch = data[i];
+        if (ch == L'\n' && lastCh == L'\r')
+            retPtr[-1] = uint8_t('\n');
+        else
+            retPtr += utf8proc_encode_char(ch, retPtr);
+        lastCh = ch;
+    }
+    return ret;
+}
     
 class WindowWin32 : public IWindow
 {
     friend struct GraphicsContextWin32;
     HWND m_hwnd;
+    HIMC m_imc;
     std::unique_ptr<GraphicsContextWin32> m_gfxCtx;
     IWindowCallback* m_callback = nullptr;
     EMouseCursor m_cursor = EMouseCursor::None;
@@ -475,6 +710,7 @@ public:
         m_hwnd = CreateWindowW(L"BooWindow", title.c_str(), WS_OVERLAPPEDWINDOW,
                                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                                NULL, NULL, NULL, NULL);
+        m_imc = ImmGetContext(m_hwnd);
         IGraphicsContext::EGraphicsAPI api = IGraphicsContext::EGraphicsAPI::D3D11;
 #if _WIN32_WINNT_WIN10
         if (b3dCtx.m_ctx12.m_dev)
@@ -609,6 +845,105 @@ public:
         m_gfxCtx->m_3dCtx.setFullscreen(this, fs);
     }
 
+    void _immSetOpenStatus(bool open)
+    {
+        if (GetCurrentThreadId() != g_mainThreadId)
+        {
+            if (!PostThreadMessage(g_mainThreadId, WM_USER+3, WPARAM(m_imc), LPARAM(open)))
+                Log.report(LogVisor::FatalError, "PostThreadMessage error");
+            return;
+        }
+        ImmSetOpenStatus(m_imc, open);
+    }
+
+    COMPOSITIONFORM m_cForm = {CFS_POINT};
+    void _immSetCompositionWindow(const int coord[2])
+    {
+        int x, y, w, h;
+        getWindowFrame(x, y, w, h);
+        m_cForm.ptCurrentPos.x = coord[0];
+        m_cForm.ptCurrentPos.y = h - coord[1];
+
+        if (GetCurrentThreadId() != g_mainThreadId)
+        {
+            if (!PostThreadMessage(g_mainThreadId, WM_USER+4, WPARAM(m_imc), LPARAM(&m_cForm)))
+                Log.report(LogVisor::FatalError, "PostThreadMessage error");
+            return;
+        }
+        ImmSetCompositionWindow(m_imc, &m_cForm);
+    }
+
+    void claimKeyboardFocus(const int coord[2])
+    {
+        if (!coord)
+        {
+            _immSetOpenStatus(false);
+            return;
+        }
+        _immSetCompositionWindow(coord);
+        _immSetOpenStatus(true);
+    }
+
+    bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz)
+    {
+        switch (type)
+        {
+        case EClipboardType::String:
+        {
+            HGLOBAL gStr = MakeANSICRLF(reinterpret_cast<const char*>(data), sz);
+            OpenClipboard(m_hwnd);
+            EmptyClipboard();
+            SetClipboardData(CF_TEXT, gStr);
+            CloseClipboard();
+            return true;
+        }
+        case EClipboardType::UTF8String:
+        {
+            HGLOBAL gStr = MakeUnicodeCRLF(reinterpret_cast<const char*>(data), sz);
+            OpenClipboard(m_hwnd);
+            EmptyClipboard();
+            SetClipboardData(CF_UNICODETEXT, gStr);
+            CloseClipboard();
+            return true;
+        }
+        default: break;
+        }
+        return false;
+    }
+
+    std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz)
+    {
+        switch (type)
+        {
+        case EClipboardType::String:
+        {
+            OpenClipboard(m_hwnd);
+            HGLOBAL gStr = GetClipboardData(CF_TEXT);
+            if (!gStr)
+                break;
+            const char* str = reinterpret_cast<const char*>(GlobalLock(gStr));
+            std::unique_ptr<uint8_t[]> ret = MakeANSILF(str, GlobalSize(gStr), sz);
+            GlobalUnlock(gStr);
+            CloseClipboard();
+            return ret;
+        }
+        case EClipboardType::UTF8String:
+        {
+            OpenClipboard(m_hwnd);
+            HGLOBAL gStr = GetClipboardData(CF_UNICODETEXT);
+            if (!gStr)
+                break;
+            const wchar_t* str = reinterpret_cast<const wchar_t*>(GlobalLock(gStr));
+            std::unique_ptr<uint8_t[]> ret = MakeUnicodeLF(str, GlobalSize(gStr)/2, sz);
+            GlobalUnlock(gStr);
+            CloseClipboard();
+            return ret;
+        }
+        default: break;
+        }
+        return std::unique_ptr<uint8_t[]>();
+    }
+
     void waitForRetrace()
     {
         m_gfxCtx->m_output->WaitForVBlank();
@@ -701,7 +1036,7 @@ public:
             {
                 ESpecialKey specialKey;
                 EModifierKey modifierKey;
-                uint32_t charCode = translateKeysym(e.wParam, specialKey, modifierKey);
+                uint32_t charCode = translateKeysym(e.wParam, (e.lParam >> 16) & 0xff, specialKey, modifierKey);
                 EModifierKey modifierMask = translateModifiers(e.uMsg);
                 if (charCode)
                     m_callback->charKeyDown(charCode, modifierMask, (e.lParam & 0xffff) != 0);
@@ -719,7 +1054,7 @@ public:
             {
                 ESpecialKey specialKey;
                 EModifierKey modifierKey;
-                uint32_t charCode = translateKeysym(e.wParam, specialKey, modifierKey);
+                uint32_t charCode = translateKeysym(e.wParam, (e.lParam >> 16) & 0xff, specialKey, modifierKey);
                 EModifierKey modifierMask = translateModifiers(e.uMsg);
                 if (charCode)
                     m_callback->charKeyUp(charCode, modifierMask);
@@ -832,6 +1167,28 @@ public:
                     { float(GET_X_LPARAM(e.lParam)) / float(w), float(h-GET_Y_LPARAM(e.lParam)) / float(h) }
                 };
                 m_callback->mouseEnter(coord);
+            }
+            return;
+        }
+        case WM_IME_COMPOSITION:
+        {
+            if (m_callback)
+            {
+                if ((e.lParam & GCS_RESULTSTR) != 0)
+                {
+                    wchar_t str[512];
+                    LONG len = ImmGetCompositionStringW(m_imc, GCS_RESULTSTR, str, sizeof(str));
+                    if (len > 0)
+                    {
+                        size_t szOut;
+                        std::unique_ptr<uint8_t[]> out = MakeUnicodeLF(str, len/2, szOut);
+                        if (szOut)
+                        {
+                            std::string strOut((char*)out.get(), szOut);
+                            m_callback->utf8FragmentDown(strOut);
+                        }
+                    }
+                }
             }
             return;
         }

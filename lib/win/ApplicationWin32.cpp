@@ -267,6 +267,7 @@ public:
             case WM_NCMOUSELEAVE:
             case WM_MOUSEHOVER:
             case WM_NCMOUSEHOVER:
+            case WM_IME_COMPOSITION:
                 window->_incomingEvent(&HWNDEvent(uMsg, wParam, lParam));
 
             default:
@@ -290,30 +291,42 @@ public:
         MSG msg = {0};
         while (GetMessage(&msg, NULL, 0, 0))
         {
-            switch (msg.message)
+            if (!msg.hwnd)
             {
-            case WM_USER:
-            {
-                /* New-window message (coalesced onto main thread) */
-                std::unique_lock<std::mutex> lk(m_nwmt);
-                const SystemString* title = reinterpret_cast<const SystemString*>(msg.wParam);
-                m_mwret = newWindow(*title);
-                lk.unlock();
-                m_nwcv.notify_one();
-                continue;
+                /* PostThreadMessage events */
+                switch (msg.message)
+                {
+                case WM_USER:
+                {
+                    /* New-window message (coalesced onto main thread) */
+                    std::unique_lock<std::mutex> lk(m_nwmt);
+                    const SystemString* title = reinterpret_cast<const SystemString*>(msg.wParam);
+                    m_mwret = newWindow(*title);
+                    lk.unlock();
+                    m_nwcv.notify_one();
+                    continue;
+                }
+                case WM_USER+1:
+                    /* Quit message from client thread */
+                    PostQuitMessage(0);
+                    continue;
+                case WM_USER+2:
+                    /* SetCursor call from client thread */
+                    SetCursor(HCURSOR(msg.wParam));
+                    continue;
+                case WM_USER+3:
+                    /* ImmSetOpenStatus call from client thread */
+                    ImmSetOpenStatus(HIMC(msg.wParam), BOOL(msg.lParam));
+                    continue;
+                case WM_USER+4:
+                    /* ImmSetCompositionWindow call from client thread */
+                    ImmSetCompositionWindow(HIMC(msg.wParam), LPCOMPOSITIONFORM(msg.lParam));
+                    continue;
+                default: break;
+                }
             }
-            case WM_USER+1:
-                /* Quit message from client thread */
-                PostQuitMessage(0);
-                continue;
-            case WM_USER+2:
-                /* SetCursor call from client thread */
-                SetCursor(HCURSOR(msg.wParam));
-                continue;
-            default:
-                TranslateMessage(&msg);
-                DispatchMessage(&msg);
-            }
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
         }
 
         m_callback.appQuitting(this);
