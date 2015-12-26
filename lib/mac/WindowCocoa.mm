@@ -123,12 +123,13 @@ class GraphicsContextCocoaGL;
 class GraphicsContextCocoaMetal;
 }
 
-@interface BooCocoaResponder : NSResponder
+@interface BooCocoaResponder : NSResponder <NSTextInputClient>
 {
     @public
     NSUInteger lastModifiers;
     boo::GraphicsContextCocoa* booContext;
     NSView* parentView;
+    NSTextInputContext* textContext;
 }
 - (id)initWithBooContext:(boo::GraphicsContextCocoa*)bctx View:(NSView*)view;
 @end
@@ -426,7 +427,172 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
     lastModifiers = 0;
     booContext = bctx;
     parentView = view;
+    textContext = [[NSTextInputContext alloc] initWithClient:self];
     return self;
+}
+
+- (BOOL)hasMarkedText
+{
+    if (booContext->m_callback)
+    {
+        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+        if (textCb)
+            return textCb->hasMarkedText();
+    }
+    return false;
+}
+
+- (NSRange)markedRange
+{
+    if (booContext->m_callback)
+    {
+        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+        if (textCb)
+        {
+            std::pair<int,int> rng = textCb->markedRange();
+            return NSMakeRange(rng.first < 0 ? NSNotFound : rng.first, rng.second);
+        }
+    }
+    return NSMakeRange(NSNotFound, 0);
+}
+
+- (NSRange)selectedRange
+{
+    if (booContext->m_callback)
+    {
+        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+        if (textCb)
+        {
+            std::pair<int,int> rng = textCb->selectedRange();
+            return NSMakeRange(rng.first < 0 ? NSNotFound : rng.first, rng.second);
+        }
+    }
+    return NSMakeRange(NSNotFound, 0);
+}
+
+- (void)setMarkedText:(id)aString selectedRange:(NSRange)selectedRange replacementRange:(NSRange)replacementRange
+{
+    if (booContext->m_callback)
+    {
+        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+        if (textCb)
+        {
+            NSString* plainStr;
+            if ([aString isKindOfClass:[NSAttributedString class]])
+                plainStr = ((NSAttributedString*)aString).string;
+            else
+            {
+                plainStr = aString;
+                [plainStr retain];
+            }
+            textCb->setMarkedText([plainStr UTF8String],
+                                  std::make_pair(selectedRange.location, selectedRange.length),
+                                  std::make_pair(replacementRange.location, replacementRange.length));
+            [plainStr release];
+        }
+    }
+}
+
+- (void)unmarkText
+{
+    if (booContext->m_callback)
+    {
+        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+        if (textCb)
+            textCb->unmarkText();
+    }
+}
+
+- (NSArray<NSString*>*)validAttributesForMarkedText
+{
+    return [NSArray array];
+}
+
+- (NSAttributedString*)attributedSubstringForProposedRange:(NSRange)aRange actualRange:(NSRangePointer)actualRange
+{
+    if (booContext->m_callback)
+    {
+        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+        if (textCb)
+        {
+            std::pair<int,int> actualRng;
+            std::string str = textCb->substringForRange(std::make_pair(aRange.location, aRange.length), actualRng);
+            if (str.empty())
+                return nil;
+            actualRange->location = actualRng.first;
+            actualRange->length = actualRng.second;
+            NSString* nsStr = [NSString stringWithUTF8String:str.c_str()];
+            NSAttributedString* ret = [[NSAttributedString alloc] initWithString:nsStr];
+            [nsStr release];
+            return ret;
+        }
+    }
+    return nil;
+}
+
+- (void)insertText:(id)aString replacementRange:(NSRange)replacementRange
+{
+    if (booContext->m_callback)
+    {
+        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+        if (textCb)
+        {
+            NSString* plainStr;
+            if ([aString isKindOfClass:[NSAttributedString class]])
+                plainStr = ((NSAttributedString*)aString).string;
+            else
+            {
+                plainStr = aString;
+                [plainStr retain];
+            }
+            textCb->insertText([plainStr UTF8String],
+                               std::make_pair(replacementRange.location, replacementRange.length));
+            [plainStr release];
+        }
+    }
+}
+
+- (NSUInteger)characterIndexForPoint:(NSPoint)aPoint
+{
+    if (booContext->m_callback)
+    {
+        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+        if (textCb)
+        {
+            NSPoint backingPoint = [parentView convertPointToBacking:aPoint];
+            boo::SWindowCoord coord = {{int(backingPoint.x), int(backingPoint.y)}, {int(aPoint.x), int(aPoint.y)}};
+            int idx = textCb->characterIndexAtPoint(coord);
+            if (idx < 0)
+                return NSNotFound;
+            return idx;
+        }
+    }
+    return NSNotFound;
+}
+
+- (NSRect)firstRectForCharacterRange:(NSRange)aRange actualRange:(NSRangePointer)actualRange
+{
+    if (booContext->m_callback)
+    {
+        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+        if (textCb)
+        {
+            std::pair<int,int> actualRng;
+            boo::SWindowRect rect =
+            textCb->rectForCharacterRange(std::make_pair(aRange.location, aRange.length), actualRng);
+            actualRange->location = actualRng.first;
+            actualRange->length = actualRng.second;
+            return [[parentView window] convertRectToScreen:
+             [parentView convertRectFromBacking:NSMakeRect(rect.location[0], rect.location[1],
+                                                           rect.size[0], rect.size[1])]];
+        }
+    }
+    return NSMakeRect(0, 0, 0, 0);
+}
+
+- (void)doCommandBySelector:(SEL)aSelector
+{
+    
 }
 
 static inline boo::EModifierKey getMod(NSUInteger flags)
@@ -470,6 +636,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
     };
     booContext->m_callback->mouseDown(coord, boo::EMouseButton::Primary,
                                       getMod([theEvent modifierFlags]));
+    [textContext handleEvent:theEvent];
 }
 
 - (void)mouseUp:(NSEvent*)theEvent
@@ -487,6 +654,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
     };
     booContext->m_callback->mouseUp(coord, boo::EMouseButton::Primary,
                                     getMod([theEvent modifierFlags]));
+    [textContext handleEvent:theEvent];
 }
 
 - (void)rightMouseDown:(NSEvent*)theEvent
@@ -504,6 +672,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
     };
     booContext->m_callback->mouseDown(coord, boo::EMouseButton::Secondary,
                                       getMod([theEvent modifierFlags]));
+    [textContext handleEvent:theEvent];
 }
 
 - (void)rightMouseUp:(NSEvent*)theEvent
@@ -521,6 +690,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
     };
     booContext->m_callback->mouseUp(coord, boo::EMouseButton::Secondary,
                                     getMod([theEvent modifierFlags]));
+    [textContext handleEvent:theEvent];
 }
 
 - (void)otherMouseDown:(NSEvent*)theEvent
@@ -540,6 +710,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
         {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
     };
     booContext->m_callback->mouseDown(coord, button, getMod([theEvent modifierFlags]));
+    [textContext handleEvent:theEvent];
 }
 
 - (void)otherMouseUp:(NSEvent*)theEvent
@@ -559,6 +730,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
         {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
     };
     booContext->m_callback->mouseUp(coord, button, getMod([theEvent modifierFlags]));
+    [textContext handleEvent:theEvent];
 }
 
 - (void)mouseMoved:(NSEvent*)theEvent
@@ -578,6 +750,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
         };
         booContext->m_callback->mouseMove(coord);
     }
+    [textContext handleEvent:theEvent];
 }
 
 - (void)mouseDragged:(NSEvent*)theEvent
@@ -614,6 +787,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
         (bool)[theEvent hasPreciseScrollingDeltas]
     };
     booContext->m_callback->scroll(coord, scroll);
+    [textContext handleEvent:theEvent];
 }
 
 - (void)touchesBeganWithEvent:(NSEvent*)event
@@ -798,6 +972,7 @@ static boo::ESpecialKey translateKeycode(short code)
         booContext->m_callback->charKeyDown([chars characterAtIndex:0],
                                             getMod(theEvent.modifierFlags),
                                             theEvent.isARepeat);
+    [textContext handleEvent:theEvent];
 }
 
 - (void)keyUp:(NSEvent*)theEvent
@@ -812,6 +987,7 @@ static boo::ESpecialKey translateKeycode(short code)
     else if ([chars length])
         booContext->m_callback->charKeyUp([chars characterAtIndex:0],
                                           getMod(theEvent.modifierFlags));
+    [textContext handleEvent:theEvent];
 }
 
 - (void)flagsChanged:(NSEvent*)theEvent
@@ -845,6 +1021,7 @@ static boo::ESpecialKey translateKeycode(short code)
         
         lastModifiers = modFlags;
     }
+    [textContext handleEvent:theEvent];
 }
 
 - (BOOL)acceptsTouchEvents
@@ -855,6 +1032,12 @@ static boo::ESpecialKey translateKeycode(short code)
 - (BOOL)acceptsFirstResponder
 {
     return YES;
+}
+
+- (void)dealloc
+{
+    [textContext release];
+    [super dealloc];
 }
 
 @end
@@ -1150,6 +1333,21 @@ public:
             ^{
                 [m_nsWindow toggleFullScreen:nil];
             });
+    }
+    
+    void claimKeyboardFocus(const int coord[2])
+    {
+        
+    }
+    
+    bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz)
+    {
+        
+    }
+    
+    std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz)
+    {
+        
     }
     
     ETouchType getTouchType() const
