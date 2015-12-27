@@ -3,23 +3,39 @@
 #if __APPLE__
 
 #include <Availability.h>
+#include <utility>
 
 template <class T>
 class NSPtr
 {
-    T m_ptr = 0;
+    void* m_ptr = nullptr;
 public:
     NSPtr() = default;
-    ~NSPtr() {[m_ptr release];}
-    NSPtr(T&& recv) : m_ptr(recv) {}
-    NSPtr& operator=(T&& recv) {[m_ptr release]; m_ptr = recv; return *this;}
+    ~NSPtr()
+    {
+        T ptr = (__bridge_transfer T)m_ptr;
+        (void)ptr;
+    }
+    NSPtr(T&& recv) {*this = std::move(recv);}
+    NSPtr& operator=(T&& recv)
+    {
+        T old = (__bridge_transfer T)m_ptr;
+        (void)old;
+        m_ptr = (__bridge_retained void*)recv;
+        return *this;
+    }
     NSPtr(const NSPtr& other) = delete;
     NSPtr(NSPtr&& other) = default;
     NSPtr& operator=(const NSPtr& other) = delete;
     NSPtr& operator=(NSPtr&& other) = default;
     operator bool() const {return m_ptr != 0;}
-    T get() const {return m_ptr;}
-    void reset() {[m_ptr release]; m_ptr = 0;}
+    T get() const {return (__bridge T)m_ptr;}
+    void reset()
+    {
+        T old = (__bridge_transfer T)m_ptr;
+        (void)old;
+        m_ptr = nullptr;
+    }
 };
 
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101100

@@ -7,6 +7,10 @@
 
 #include <LogVisor/LogVisor.hpp>
 
+#if !__has_feature(objc_arc)
+#error ARC Required
+#endif
+
 namespace boo {class ApplicationCocoa;}
 @interface AppDelegate : NSObject <NSApplicationDelegate>
 {
@@ -26,8 +30,8 @@ IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx, 
 class ApplicationCocoa : public IApplication
 {
 public:
-    NSApplication* m_app = nullptr;
     IApplicationCallback& m_callback;
+    AppDelegate* m_appDelegate;
 private:
     const SystemString m_uniqueName;
     const SystemString m_friendlyName;
@@ -37,13 +41,13 @@ private:
     NSPanel* aboutPanel;
     
     /* All windows */
-    std::unordered_map<NSWindow*, IWindow*> m_windows;
+    std::unordered_map<uintptr_t, IWindow*> m_windows;
     
     MetalContext m_metalCtx;
     
     void _deletedWindow(IWindow* window)
     {
-        m_windows.erase((NSWindow*)window->getPlatformHandle());
+        m_windows.erase(window->getPlatformHandle());
     }
 
 public:
@@ -58,17 +62,16 @@ public:
       m_pname(pname),
       m_args(args)
     {
-        m_app = [NSApplication sharedApplication];
-        [m_app setActivationPolicy:NSApplicationActivationPolicyRegular];
+        [[NSApplication sharedApplication] setActivationPolicy:NSApplicationActivationPolicyRegular];
         
         /* Delegate (OS X callbacks) */
-        AppDelegate* appDelegate = [[AppDelegate alloc] initWithApp:this];
-        [m_app setDelegate:appDelegate];
+        m_appDelegate = [[AppDelegate alloc] initWithApp:this];
+        [[NSApplication sharedApplication] setDelegate:m_appDelegate];
         
         /* App menu */
         NSMenu* appMenu = [[NSMenu alloc] initWithTitle:@"main"];
-        NSMenu* rwkMenu = [[NSMenu alloc] initWithTitle:[[NSString stringWithUTF8String:m_friendlyName.c_str()] autorelease]];
-        [rwkMenu addItemWithTitle:[[NSString stringWithFormat:@"About %s", m_friendlyName.c_str()] autorelease]
+        NSMenu* rwkMenu = [[NSMenu alloc] initWithTitle:[NSString stringWithUTF8String:m_friendlyName.c_str()]];
+        [rwkMenu addItemWithTitle:[NSString stringWithFormat:@"About %s", m_friendlyName.c_str()]
                            action:@selector(aboutApp:)
                     keyEquivalent:@""];
         NSMenuItem* fsItem = [rwkMenu addItemWithTitle:@"Toggle Full Screen"
@@ -76,11 +79,11 @@ public:
                                          keyEquivalent:@"f"];
         [fsItem setKeyEquivalentModifierMask:NSCommandKeyMask];
         [rwkMenu addItem:[NSMenuItem separatorItem]];
-        NSMenuItem* quit_item = [rwkMenu addItemWithTitle:[[NSString stringWithFormat:@"Quit %s", m_friendlyName.c_str()] autorelease]
+        NSMenuItem* quit_item = [rwkMenu addItemWithTitle:[NSString stringWithFormat:@"Quit %s", m_friendlyName.c_str()]
                                                    action:@selector(quitApp:)
                                             keyEquivalent:@"q"];
         [quit_item setKeyEquivalentModifierMask:NSCommandKeyMask];
-        [[appMenu addItemWithTitle:[[NSString stringWithUTF8String:m_friendlyName.c_str()] autorelease]
+        [[appMenu addItemWithTitle:[NSString stringWithUTF8String:m_friendlyName.c_str()]
                             action:nil keyEquivalent:@""] setSubmenu:rwkMenu];
         [[NSApplication sharedApplication] setMainMenu:appMenu];
         
@@ -89,13 +92,13 @@ public:
         aboutPanel = [[NSPanel alloc] initWithContentRect:aboutCr
                                                 styleMask:NSUtilityWindowMask|NSTitledWindowMask|NSClosableWindowMask
                                                   backing:NSBackingStoreBuffered defer:YES];
-        [aboutPanel setTitle:[[NSString stringWithFormat:@"About %s", m_friendlyName.c_str()] autorelease]];
+        [aboutPanel setTitle:[NSString stringWithFormat:@"About %s", m_friendlyName.c_str()]];
         NSText* aboutText = [[NSText alloc] initWithFrame:aboutCr];
         [aboutText setEditable:NO];
         [aboutText setAlignment:NSCenterTextAlignment];
         [aboutText setString:@"\nBoo Authors\n\nJackoalan\nAntidote\n"];
         [aboutPanel setContentView:aboutText];
-        appDelegate->aboutPanel = aboutPanel;
+        m_appDelegate->aboutPanel = aboutPanel;
         
         /* Determine which graphics API to use */
 #if BOO_HAS_METAL
@@ -166,7 +169,7 @@ public:
     IWindow* newWindow(const std::string& title)
     {
         IWindow* newWindow = _WindowCocoaNew(title, m_lastGLCtx, &m_metalCtx);
-        m_windows[(NSWindow*)newWindow->getPlatformHandle()] = newWindow;
+        m_windows[newWindow->getPlatformHandle()] = newWindow;
         return newWindow;
     }
     
@@ -197,7 +200,7 @@ int ApplicationRun(IApplication::EPlatformType platform,
                 return 1;
             APP = new ApplicationCocoa(cb, uniqueName, friendlyName, pname, args);
         }
-        [static_cast<ApplicationCocoa*>(APP)->m_app run];
+        [[NSApplication sharedApplication] run];
         return static_cast<ApplicationCocoa*>(APP)->m_clientReturn;
     }
 }

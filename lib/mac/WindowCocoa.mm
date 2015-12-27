@@ -10,7 +10,11 @@
 
 #include <LogVisor/LogVisor.hpp>
 
-namespace boo {class WindowCocoa;}
+#if !__has_feature(objc_arc)
+#error ARC Required
+#endif
+
+namespace boo {class WindowCocoa; class GraphicsContextCocoa;}
 @interface WindowCocoaInternal : NSWindow
 {
     boo::WindowCocoa* booWindow;
@@ -75,8 +79,20 @@ static const NSOpenGLPixelFormatAttribute* PF_TABLE[] =
     PF_RGBAF32_Z24_ATTRS
 };
 
+@interface BooCocoaResponder : NSResponder <NSTextInputClient>
+{
+@public
+    NSUInteger lastModifiers;
+    boo::GraphicsContextCocoa* booContext;
+    NSView* parentView;
+    NSTextInputContext* textContext;
+}
+- (id)initWithBooContext:(boo::GraphicsContextCocoa*)bctx View:(NSView*)view;
+@end
+
 namespace boo
 {
+    
 class GraphicsContextCocoa : public IGraphicsContext
 {
 protected:
@@ -102,6 +118,7 @@ protected:
         return kCVReturnSuccess;
     }
     
+public:
     ~GraphicsContextCocoa()
     {
         if (m_dispLink)
@@ -111,31 +128,21 @@ protected:
         }
     }
     
-public:
     IWindowCallback* m_callback = nullptr;
     void waitForRetrace()
     {
         std::unique_lock<std::mutex> lk(m_dlmt);
         m_dlcv.wait(lk);
     }
+    virtual BooCocoaResponder* responder() const=0;
 };
 class GraphicsContextCocoaGL;
 class GraphicsContextCocoaMetal;
 }
 
-@interface BooCocoaResponder : NSResponder <NSTextInputClient>
-{
-    @public
-    NSUInteger lastModifiers;
-    boo::GraphicsContextCocoa* booContext;
-    NSView* parentView;
-    NSTextInputContext* textContext;
-}
-- (id)initWithBooContext:(boo::GraphicsContextCocoa*)bctx View:(NSView*)view;
-@end
-
 @interface GraphicsContextCocoaGLInternal : NSOpenGLView
 {
+@public
     BooCocoaResponder* resp;
 }
 - (id)initWithBooContext:(boo::GraphicsContextCocoaGL*)bctx;
@@ -143,6 +150,7 @@ class GraphicsContextCocoaMetal;
 
 @interface GraphicsContextCocoaMetalInternal : NSView
 {
+@public
     BooCocoaResponder* resp;
     boo::MetalContext* m_ctx;
     boo::IWindow* m_window;
@@ -158,7 +166,7 @@ IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent);
 IGraphicsCommandQueue* _NewMetalCommandQueue(MetalContext* ctx, IWindow* parentWindow,
                                              IGraphicsContext* parent);
 void _CocoaUpdateLastGLCtx(NSOpenGLContext* lastGLCtx);
-
+    
 class GraphicsContextCocoaGL : public GraphicsContextCocoa
 {
     GraphicsContextCocoaGLInternal* m_nsContext = nullptr;
@@ -182,8 +190,6 @@ public:
     {
         delete m_dataFactory;
         delete m_commandQueue;
-        [m_nsContext release];
-        [m_loadCtx release];
     }
     
     void _setCallback(IWindowCallback* cb)
@@ -213,7 +219,7 @@ public:
         m_nsContext = [[GraphicsContextCocoaGLInternal alloc] initWithBooContext:this];
         if (!m_nsContext)
             Log.report(LogVisor::FatalError, "unable to make new NSOpenGLView");
-        [(NSWindow*)m_parentWindow->getPlatformHandle() setContentView:m_nsContext];
+        [(__bridge NSWindow*)(void*)m_parentWindow->getPlatformHandle() setContentView:m_nsContext];
         CVDisplayLinkCreateWithActiveCGDisplays(&m_dispLink);
         CVDisplayLinkSetOutputCallback(m_dispLink, (CVDisplayLinkOutputCallback)DLCallback, this);
         CVDisplayLinkStart(m_dispLink);
@@ -245,7 +251,6 @@ public:
         {
             NSOpenGLPixelFormat* nspf = [[NSOpenGLPixelFormat alloc] initWithAttributes:PF_TABLE[int(m_pf)]];
             m_mainCtx = [[NSOpenGLContext alloc] initWithFormat:nspf shareContext:[m_nsContext openGLContext]];
-            [nspf release];
             if (!m_mainCtx)
                 Log.report(LogVisor::FatalError, "unable to make main NSOpenGLContext");
         }
@@ -259,7 +264,6 @@ public:
         {
             NSOpenGLPixelFormat* nspf = [[NSOpenGLPixelFormat alloc] initWithAttributes:PF_TABLE[int(m_pf)]];
             m_loadCtx = [[NSOpenGLContext alloc] initWithFormat:nspf shareContext:[m_nsContext openGLContext]];
-            [nspf release];
             if (!m_loadCtx)
                 Log.report(LogVisor::FatalError, "unable to make load NSOpenGLContext");
         }
@@ -270,6 +274,13 @@ public:
     void present()
     {
         [[m_nsContext openGLContext] flushBuffer];
+    }
+    
+    BooCocoaResponder* responder() const
+    {
+        if (!m_nsContext)
+            return nullptr;
+        return m_nsContext->resp;
     }
     
 };
@@ -285,7 +296,6 @@ IGraphicsContext* _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI api,
     if (!nspf)
         return NULL;
     NSOpenGLContext* nsctx = [[NSOpenGLContext alloc] initWithFormat:nspf shareContext:nil];
-    [nspf release];
     if (!nsctx)
         return NULL;
     [nsctx makeCurrentContext];
@@ -298,7 +308,6 @@ IGraphicsContext* _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI api,
         minor = glVersion[2] - '0';
     }
     [NSOpenGLContext clearCurrentContext];
-    [nsctx release];
     if (!glVersion)
         return NULL;
     
@@ -335,7 +344,6 @@ public:
     {
         delete m_dataFactory;
         delete m_commandQueue;
-        [m_nsContext release];
         m_metalCtx->m_windows.erase(m_parentWindow);
     }
     
@@ -368,7 +376,7 @@ public:
         if (!m_nsContext)
             Log.report(LogVisor::FatalError, "unable to make new NSView for Metal");
         w.m_metalLayer = (CAMetalLayer*)m_nsContext.layer;
-        [(NSWindow*)m_parentWindow->getPlatformHandle() setContentView:m_nsContext];
+        [(__bridge NSWindow*)(void*)m_parentWindow->getPlatformHandle() setContentView:m_nsContext];
         CVDisplayLinkCreateWithActiveCGDisplays(&m_dispLink);
         CVDisplayLinkSetOutputCallback(m_dispLink, (CVDisplayLinkOutputCallback)DLCallback, this);
         CVDisplayLinkStart(m_dispLink);
@@ -407,6 +415,13 @@ public:
     {
     }
     
+    BooCocoaResponder* responder() const
+    {
+        if (!m_nsContext)
+            return nullptr;
+        return m_nsContext->resp;
+    }
+    
 };
 
 IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI api,
@@ -433,6 +448,7 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (BOOL)hasMarkedText
 {
+    NSLog(@"hasMarkedText");
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -444,6 +460,7 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (NSRange)markedRange
 {
+    NSLog(@"markedRange");
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -458,6 +475,7 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (NSRange)selectedRange
 {
+    NSLog(@"selectedRange");
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -472,29 +490,28 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (void)setMarkedText:(id)aString selectedRange:(NSRange)selectedRange replacementRange:(NSRange)replacementRange
 {
+    NSLog(@"setMarkedText %@ [%lu,%lu] [%lu,%lu]", aString,
+          selectedRange.location, selectedRange.length,
+          replacementRange.location, replacementRange.length);
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
         if (textCb)
         {
-            NSString* plainStr;
+            NSString* plainStr = aString;
             if ([aString isKindOfClass:[NSAttributedString class]])
                 plainStr = ((NSAttributedString*)aString).string;
-            else
-            {
-                plainStr = aString;
-                [plainStr retain];
-            }
             textCb->setMarkedText([plainStr UTF8String],
                                   std::make_pair(selectedRange.location, selectedRange.length),
-                                  std::make_pair(replacementRange.location, replacementRange.length));
-            [plainStr release];
+                                  std::make_pair(replacementRange.location==NSNotFound ? -1 : replacementRange.location,
+                                                 replacementRange.length));
         }
     }
 }
 
 - (void)unmarkText
 {
+    NSLog(@"unmarkText");
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -505,11 +522,12 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (NSArray<NSString*>*)validAttributesForMarkedText
 {
-    return [NSArray array];
+    return @[];
 }
 
 - (NSAttributedString*)attributedSubstringForProposedRange:(NSRange)aRange actualRange:(NSRangePointer)actualRange
 {
+    NSLog(@"attributedSubstringForProposedRange");
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -523,7 +541,6 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
             actualRange->length = actualRng.second;
             NSString* nsStr = [NSString stringWithUTF8String:str.c_str()];
             NSAttributedString* ret = [[NSAttributedString alloc] initWithString:nsStr];
-            [nsStr release];
             return ret;
         }
     }
@@ -532,28 +549,25 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (void)insertText:(id)aString replacementRange:(NSRange)replacementRange
 {
+    NSLog(@"insertText %@ [%lu,%lu]", aString, replacementRange.location, replacementRange.length);
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
         if (textCb)
         {
-            NSString* plainStr;
+            NSString* plainStr = aString;
             if ([aString isKindOfClass:[NSAttributedString class]])
                 plainStr = ((NSAttributedString*)aString).string;
-            else
-            {
-                plainStr = aString;
-                [plainStr retain];
-            }
             textCb->insertText([plainStr UTF8String],
-                               std::make_pair(replacementRange.location, replacementRange.length));
-            [plainStr release];
+                               std::make_pair(replacementRange.location == NSNotFound ? -1 : replacementRange.location,
+                                              replacementRange.length));
         }
     }
 }
 
 - (NSUInteger)characterIndexForPoint:(NSPoint)aPoint
 {
+    NSLog(@"characterIndexForPoint");
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -572,6 +586,7 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (NSRect)firstRectForCharacterRange:(NSRange)aRange actualRange:(NSRangePointer)actualRange
 {
+    NSLog(@"firstRectForCharacterRange");
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -592,7 +607,7 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (void)doCommandBySelector:(SEL)aSelector
 {
-    
+    NSLog(@"doCommandBySelector %@", NSStringFromSelector(aSelector));
 }
 
 static inline boo::EModifierKey getMod(NSUInteger flags)
@@ -987,7 +1002,7 @@ static boo::ESpecialKey translateKeycode(short code)
     else if ([chars length])
         booContext->m_callback->charKeyUp([chars characterAtIndex:0],
                                           getMod(theEvent.modifierFlags));
-    [textContext handleEvent:theEvent];
+    //[textContext handleEvent:theEvent];
 }
 
 - (void)flagsChanged:(NSEvent*)theEvent
@@ -1034,12 +1049,6 @@ static boo::ESpecialKey translateKeycode(short code)
     return YES;
 }
 
-- (void)dealloc
-{
-    [textContext release];
-    [super dealloc];
-}
-
 @end
     
 @implementation GraphicsContextCocoaGLInternal
@@ -1055,14 +1064,7 @@ static boo::ESpecialKey translateKeycode(short code)
         [self setOpenGLContext:sharedCtx];
         [sharedCtx setView:self];
     }
-    [nspf release];
     return self;
-}
-
-- (void)dealloc
-{
-    [resp release];
-    [super dealloc];
 }
 
 - (void)reshape
@@ -1101,12 +1103,6 @@ static boo::ESpecialKey translateKeycode(short code)
     [self setWantsLayer:YES];
     resp = [[BooCocoaResponder alloc] initWithBooContext:bctx View:self];
     return self;
-}
-
-- (void)dealloc
-{
-    [resp release];
-    [super dealloc];
 }
 
 - (CALayer*)makeBackingLayer
@@ -1168,12 +1164,17 @@ static boo::ESpecialKey translateKeycode(short code)
 
 namespace boo
 {
+    
+static NSString* ClipboardTypes[] =
+{
+    0, NSPasteboardTypeString, NSPasteboardTypeString, NSPasteboardTypePNG
+};
 
 class WindowCocoa : public IWindow
 {
     
     WindowCocoaInternal* m_nsWindow;
-    IGraphicsContext* m_gfxCtx;
+    GraphicsContextCocoa* m_gfxCtx;
     EMouseCursor m_cursor = EMouseCursor::None;
 
 public:
@@ -1185,16 +1186,18 @@ public:
             m_nsWindow = [[WindowCocoaInternal alloc] initWithBooWindow:this title:title];
 #if BOO_HAS_METAL
             if (metalCtx->m_dev)
-                m_gfxCtx = _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI::Metal, this, metalCtx);
+                m_gfxCtx = static_cast<GraphicsContextCocoa*>(_GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI::Metal, this, metalCtx));
             else
 #endif
-                m_gfxCtx = _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI::OpenGL3_3, this, lastGLCtx);
+                m_gfxCtx = static_cast<GraphicsContextCocoa*>(_GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI::OpenGL3_3, this, lastGLCtx));
             m_gfxCtx->initializeContext();
         });
     }
     
     void _clearWindow()
     {
+        /* Caller consumes reference on its own */
+        (void)(__bridge_retained void*)m_nsWindow;
         m_nsWindow = nullptr;
     }
     
@@ -1202,7 +1205,6 @@ public:
     {
         [m_nsWindow orderOut:nil];
         delete m_gfxCtx;
-        [m_nsWindow release];
         APP->_deletedWindow(this);
     }
     
@@ -1236,7 +1238,7 @@ public:
     {
         dispatch_sync(dispatch_get_main_queue(),
         ^{
-            [m_nsWindow setTitle:[[NSString stringWithUTF8String:title.c_str()] autorelease]];
+            [m_nsWindow setTitle:[NSString stringWithUTF8String:title.c_str()]];
         });
     }
     
@@ -1337,17 +1339,38 @@ public:
     
     void claimKeyboardFocus(const int coord[2])
     {
-        
+        BooCocoaResponder* resp = m_gfxCtx->responder();
+        if (resp)
+        {
+            dispatch_async(dispatch_get_main_queue(),
+            ^{
+                if (coord)
+                    [resp->textContext activate];
+                else
+                    [resp->textContext deactivate];
+            });
+        }
     }
     
     bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz)
     {
-        
+        NSPasteboard* pb = [NSPasteboard generalPasteboard];
+        [pb clearContents];
+        NSData* d = [NSData dataWithBytes:data length:sz];
+        [pb setData:d forType:ClipboardTypes[int(type)]];
+        return true;
     }
     
     std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz)
     {
-        
+        NSPasteboard* pb = [NSPasteboard generalPasteboard];
+        NSData* d = [pb dataForType:ClipboardTypes[int(type)]];
+        if (!d)
+            return std::unique_ptr<uint8_t[]>();
+        sz = [d length];
+        std::unique_ptr<uint8_t[]> ret(new uint8_t[sz]);
+        [d getBytes:ret.get() length:sz];
+        return ret;
     }
     
     ETouchType getTouchType() const
@@ -1437,7 +1460,7 @@ IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx, 
                                      NSResizableWindowMask
                              backing:NSBackingStoreBuffered
                                defer:YES];
-    self.title = [[NSString stringWithUTF8String:title.c_str()] autorelease];
+    self.title = [NSString stringWithUTF8String:title.c_str()];
     booWindow = bw;
     return self;
 }

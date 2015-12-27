@@ -5,6 +5,10 @@
 #include "boo/IGraphicsContext.hpp"
 #include <vector>
 
+#if !__has_feature(objc_arc)
+#error ARC Required
+#endif
+
 #define MAX_UNIFORM_COUNT 8
 #define MAX_TEXTURE_COUNT 8
 
@@ -94,9 +98,9 @@ class MetalTextureS : public ITextureS
         NSPtr<MTLTextureDescriptor*> desc;
         @autoreleasepool
         {
-            desc = [[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:pfmt
-                                                                       width:width height:height
-                                                                   mipmapped:(mips>1)?YES:NO] retain];
+            desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:pfmt
+                                                                      width:width height:height
+                                                                  mipmapped:(mips>1)?YES:NO];
         }
         desc.get().usage = MTLTextureUsageShaderRead;
         desc.get().mipmapLevelCount = mips;
@@ -138,9 +142,9 @@ class MetalTextureSA : public ITextureSA
         NSPtr<MTLTextureDescriptor*> desc;
         @autoreleasepool
         {
-            desc = [[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:pfmt
-                                                                       width:width height:height
-                                                                   mipmapped:NO] retain];
+            desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:pfmt
+                                                                      width:width height:height
+                                                                  mipmapped:NO];
         }
         desc.get().textureType = MTLTextureType2DArray;
         desc.get().arrayLength = layers;
@@ -198,9 +202,9 @@ class MetalTextureD : public ITextureD
         NSPtr<MTLTextureDescriptor*> desc;
         @autoreleasepool
         {
-            desc = [[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format
-                                                                       width:width height:height
-                                                                   mipmapped:NO] retain];
+            desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format
+                                                                      width:width height:height
+                                                                  mipmapped:NO];
         }
         desc.get().usage = MTLTextureUsageShaderRead;
         m_texs[0] = [ctx->m_dev.get() newTextureWithDescriptor:desc.get()];
@@ -229,10 +233,10 @@ class MetalTextureR : public ITextureR
         NSPtr<MTLTextureDescriptor*> desc;
         @autoreleasepool
         {
-            desc = [[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
-                                                                       width:width height:height
-                                                                   mipmapped:NO] retain];
-            m_passDesc = [[MTLRenderPassDescriptor renderPassDescriptor] retain];
+            desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                                                      width:width height:height
+                                                                  mipmapped:NO];
+            m_passDesc = [MTLRenderPassDescriptor renderPassDescriptor];
         }
         desc.get().usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
         desc.get().storageMode = MTLStorageModePrivate;
@@ -555,7 +559,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     {
         @autoreleasepool
         {
-            m_cmdBuf = [[ctx->m_q.get() commandBuffer] retain];
+            m_cmdBuf = [ctx->m_q.get() commandBuffer];
         }
     }
     
@@ -586,7 +590,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         [m_enc.get() endEncoding];
         @autoreleasepool
         {
-            m_enc = [[m_cmdBuf.get() renderCommandEncoderWithDescriptor:ctarget->m_passDesc.get()] retain];
+            m_enc = [m_cmdBuf.get() renderCommandEncoderWithDescriptor:ctarget->m_passDesc.get()];
         }
         m_boundTarget = ctarget;
     }
@@ -738,7 +742,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             /* Abandon if in progress (renderer too slow) */
             if (m_inProgress)
             {
-                m_cmdBuf = [[m_ctx->m_q.get() commandBuffer] retain];
+                m_cmdBuf = [m_ctx->m_q.get() commandBuffer];
                 return;
             }
             
@@ -748,7 +752,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                 for (const auto& resize : m_texResizes)
                     resize.first->resize(m_ctx, resize.second.first, resize.second.second);
                 m_texResizes.clear();
-                m_cmdBuf = [[m_ctx->m_q.get() commandBuffer] retain];
+                m_cmdBuf = [m_ctx->m_q.get() commandBuffer];
                 return;
             }
             
@@ -758,7 +762,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             [m_cmdBuf.get() addCompletedHandler:^(id<MTLCommandBuffer> buf) {m_inProgress = false;}];
             m_inProgress = true;
             [m_cmdBuf.get() commit];
-            m_cmdBuf = [[m_ctx->m_q.get() commandBuffer] retain];
+            m_cmdBuf = [m_ctx->m_q.get() commandBuffer];
         }
     }
 };
