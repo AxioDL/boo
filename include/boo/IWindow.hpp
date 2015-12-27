@@ -115,7 +115,7 @@ struct ITextInputCallback
     
     virtual std::string substringForRange(const std::pair<int,int>& range,
                                           std::pair<int,int>& actualRange) const=0;
-    virtual void insertText(const std::string& str, const std::pair<int,int>& range)=0;
+    virtual void insertText(const std::string& str, const std::pair<int,int>& range={-1,0})=0;
     virtual int characterIndexAtPoint(const SWindowCoord& point) const=0;
     virtual SWindowRect rectForCharacterRange(const std::pair<int,int>& range,
                                               std::pair<int,int>& actualRange) const=0;
@@ -158,7 +158,6 @@ public:
     {(void)mod;(void)isRepeat;}
     virtual void modKeyUp(EModifierKey mod) {(void)mod;}
     
-    virtual void utf8FragmentDown(const std::string& str) {(void)str;}
     virtual ITextInputCallback* getTextInputCallback() {return nullptr;}
     
     virtual void focusLost() {}

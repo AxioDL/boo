@@ -1237,15 +1237,22 @@ public:
                 unsigned int state = event->xkey.state;
                 event->xkey.state &= ~ControlMask;
                 std::string utf8Frag = translateUTF8(&event->xkey, m_xIC);
+                ITextInputCallback* inputCb = m_callback->getTextInputCallback();
                 if (utf8Frag.size())
                 {
-                    m_callback->utf8FragmentDown(utf8Frag);
+                    if (inputCb)
+                        inputCb->insertText(utf8Frag);
                     return;
                 }
                 char charCode = translateKeysym(&event->xkey, specialKey, modifierKey);
                 EModifierKey modifierMask = translateModifiers(state);
                 if (charCode)
+                {
+                    if (inputCb &&
+                        (modifierMask & (EModifierKey::Ctrl|EModifierKey::Command)) == EModifierKey::None)
+                        inputCb->insertText(std::string(1, charCode));
                     m_callback->charKeyDown(charCode, modifierMask, false);
+                }
                 else if (specialKey != ESpecialKey::None)
                     m_callback->specialKeyDown(specialKey, modifierMask, false);
                 else if (modifierKey != EModifierKey::None)

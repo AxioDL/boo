@@ -267,6 +267,7 @@ public:
             case WM_NCMOUSELEAVE:
             case WM_MOUSEHOVER:
             case WM_NCMOUSEHOVER:
+            case WM_UNICHAR:
             case WM_IME_COMPOSITION:
                 window->_incomingEvent(&HWNDEvent(uMsg, wParam, lParam));
 

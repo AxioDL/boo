@@ -1170,10 +1170,23 @@ public:
             }
             return;
         }
+        case WM_UNICHAR:
+        {
+            if (m_callback)
+            {
+                ITextInputCallback* inputCb = m_callback->getTextInputCallback();
+                uint8_t utf8ch[4];
+                size_t len = utf8proc_encode_char(e.wParam, utf8ch);
+                if (inputCb && len)
+                    inputCb->insertText(std::string((char*)utf8ch, len));
+            }
+            return;
+        }
         case WM_IME_COMPOSITION:
         {
             if (m_callback)
             {
+                ITextInputCallback* inputCb = m_callback->getTextInputCallback();
                 if ((e.lParam & GCS_RESULTSTR) != 0)
                 {
                     wchar_t str[512];
@@ -1182,11 +1195,8 @@ public:
                     {
                         size_t szOut;
                         std::unique_ptr<uint8_t[]> out = MakeUnicodeLF(str, len/2, szOut);
-                        if (szOut)
-                        {
-                            std::string strOut((char*)out.get(), szOut);
-                            m_callback->utf8FragmentDown(strOut);
-                        }
+                        if (szOut && inputCb)
+                            inputCb->insertText(std::string((char*)out.get(), szOut));
                     }
                 }
             }
