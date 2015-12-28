@@ -978,14 +978,19 @@ static boo::ESpecialKey translateKeycode(short code)
     if (!booContext->m_callback)
         return;
     boo::ESpecialKey special = translateKeycode(theEvent.keyCode);
-    NSString* chars = theEvent.characters;
+    boo::EModifierKey mods = getMod(theEvent.modifierFlags);
+    NSString* chars;
+    if ((mods & boo::EModifierKey::Ctrl) != boo::EModifierKey::None)
+        chars = theEvent.charactersIgnoringModifiers;
+    else
+        chars = theEvent.characters;
     if (special != boo::ESpecialKey::None)
         booContext->m_callback->specialKeyDown(special,
-                                               getMod(theEvent.modifierFlags),
+                                               mods,
                                                theEvent.isARepeat);
     else if ([chars length])
         booContext->m_callback->charKeyDown([chars characterAtIndex:0],
-                                            getMod(theEvent.modifierFlags),
+                                            mods,
                                             theEvent.isARepeat);
     [textContext handleEvent:theEvent];
 }
@@ -995,13 +1000,18 @@ static boo::ESpecialKey translateKeycode(short code)
     if (!booContext->m_callback)
         return;
     boo::ESpecialKey special = translateKeycode(theEvent.keyCode);
-    NSString* chars = theEvent.characters;
+    boo::EModifierKey mods = getMod(theEvent.modifierFlags);
+    NSString* chars;
+    if ((mods & boo::EModifierKey::Ctrl) != boo::EModifierKey::None)
+        chars = theEvent.charactersIgnoringModifiers;
+    else
+        chars = theEvent.characters;
     if (special != boo::ESpecialKey::None)
         booContext->m_callback->specialKeyUp(special,
-                                             getMod(theEvent.modifierFlags));
+                                             mods);
     else if ([chars length])
         booContext->m_callback->charKeyUp([chars characterAtIndex:0],
-                                          getMod(theEvent.modifierFlags));
+                                          mods);
     //[textContext handleEvent:theEvent];
 }
 
