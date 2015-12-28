@@ -877,11 +877,11 @@ public:
     {
         if (!coord)
         {
-            _immSetOpenStatus(false);
+            //_immSetOpenStatus(false);
             return;
         }
         _immSetCompositionWindow(coord);
-        _immSetOpenStatus(true);
+        //_immSetOpenStatus(true);
     }
 
     bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz)
@@ -1170,6 +1170,7 @@ public:
             }
             return;
         }
+        case WM_CHAR:
         case WM_UNICHAR:
         {
             if (m_callback)
@@ -1179,26 +1180,6 @@ public:
                 size_t len = utf8proc_encode_char(e.wParam, utf8ch);
                 if (inputCb && len)
                     inputCb->insertText(std::string((char*)utf8ch, len));
-            }
-            return;
-        }
-        case WM_IME_COMPOSITION:
-        {
-            if (m_callback)
-            {
-                ITextInputCallback* inputCb = m_callback->getTextInputCallback();
-                if ((e.lParam & GCS_RESULTSTR) != 0)
-                {
-                    wchar_t str[512];
-                    LONG len = ImmGetCompositionStringW(m_imc, GCS_RESULTSTR, str, sizeof(str));
-                    if (len > 0)
-                    {
-                        size_t szOut;
-                        std::unique_ptr<uint8_t[]> out = MakeUnicodeLF(str, len/2, szOut);
-                        if (szOut && inputCb)
-                            inputCb->insertText(std::string((char*)out.get(), szOut));
-                    }
-                }
             }
             return;
         }
