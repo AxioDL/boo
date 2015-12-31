@@ -2,6 +2,10 @@
 #define BOO_COCOACOMMON_HPP
 #if __APPLE__
 
+#if !__has_feature(objc_arc)
+#error ARC Required
+#endif
+
 #include <Availability.h>
 #include <utility>
 
