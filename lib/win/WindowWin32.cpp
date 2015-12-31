@@ -1170,6 +1170,26 @@ public:
             }
             return;
         }
+        case WM_MOUSEWHEEL:
+        {
+            if (m_callback)
+            {
+                int x, y, w, h;
+                getWindowFrame(x, y, w, h);
+                SWindowCoord coord =
+                {
+                    { GET_X_LPARAM(e.lParam), h-GET_Y_LPARAM(e.lParam) },
+                    { GET_X_LPARAM(e.lParam), h-GET_Y_LPARAM(e.lParam) },
+                    { float(GET_X_LPARAM(e.lParam)) / float(w), float(h-GET_Y_LPARAM(e.lParam)) / float(h) }
+                };
+                SScrollDelta scroll =
+                {
+                    { 0, GET_WHEEL_DELTA_WPARAM(e.wParam) / double(WHEEL_DELTA) }, false
+                };
+                m_callback->scroll(coord, scroll);
+            }
+            return;
+        }
         case WM_CHAR:
         case WM_UNICHAR:
         {

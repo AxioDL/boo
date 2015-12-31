@@ -1047,8 +1047,12 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
 
     void setScissor(const SWindowRect& rect)
     {
-        D3D12_RECT d3drect = {rect.location[0], rect.location[1], rect.size[0], rect.size[1]};
-        m_cmdList->RSSetScissorRects(1, &d3drect);
+        if (m_boundTarget)
+        {
+            D3D12_RECT d3drect = {LONG(rect.location[0]), LONG(m_boundTarget->m_height - rect.location[1] - rect.size[1]),
+                                  LONG(rect.location[0] + rect.size[0]), LONG(m_boundTarget->m_height - rect.location[1])};
+            m_cmdList->RSSetScissorRects(1, &d3drect);
+        }
     }
 
     std::unordered_map<D3D12TextureR*, std::pair<size_t, size_t>> m_texResizes;

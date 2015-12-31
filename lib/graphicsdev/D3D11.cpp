@@ -435,7 +435,7 @@ class D3D11ShaderPipeline : public IShaderPipeline
 
         CD3D11_RASTERIZER_DESC rasDesc(D3D11_FILL_SOLID, backfaceCulling ? D3D11_CULL_BACK : D3D11_CULL_NONE, true, 
             D3D11_DEFAULT_DEPTH_BIAS, D3D11_DEFAULT_DEPTH_BIAS_CLAMP, D3D11_DEFAULT_SLOPE_SCALED_DEPTH_BIAS, 
-            true, false, false, false);
+            true, true, false, false);
         ThrowIfFailed(ctx->m_dev->CreateRasterizerState(&rasDesc, &m_rasState));
 
         CD3D11_DEPTH_STENCIL_DESC dsDesc(D3D11_DEFAULT);
@@ -783,8 +783,12 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
 
     void setScissor(const SWindowRect& rect)
     {
-        D3D11_RECT d3drect = {rect.location[0], rect.location[1], rect.size[0], rect.size[1]};
-        m_deferredCtx->RSSetScissorRects(1, &d3drect);
+        if (m_boundTarget)
+        {
+            D3D11_RECT d3drect = {LONG(rect.location[0]), LONG(m_boundTarget->m_height - rect.location[1] - rect.size[1]),
+                                  LONG(rect.location[0] + rect.size[0]), LONG(m_boundTarget->m_height - rect.location[1])};
+            m_deferredCtx->RSSetScissorRects(1, &d3drect);
+        }
     }
 
     std::unordered_map<D3D11TextureR*, std::pair<size_t, size_t>> m_texResizes;
