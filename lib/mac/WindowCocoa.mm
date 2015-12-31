@@ -448,7 +448,6 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (BOOL)hasMarkedText
 {
-    NSLog(@"hasMarkedText");
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -460,7 +459,6 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (NSRange)markedRange
 {
-    NSLog(@"markedRange");
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -475,7 +473,6 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (NSRange)selectedRange
 {
-    NSLog(@"selectedRange");
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -490,9 +487,6 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (void)setMarkedText:(id)aString selectedRange:(NSRange)selectedRange replacementRange:(NSRange)replacementRange
 {
-    NSLog(@"setMarkedText %@ [%lu,%lu] [%lu,%lu]", aString,
-          selectedRange.location, selectedRange.length,
-          replacementRange.location, replacementRange.length);
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -511,7 +505,6 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (void)unmarkText
 {
-    NSLog(@"unmarkText");
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -527,7 +520,6 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (NSAttributedString*)attributedSubstringForProposedRange:(NSRange)aRange actualRange:(NSRangePointer)actualRange
 {
-    NSLog(@"attributedSubstringForProposedRange");
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -549,7 +541,6 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (void)insertText:(id)aString replacementRange:(NSRange)replacementRange
 {
-    NSLog(@"insertText %@ [%lu,%lu]", aString, replacementRange.location, replacementRange.length);
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -567,7 +558,6 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (NSUInteger)characterIndexForPoint:(NSPoint)aPoint
 {
-    NSLog(@"characterIndexForPoint");
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -586,7 +576,6 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (NSRect)firstRectForCharacterRange:(NSRange)aRange actualRange:(NSRangePointer)actualRange
 {
-    NSLog(@"firstRectForCharacterRange");
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -607,7 +596,6 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (void)doCommandBySelector:(SEL)aSelector
 {
-    NSLog(@"doCommandBySelector %@", NSStringFromSelector(aSelector));
 }
 
 static inline boo::EModifierKey getMod(NSUInteger flags)
@@ -781,6 +769,38 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 - (void)otherMouseDragged:(NSEvent*)theEvent
 {
     [self mouseMoved:theEvent];
+}
+
+- (void)mouseEntered:(NSEvent*)theEvent
+{
+    if (!booContext->m_callback)
+        return;
+    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+    float pixelFactor = [[parentView window] backingScaleFactor];
+    NSRect frame = [parentView frame];
+    boo::SWindowCoord coord =
+    {
+        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
+        {int(liw.x), int(liw.y)},
+        {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
+    };
+    booContext->m_callback->mouseEnter(coord);
+}
+
+- (void)mouseExited:(NSEvent*)theEvent
+{
+    if (!booContext->m_callback)
+        return;
+    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+    float pixelFactor = [[parentView window] backingScaleFactor];
+    NSRect frame = [parentView frame];
+    boo::SWindowCoord coord =
+    {
+        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
+        {int(liw.x), int(liw.y)},
+        {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
+    };
+    booContext->m_callback->mouseLeave(coord);
 }
 
 - (void)scrollWheel:(NSEvent*)theEvent
@@ -1074,6 +1094,14 @@ static boo::ESpecialKey translateKeycode(short code)
         [self setOpenGLContext:sharedCtx];
         [sharedCtx setView:self];
     }
+    NSTrackingArea* trackingArea = [[NSTrackingArea alloc] initWithRect:NSZeroRect
+                                                                options:(NSTrackingMouseEnteredAndExited |
+                                                                         NSTrackingMouseMoved |
+                                                                         NSTrackingActiveAlways |
+                                                                         NSTrackingInVisibleRect)
+                                                                  owner:self
+                                                               userInfo:nil];
+    [self addTrackingArea:trackingArea];
     return self;
 }
 
@@ -1112,6 +1140,14 @@ static boo::ESpecialKey translateKeycode(short code)
     self = [self initWithFrame:NSMakeRect(0, 0, 100, 100)];
     [self setWantsLayer:YES];
     resp = [[BooCocoaResponder alloc] initWithBooContext:bctx View:self];
+    NSTrackingArea* trackingArea = [[NSTrackingArea alloc] initWithRect:NSZeroRect
+                                                                options:(NSTrackingMouseEnteredAndExited |
+                                                                         NSTrackingMouseMoved |
+                                                                         NSTrackingActiveAlways |
+                                                                         NSTrackingInVisibleRect)
+                                                                  owner:self
+                                                               userInfo:nil];
+    [self addTrackingArea:trackingArea];
     return self;
 }
 

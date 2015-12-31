@@ -604,9 +604,13 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     
     void setScissor(const SWindowRect& rect)
     {
-        MTLScissorRect scissor = {NSUInteger(rect.location[0]), NSUInteger(rect.location[1]),
-            NSUInteger(rect.size[0]), NSUInteger(rect.size[1])};
-        [m_enc.get() setScissorRect:scissor];
+        if (m_boundTarget)
+        {
+            MTLScissorRect scissor = {NSUInteger(rect.location[0]),
+                NSUInteger(m_boundTarget->m_height - rect.location[1] - rect.size[1]),
+                NSUInteger(rect.size[0]), NSUInteger(rect.size[1])};
+            [m_enc.get() setScissorRect:scissor];
+        }
     }
         
     std::unordered_map<MetalTextureR*, std::pair<size_t, size_t>> m_texResizes;
@@ -677,46 +681,10 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                              instanceCount:instCount];
     }
     
+    MetalTextureR* m_needsDisplay = nullptr;
     void resolveDisplay(ITextureR* source)
     {
-        MetalContext::Window& w = m_ctx->m_windows[m_parentWindow];
-        
-        MetalTextureR* csource = static_cast<MetalTextureR*>(source);
-        [m_enc.get() endEncoding];
-        m_enc.reset();
-        @autoreleasepool
-        {
-            {
-                std::unique_lock<std::mutex> lk(w.m_resizeLock);
-                if (w.m_needsResize)
-                {
-                    w.m_metalLayer.drawableSize = w.m_size;
-                    w.m_needsResize = NO;
-                    return;
-                }
-            }
-            id<CAMetalDrawable> drawable = [w.m_metalLayer nextDrawable];
-            if (drawable)
-            {
-                id<MTLTexture> dest = drawable.texture;
-                if (csource->m_tex.get().width == dest.width &&
-                    csource->m_tex.get().height == dest.height)
-                {
-                    id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf.get() blitCommandEncoder];
-                    [blitEnc copyFromTexture:csource->m_tex.get()
-                                 sourceSlice:0
-                                 sourceLevel:0
-                                sourceOrigin:MTLOriginMake(0, 0, 0)
-                                  sourceSize:MTLSizeMake(dest.width, dest.height, 1)
-                                   toTexture:dest
-                            destinationSlice:0
-                            destinationLevel:0
-                           destinationOrigin:MTLOriginMake(0, 0, 0)];
-                    [blitEnc endEncoding];
-                    [m_cmdBuf.get() presentDrawable:drawable];
-                }
-            }
-        }
+        m_needsDisplay = static_cast<MetalTextureR*>(source);
     }
     
     bool m_inProgress = false;
@@ -739,6 +707,9 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         
         @autoreleasepool
         {
+            [m_enc.get() endEncoding];
+            m_enc.reset();
+            
             /* Abandon if in progress (renderer too slow) */
             if (m_inProgress)
             {
@@ -754,6 +725,47 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                 m_texResizes.clear();
                 m_cmdBuf = [m_ctx->m_q.get() commandBuffer];
                 return;
+            }
+            
+            /* Wrap up and present if needed */
+            if (m_needsDisplay)
+            {
+                MetalContext::Window& w = m_ctx->m_windows[m_parentWindow];
+                @autoreleasepool
+                {
+                    {
+                        std::unique_lock<std::mutex> lk(w.m_resizeLock);
+                        if (w.m_needsResize)
+                        {
+                            w.m_metalLayer.drawableSize = w.m_size;
+                            w.m_needsResize = NO;
+                            m_needsDisplay = nullptr;
+                            return;
+                        }
+                    }
+                    id<CAMetalDrawable> drawable = [w.m_metalLayer nextDrawable];
+                    if (drawable)
+                    {
+                        id<MTLTexture> dest = drawable.texture;
+                        if (m_needsDisplay->m_tex.get().width == dest.width &&
+                            m_needsDisplay->m_tex.get().height == dest.height)
+                        {
+                            id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf.get() blitCommandEncoder];
+                            [blitEnc copyFromTexture:m_needsDisplay->m_tex.get()
+                                         sourceSlice:0
+                                         sourceLevel:0
+                                        sourceOrigin:MTLOriginMake(0, 0, 0)
+                                          sourceSize:MTLSizeMake(dest.width, dest.height, 1)
+                                           toTexture:dest
+                                    destinationSlice:0
+                                    destinationLevel:0
+                                   destinationOrigin:MTLOriginMake(0, 0, 0)];
+                            [blitEnc endEncoding];
+                            [m_cmdBuf.get() presentDrawable:drawable];
+                        }
+                    }
+                }
+                m_needsDisplay = nullptr;
             }
             
             m_drawBuf = m_fillBuf;
