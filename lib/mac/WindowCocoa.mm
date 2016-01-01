@@ -819,7 +819,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
     boo::SScrollDelta scroll =
     {
         {(float)[theEvent scrollingDeltaX], (float)[theEvent scrollingDeltaY]},
-        (bool)[theEvent hasPreciseScrollingDeltas]
+        (bool)[theEvent hasPreciseScrollingDeltas], true
     };
     booContext->m_callback->scroll(coord, scroll);
     [textContext handleEvent:theEvent];

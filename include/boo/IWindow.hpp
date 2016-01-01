@@ -55,6 +55,7 @@ struct SScrollDelta
 {
     double delta[2];
     bool isFine; /* Use system-scale fine-scroll (for scrollable-trackpads) */
+    bool isAccelerated = false; /* System performs acceleration computation */
 
     SScrollDelta operator+(const SScrollDelta& other)
     {return {{delta[0] + other.delta[0], delta[1] + other.delta[1]}, isFine || other.isFine};}
