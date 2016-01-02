@@ -3,6 +3,10 @@
 
 #include "System.hpp"
 #include <memory>
+#include <algorithm>
+
+#undef min
+#undef max
 
 namespace boo
 {
@@ -75,9 +79,22 @@ struct SScrollDelta
     bool isAccelerated = false; /* System performs acceleration computation */
 
     SScrollDelta operator+(const SScrollDelta& other)
-    {return {{delta[0] + other.delta[0], delta[1] + other.delta[1]}, isFine || other.isFine};}
+    {
+        SScrollDelta ret;
+        ret.delta[0] = delta[0] + other.delta[0];
+        ret.delta[1] = delta[1] + other.delta[1];
+        ret.isFine = isFine || other.isFine;
+        ret.isAccelerated = isAccelerated || other.isAccelerated;
+        return ret;
+    }
     SScrollDelta& operator+=(const SScrollDelta& other)
-    {delta[0] += other.delta[0]; delta[1] += other.delta[1]; isFine |= other.isFine; return *this;}
+    {
+        delta[0] += other.delta[0];
+        delta[1] += other.delta[1];
+        isFine |= other.isFine;
+        isAccelerated |= other.isAccelerated;
+        return *this;
+    }
     void zeroOut() {delta[0] = 0.0; delta[1] = 0.0;}
 };
 

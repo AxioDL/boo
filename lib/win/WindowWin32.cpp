@@ -1039,11 +1039,11 @@ public:
                 uint32_t charCode = translateKeysym(e.wParam, (e.lParam >> 16) & 0xff, specialKey, modifierKey);
                 EModifierKey modifierMask = translateModifiers(e.uMsg);
                 if (charCode)
-                    m_callback->charKeyDown(charCode, modifierMask, (e.lParam & 0xffff) != 0);
+                    m_callback->charKeyDown(charCode, modifierMask, (HIWORD(e.lParam) & KF_REPEAT) != 0);
                 else if (specialKey != ESpecialKey::None)
-                    m_callback->specialKeyDown(specialKey, modifierMask, (e.lParam & 0xffff) != 0);
+                    m_callback->specialKeyDown(specialKey, modifierMask, (HIWORD(e.lParam) & KF_REPEAT) != 0);
                 else if (modifierKey != EModifierKey::None)
-                    m_callback->modKeyDown(modifierKey, (e.lParam & 0xffff) != 0);
+                    m_callback->modKeyDown(modifierKey, (HIWORD(e.lParam) & KF_REPEAT) != 0);
             }
             return;
         }
@@ -1182,10 +1182,8 @@ public:
                     { GET_X_LPARAM(e.lParam), h-GET_Y_LPARAM(e.lParam) },
                     { float(GET_X_LPARAM(e.lParam)) / float(w), float(h-GET_Y_LPARAM(e.lParam)) / float(h) }
                 };
-                SScrollDelta scroll =
-                {
-                    { 0, GET_WHEEL_DELTA_WPARAM(e.wParam) / double(WHEEL_DELTA) }, false
-                };
+                SScrollDelta scroll = {};
+                scroll.delta[1] = GET_WHEEL_DELTA_WPARAM(e.wParam) / double(WHEEL_DELTA);
                 m_callback->scroll(coord, scroll);
             }
             return;
