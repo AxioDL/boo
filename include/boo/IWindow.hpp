@@ -44,6 +44,23 @@ struct SWindowRect
         return coord.pixel[0] >= location[0] && coord.pixel[0] < location[0] + size[0] &&
                coord.pixel[1] >= location[1] && coord.pixel[1] < location[1] + size[1];
     }
+
+    SWindowRect intersect(const SWindowRect& other) const
+    {
+        if (location[0] < other.location[0] + other.size[0] &&
+            location[0] + size[0] > other.location[0] &&
+            location[1] < other.location[1] + other.size[1] &&
+            location[1] + size[1] > other.location[1])
+        {
+            SWindowRect ret;
+            ret.location[0] = std::max(location[0], other.location[0]);
+            ret.location[1] = std::max(location[1], other.location[1]);
+            ret.size[0] = std::min(location[0] + size[0], other.location[0] + other.size[0]) - ret.location[0];
+            ret.size[1] = std::min(location[1] + size[1], other.location[1] + other.size[1]) - ret.location[1];
+            return ret;
+        }
+        return {};
+    }
 };
 
 struct STouchCoord
@@ -100,7 +117,8 @@ enum class EModifierKey
     Ctrl    = 1<<0,
     Alt     = 1<<2,
     Shift   = 1<<3,
-    Command = 1<<4
+    Command = 1<<4,
+    CtrlCommand = EModifierKey::Ctrl | EModifierKey::Command
 };
 ENABLE_BITWISE_ENUM(EModifierKey)
     
