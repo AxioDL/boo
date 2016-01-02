@@ -34,7 +34,7 @@ static inline void ThrowIfFailed(HRESULT hr)
 
 struct D3D11Data : IGraphicsData
 {
-    std::atomic_size_t m_refCount = 4;
+    size_t m_deleteCountdown = 4;
     std::vector<std::unique_ptr<class D3D11ShaderPipeline>> m_SPs;
     std::vector<std::unique_ptr<struct D3D11ShaderDataBinding>> m_SBinds;
     std::vector<std::unique_ptr<class D3D11GraphicsBufferS>> m_SBufs;
@@ -47,10 +47,10 @@ struct D3D11Data : IGraphicsData
 
     bool decref()
     {
-        size_t res = std::atomic_fetch_sub(&m_refCount, 1);
-        if (!res)
+        if (!m_deleteCountdown)
             Log.report(LogVisor::FatalError, "Can't decrement 0-data");
-        if (res == 1)
+        --m_deleteCountdown;
+        if (!m_deleteCountdown)
         {
             delete this;
             return true;
@@ -1189,9 +1189,9 @@ void D3D11CommandQueue::ProcessDynamicLoads(ID3D11DeviceContext* ctx)
     for (D3D11Data* d : gfxF->m_committedData)
     {
         for (std::unique_ptr<D3D11GraphicsBufferD>& b : d->m_DBufs)
-            b->update(ctx, m_fillBuf);
+            b->update(ctx, m_drawBuf);
         for (std::unique_ptr<D3D11TextureD>& t : d->m_DTexs)
-            t->update(ctx, m_fillBuf);
+            t->update(ctx, m_drawBuf);
     }
 }
 

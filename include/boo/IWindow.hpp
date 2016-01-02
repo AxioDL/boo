@@ -34,6 +34,17 @@ struct SWindowRect
 {
     int location[2];
     int size[2];
+
+    SWindowRect() {memset(this, 0, sizeof(SWindowRect));}
+
+    SWindowRect(int x, int y, int w, int h)
+    {
+        location[0] = x;
+        location[1] = y;
+        size[0] = w;
+        size[1] = h;
+    }
+
     bool operator!=(const SWindowRect& other) const
     {
         return location[0] != other.location[0] ||
