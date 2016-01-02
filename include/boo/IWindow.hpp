@@ -4,6 +4,7 @@
 #include "System.hpp"
 #include <memory>
 #include <algorithm>
+#include <cstring>
 
 #undef min
 #undef max
@@ -35,7 +36,7 @@ struct SWindowRect
     int location[2];
     int size[2];
 
-    SWindowRect() {memset(this, 0, sizeof(SWindowRect));}
+    SWindowRect() {std::memset(this, 0, sizeof(SWindowRect));}
 
     SWindowRect(int x, int y, int w, int h)
     {

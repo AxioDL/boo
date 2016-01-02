@@ -525,7 +525,7 @@ class WindowXlib : public IWindow
     double m_vScrollLast = 0.0;
 
     /* Cached window rectangle (to avoid repeated X queries) */
-    int m_wx, m_wy, m_ww, m_wh;
+    boo::SWindowRect m_wrect;
     float m_pixelFactor;
     bool m_inFs = false;
 
@@ -912,8 +912,8 @@ public:
             XUnlockDisplay(m_xDisp);
             return;
         }
-        getWindowFrame(m_wx, m_wy, m_ww, m_wh);
-        XPoint pt = {short(coord[0]), short(m_wh - coord[1])};
+        getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
+        XPoint pt = {short(coord[0]), short(m_wrect.size[1] - coord[1])};
         XVaNestedList list = XVaCreateNestedList(0, XNSpotLocation, &pt, nullptr);
         XSetICValues(m_xIC, XNPreeditAttributes, list, nullptr);
         XFree(list);
@@ -1108,36 +1108,36 @@ public:
     SWindowCoord MakeButtonEventCoord(XEvent* event) const
     {
         int x = event->xbutton.x;
-        int y = m_wh-event->xbutton.y;
+        int y = m_wrect.size[1]-event->xbutton.y;
         return
         {
             {x, y},
             {int(x / m_pixelFactor), int(y / m_pixelFactor)},
-            {x / float(m_ww), y / float(m_wh)}
+            {x / float(m_wrect.size[0]), y / float(m_wrect.size[1])}
         };
     }
 
     SWindowCoord MakeMotionEventCoord(XEvent* event) const
     {
         int x = event->xmotion.x;
-        int y = m_wh-event->xmotion.y;
+        int y = m_wrect.size[1]-event->xmotion.y;
         return
         {
             {x, y},
             {int(x / m_pixelFactor), int(y / m_pixelFactor)},
-            {x / float(m_ww), y / float(m_wh)}
+            {x / float(m_wrect.size[0]), y / float(m_wrect.size[1])}
         };
     }
 
     SWindowCoord MakeCrossingEventCoord(XEvent* event) const
     {
         int x = event->xcrossing.x;
-        int y = m_wh-event->xcrossing.y;
+        int y = m_wrect.size[1]-event->xcrossing.y;
         return
         {
             {x, y},
             {int(x / m_pixelFactor), int(y / m_pixelFactor)},
-            {x / float(m_ww), y / float(m_wh)}
+            {x / float(m_wrect.size[0]), y / float(m_wrect.size[1])}
         };
     }
 
@@ -1194,16 +1194,14 @@ public:
             int x, y;
             XTranslateCoordinates(m_xDisp, m_windowId, DefaultRootWindow(m_xDisp), event->xexpose.x, event->xexpose.y, &x, &y, &nw);
             XGetWindowAttributes(m_xDisp, m_windowId, &wxa);
-            m_wx = x - wxa.x;
-            m_wy = y - wxa.y;
-            m_ww = event->xexpose.width;
-            m_wh = event->xexpose.height;
+            m_wrect.location[0] = x - wxa.x;
+            m_wrect.location[1] = y - wxa.y;
+            m_wrect.size[0] = event->xexpose.width;
+            m_wrect.size[1] = event->xexpose.height;
             if (m_callback)
             {
-                SWindowRect rect =
-                { {m_wx, m_wy}, {m_ww, m_wh} };
                 XUnlockDisplay(m_xDisp);
-                m_callback->resized(rect);
+                m_callback->resized(m_wrect);
                 XLockDisplay(m_xDisp);
             }
             return;
@@ -1215,17 +1213,13 @@ public:
             int x, y;
             XTranslateCoordinates(m_xDisp, m_windowId, DefaultRootWindow(m_xDisp), event->xconfigure.x, event->xconfigure.y, &x, &y, &nw);
             XGetWindowAttributes(m_xDisp, m_windowId, &wxa);
-            m_wx = x - wxa.x;
-            m_wy = y - wxa.y;
-            m_ww = event->xconfigure.width;
-            m_wh = event->xconfigure.height;
+            m_wrect.location[0] = x - wxa.x;
+            m_wrect.location[1] = y - wxa.y;
+            m_wrect.size[0] = event->xconfigure.width;
+            m_wrect.size[1] = event->xconfigure.height;
 
             if (m_callback)
-            {
-                SWindowRect rect =
-                { {m_wx, m_wy}, {m_ww, m_wh} };
-                m_callback->windowMoved(rect);
-            }
+                m_callback->windowMoved(m_wrect);
             return;
         }
         case KeyPress:
@@ -1283,7 +1277,7 @@ public:
         {
             if (m_callback)
             {
-                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
+                getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
                 EMouseButton button = translateButton(event->xbutton.button);
                 if (button != EMouseButton::None)
                 {
@@ -1318,7 +1312,7 @@ public:
         {
             if (m_callback)
             {
-                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
+                getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
                 EMouseButton button = translateButton(event->xbutton.button);
                 if (button != EMouseButton::None)
                 {
@@ -1345,7 +1339,7 @@ public:
         {
             if (m_callback)
             {
-                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
+                getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
                 m_callback->mouseMove(MakeMotionEventCoord(event));
             }
             return;
@@ -1354,7 +1348,7 @@ public:
         {
             if (m_callback)
             {
-                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
+                getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
                 m_callback->mouseEnter(MakeCrossingEventCoord(event));
             }
             return;
@@ -1363,7 +1357,7 @@ public:
         {
             if (m_callback)
             {
-                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
+                getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
                 m_callback->mouseLeave(MakeCrossingEventCoord(event));
             }
             return;
@@ -1372,7 +1366,7 @@ public:
         {
             if (event->xgeneric.extension == XINPUT_OPCODE)
             {
-                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
+                getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
                 switch (event->xgeneric.evtype)
                 {
                 case XI_Motion:
@@ -1416,12 +1410,12 @@ public:
                     if (m_callback && didScroll)
                     {
                         int event_x = int(ev->event_x) >> 16;
-                        int event_y = m_wh - (int(ev->event_y) >> 16);
+                        int event_y = m_wrect.size[1] - (int(ev->event_y) >> 16);
                         SWindowCoord coord =
                         {
                             {event_x, event_y},
                             {int(event_x / m_pixelFactor), int(event_y / m_pixelFactor)},
-                            {event_x / float(m_ww), event_y / float(m_wh)}
+                            {event_x / float(m_wrect.size[0]), event_y / float(m_wrect.size[1])}
                         };
                         m_callback->scroll(coord, scrollDelta);
                     }
