@@ -1107,8 +1107,8 @@ static boo::ESpecialKey translateKeycode(short code)
 
 - (void)reshape
 {
-    boo::SWindowRect rect = {{int(self.frame.origin.x), int(self.frame.origin.y)},
-                             {int(self.frame.size.width), int(self.frame.size.height)}};
+    boo::SWindowRect rect = {int(self.frame.origin.x), int(self.frame.origin.y),
+                             int(self.frame.size.width), int(self.frame.size.height)};
     if (resp->booContext->m_callback)
         resp->booContext->m_callback->resized(rect);
     [super reshape];
@@ -1177,8 +1177,8 @@ static boo::ESpecialKey translateKeycode(short code)
 
 - (void)reshapeHandler
 {
-    boo::SWindowRect rect = {{int(self.frame.origin.x), int(self.frame.origin.y)},
-        {int(self.frame.size.width), int(self.frame.size.height)}};
+    boo::SWindowRect rect = {int(self.frame.origin.x), int(self.frame.origin.y),
+                             int(self.frame.size.width), int(self.frame.size.height)};
     boo::MetalContext::Window& w = m_ctx->m_windows[m_window];
     std::unique_lock<std::mutex> lk(w.m_resizeLock);
     if (resp->booContext->m_callback)
