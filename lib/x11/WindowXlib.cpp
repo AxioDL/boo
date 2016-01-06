@@ -510,7 +510,7 @@ class WindowXlib : public IWindow
     Colormap m_colormapId;
     Window m_windowId;
     XIMStyle m_bestStyle;
-    XIC m_xIC;
+    XIC m_xIC = nullptr;
     GraphicsContextGLX m_gfxCtx;
     uint32_t m_visualId;
 
@@ -603,26 +603,24 @@ public:
          * Now go create an IC using the style we chose.
          * Also set the window and fontset attributes now.
          */
-        XPoint pt = {0,0};
-        XVaNestedList nlist;
-        m_xIC = XCreateIC(xIM, XNInputStyle, bestInputStyle,
-                          XNClientWindow, m_windowId,
-                          XNFocusWindow, m_windowId,
-                          XNPreeditAttributes, nlist = XVaCreateNestedList(0,
-                                                                           XNSpotLocation, &pt,
-                                                                           XNFontSet, fontset,
-                                                                           nullptr),
-                          nullptr);
-        XFree(nlist);
-        if (m_xIC == nullptr)
+        if (xIM)
         {
-            Log.report(LogVisor::FatalError, "Couldn't create input context.");
-            return;
+            XPoint pt = {0,0};
+            XVaNestedList nlist;
+            m_xIC = XCreateIC(xIM, XNInputStyle, bestInputStyle,
+                              XNClientWindow, m_windowId,
+                              XNFocusWindow, m_windowId,
+                              XNPreeditAttributes, nlist = XVaCreateNestedList(0,
+                                                                               XNSpotLocation, &pt,
+                                                                               XNFontSet, fontset,
+                                                                               nullptr),
+                              nullptr);
+            XFree(nlist);
+            long im_event_mask;
+            XGetICValues(m_xIC, XNFilterEvents, &im_event_mask, nullptr);
+            XSelectInput(display, m_windowId, swa.event_mask | im_event_mask);
+            XSetICFocus(m_xIC);
         }
-        long im_event_mask;
-        XGetICValues(m_xIC, XNFilterEvents, &im_event_mask, nullptr);
-        XSelectInput(display, m_windowId, swa.event_mask | im_event_mask);
-        XSetICFocus(m_xIC);
 
         /* The XInput 2.1 extension enables per-pixel smooth scrolling trackpads */
         XIEventMask mask = {XIAllMasterDevices, XIMaskLen(XI_LASTEVENT)};
@@ -905,20 +903,23 @@ public:
 
     void claimKeyboardFocus(const int coord[2])
     {
-        XLockDisplay(m_xDisp);
-        if (!coord)
+        if (m_xIC)
         {
-            XUnsetICFocus(m_xIC);
+            XLockDisplay(m_xDisp);
+            if (!coord)
+            {
+                XUnsetICFocus(m_xIC);
+                XUnlockDisplay(m_xDisp);
+                return;
+            }
+            getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
+            XPoint pt = {short(coord[0]), short(m_wrect.size[1] - coord[1])};
+            XVaNestedList list = XVaCreateNestedList(0, XNSpotLocation, &pt, nullptr);
+            XSetICValues(m_xIC, XNPreeditAttributes, list, nullptr);
+            XFree(list);
+            XSetICFocus(m_xIC);
             XUnlockDisplay(m_xDisp);
-            return;
         }
-        getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
-        XPoint pt = {short(coord[0]), short(m_wrect.size[1] - coord[1])};
-        XVaNestedList list = XVaCreateNestedList(0, XNSpotLocation, &pt, nullptr);
-        XSetICValues(m_xIC, XNPreeditAttributes, list, nullptr);
-        XFree(list);
-        XSetICFocus(m_xIC);
-        XUnlockDisplay(m_xDisp);
     }
 
     bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz)
@@ -1141,6 +1142,7 @@ public:
         };
     }
 
+#if 0
     /* This procedure sets the application's size constraints and returns
      * the IM's preferred size for either the Preedit or Status areas,
      * depending on the value of the name argument.  The area argument is
@@ -1167,6 +1169,7 @@ public:
         XSetICValues(m_xIC, name, list, nullptr);
         XFree(list);
     }
+#endif
 
     void _incomingEvent(void* e)
     {
@@ -1230,13 +1233,16 @@ public:
                 EModifierKey modifierKey;
                 unsigned int state = event->xkey.state;
                 event->xkey.state &= ~ControlMask;
-                std::string utf8Frag = translateUTF8(&event->xkey, m_xIC);
                 ITextInputCallback* inputCb = m_callback->getTextInputCallback();
-                if (utf8Frag.size())
+                if (m_xIC)
                 {
-                    if (inputCb)
-                        inputCb->insertText(utf8Frag);
-                    return;
+                    std::string utf8Frag = translateUTF8(&event->xkey, m_xIC);
+                    if (utf8Frag.size())
+                    {
+                        if (inputCb)
+                            inputCb->insertText(utf8Frag);
+                        return;
+                    }
                 }
                 char charCode = translateKeysym(&event->xkey, specialKey, modifierKey);
                 EModifierKey modifierMask = translateModifiers(state);
