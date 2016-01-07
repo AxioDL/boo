@@ -292,6 +292,7 @@ public:
         return *this;
     }
     ~GraphicsDataToken() {doDestroy();}
+    operator bool() const {return m_factory && m_data;}
 };
 
 }
