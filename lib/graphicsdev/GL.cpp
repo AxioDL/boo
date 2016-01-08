@@ -66,16 +66,20 @@ class GLGraphicsBufferD : public IGraphicsBufferD
 {
     friend class GLDataFactory;
     friend struct GLCommandQueue;
-    struct GLCommandQueue* m_q;
     GLuint m_bufs[3];
     GLenum m_target;
     std::unique_ptr<uint8_t[]> m_cpuBuf;
     size_t m_cpuSz = 0;
     int m_validMask = 0;
-    GLGraphicsBufferD(GLCommandQueue* q, BufferUse use, size_t sz)
-    : m_q(q), m_target(USE_TABLE[int(use)]), m_cpuBuf(new uint8_t[sz]), m_cpuSz(sz)
+    GLGraphicsBufferD(BufferUse use, size_t sz)
+    : m_target(USE_TABLE[int(use)]), m_cpuBuf(new uint8_t[sz]), m_cpuSz(sz)
     {
         glGenBuffers(3, m_bufs);
+        for (int i=0 ; i<3 ; ++i)
+        {
+            glBindBuffer(m_target, m_bufs[i]);
+            glBufferData(m_target, m_cpuSz, nullptr, GL_STREAM_DRAW);
+        }
     }
     void update(int b);
 public:
@@ -193,7 +197,6 @@ class GLTextureD : public ITextureD
 {
     friend class GLDataFactory;
     friend struct GLCommandQueue;
-    struct GLCommandQueue* m_q;
     GLuint m_texs[3];
     std::unique_ptr<uint8_t[]> m_cpuBuf;
     size_t m_cpuSz = 0;
@@ -201,7 +204,7 @@ class GLTextureD : public ITextureD
     size_t m_width = 0;
     size_t m_height = 0;
     int m_validMask = 0;
-    GLTextureD(GLCommandQueue* q, size_t width, size_t height, TextureFormat fmt);
+    GLTextureD(size_t width, size_t height, TextureFormat fmt);
     void update(int b);
 public:
     ~GLTextureD();
@@ -223,6 +226,7 @@ class GLTextureR : public ITextureR
     size_t m_width = 0;
     size_t m_height = 0;
     size_t m_samples = 0;
+    GLenum m_target;
     GLTextureR(GLCommandQueue* q, size_t width, size_t height, size_t samples);
 public:
     ~GLTextureR();
@@ -230,17 +234,28 @@ public:
     void bind(size_t idx) const
     {
         glActiveTexture(GL_TEXTURE0 + idx);
-        glBindTexture(GL_TEXTURE_2D, m_texs[0]);
+        glBindTexture(m_target, m_texs[0]);
     }
     
     void resize(size_t width, size_t height)
     {
         m_width = width;
         m_height = height;
-        glBindTexture(GL_TEXTURE_2D, m_texs[0]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-        glBindTexture(GL_TEXTURE_2D, m_texs[1]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+        
+        if (m_samples > 1)
+        {
+            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[0]);
+            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_samples, GL_RGBA, width, height, GL_FALSE);
+            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[1]);
+            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_samples, GL_DEPTH_COMPONENT24, width, height, GL_FALSE);
+        }
+        else
+        {
+            glBindTexture(GL_TEXTURE_2D, m_texs[0]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            glBindTexture(GL_TEXTURE_2D, m_texs[1]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+        }
     }
 };
 
@@ -1142,7 +1157,7 @@ void GLGraphicsBufferD::update(int b)
     if ((slot & m_validMask) == 0)
     {
         glBindBuffer(m_target, m_bufs[b]);
-        glBufferData(m_target, m_cpuSz, m_cpuBuf.get(), GL_DYNAMIC_DRAW);
+        glBufferSubData(m_target, 0, m_cpuSz, m_cpuBuf.get());
         m_validMask |= slot;
     }
 }
@@ -1173,18 +1188,17 @@ void GLGraphicsBufferD::bindUniform(size_t idx, int b)
 IGraphicsBufferD*
 GLDataFactory::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
 {
-    GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
-    GLGraphicsBufferD* retval = new GLGraphicsBufferD(q, use, stride * count);
+    GLGraphicsBufferD* retval = new GLGraphicsBufferD(use, stride * count);
     if (!m_deferredData.get())
         m_deferredData.reset(new struct GLData());
     m_deferredData->m_DBufs.emplace_back(retval);
     return retval;
 }
 
-GLTextureD::GLTextureD(GLCommandQueue* q, size_t width, size_t height, TextureFormat fmt)
-: m_q(q), m_width(width), m_height(height)
+GLTextureD::GLTextureD(size_t width, size_t height, TextureFormat fmt)
+: m_width(width), m_height(height)
 {
-    int pxPitch;
+    int pxPitch = 4;
     switch (fmt)
     {
     case TextureFormat::RGBA8:
@@ -1250,8 +1264,7 @@ void GLTextureD::bind(size_t idx, int b)
 ITextureD*
 GLDataFactory::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
 {
-    GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
-    GLTextureD* retval = new GLTextureD(q, width, height, fmt);
+    GLTextureD* retval = new GLTextureD(width, height, fmt);
     if (!m_deferredData.get())
         m_deferredData.reset(new struct GLData());
     m_deferredData->m_DTexs.emplace_back(retval);
@@ -1262,10 +1275,22 @@ GLTextureR::GLTextureR(GLCommandQueue* q, size_t width, size_t height, size_t sa
 : m_q(q), m_width(width), m_height(height), m_samples(samples)
 {
     glGenTextures(2, m_texs);
-    glBindTexture(GL_TEXTURE_2D, m_texs[0]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glBindTexture(GL_TEXTURE_2D, m_texs[1]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+    if (samples > 1)
+    {
+        m_target = GL_TEXTURE_2D_MULTISAMPLE;
+        glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[0]);
+        glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGBA, width, height, GL_FALSE);
+        glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[1]);
+        glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_DEPTH_COMPONENT24, width, height, GL_FALSE);
+    }
+    else
+    {
+        m_target = GL_TEXTURE_2D;
+        glBindTexture(GL_TEXTURE_2D, m_texs[0]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glBindTexture(GL_TEXTURE_2D, m_texs[1]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+    }
     m_q->addFBO(this);
 }
 GLTextureR::~GLTextureR() {glDeleteTextures(2, m_texs); m_q->delFBO(this);}
