@@ -116,8 +116,10 @@ public:
             m_clientReturn = m_callback.appMain(this);
             
             /* Cleanup here */
+            std::vector<std::unique_ptr<IWindow>> toDelete;
+            toDelete.reserve(m_windows.size());
             for (auto& window : m_windows)
-                delete window.second;
+                toDelete.emplace_back(window.second);
         });
         
         /* Already in Cocoa's event loop; return now */
