@@ -241,7 +241,8 @@ enum class EMouseCursor
     Pointer         = 1,
     HorizontalArrow = 2,
     VerticalArrow   = 3,
-    IBeam           = 4
+    IBeam           = 4,
+    Crosshairs      = 5
 };
 
 enum class EClipboardType

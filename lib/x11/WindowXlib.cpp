@@ -547,6 +547,8 @@ class WindowXlib : public IWindow
             return X_CURSORS.m_vArrow;
         case EMouseCursor::IBeam:
             return X_CURSORS.m_ibeam;
+        case EMouseCursor::Crosshairs:
+            return X_CURSORS.m_crosshairs;
         default: break;
         }
         return X_CURSORS.m_pointer;

@@ -1309,6 +1309,9 @@ public:
             case EMouseCursor::IBeam:
                 [[NSCursor IBeamCursor] set];
                 break;
+            case EMouseCursor::Crosshairs:
+                [[NSCursor crosshairCursor] set];
+                break;
             default: break;
             }
         });
