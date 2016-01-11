@@ -41,13 +41,13 @@ class MetalGraphicsBufferS : public IGraphicsBufferS
     MetalGraphicsBufferS(BufferUse use, MetalContext* ctx, const void* data, size_t stride, size_t count)
     : m_stride(stride), m_count(count), m_sz(stride * count)
     {
-        m_buf = [ctx->m_dev.get() newBufferWithBytes:data length:m_sz options:MTL_STATIC];
+        m_buf = [ctx->m_dev newBufferWithBytes:data length:m_sz options:MTL_STATIC];
     }
 public:
     size_t m_stride;
     size_t m_count;
     size_t m_sz;
-    NSPtr<id<MTLBuffer>> m_buf;
+    id<MTLBuffer> m_buf;
     ~MetalGraphicsBufferS() = default;
 };
 
@@ -62,15 +62,15 @@ class MetalGraphicsBufferD : public IGraphicsBufferD
     : m_q(q), m_stride(stride), m_count(count), m_sz(stride * count)
     {
         m_cpuBuf.reset(new uint8_t[m_sz]);
-        m_bufs[0] = [ctx->m_dev.get() newBufferWithLength:m_sz options:MTL_DYNAMIC];
-        m_bufs[1] = [ctx->m_dev.get() newBufferWithLength:m_sz options:MTL_DYNAMIC];
+        m_bufs[0] = [ctx->m_dev newBufferWithLength:m_sz options:MTL_DYNAMIC];
+        m_bufs[1] = [ctx->m_dev newBufferWithLength:m_sz options:MTL_DYNAMIC];
     }
     void update(int b);
 public:
     size_t m_stride;
     size_t m_count;
     size_t m_sz;
-    NSPtr<id<MTLBuffer>> m_bufs[2];
+    id<MTLBuffer> m_bufs[2];
     MetalGraphicsBufferD() = default;
     
     void load(const void* data, size_t sz);
@@ -95,30 +95,30 @@ class MetalTextureS : public ITextureS
         default: break;
         }
         
-        NSPtr<MTLTextureDescriptor*> desc;
         @autoreleasepool
         {
-            desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:pfmt
-                                                                      width:width height:height
-                                                                  mipmapped:(mips>1)?YES:NO];
-        }
-        desc.get().usage = MTLTextureUsageShaderRead;
-        desc.get().mipmapLevelCount = mips;
-        m_tex = [ctx->m_dev.get() newTextureWithDescriptor:desc.get()];
-        const uint8_t* dataIt = reinterpret_cast<const uint8_t*>(data);
-        for (size_t i=0 ; i<mips ; ++i)
-        {
-            [m_tex.get() replaceRegion:MTLRegionMake2D(0, 0, width, height)
-                           mipmapLevel:i
-                             withBytes:dataIt
-                           bytesPerRow:width * ppitch];
-            dataIt += width * height * ppitch;
-            width /= 2;
-            height /= 2;
+            MTLTextureDescriptor* desc =
+            [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:pfmt
+                                                               width:width height:height
+                                                           mipmapped:(mips>1)?YES:NO];
+            desc.usage = MTLTextureUsageShaderRead;
+            desc.mipmapLevelCount = mips;
+            m_tex = [ctx->m_dev newTextureWithDescriptor:desc];
+            const uint8_t* dataIt = reinterpret_cast<const uint8_t*>(data);
+            for (size_t i=0 ; i<mips ; ++i)
+            {
+                [m_tex replaceRegion:MTLRegionMake2D(0, 0, width, height)
+                         mipmapLevel:i
+                           withBytes:dataIt
+                         bytesPerRow:width * ppitch];
+                dataIt += width * height * ppitch;
+                width /= 2;
+                height /= 2;
+            }
         }
     }
 public:
-    NSPtr<id<MTLTexture>> m_tex;
+    id<MTLTexture> m_tex;
     ~MetalTextureS() = default;
 };
     
@@ -139,31 +139,31 @@ class MetalTextureSA : public ITextureSA
         default: break;
         }
         
-        NSPtr<MTLTextureDescriptor*> desc;
         @autoreleasepool
         {
-            desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:pfmt
-                                                                      width:width height:height
-                                                                  mipmapped:NO];
-        }
-        desc.get().textureType = MTLTextureType2DArray;
-        desc.get().arrayLength = layers;
-        desc.get().usage = MTLTextureUsageShaderRead;
-        m_tex = [ctx->m_dev.get() newTextureWithDescriptor:desc.get()];
-        const uint8_t* dataIt = reinterpret_cast<const uint8_t*>(data);
-        for (size_t i=0 ; i<layers ; ++i)
-        {
-            [m_tex.get() replaceRegion:MTLRegionMake2D(0, 0, width, height)
-                           mipmapLevel:0
-                                 slice:i
-                             withBytes:dataIt
-                           bytesPerRow:width * ppitch
-                         bytesPerImage:width * height * ppitch];
-            dataIt += width * height * ppitch;
+            MTLTextureDescriptor* desc =
+            [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:pfmt
+                                                               width:width height:height
+                                                           mipmapped:NO];
+            desc.textureType = MTLTextureType2DArray;
+            desc.arrayLength = layers;
+            desc.usage = MTLTextureUsageShaderRead;
+            m_tex = [ctx->m_dev newTextureWithDescriptor:desc];
+            const uint8_t* dataIt = reinterpret_cast<const uint8_t*>(data);
+            for (size_t i=0 ; i<layers ; ++i)
+            {
+                [m_tex replaceRegion:MTLRegionMake2D(0, 0, width, height)
+                         mipmapLevel:0
+                               slice:i
+                           withBytes:dataIt
+                         bytesPerRow:width * ppitch
+                       bytesPerImage:width * height * ppitch];
+                dataIt += width * height * ppitch;
+            }
         }
     }
 public:
-    NSPtr<id<MTLTexture>> m_tex;
+    id<MTLTexture> m_tex;
     ~MetalTextureSA() = default;
 };
     
@@ -199,20 +199,20 @@ class MetalTextureD : public ITextureD
         m_cpuSz = width * height * m_pxPitch;
         m_cpuBuf.reset(new uint8_t[m_cpuSz]);
         
-        NSPtr<MTLTextureDescriptor*> desc;
         @autoreleasepool
         {
-            desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format
-                                                                      width:width height:height
-                                                                  mipmapped:NO];
+            MTLTextureDescriptor* desc =
+            [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format
+                                                               width:width height:height
+                                                           mipmapped:NO];
+            desc.usage = MTLTextureUsageShaderRead;
+            m_texs[0] = [ctx->m_dev newTextureWithDescriptor:desc];
+            m_texs[1] = [ctx->m_dev newTextureWithDescriptor:desc];
         }
-        desc.get().usage = MTLTextureUsageShaderRead;
-        m_texs[0] = [ctx->m_dev.get() newTextureWithDescriptor:desc.get()];
-        m_texs[1] = [ctx->m_dev.get() newTextureWithDescriptor:desc.get()];
     }
     void update(int b);
 public:
-    NSPtr<id<MTLTexture>> m_texs[2];
+    id<MTLTexture> m_texs[2];
     ~MetalTextureD() = default;
     
     void load(const void* data, size_t sz);
@@ -230,49 +230,49 @@ class MetalTextureR : public ITextureR
     
     void Setup(MetalContext* ctx, size_t width, size_t height, size_t samples)
     {
-        NSPtr<MTLTextureDescriptor*> desc;
         @autoreleasepool
         {
-            desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
-                                                                      width:width height:height
-                                                                  mipmapped:NO];
+            MTLTextureDescriptor* desc =
+            [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                                               width:width height:height
+                                                           mipmapped:NO];
             m_passDesc = [MTLRenderPassDescriptor renderPassDescriptor];
-        }
-        desc.get().usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
-        desc.get().storageMode = MTLStorageModePrivate;
+            desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+            desc.storageMode = MTLStorageModePrivate;
 
-        m_tex = [ctx->m_dev.get() newTextureWithDescriptor:desc.get()];
-        
-        if (samples > 1)
-        {
-            desc.get().textureType = MTLTextureType2DMultisample;
-            desc.get().sampleCount = samples;
-            m_msaaTex = [ctx->m_dev.get() newTextureWithDescriptor:desc.get()];
-            
-            desc.get().pixelFormat = MTLPixelFormatDepth32Float;
-            m_depthTex = [ctx->m_dev.get() newTextureWithDescriptor:desc.get()];
-            
-            m_passDesc.get().colorAttachments[0].texture = m_msaaTex.get();
-            m_passDesc.get().colorAttachments[0].resolveTexture = m_tex.get();
-            m_passDesc.get().colorAttachments[0].loadAction = MTLLoadActionClear;
-            m_passDesc.get().colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
-            
-            m_passDesc.get().depthAttachment.texture = m_depthTex.get();
-            m_passDesc.get().depthAttachment.loadAction = MTLLoadActionClear;
-            m_passDesc.get().depthAttachment.storeAction = MTLStoreActionDontCare;
-        }
-        else
-        {
-            desc.get().pixelFormat = MTLPixelFormatDepth32Float;
-            m_depthTex = [ctx->m_dev.get() newTextureWithDescriptor:desc.get()];
-            
-            m_passDesc.get().colorAttachments[0].texture = m_tex.get();
-            m_passDesc.get().colorAttachments[0].loadAction = MTLLoadActionClear;
-            m_passDesc.get().colorAttachments[0].storeAction = MTLStoreActionStore;
-            
-            m_passDesc.get().depthAttachment.texture = m_depthTex.get();
-            m_passDesc.get().depthAttachment.loadAction = MTLLoadActionClear;
-            m_passDesc.get().depthAttachment.storeAction = MTLStoreActionDontCare;
+            m_tex = [ctx->m_dev newTextureWithDescriptor:desc];
+
+            if (samples > 1)
+            {
+                desc.textureType = MTLTextureType2DMultisample;
+                desc.sampleCount = samples;
+                m_msaaTex = [ctx->m_dev newTextureWithDescriptor:desc];
+
+                desc.pixelFormat = MTLPixelFormatDepth32Float;
+                m_depthTex = [ctx->m_dev newTextureWithDescriptor:desc];
+
+                m_passDesc.colorAttachments[0].texture = m_msaaTex;
+                m_passDesc.colorAttachments[0].resolveTexture = m_tex;
+                m_passDesc.colorAttachments[0].loadAction = MTLLoadActionClear;
+                m_passDesc.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
+
+                m_passDesc.depthAttachment.texture = m_depthTex;
+                m_passDesc.depthAttachment.loadAction = MTLLoadActionClear;
+                m_passDesc.depthAttachment.storeAction = MTLStoreActionDontCare;
+            }
+            else
+            {
+                desc.pixelFormat = MTLPixelFormatDepth32Float;
+                m_depthTex = [ctx->m_dev newTextureWithDescriptor:desc];
+
+                m_passDesc.colorAttachments[0].texture = m_tex;
+                m_passDesc.colorAttachments[0].loadAction = MTLLoadActionClear;
+                m_passDesc.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+                m_passDesc.depthAttachment.texture = m_depthTex;
+                m_passDesc.depthAttachment.loadAction = MTLLoadActionClear;
+                m_passDesc.depthAttachment.storeAction = MTLStoreActionDontCare;
+            }
         }
     }
     
@@ -284,10 +284,10 @@ class MetalTextureR : public ITextureR
     }
 public:
     size_t samples() const {return m_samples;}
-    NSPtr<id<MTLTexture>> m_tex;
-    NSPtr<id<MTLTexture>> m_msaaTex;
-    NSPtr<id<MTLTexture>> m_depthTex;
-    NSPtr<MTLRenderPassDescriptor*> m_passDesc;
+    id<MTLTexture> m_tex;
+    id<MTLTexture> m_msaaTex;
+    id<MTLTexture> m_depthTex;
+    MTLRenderPassDescriptor* m_passDesc;
     ~MetalTextureR() = default;
     
     void resize(MetalContext* ctx, size_t width, size_t height)
@@ -301,7 +301,7 @@ public:
         Setup(ctx, width, height, m_samples);
     }
     
-    id<MTLTexture> getRenderColorRes() {if (m_samples > 1) return m_msaaTex.get(); return m_tex.get();}
+    id<MTLTexture> getRenderColorRes() {if (m_samples > 1) return m_msaaTex; return m_tex;}
 };
     
 static const size_t SEMANTIC_SIZE_TABLE[] =
@@ -337,7 +337,7 @@ static const MTLVertexFormat SEMANTIC_TYPE_TABLE[] =
 struct MetalVertexFormat : IVertexFormat
 {
     size_t m_elementCount;
-    NSPtr<MTLVertexDescriptor*> m_vdesc;
+    MTLVertexDescriptor* m_vdesc;
     MetalVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)
     : m_elementCount(elementCount)
     {
@@ -354,12 +354,12 @@ struct MetalVertexFormat : IVertexFormat
         }
         
         m_vdesc = [MTLVertexDescriptor vertexDescriptor];
-        MTLVertexBufferLayoutDescriptor* layoutDesc = m_vdesc.get().layouts[0];
+        MTLVertexBufferLayoutDescriptor* layoutDesc = m_vdesc.layouts[0];
         layoutDesc.stride = stride;
         layoutDesc.stepFunction = MTLVertexStepFunctionPerVertex;
         layoutDesc.stepRate = 1;
         
-        layoutDesc = m_vdesc.get().layouts[1];
+        layoutDesc = m_vdesc.layouts[1];
         layoutDesc.stride = instStride;
         layoutDesc.stepFunction = MTLVertexStepFunctionPerInstance;
         layoutDesc.stepRate = 1;
@@ -369,7 +369,7 @@ struct MetalVertexFormat : IVertexFormat
         for (size_t i=0 ; i<elementCount ; ++i)
         {
             const VertexElementDescriptor* elemin = &elements[i];
-            MTLVertexAttributeDescriptor* attrDesc = m_vdesc.get().attributes[i];
+            MTLVertexAttributeDescriptor* attrDesc = m_vdesc.attributes[i];
             int semantic = int(elemin->semantic & VertexSemantic::SemanticMask);
             if ((elemin->semantic & VertexSemantic::Instanced) != VertexSemantic::None)
             {
@@ -415,40 +415,40 @@ class MetalShaderPipeline : public IShaderPipeline
         if (backfaceCulling)
             m_cullMode = MTLCullModeBack;
         
-        NSPtr<MTLRenderPipelineDescriptor*> desc = [MTLRenderPipelineDescriptor new];
-        desc.get().vertexFunction = vert;
-        desc.get().fragmentFunction = frag;
-        desc.get().vertexDescriptor = vtxFmt->m_vdesc.get();
-        desc.get().sampleCount = targetSamples;
-        desc.get().colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
-        desc.get().colorAttachments[0].blendingEnabled = dstFac != BlendFactor::Zero;
-        desc.get().colorAttachments[0].sourceRGBBlendFactor = BLEND_FACTOR_TABLE[int(srcFac)];
-        desc.get().colorAttachments[0].destinationRGBBlendFactor = BLEND_FACTOR_TABLE[int(dstFac)];
-        desc.get().depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;
-        desc.get().inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
+        MTLRenderPipelineDescriptor* desc = [MTLRenderPipelineDescriptor new];
+        desc.vertexFunction = vert;
+        desc.fragmentFunction = frag;
+        desc.vertexDescriptor = vtxFmt->m_vdesc;
+        desc.sampleCount = targetSamples;
+        desc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+        desc.colorAttachments[0].blendingEnabled = dstFac != BlendFactor::Zero;
+        desc.colorAttachments[0].sourceRGBBlendFactor = BLEND_FACTOR_TABLE[int(srcFac)];
+        desc.colorAttachments[0].destinationRGBBlendFactor = BLEND_FACTOR_TABLE[int(dstFac)];
+        desc.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;
+        desc.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
         NSError* err = nullptr;
-        m_state = [ctx->m_dev.get() newRenderPipelineStateWithDescriptor:desc.get() error:&err];
+        m_state = [ctx->m_dev newRenderPipelineStateWithDescriptor:desc error:&err];
         if (err)
             Log.report(LogVisor::FatalError, "error making shader pipeline: %s",
                        [[err localizedDescription] UTF8String]);
         
-        NSPtr<MTLDepthStencilDescriptor*> dsDesc = [MTLDepthStencilDescriptor new];
+        MTLDepthStencilDescriptor* dsDesc = [MTLDepthStencilDescriptor new];
         if (depthTest)
-            dsDesc.get().depthCompareFunction = MTLCompareFunctionLessEqual;
-        dsDesc.get().depthWriteEnabled = depthWrite;
-        m_dsState = [ctx->m_dev.get() newDepthStencilStateWithDescriptor:dsDesc.get()];
+            dsDesc.depthCompareFunction = MTLCompareFunctionLessEqual;
+        dsDesc.depthWriteEnabled = depthWrite;
+        m_dsState = [ctx->m_dev newDepthStencilStateWithDescriptor:dsDesc];
     }
 public:
-    NSPtr<id<MTLRenderPipelineState>> m_state;
-    NSPtr<id<MTLDepthStencilState>> m_dsState;
+    id<MTLRenderPipelineState> m_state;
+    id<MTLDepthStencilState> m_dsState;
     ~MetalShaderPipeline() = default;
     MetalShaderPipeline& operator=(const MetalShaderPipeline&) = delete;
     MetalShaderPipeline(const MetalShaderPipeline&) = delete;
     
     void bind(id<MTLRenderCommandEncoder> enc)
     {
-        [enc setRenderPipelineState:m_state.get()];
-        [enc setDepthStencilState:m_dsState.get()];
+        [enc setRenderPipelineState:m_state];
+        [enc setDepthStencilState:m_dsState];
         [enc setCullMode:m_cullMode];
     }
 };
@@ -458,12 +458,12 @@ static id<MTLBuffer> GetBufferGPUResource(const IGraphicsBuffer* buf, int idx)
     if (buf->dynamic())
     {
         const MetalGraphicsBufferD* cbuf = static_cast<const MetalGraphicsBufferD*>(buf);
-        return cbuf->m_bufs[idx].get();
+        return cbuf->m_bufs[idx];
     }
     else
     {
         const MetalGraphicsBufferS* cbuf = static_cast<const MetalGraphicsBufferS*>(buf);
-        return cbuf->m_buf.get();
+        return cbuf->m_buf;
     }
 }
 
@@ -474,22 +474,22 @@ static id<MTLTexture> GetTextureGPUResource(const ITexture* tex, int idx)
     case TextureType::Dynamic:
     {
         const MetalTextureD* ctex = static_cast<const MetalTextureD*>(tex);
-        return ctex->m_texs[idx].get();
+        return ctex->m_texs[idx];
     }
     case TextureType::Static:
     {
         const MetalTextureS* ctex = static_cast<const MetalTextureS*>(tex);
-        return ctex->m_tex.get();
+        return ctex->m_tex;
     }
     case TextureType::StaticArray:
     {
         const MetalTextureSA* ctex = static_cast<const MetalTextureSA*>(tex);
-        return ctex->m_tex.get();
+        return ctex->m_tex;
     }
     case TextureType::Render:
     {
         const MetalTextureR* ctex = static_cast<const MetalTextureR*>(tex);
-        return ctex->m_tex.get();
+        return ctex->m_tex;
     }
     default: break;
     }
@@ -547,8 +547,8 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     MetalContext* m_ctx;
     IWindow* m_parentWindow;
     IGraphicsContext* m_parent;
-    NSPtr<id<MTLCommandBuffer>> m_cmdBuf;
-    NSPtr<id<MTLRenderCommandEncoder>> m_enc;
+    id<MTLCommandBuffer> m_cmdBuf;
+    id<MTLRenderCommandEncoder> m_enc;
     bool m_running = true;
     
     size_t m_fillBuf = 0;
@@ -559,7 +559,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     {
         @autoreleasepool
         {
-            m_cmdBuf = [ctx->m_q.get() commandBuffer];
+            m_cmdBuf = [ctx->m_q commandBuffer];
         }
     }
     
@@ -567,7 +567,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     {
         m_running = false;
         if (m_inProgress)
-            [m_cmdBuf.get() waitUntilCompleted];
+            [m_cmdBuf waitUntilCompleted];
     }
     
     ~MetalCommandQueue()
@@ -579,7 +579,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     void setShaderDataBinding(IShaderDataBinding* binding)
     {
         MetalShaderDataBinding* cbind = static_cast<MetalShaderDataBinding*>(binding);
-        cbind->bind(m_enc.get(), m_fillBuf);
+        cbind->bind(m_enc, m_fillBuf);
         m_boundData = cbind;
     }
     
@@ -587,10 +587,10 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     void setRenderTarget(ITextureR* target)
     {
         MetalTextureR* ctarget = static_cast<MetalTextureR*>(target);
-        [m_enc.get() endEncoding];
+        [m_enc endEncoding];
         @autoreleasepool
         {
-            m_enc = [m_cmdBuf.get() renderCommandEncoderWithDescriptor:ctarget->m_passDesc.get()];
+            m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:ctarget->m_passDesc];
         }
         m_boundTarget = ctarget;
     }
@@ -599,7 +599,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     {
         MTLViewport vp = {double(rect.location[0]), double(rect.location[1]),
                           double(rect.size[0]), double(rect.size[1]), 0.0, 1.0};
-        [m_enc.get() setViewport:vp];
+        [m_enc setViewport:vp];
     }
     
     void setScissor(const SWindowRect& rect)
@@ -609,7 +609,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             MTLScissorRect scissor = {NSUInteger(rect.location[0]),
                 NSUInteger(m_boundTarget->m_height - rect.location[1] - rect.size[1]),
                 NSUInteger(rect.size[0]), NSUInteger(rect.size[1])};
-            [m_enc.get() setScissorRect:scissor];
+            [m_enc setScissorRect:scissor];
         }
     }
         
@@ -654,31 +654,31 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     
     void draw(size_t start, size_t count)
     {
-        [m_enc.get() drawPrimitives:m_primType vertexStart:start vertexCount:count];
+        [m_enc drawPrimitives:m_primType vertexStart:start vertexCount:count];
     }
     
     void drawIndexed(size_t start, size_t count)
     {
-        [m_enc.get() drawIndexedPrimitives:m_primType
-                                indexCount:count
-                                 indexType:MTLIndexTypeUInt32
-                               indexBuffer:GetBufferGPUResource(m_boundData->m_ibuf, m_fillBuf)
-                         indexBufferOffset:start*4];
+        [m_enc drawIndexedPrimitives:m_primType
+                          indexCount:count
+                           indexType:MTLIndexTypeUInt32
+                         indexBuffer:GetBufferGPUResource(m_boundData->m_ibuf, m_fillBuf)
+                   indexBufferOffset:start*4];
     }
     
     void drawInstances(size_t start, size_t count, size_t instCount)
     {
-        [m_enc.get() drawPrimitives:m_primType vertexStart:start vertexCount:count instanceCount:instCount];
+        [m_enc drawPrimitives:m_primType vertexStart:start vertexCount:count instanceCount:instCount];
     }
     
     void drawInstancesIndexed(size_t start, size_t count, size_t instCount)
     {
-        [m_enc.get() drawIndexedPrimitives:m_primType
-                                indexCount:count
-                                 indexType:MTLIndexTypeUInt32
-                               indexBuffer:GetBufferGPUResource(m_boundData->m_ibuf, m_fillBuf)
-                         indexBufferOffset:start*4
-                             instanceCount:instCount];
+        [m_enc drawIndexedPrimitives:m_primType
+                          indexCount:count
+                           indexType:MTLIndexTypeUInt32
+                         indexBuffer:GetBufferGPUResource(m_boundData->m_ibuf, m_fillBuf)
+                   indexBufferOffset:start*4
+                       instanceCount:instCount];
     }
     
     MetalTextureR* m_needsDisplay = nullptr;
@@ -707,13 +707,13 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         
         @autoreleasepool
         {
-            [m_enc.get() endEncoding];
-            m_enc.reset();
+            [m_enc endEncoding];
+            m_enc = nullptr;
             
             /* Abandon if in progress (renderer too slow) */
             if (m_inProgress)
             {
-                m_cmdBuf = [m_ctx->m_q.get() commandBuffer];
+                m_cmdBuf = [m_ctx->m_q commandBuffer];
                 return;
             }
             
@@ -723,7 +723,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                 for (const auto& resize : m_texResizes)
                     resize.first->resize(m_ctx, resize.second.first, resize.second.second);
                 m_texResizes.clear();
-                m_cmdBuf = [m_ctx->m_q.get() commandBuffer];
+                m_cmdBuf = [m_ctx->m_q commandBuffer];
                 return;
             }
             
@@ -747,11 +747,11 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                     if (drawable)
                     {
                         id<MTLTexture> dest = drawable.texture;
-                        if (m_needsDisplay->m_tex.get().width == dest.width &&
-                            m_needsDisplay->m_tex.get().height == dest.height)
+                        if (m_needsDisplay->m_tex.width == dest.width &&
+                            m_needsDisplay->m_tex.height == dest.height)
                         {
-                            id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf.get() blitCommandEncoder];
-                            [blitEnc copyFromTexture:m_needsDisplay->m_tex.get()
+                            id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf blitCommandEncoder];
+                            [blitEnc copyFromTexture:m_needsDisplay->m_tex
                                          sourceSlice:0
                                          sourceLevel:0
                                         sourceOrigin:MTLOriginMake(0, 0, 0)
@@ -761,7 +761,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                                     destinationLevel:0
                                    destinationOrigin:MTLOriginMake(0, 0, 0)];
                             [blitEnc endEncoding];
-                            [m_cmdBuf.get() presentDrawable:drawable];
+                            [m_cmdBuf presentDrawable:drawable];
                         }
                     }
                 }
@@ -771,10 +771,10 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             m_drawBuf = m_fillBuf;
             m_fillBuf ^= 1;
             
-            [m_cmdBuf.get() addCompletedHandler:^(id<MTLCommandBuffer> buf) {m_inProgress = false;}];
+            [m_cmdBuf addCompletedHandler:^(id<MTLCommandBuffer> buf) {m_inProgress = false;}];
             m_inProgress = true;
-            [m_cmdBuf.get() commit];
-            m_cmdBuf = [m_ctx->m_q.get() commandBuffer];
+            [m_cmdBuf commit];
+            m_cmdBuf = [m_ctx->m_q commandBuffer];
         }
     }
 };
@@ -784,7 +784,7 @@ void MetalGraphicsBufferD::update(int b)
     int slot = 1 << b;
     if ((slot & m_validSlots) == 0)
     {
-        id<MTLBuffer> res = m_bufs[b].get();
+        id<MTLBuffer> res = m_bufs[b];
         memcpy(res.contents, m_cpuBuf.get(), m_sz);
         m_validSlots |= slot;
     }
@@ -811,7 +811,7 @@ void MetalTextureD::update(int b)
     int slot = 1 << b;
     if ((slot & m_validSlots) == 0)
     {
-        id<MTLTexture> res = m_texs[b].get();
+        id<MTLTexture> res = m_texs[b];
         [res replaceRegion:MTLRegionMake2D(0, 0, m_width, m_height)
                mipmapLevel:0 withBytes:m_cpuBuf.get() bytesPerRow:m_width*m_pxPitch];
         m_validSlots |= slot;
@@ -924,25 +924,25 @@ IShaderPipeline* MetalDataFactory::newShaderPipeline(const char* vertSource, con
                                                      BlendFactor srcFac, BlendFactor dstFac,
                                                      bool depthTest, bool depthWrite, bool backfaceCulling)
 {
-    NSPtr<MTLCompileOptions*> compOpts = [MTLCompileOptions new];
-    compOpts.get().languageVersion = MTLLanguageVersion1_1;
+    MTLCompileOptions* compOpts = [MTLCompileOptions new];
+    compOpts.languageVersion = MTLLanguageVersion1_1;
     NSError* err = nullptr;
     
-    NSPtr<id<MTLLibrary>> vertShaderLib = [m_ctx->m_dev.get() newLibraryWithSource:@(vertSource)
-                                                                           options:compOpts.get()
-                                                                             error:&err];
+    id<MTLLibrary> vertShaderLib = [m_ctx->m_dev newLibraryWithSource:@(vertSource)
+                                                              options:compOpts
+                                                                error:&err];
     if (err)
         Log.report(LogVisor::FatalError, "error compiling vert shader: %s", [[err localizedDescription] UTF8String]);
-    NSPtr<id<MTLFunction>> vertFunc = [vertShaderLib.get() newFunctionWithName:@"vmain"];
+    id<MTLFunction> vertFunc = [vertShaderLib newFunctionWithName:@"vmain"];
     
-    NSPtr<id<MTLLibrary>> fragShaderLib = [m_ctx->m_dev.get() newLibraryWithSource:@(fragSource)
-                                                                           options:compOpts.get()
-                                                                             error:&err];
+    id<MTLLibrary> fragShaderLib = [m_ctx->m_dev newLibraryWithSource:@(fragSource)
+                                                              options:compOpts
+                                                                error:&err];
     if (err)
         Log.report(LogVisor::FatalError, "error compiling frag shader: %s", [[err localizedDescription] UTF8String]);
-    NSPtr<id<MTLFunction>> fragFunc = [fragShaderLib.get() newFunctionWithName:@"fmain"];
+    id<MTLFunction> fragFunc = [fragShaderLib newFunctionWithName:@"fmain"];
     
-    MetalShaderPipeline* retval = new MetalShaderPipeline(m_ctx, vertFunc.get(), fragFunc.get(),
+    MetalShaderPipeline* retval = new MetalShaderPipeline(m_ctx, vertFunc, fragFunc,
                                                           static_cast<const MetalVertexFormat*>(vtxFmt), targetSamples,
                                                           srcFac, dstFac, depthTest, depthWrite, backfaceCulling);
     if (!m_deferredData.get())

@@ -1154,7 +1154,7 @@ static boo::ESpecialKey translateKeycode(short code)
 - (CALayer*)makeBackingLayer
 {
     CAMetalLayer* layer = [CAMetalLayer new];
-    layer.device = m_ctx->m_dev.get();
+    layer.device = m_ctx->m_dev;
     layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
     layer.framebufferOnly = NO;
     return layer;

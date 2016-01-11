@@ -89,7 +89,7 @@ public:
             if (!arg.compare("--metal"))
             {
                 m_metalCtx.m_dev = MTLCreateSystemDefaultDevice();
-                m_metalCtx.m_q = [m_metalCtx.m_dev.get() newCommandQueue];
+                m_metalCtx.m_q = [m_metalCtx.m_dev newCommandQueue];
                 Log.report(LogVisor::Info, "using Metal renderer");
                 break;
             }
