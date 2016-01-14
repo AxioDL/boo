@@ -184,6 +184,7 @@ struct IGraphicsDataFactory
         D3D11,
         D3D12,
         Metal,
+        Vulkan,
         GX,
         GX2
     };
