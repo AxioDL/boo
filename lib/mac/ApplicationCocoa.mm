@@ -75,10 +75,10 @@ public:
                                          keyEquivalent:@"f"];
         [fsItem setKeyEquivalentModifierMask:NSCommandKeyMask];
         [appMenu addItem:[NSMenuItem separatorItem]];
-        NSMenuItem* quit_item = [appMenu addItemWithTitle:[NSString stringWithFormat:@"Quit %s", m_friendlyName.c_str()]
-                                                   action:@selector(quitApp:)
-                                            keyEquivalent:@"q"];
-        [quit_item setKeyEquivalentModifierMask:NSCommandKeyMask];
+        NSMenuItem* quitItem = [appMenu addItemWithTitle:[NSString stringWithFormat:@"Quit %s", m_friendlyName.c_str()]
+                                                  action:@selector(quitApp:)
+                                           keyEquivalent:@"q"];
+        [quitItem setKeyEquivalentModifierMask:NSCommandKeyMask];
         [[rootMenu addItemWithTitle:[NSString stringWithUTF8String:m_friendlyName.c_str()]
                             action:nil keyEquivalent:@""] setSubmenu:appMenu];
         [[NSApplication sharedApplication] setMainMenu:rootMenu];
