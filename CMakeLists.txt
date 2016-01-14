@@ -16,10 +16,12 @@ include_directories(include ${LOG_VISOR_INCLUDE_DIR})
 if(NOT GEKKO AND NOT CAFE)
 list(APPEND PLAT_SRCS
     lib/graphicsdev/GL.cpp
+    lib/graphicsdev/Vulkan.cpp
     lib/graphicsdev/glew.c)
 
 list(APPEND PLAT_HDRS
-    include/boo/graphicsdev/GL.hpp)
+     include/boo/graphicsdev/GL.hpp
+     include/boo/graphicsdev/Vulkan.hpp)
 endif()
 
 if(WIN32)
@@ -139,7 +141,7 @@ set(BOO_SYS_LIBS ${_BOO_SYS_LIBS} CACHE PATH "Boo System Libraries" FORCE)
 set(BOO_SYS_DEFINES ${_BOO_SYS_DEFINES} CACHE PATH "Boo System Defines" FORCE)
 
 add_definitions(${_BOO_SYS_DEFINES})
-include_directories(include)
+include_directories(include glslang)
 
 add_library(Boo
             lib/inputdev/CafeProPad.cpp include/boo/inputdev/CafeProPad.hpp
