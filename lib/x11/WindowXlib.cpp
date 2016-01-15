@@ -495,11 +495,7 @@ public:
     }
 
     void present()
-    {
-        XLockDisplay(m_xDisp);
-        glXSwapBuffers(m_xDisp, m_glxWindow);
-        XUnlockDisplay(m_xDisp);
-    }
+    { glXSwapBuffers(m_xDisp, m_glxWindow); }
 
 };
 
