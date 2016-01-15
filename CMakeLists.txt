@@ -25,7 +25,7 @@ list(APPEND PLAT_HDRS
 endif()
 
 if(WIN32)
-  list(APPEND PLAT_SRCS 
+  list(APPEND PLAT_SRCS
        lib/win/ApplicationWin32.cpp
        lib/win/WindowWin32.cpp
        lib/win/Win32Common.hpp
@@ -41,7 +41,7 @@ if(WIN32)
 
   list(APPEND _BOO_SYS_LIBS Winusb opengl32 Setupapi Imm32)
 elseif(APPLE)
-  list(APPEND PLAT_SRCS 
+  list(APPEND PLAT_SRCS
        lib/mac/ApplicationCocoa.mm
        lib/mac/WindowCocoa.mm
        lib/mac/CocoaCommon.hpp
@@ -67,7 +67,7 @@ set_source_files_properties(lib/mac/ApplicationCocoa.mm
   list(APPEND _BOO_SYS_LIBS ${APPKIT_LIBRARY} ${IOKIT_LIBRARY} ${OPENGL_LIBRARY} ${METAL_LIBRARY}
                             ${QUARTZCORE_LIBRARY} ${COREVIDEO_LIBRARY})
 else(NOT GEKKO)
-  list(APPEND PLAT_SRCS 
+  list(APPEND PLAT_SRCS
        lib/x11/XlibCommon.hpp
        lib/x11/ApplicationUnix.cpp
        lib/x11/ApplicationXlib.hpp
