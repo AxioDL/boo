@@ -97,6 +97,7 @@ public:
         WIN32_CURSORS.m_hResize = LoadCursor(nullptr, IDC_SIZEWE);
         WIN32_CURSORS.m_vResize = LoadCursor(nullptr, IDC_SIZENS);
         WIN32_CURSORS.m_ibeam = LoadCursor(nullptr, IDC_IBEAM);
+        WIN32_CURSORS.m_crosshairs = LoadCursor(nullptr, IDC_CROSS);
         WIN32_CURSORS.m_wait = LoadCursor(nullptr, IDC_WAIT);
 
         HMODULE dxgilib = LoadLibraryW(L"dxgi.dll");

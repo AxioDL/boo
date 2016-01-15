@@ -1107,8 +1107,8 @@ static boo::ESpecialKey translateKeycode(short code)
 
 - (void)reshape
 {
-    boo::SWindowRect rect = {{int(self.frame.origin.x), int(self.frame.origin.y)},
-                             {int(self.frame.size.width), int(self.frame.size.height)}};
+    boo::SWindowRect rect = {int(self.frame.origin.x), int(self.frame.origin.y),
+                             int(self.frame.size.width), int(self.frame.size.height)};
     if (resp->booContext->m_callback)
         resp->booContext->m_callback->resized(rect);
     [super reshape];
@@ -1154,7 +1154,7 @@ static boo::ESpecialKey translateKeycode(short code)
 - (CALayer*)makeBackingLayer
 {
     CAMetalLayer* layer = [CAMetalLayer new];
-    layer.device = m_ctx->m_dev.get();
+    layer.device = m_ctx->m_dev;
     layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
     layer.framebufferOnly = NO;
     return layer;
@@ -1177,8 +1177,8 @@ static boo::ESpecialKey translateKeycode(short code)
 
 - (void)reshapeHandler
 {
-    boo::SWindowRect rect = {{int(self.frame.origin.x), int(self.frame.origin.y)},
-        {int(self.frame.size.width), int(self.frame.size.height)}};
+    boo::SWindowRect rect = {int(self.frame.origin.x), int(self.frame.origin.y),
+                             int(self.frame.size.width), int(self.frame.size.height)};
     boo::MetalContext::Window& w = m_ctx->m_windows[m_window];
     std::unique_lock<std::mutex> lk(w.m_resizeLock);
     if (resp->booContext->m_callback)
@@ -1222,34 +1222,31 @@ class WindowCocoa : public IWindow
     WindowCocoaInternal* m_nsWindow;
     GraphicsContextCocoa* m_gfxCtx;
     EMouseCursor m_cursor = EMouseCursor::None;
+    bool m_closed = false;
 
 public:
 
     WindowCocoa(const std::string& title, NSOpenGLContext* lastGLCtx, MetalContext* metalCtx)
     {
-        dispatch_sync(dispatch_get_main_queue(),
-        ^{
-            m_nsWindow = [[WindowCocoaInternal alloc] initWithBooWindow:this title:title];
+        m_nsWindow = [[WindowCocoaInternal alloc] initWithBooWindow:this title:title];
 #if BOO_HAS_METAL
-            if (metalCtx->m_dev)
-                m_gfxCtx = static_cast<GraphicsContextCocoa*>(_GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI::Metal, this, metalCtx));
-            else
+        if (metalCtx->m_dev)
+            m_gfxCtx = static_cast<GraphicsContextCocoa*>(_GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI::Metal, this, metalCtx));
+        else
 #endif
-                m_gfxCtx = static_cast<GraphicsContextCocoa*>(_GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI::OpenGL3_3, this, lastGLCtx));
-            m_gfxCtx->initializeContext();
-        });
+            m_gfxCtx = static_cast<GraphicsContextCocoa*>(_GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI::OpenGL3_3, this, lastGLCtx));
+        m_gfxCtx->initializeContext();
     }
     
     void _clearWindow()
     {
-        /* Caller consumes reference on its own */
-        (void)(__bridge_retained void*)m_nsWindow;
-        m_nsWindow = nullptr;
+        m_closed = true;
     }
     
     ~WindowCocoa()
     {
-        [m_nsWindow orderOut:nil];
+        if (!m_closed)
+            [m_nsWindow orderOut:nil];
         delete m_gfxCtx;
         APP->_deletedWindow(this);
     }
@@ -1308,6 +1305,9 @@ public:
                 break;
             case EMouseCursor::IBeam:
                 [[NSCursor IBeamCursor] set];
+                break;
+            case EMouseCursor::Crosshairs:
+                [[NSCursor crosshairCursor] set];
                 break;
             default: break;
             }
@@ -1491,7 +1491,12 @@ public:
     
 IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx, MetalContext* metalCtx)
 {
-    return new WindowCocoa(title, lastGLCtx, metalCtx);
+    __block IWindow* window = nullptr;
+    dispatch_sync(dispatch_get_main_queue(),
+    ^{
+        window = new WindowCocoa(title, lastGLCtx, metalCtx);
+    });
+    return window;
 }
     
 }
@@ -1506,6 +1511,7 @@ IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx, 
                                      NSResizableWindowMask
                              backing:NSBackingStoreBuffered
                                defer:YES];
+    self.releasedWhenClosed = NO;
     self.title = [NSString stringWithUTF8String:title.c_str()];
     booWindow = bw;
     return self;

@@ -495,11 +495,7 @@ public:
     }
 
     void present()
-    {
-        XLockDisplay(m_xDisp);
-        glXSwapBuffers(m_xDisp, m_glxWindow);
-        XUnlockDisplay(m_xDisp);
-    }
+    { glXSwapBuffers(m_xDisp, m_glxWindow); }
 
 };
 
@@ -510,7 +506,7 @@ class WindowXlib : public IWindow
     Colormap m_colormapId;
     Window m_windowId;
     XIMStyle m_bestStyle;
-    XIC m_xIC;
+    XIC m_xIC = nullptr;
     GraphicsContextGLX m_gfxCtx;
     uint32_t m_visualId;
 
@@ -525,7 +521,7 @@ class WindowXlib : public IWindow
     double m_vScrollLast = 0.0;
 
     /* Cached window rectangle (to avoid repeated X queries) */
-    int m_wx, m_wy, m_ww, m_wh;
+    boo::SWindowRect m_wrect;
     float m_pixelFactor;
     bool m_inFs = false;
 
@@ -547,6 +543,8 @@ class WindowXlib : public IWindow
             return X_CURSORS.m_vArrow;
         case EMouseCursor::IBeam:
             return X_CURSORS.m_ibeam;
+        case EMouseCursor::Crosshairs:
+            return X_CURSORS.m_crosshairs;
         default: break;
         }
         return X_CURSORS.m_pointer;
@@ -603,26 +601,24 @@ public:
          * Now go create an IC using the style we chose.
          * Also set the window and fontset attributes now.
          */
-        XPoint pt = {0,0};
-        XVaNestedList nlist;
-        m_xIC = XCreateIC(xIM, XNInputStyle, bestInputStyle,
-                          XNClientWindow, m_windowId,
-                          XNFocusWindow, m_windowId,
-                          XNPreeditAttributes, nlist = XVaCreateNestedList(0,
-                                                                           XNSpotLocation, &pt,
-                                                                           XNFontSet, fontset,
-                                                                           nullptr),
-                          nullptr);
-        XFree(nlist);
-        if (m_xIC == nullptr)
+        if (xIM)
         {
-            Log.report(LogVisor::FatalError, "Couldn't create input context.");
-            return;
+            XPoint pt = {0,0};
+            XVaNestedList nlist;
+            m_xIC = XCreateIC(xIM, XNInputStyle, bestInputStyle,
+                              XNClientWindow, m_windowId,
+                              XNFocusWindow, m_windowId,
+                              XNPreeditAttributes, nlist = XVaCreateNestedList(0,
+                                                                               XNSpotLocation, &pt,
+                                                                               XNFontSet, fontset,
+                                                                               nullptr),
+                              nullptr);
+            XFree(nlist);
+            long im_event_mask;
+            XGetICValues(m_xIC, XNFilterEvents, &im_event_mask, nullptr);
+            XSelectInput(display, m_windowId, swa.event_mask | im_event_mask);
+            XSetICFocus(m_xIC);
         }
-        long im_event_mask;
-        XGetICValues(m_xIC, XNFilterEvents, &im_event_mask, nullptr);
-        XSelectInput(display, m_windowId, swa.event_mask | im_event_mask);
-        XSetICFocus(m_xIC);
 
         /* The XInput 2.1 extension enables per-pixel smooth scrolling trackpads */
         XIEventMask mask = {XIAllMasterDevices, XIMaskLen(XI_LASTEVENT)};
@@ -905,20 +901,23 @@ public:
 
     void claimKeyboardFocus(const int coord[2])
     {
-        XLockDisplay(m_xDisp);
-        if (!coord)
+        if (m_xIC)
         {
-            XUnsetICFocus(m_xIC);
+            XLockDisplay(m_xDisp);
+            if (!coord)
+            {
+                XUnsetICFocus(m_xIC);
+                XUnlockDisplay(m_xDisp);
+                return;
+            }
+            getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
+            XPoint pt = {short(coord[0]), short(m_wrect.size[1] - coord[1])};
+            XVaNestedList list = XVaCreateNestedList(0, XNSpotLocation, &pt, nullptr);
+            XSetICValues(m_xIC, XNPreeditAttributes, list, nullptr);
+            XFree(list);
+            XSetICFocus(m_xIC);
             XUnlockDisplay(m_xDisp);
-            return;
         }
-        getWindowFrame(m_wx, m_wy, m_ww, m_wh);
-        XPoint pt = {short(coord[0]), short(m_wh - coord[1])};
-        XVaNestedList list = XVaCreateNestedList(0, XNSpotLocation, &pt, nullptr);
-        XSetICValues(m_xIC, XNPreeditAttributes, list, nullptr);
-        XFree(list);
-        XSetICFocus(m_xIC);
-        XUnlockDisplay(m_xDisp);
     }
 
     bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz)
@@ -1108,39 +1107,40 @@ public:
     SWindowCoord MakeButtonEventCoord(XEvent* event) const
     {
         int x = event->xbutton.x;
-        int y = m_wh-event->xbutton.y;
+        int y = m_wrect.size[1]-event->xbutton.y;
         return
         {
             {x, y},
             {int(x / m_pixelFactor), int(y / m_pixelFactor)},
-            {x / float(m_ww), y / float(m_wh)}
+            {x / float(m_wrect.size[0]), y / float(m_wrect.size[1])}
         };
     }
 
     SWindowCoord MakeMotionEventCoord(XEvent* event) const
     {
         int x = event->xmotion.x;
-        int y = m_wh-event->xmotion.y;
+        int y = m_wrect.size[1]-event->xmotion.y;
         return
         {
             {x, y},
             {int(x / m_pixelFactor), int(y / m_pixelFactor)},
-            {x / float(m_ww), y / float(m_wh)}
+            {x / float(m_wrect.size[0]), y / float(m_wrect.size[1])}
         };
     }
 
     SWindowCoord MakeCrossingEventCoord(XEvent* event) const
     {
         int x = event->xcrossing.x;
-        int y = m_wh-event->xcrossing.y;
+        int y = m_wrect.size[1]-event->xcrossing.y;
         return
         {
             {x, y},
             {int(x / m_pixelFactor), int(y / m_pixelFactor)},
-            {x / float(m_ww), y / float(m_wh)}
+            {x / float(m_wrect.size[0]), y / float(m_wrect.size[1])}
         };
     }
 
+#if 0
     /* This procedure sets the application's size constraints and returns
      * the IM's preferred size for either the Preedit or Status areas,
      * depending on the value of the name argument.  The area argument is
@@ -1167,6 +1167,7 @@ public:
         XSetICValues(m_xIC, name, list, nullptr);
         XFree(list);
     }
+#endif
 
     void _incomingEvent(void* e)
     {
@@ -1194,16 +1195,14 @@ public:
             int x, y;
             XTranslateCoordinates(m_xDisp, m_windowId, DefaultRootWindow(m_xDisp), event->xexpose.x, event->xexpose.y, &x, &y, &nw);
             XGetWindowAttributes(m_xDisp, m_windowId, &wxa);
-            m_wx = x - wxa.x;
-            m_wy = y - wxa.y;
-            m_ww = event->xexpose.width;
-            m_wh = event->xexpose.height;
+            m_wrect.location[0] = x - wxa.x;
+            m_wrect.location[1] = y - wxa.y;
+            m_wrect.size[0] = event->xexpose.width;
+            m_wrect.size[1] = event->xexpose.height;
             if (m_callback)
             {
-                SWindowRect rect =
-                { {m_wx, m_wy}, {m_ww, m_wh} };
                 XUnlockDisplay(m_xDisp);
-                m_callback->resized(rect);
+                m_callback->resized(m_wrect);
                 XLockDisplay(m_xDisp);
             }
             return;
@@ -1215,17 +1214,13 @@ public:
             int x, y;
             XTranslateCoordinates(m_xDisp, m_windowId, DefaultRootWindow(m_xDisp), event->xconfigure.x, event->xconfigure.y, &x, &y, &nw);
             XGetWindowAttributes(m_xDisp, m_windowId, &wxa);
-            m_wx = x - wxa.x;
-            m_wy = y - wxa.y;
-            m_ww = event->xconfigure.width;
-            m_wh = event->xconfigure.height;
+            m_wrect.location[0] = x - wxa.x;
+            m_wrect.location[1] = y - wxa.y;
+            m_wrect.size[0] = event->xconfigure.width;
+            m_wrect.size[1] = event->xconfigure.height;
 
             if (m_callback)
-            {
-                SWindowRect rect =
-                { {m_wx, m_wy}, {m_ww, m_wh} };
-                m_callback->windowMoved(rect);
-            }
+                m_callback->windowMoved(m_wrect);
             return;
         }
         case KeyPress:
@@ -1236,13 +1231,16 @@ public:
                 EModifierKey modifierKey;
                 unsigned int state = event->xkey.state;
                 event->xkey.state &= ~ControlMask;
-                std::string utf8Frag = translateUTF8(&event->xkey, m_xIC);
                 ITextInputCallback* inputCb = m_callback->getTextInputCallback();
-                if (utf8Frag.size())
+                if (m_xIC)
                 {
-                    if (inputCb)
-                        inputCb->insertText(utf8Frag);
-                    return;
+                    std::string utf8Frag = translateUTF8(&event->xkey, m_xIC);
+                    if (utf8Frag.size())
+                    {
+                        if (inputCb)
+                            inputCb->insertText(utf8Frag);
+                        return;
+                    }
                 }
                 char charCode = translateKeysym(&event->xkey, specialKey, modifierKey);
                 EModifierKey modifierMask = translateModifiers(state);
@@ -1283,7 +1281,7 @@ public:
         {
             if (m_callback)
             {
-                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
+                getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
                 EMouseButton button = translateButton(event->xbutton.button);
                 if (button != EMouseButton::None)
                 {
@@ -1318,7 +1316,7 @@ public:
         {
             if (m_callback)
             {
-                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
+                getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
                 EMouseButton button = translateButton(event->xbutton.button);
                 if (button != EMouseButton::None)
                 {
@@ -1345,7 +1343,7 @@ public:
         {
             if (m_callback)
             {
-                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
+                getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
                 m_callback->mouseMove(MakeMotionEventCoord(event));
             }
             return;
@@ -1354,7 +1352,7 @@ public:
         {
             if (m_callback)
             {
-                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
+                getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
                 m_callback->mouseEnter(MakeCrossingEventCoord(event));
             }
             return;
@@ -1363,7 +1361,7 @@ public:
         {
             if (m_callback)
             {
-                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
+                getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
                 m_callback->mouseLeave(MakeCrossingEventCoord(event));
             }
             return;
@@ -1372,7 +1370,7 @@ public:
         {
             if (event->xgeneric.extension == XINPUT_OPCODE)
             {
-                getWindowFrame(m_wx, m_wy, m_ww, m_wh);
+                getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
                 switch (event->xgeneric.evtype)
                 {
                 case XI_Motion:
@@ -1416,12 +1414,12 @@ public:
                     if (m_callback && didScroll)
                     {
                         int event_x = int(ev->event_x) >> 16;
-                        int event_y = m_wh - (int(ev->event_y) >> 16);
+                        int event_y = m_wrect.size[1] - (int(ev->event_y) >> 16);
                         SWindowCoord coord =
                         {
                             {event_x, event_y},
                             {int(event_x / m_pixelFactor), int(event_y / m_pixelFactor)},
-                            {event_x / float(m_ww), event_y / float(m_wh)}
+                            {event_x / float(m_wrect.size[0]), event_y / float(m_wrect.size[1])}
                         };
                         m_callback->scroll(coord, scrollDelta);
                     }

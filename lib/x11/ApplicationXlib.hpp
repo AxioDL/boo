@@ -163,7 +163,7 @@ class ApplicationXlib final : public IApplication
     std::unordered_map<Window, IWindow*> m_windows;
 
     Display* m_xDisp = nullptr;
-    XIM m_xIM;
+    XIM m_xIM = nullptr;
     XFontSet m_fontset;
     XIMStyle m_bestStyle = 0;
     int m_xDefaultScreen = 0;
@@ -260,51 +260,49 @@ public:
         if (XSetLocaleModifiers("") == nullptr)
             Log.report(LogVisor::Warning, "Cannot set locale modifiers.");
 
-        if ((m_xIM = XOpenIM(m_xDisp, nullptr, nullptr, nullptr)) == nullptr)
+        if ((m_xIM = XOpenIM(m_xDisp, nullptr, nullptr, nullptr)))
         {
-            Log.report(LogVisor::FatalError, "Couldn't open input method.");
-            return;
-        }
+            char** missing_charsets;
+            int num_missing_charsets = 0;
+            char* default_string;
+            m_fontset = XCreateFontSet(m_xDisp,
+                                       "-adobe-helvetica-*-r-*-*-*-120-*-*-*-*-*-*,\
+                                        -misc-fixed-*-r-*-*-*-130-*-*-*-*-*-*",
+                                       &missing_charsets, &num_missing_charsets,
+                                       &default_string);
 
-        char** missing_charsets;
-        int num_missing_charsets = 0;
-        char* default_string;
-        m_fontset = XCreateFontSet(m_xDisp,
-                                   "-adobe-helvetica-*-r-*-*-*-120-*-*-*-*-*-*,\
-                                    -misc-fixed-*-r-*-*-*-130-*-*-*-*-*-*",
-                                   &missing_charsets, &num_missing_charsets,
-                                   &default_string);
-
-        /* figure out which styles the IM can support */
-        XIMStyles* im_supported_styles;
-        XIMStyle app_supported_styles;
-        XGetIMValues(m_xIM, XNQueryInputStyle, &im_supported_styles, nullptr);
-        /* set flags for the styles our application can support */
-        app_supported_styles = XIMPreeditNone | XIMPreeditNothing | XIMPreeditPosition;
-        app_supported_styles |= XIMStatusNone | XIMStatusNothing;
-        /*
-         * now look at each of the IM supported styles, and
-         * chose the "best" one that we can support.
-         */
-        for (int i=0 ; i<im_supported_styles->count_styles ; ++i)
-        {
-            XIMStyle style = im_supported_styles->supported_styles[i];
-            if ((style & app_supported_styles) == style) /* if we can handle it */
-                m_bestStyle = ChooseBetterStyle(style, m_bestStyle);
+            /* figure out which styles the IM can support */
+            XIMStyles* im_supported_styles;
+            XIMStyle app_supported_styles;
+            XGetIMValues(m_xIM, XNQueryInputStyle, &im_supported_styles, nullptr);
+            /* set flags for the styles our application can support */
+            app_supported_styles = XIMPreeditNone | XIMPreeditNothing | XIMPreeditPosition;
+            app_supported_styles |= XIMStatusNone | XIMStatusNothing;
+            /*
+             * now look at each of the IM supported styles, and
+             * chose the "best" one that we can support.
+             */
+            for (int i=0 ; i<im_supported_styles->count_styles ; ++i)
+            {
+                XIMStyle style = im_supported_styles->supported_styles[i];
+                if ((style & app_supported_styles) == style) /* if we can handle it */
+                    m_bestStyle = ChooseBetterStyle(style, m_bestStyle);
+            }
+            /* if we couldn't support any of them, print an error and exit */
+            if (m_bestStyle == 0)
+            {
+                Log.report(LogVisor::FatalError, "interaction style not supported.");
+                return;
+            }
+            XFree(im_supported_styles);
         }
-        /* if we couldn't support any of them, print an error and exit */
-        if (m_bestStyle == 0)
-        {
-            Log.report(LogVisor::FatalError, "interaction style not supported.");
-            return;
-        }
-        XFree(im_supported_styles);
 
         m_xDefaultScreen = DefaultScreen(m_xDisp);
         X_CURSORS.m_pointer = XCreateFontCursor(m_xDisp, XC_left_ptr);
         X_CURSORS.m_hArrow = XCreateFontCursor(m_xDisp, XC_sb_h_double_arrow);
         X_CURSORS.m_vArrow = XCreateFontCursor(m_xDisp, XC_sb_v_double_arrow);
         X_CURSORS.m_ibeam = XCreateFontCursor(m_xDisp, XC_xterm);
+        X_CURSORS.m_crosshairs = XCreateFontCursor(m_xDisp, XC_cross);
         X_CURSORS.m_wait = XCreateFontCursor(m_xDisp, XC_watch);
 
         /* The xkb extension requests that the X server does not

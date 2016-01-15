@@ -16,14 +16,16 @@ include_directories(include ${LOG_VISOR_INCLUDE_DIR})
 if(NOT GEKKO AND NOT CAFE)
 list(APPEND PLAT_SRCS
     lib/graphicsdev/GL.cpp
+    lib/graphicsdev/Vulkan.cpp
     lib/graphicsdev/glew.c)
 
 list(APPEND PLAT_HDRS
-    include/boo/graphicsdev/GL.hpp)
+     include/boo/graphicsdev/GL.hpp
+     include/boo/graphicsdev/Vulkan.hpp)
 endif()
 
 if(WIN32)
-  list(APPEND PLAT_SRCS 
+  list(APPEND PLAT_SRCS
        lib/win/ApplicationWin32.cpp
        lib/win/WindowWin32.cpp
        lib/win/Win32Common.hpp
@@ -39,7 +41,7 @@ if(WIN32)
 
   list(APPEND _BOO_SYS_LIBS Winusb opengl32 Setupapi Imm32)
 elseif(APPLE)
-  list(APPEND PLAT_SRCS 
+  list(APPEND PLAT_SRCS
        lib/mac/ApplicationCocoa.mm
        lib/mac/WindowCocoa.mm
        lib/mac/CocoaCommon.hpp
@@ -65,7 +67,7 @@ set_source_files_properties(lib/mac/ApplicationCocoa.mm
   list(APPEND _BOO_SYS_LIBS ${APPKIT_LIBRARY} ${IOKIT_LIBRARY} ${OPENGL_LIBRARY} ${METAL_LIBRARY}
                             ${QUARTZCORE_LIBRARY} ${COREVIDEO_LIBRARY})
 else(NOT GEKKO)
-  list(APPEND PLAT_SRCS 
+  list(APPEND PLAT_SRCS
        lib/x11/XlibCommon.hpp
        lib/x11/ApplicationUnix.cpp
        lib/x11/ApplicationXlib.hpp
@@ -130,11 +132,16 @@ if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "AppleCl
   set_source_files_properties(lib/graphicsdev/glew.c PROPERTIES COMPILE_FLAGS -Os)
 endif()
 
+add_subdirectory(glslang/glslang EXCLUDE_FROM_ALL)
+add_subdirectory(glslang/OGLCompilersDLL EXCLUDE_FROM_ALL)
+add_subdirectory(glslang/SPIRV EXCLUDE_FROM_ALL)
+list(APPEND _BOO_SYS_LIBS glslang OSDependent OGLCompiler SPIRV)
+
 set(BOO_SYS_LIBS ${_BOO_SYS_LIBS} CACHE PATH "Boo System Libraries" FORCE)
 set(BOO_SYS_DEFINES ${_BOO_SYS_DEFINES} CACHE PATH "Boo System Defines" FORCE)
 
 add_definitions(${_BOO_SYS_DEFINES})
-include_directories(include)
+include_directories(include glslang)
 
 add_library(Boo
             lib/inputdev/CafeProPad.cpp include/boo/inputdev/CafeProPad.hpp

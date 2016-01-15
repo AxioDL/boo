@@ -698,6 +698,8 @@ class WindowWin32 : public IWindow
             return WIN32_CURSORS.m_vResize;
         case EMouseCursor::IBeam:
             return WIN32_CURSORS.m_ibeam;
+        case EMouseCursor::Crosshairs:
+            return WIN32_CURSORS.m_crosshairs;
         default: break;
         }
         return WIN32_CURSORS.m_arrow;

@@ -16,7 +16,6 @@ namespace boo {class ApplicationCocoa;}
 {
     boo::ApplicationCocoa* m_app;
     @public
-    NSPanel* aboutPanel;
 }
 - (id)initWithApp:(boo::ApplicationCocoa*)app;
 @end
@@ -69,36 +68,20 @@ public:
         [[NSApplication sharedApplication] setDelegate:m_appDelegate];
         
         /* App menu */
-        NSMenu* appMenu = [[NSMenu alloc] initWithTitle:@"main"];
-        NSMenu* rwkMenu = [[NSMenu alloc] initWithTitle:[NSString stringWithUTF8String:m_friendlyName.c_str()]];
-        [rwkMenu addItemWithTitle:[NSString stringWithFormat:@"About %s", m_friendlyName.c_str()]
-                           action:@selector(aboutApp:)
-                    keyEquivalent:@""];
-        NSMenuItem* fsItem = [rwkMenu addItemWithTitle:@"Toggle Full Screen"
+        NSMenu* rootMenu = [[NSMenu alloc] initWithTitle:@"main"];
+        NSMenu* appMenu = [[NSMenu alloc] initWithTitle:[NSString stringWithUTF8String:m_friendlyName.c_str()]];
+        NSMenuItem* fsItem = [appMenu addItemWithTitle:@"Toggle Full Screen"
                                                 action:@selector(toggleFs:)
                                          keyEquivalent:@"f"];
         [fsItem setKeyEquivalentModifierMask:NSCommandKeyMask];
-        [rwkMenu addItem:[NSMenuItem separatorItem]];
-        NSMenuItem* quit_item = [rwkMenu addItemWithTitle:[NSString stringWithFormat:@"Quit %s", m_friendlyName.c_str()]
-                                                   action:@selector(quitApp:)
-                                            keyEquivalent:@"q"];
-        [quit_item setKeyEquivalentModifierMask:NSCommandKeyMask];
-        [[appMenu addItemWithTitle:[NSString stringWithUTF8String:m_friendlyName.c_str()]
-                            action:nil keyEquivalent:@""] setSubmenu:rwkMenu];
-        [[NSApplication sharedApplication] setMainMenu:appMenu];
-        
-        /* About panel */
-        NSRect aboutCr = NSMakeRect(0, 0, 300, 220);
-        aboutPanel = [[NSPanel alloc] initWithContentRect:aboutCr
-                                                styleMask:NSUtilityWindowMask|NSTitledWindowMask|NSClosableWindowMask
-                                                  backing:NSBackingStoreBuffered defer:YES];
-        [aboutPanel setTitle:[NSString stringWithFormat:@"About %s", m_friendlyName.c_str()]];
-        NSText* aboutText = [[NSText alloc] initWithFrame:aboutCr];
-        [aboutText setEditable:NO];
-        [aboutText setAlignment:NSCenterTextAlignment];
-        [aboutText setString:@"\nBoo Authors\n\nJackoalan\nAntidote\n"];
-        [aboutPanel setContentView:aboutText];
-        m_appDelegate->aboutPanel = aboutPanel;
+        [appMenu addItem:[NSMenuItem separatorItem]];
+        NSMenuItem* quitItem = [appMenu addItemWithTitle:[NSString stringWithFormat:@"Quit %s", m_friendlyName.c_str()]
+                                                  action:@selector(quitApp:)
+                                           keyEquivalent:@"q"];
+        [quitItem setKeyEquivalentModifierMask:NSCommandKeyMask];
+        [[rootMenu addItemWithTitle:[NSString stringWithUTF8String:m_friendlyName.c_str()]
+                            action:nil keyEquivalent:@""] setSubmenu:appMenu];
+        [[NSApplication sharedApplication] setMainMenu:rootMenu];
         
         /* Determine which graphics API to use */
 #if BOO_HAS_METAL
@@ -106,7 +89,7 @@ public:
             if (!arg.compare("--metal"))
             {
                 m_metalCtx.m_dev = MTLCreateSystemDefaultDevice();
-                m_metalCtx.m_q = [m_metalCtx.m_dev.get() newCommandQueue];
+                m_metalCtx.m_q = [m_metalCtx.m_dev newCommandQueue];
                 Log.report(LogVisor::Info, "using Metal renderer");
                 break;
             }
@@ -133,8 +116,10 @@ public:
             m_clientReturn = m_callback.appMain(this);
             
             /* Cleanup here */
+            std::vector<std::unique_ptr<IWindow>> toDelete;
+            toDelete.reserve(m_windows.size());
             for (auto& window : m_windows)
-                delete window.second;
+                toDelete.emplace_back(window.second);
         });
         
         /* Already in Cocoa's event loop; return now */
@@ -244,16 +229,6 @@ int ApplicationRun(IApplication::EPlatformType platform,
 {
     (void)sender;
     return YES;
-}
-- (IBAction)aboutApp:(id)sender
-{
-    (void)sender;
-    NSRect screenFrame = [[aboutPanel screen] frame];
-    CGFloat xPos = NSWidth(screenFrame)/2 - 300/2;
-    CGFloat yPos = NSHeight(screenFrame)/2 - 220/2;
-    NSRect aboutCr = NSMakeRect(xPos, yPos, 300, 220);
-    [aboutPanel setFrame:aboutCr display:NO];
-    [aboutPanel makeKeyAndOrderFront:self];
 }
 - (IBAction)toggleFs:(id)sender
 {

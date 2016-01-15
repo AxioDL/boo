@@ -184,6 +184,7 @@ struct IGraphicsDataFactory
         D3D11,
         D3D12,
         Metal,
+        Vulkan,
         GX,
         GX2
     };
@@ -292,6 +293,7 @@ public:
         return *this;
     }
     ~GraphicsDataToken() {doDestroy();}
+    operator bool() const {return m_factory && m_data;}
 };
 
 }
