@@ -269,6 +269,7 @@ public:
             case WM_MOUSEHOVER:
             case WM_NCMOUSEHOVER:
             case WM_MOUSEWHEEL:
+            case WM_MOUSEHWHEEL:
             case WM_CHAR:
             case WM_UNICHAR:
                 window->_incomingEvent(&HWNDEvent(uMsg, wParam, lParam));
