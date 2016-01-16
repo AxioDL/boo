@@ -37,6 +37,7 @@ static const NSOpenGLPixelFormatAttribute PF_RGBA8_ATTRS[] =
     NSOpenGLPFADoubleBuffer,
     NSOpenGLPFAColorSize, 24,
     NSOpenGLPFAAlphaSize, 8,
+    0, 0
 };
 
 static const NSOpenGLPixelFormatAttribute PF_RGBA8_Z24_ATTRS[] =
@@ -47,6 +48,7 @@ static const NSOpenGLPixelFormatAttribute PF_RGBA8_Z24_ATTRS[] =
     NSOpenGLPFAColorSize, 24,
     NSOpenGLPFAAlphaSize, 8,
     NSOpenGLPFADepthSize, 24,
+    0, 0
 };
 
 static const NSOpenGLPixelFormatAttribute PF_RGBAF32_ATTRS[] =
@@ -57,6 +59,7 @@ static const NSOpenGLPixelFormatAttribute PF_RGBAF32_ATTRS[] =
     NSOpenGLPFAColorFloat,
     NSOpenGLPFAColorSize, 96,
     NSOpenGLPFAAlphaSize, 32,
+    0, 0
 };
 
 static const NSOpenGLPixelFormatAttribute PF_RGBAF32_Z24_ATTRS[] =
@@ -68,6 +71,7 @@ static const NSOpenGLPixelFormatAttribute PF_RGBAF32_Z24_ATTRS[] =
     NSOpenGLPFAColorSize, 96,
     NSOpenGLPFAAlphaSize, 32,
     NSOpenGLPFADepthSize, 24,
+    0, 0
 };
 
 static const NSOpenGLPixelFormatAttribute* PF_TABLE[] =
@@ -1228,14 +1232,17 @@ public:
 
     WindowCocoa(const std::string& title, NSOpenGLContext* lastGLCtx, MetalContext* metalCtx)
     {
-        m_nsWindow = [[WindowCocoaInternal alloc] initWithBooWindow:this title:title];
+        dispatch_sync(dispatch_get_main_queue(),
+        ^{
+            m_nsWindow = [[WindowCocoaInternal alloc] initWithBooWindow:this title:title];
 #if BOO_HAS_METAL
-        if (metalCtx->m_dev)
-            m_gfxCtx = static_cast<GraphicsContextCocoa*>(_GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI::Metal, this, metalCtx));
-        else
+            if (metalCtx->m_dev)
+                m_gfxCtx = static_cast<GraphicsContextCocoa*>(_GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI::Metal, this, metalCtx));
+            else
 #endif
-            m_gfxCtx = static_cast<GraphicsContextCocoa*>(_GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI::OpenGL3_3, this, lastGLCtx));
-        m_gfxCtx->initializeContext();
+                m_gfxCtx = static_cast<GraphicsContextCocoa*>(_GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI::OpenGL3_3, this, lastGLCtx));
+            m_gfxCtx->initializeContext();
+        });
     }
     
     void _clearWindow()
@@ -1491,12 +1498,7 @@ public:
     
 IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx, MetalContext* metalCtx)
 {
-    __block IWindow* window = nullptr;
-    dispatch_sync(dispatch_get_main_queue(),
-    ^{
-        window = new WindowCocoa(title, lastGLCtx, metalCtx);
-    });
-    return window;
+    return new WindowCocoa(title, lastGLCtx, metalCtx);
 }
     
 }
