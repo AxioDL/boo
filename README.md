@@ -1,5 +1,7 @@
 ### libBoo
 
+<img src="http://axiodl.github.io/libBoo/mascot.png" alt="Boo Mascot" style="width:256px; height:256px; margin-left:auto; margin-right:auto;"/>
+
 **libBoo** is a cross-platform windowing and event manager similar to
 SDL and SFML, with additional 3D rendering functionality. 
 
