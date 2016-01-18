@@ -9,7 +9,7 @@
 **libBoo** is a cross-platform windowing and event manager similar to
 SDL and SFML, with additional 3D rendering functionality. 
 
-The exclusive focus of libBoo is 3D rendering using polygon-rasterization
+The exclusive focus of libBoo is 2D/3D rendering using polygon-rasterization
 APIs like OpenGL or Direct3D. It exposes a unified command-queue API for 
 calling the underlying graphics API.
 
