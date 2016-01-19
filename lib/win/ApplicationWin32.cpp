@@ -58,7 +58,7 @@ namespace boo
 {
 static LogVisor::LogModule Log("boo::ApplicationWin32");
 Win32Cursors WIN32_CURSORS;
-    
+
 IWindow* _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx);
 
 class ApplicationWin32 final : public IApplication
@@ -77,9 +77,9 @@ class ApplicationWin32 final : public IApplication
     {
         m_allWindows.erase(HWND(window->getPlatformHandle()));
     }
-    
+
 public:
-    
+
     ApplicationWin32(IApplicationCallback& callback,
                      const SystemString& uniqueName,
                      const SystemString& friendlyName,
@@ -125,7 +125,7 @@ public:
         {
 #if _DEBUG
             {
-                PFN_D3D12_GET_DEBUG_INTERFACE MyD3D12GetDebugInterface = 
+                PFN_D3D12_GET_DEBUG_INTERFACE MyD3D12GetDebugInterface =
                 (PFN_D3D12_GET_DEBUG_INTERFACE)GetProcAddress(d3d12lib, "D3D12GetDebugInterface");
                 ComPtr<ID3D12Debug> debugController;
                 if (SUCCEEDED(MyD3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
@@ -136,10 +136,10 @@ public:
 #endif
             if (!FindBestD3DCompile())
                 Log.report(LogVisor::FatalError, "unable to find D3DCompile_[43-47].dll");
-            
-            D3D12SerializeRootSignaturePROC = 
+
+            D3D12SerializeRootSignaturePROC =
             (PFN_D3D12_SERIALIZE_ROOT_SIGNATURE)GetProcAddress(d3d12lib, "D3D12SerializeRootSignature");
-            
+
             /* Create device */
             PFN_D3D12_CREATE_DEVICE MyD3D12CreateDevice = (PFN_D3D12_CREATE_DEVICE)GetProcAddress(d3d12lib, "D3D12CreateDevice");
             if (!MyD3D12CreateDevice)
@@ -156,11 +156,11 @@ public:
                 Log.report(LogVisor::FatalError, "unable to create DXGI factory");
 
             /* Establish loader objects */
-            if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, 
+            if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
                 __uuidof(ID3D12CommandAllocator), &m_3dCtx.m_ctx12.m_loadqalloc)))
                 Log.report(LogVisor::FatalError, "unable to create loader allocator");
 
-            D3D12_COMMAND_QUEUE_DESC desc = 
+            D3D12_COMMAND_QUEUE_DESC desc =
             {
                 D3D12_COMMAND_LIST_TYPE_DIRECT,
                 D3D12_COMMAND_QUEUE_PRIORITY_NORMAL,
@@ -174,7 +174,7 @@ public:
 
             m_3dCtx.m_ctx12.m_loadfencehandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 
-            if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_3dCtx.m_ctx12.m_loadqalloc.Get(), 
+            if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_3dCtx.m_ctx12.m_loadqalloc.Get(),
                 nullptr, __uuidof(ID3D12GraphicsCommandList), &m_3dCtx.m_ctx12.m_loadlist)))
                 Log.report(LogVisor::FatalError, "unable to create loader list");
 
@@ -197,7 +197,7 @@ public:
             D3D_FEATURE_LEVEL level = D3D_FEATURE_LEVEL_11_0;
             ComPtr<ID3D11Device> tempDev;
             ComPtr<ID3D11DeviceContext> tempCtx;
-            if (FAILED(MyD3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_FLAGS, &level, 
+            if (FAILED(MyD3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_FLAGS, &level,
                                            1, D3D11_SDK_VERSION, &tempDev, nullptr, &tempCtx)))
                 Log.report(LogVisor::FatalError, "unable to create D3D11 device");
             tempDev.As<ID3D11Device1>(&m_3dCtx.m_ctx11.m_dev);
@@ -211,7 +211,11 @@ public:
             adapter->GetParent(__uuidof(IDXGIFactory2), &m_3dCtx.m_ctx11.m_dxFactory);
 
             /* Build default sampler here */
-            m_3dCtx.m_ctx11.m_dev->CreateSamplerState(&CD3D11_SAMPLER_DESC(D3D11_DEFAULT), &m_3dCtx.m_ctx11.m_ss);
+            CD3D11_SAMPLER_DESC sampDesc(D3D11_DEFAULT);
+            sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+            sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+            sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+            m_3dCtx.m_ctx11.m_dev->CreateSamplerState(&sampDesc, &m_3dCtx.m_ctx11.m_ss);
 
             Log.report(LogVisor::Info, "initialized D3D11 renderer");
             return;
@@ -230,12 +234,12 @@ public:
 
         Log.report(LogVisor::FatalError, "system doesn't support OGL, D3D11 or D3D12");
     }
-    
+
     EPlatformType getPlatformType() const
     {
         return EPlatformType::Win32;
     }
-    
+
     LRESULT winHwndHandler(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         /* Lookup boo window instance */
@@ -244,10 +248,10 @@ public:
         {
             case WM_CREATE:
                 return 0;
-                
+
             case WM_DEVICECHANGE:
                 return DeviceFinder::winDevChangedHandler(wParam, lParam);
-                
+
             case WM_CLOSE:
             case WM_SIZE:
             case WM_MOVING:
@@ -278,7 +282,7 @@ public:
                 return DefWindowProc(hwnd, uMsg, wParam, lParam);
         }
     }
-    
+
     int run()
     {
         g_mainThreadId = GetCurrentThreadId();
@@ -290,7 +294,7 @@ public:
             clientReturn = m_callback.appMain(this);
             PostThreadMessage(g_mainThreadId, WM_USER+1, 0, 0);
         });
-        
+
         /* Pump messages */
         MSG msg = {0};
         while (GetMessage(&msg, NULL, 0, 0))
@@ -337,7 +341,7 @@ public:
         clientThread.join();
         return clientReturn;
     }
-    
+
     const SystemString& getUniqueName() const
     {
         return m_uniqueName;
@@ -352,12 +356,12 @@ public:
     {
         return m_pname;
     }
-    
+
     const std::vector<SystemString>& getArgs() const
     {
         return m_args;
     }
-    
+
     std::mutex m_nwmt;
     std::condition_variable m_nwcv;
     IWindow* m_mwret = nullptr;
@@ -371,14 +375,14 @@ public:
             m_nwcv.wait(lk);
             return m_mwret;
         }
-        
+
         IWindow* window = _WindowWin32New(title, m_3dCtx);
         HWND hwnd = HWND(window->getPlatformHandle());
         m_allWindows[hwnd] = window;
         return window;
     }
 };
-    
+
 IApplication* APP = NULL;
 int ApplicationRun(IApplication::EPlatformType platform,
                    IApplicationCallback& cb,

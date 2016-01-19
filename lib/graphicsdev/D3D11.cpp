@@ -121,10 +121,10 @@ class D3D11TextureS : public ITextureS
     friend class D3D11DataFactory;
     size_t m_sz;
     D3D11TextureS(D3D11Context* ctx, size_t width, size_t height, size_t mips,
-        TextureFormat fmt, const void* data, size_t sz)
-        : m_sz(sz)
+                  TextureFormat fmt, const void* data, size_t sz)
+    : m_sz(sz)
     {
-        CD3D11_TEXTURE2D_DESC desc(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, mips, 
+        CD3D11_TEXTURE2D_DESC desc(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, mips,
             D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_IMMUTABLE);
 
         const uint8_t* dataIt = static_cast<const uint8_t*>(data);
@@ -140,8 +140,8 @@ class D3D11TextureS : public ITextureS
         }
 
         ThrowIfFailed(ctx->m_dev->CreateTexture2D(&desc, upData, &m_tex));
-        ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_tex.Get(), 
-            &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_tex.Get(), D3D_SRV_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8G8B8A8_UNORM), &m_srv));
+        ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_tex.Get(),
+            &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_tex.Get(), D3D_SRV_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8G8B8A8_UNORM, 0, mips), &m_srv));
     }
 public:
     ComPtr<ID3D11Texture2D> m_tex;
@@ -245,7 +245,7 @@ class D3D11TextureD : public ITextureD
         for (int i=0 ; i<3 ; ++i)
         {
             ThrowIfFailed(ctx->m_dev->CreateTexture2D(&desc, nullptr, &m_texs[i]));
-            ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_texs[i].Get(), 
+            ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_texs[i].Get(),
                 &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_texs[i].Get(), D3D_SRV_DIMENSION_TEXTURE2D, pixelFmt), &m_srvs[i]));
         }
     }
@@ -270,34 +270,34 @@ class D3D11TextureR : public ITextureR
 
     void Setup(D3D11Context* ctx, size_t width, size_t height, size_t samples)
     {
-        ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 
+        ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R8G8B8A8_UNORM, width, height,
             1, 1, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, 1), nullptr, &m_tex));
-        ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_D24_UNORM_S8_UINT, width, height, 
+        ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_D24_UNORM_S8_UINT, width, height,
             1, 1, D3D11_BIND_DEPTH_STENCIL, D3D11_USAGE_DEFAULT, 0, samples), nullptr, &m_depthTex));
 
         if (samples > 1)
         {
-            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 
+            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R8G8B8A8_UNORM, width, height,
                 1, 1, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, samples), nullptr, &m_msaaTex));
-            ThrowIfFailed(ctx->m_dev->CreateRenderTargetView(m_msaaTex.Get(), 
+            ThrowIfFailed(ctx->m_dev->CreateRenderTargetView(m_msaaTex.Get(),
                 &CD3D11_RENDER_TARGET_VIEW_DESC(m_msaaTex.Get(), D3D11_RTV_DIMENSION_TEXTURE2DMS), &m_rtv));
-            ThrowIfFailed(ctx->m_dev->CreateDepthStencilView(m_depthTex.Get(), 
+            ThrowIfFailed(ctx->m_dev->CreateDepthStencilView(m_depthTex.Get(),
                 &CD3D11_DEPTH_STENCIL_VIEW_DESC(m_depthTex.Get(), D3D11_DSV_DIMENSION_TEXTURE2DMS), &m_dsv));
         }
         else
         {
-            ThrowIfFailed(ctx->m_dev->CreateRenderTargetView(m_tex.Get(), 
+            ThrowIfFailed(ctx->m_dev->CreateRenderTargetView(m_tex.Get(),
                 &CD3D11_RENDER_TARGET_VIEW_DESC(m_tex.Get(), D3D11_RTV_DIMENSION_TEXTURE2D), &m_rtv));
-            ThrowIfFailed(ctx->m_dev->CreateDepthStencilView(m_depthTex.Get(), 
+            ThrowIfFailed(ctx->m_dev->CreateDepthStencilView(m_depthTex.Get(),
                 &CD3D11_DEPTH_STENCIL_VIEW_DESC(m_depthTex.Get(), D3D11_DSV_DIMENSION_TEXTURE2D), &m_dsv));
         }
 
-        ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_tex.Get(), 
+        ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_tex.Get(),
             &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_tex.Get(), D3D11_SRV_DIMENSION_TEXTURE2D), &m_srv));
     }
 
     D3D11TextureR(D3D11Context* ctx, size_t width, size_t height, size_t samples)
-        : m_width(width), m_height(height), m_samples(samples) 
+        : m_width(width), m_height(height), m_samples(samples)
     {
         if (samples == 0) m_samples = 1;
         Setup(ctx, width, height, samples);
@@ -433,8 +433,8 @@ class D3D11ShaderPipeline : public IShaderPipeline
         ThrowIfFailed(ctx->m_dev->CreateVertexShader(vert->GetBufferPointer(), vert->GetBufferSize(), nullptr, &m_vShader));
         ThrowIfFailed(ctx->m_dev->CreatePixelShader(pixel->GetBufferPointer(), pixel->GetBufferSize(), nullptr, &m_pShader));
 
-        CD3D11_RASTERIZER_DESC rasDesc(D3D11_FILL_SOLID, backfaceCulling ? D3D11_CULL_BACK : D3D11_CULL_NONE, true, 
-            D3D11_DEFAULT_DEPTH_BIAS, D3D11_DEFAULT_DEPTH_BIAS_CLAMP, D3D11_DEFAULT_SLOPE_SCALED_DEPTH_BIAS, 
+        CD3D11_RASTERIZER_DESC rasDesc(D3D11_FILL_SOLID, backfaceCulling ? D3D11_CULL_BACK : D3D11_CULL_NONE, true,
+            D3D11_DEFAULT_DEPTH_BIAS, D3D11_DEFAULT_DEPTH_BIAS_CLAMP, D3D11_DEFAULT_SLOPE_SCALED_DEPTH_BIAS,
             true, true, false, false);
         ThrowIfFailed(ctx->m_dev->CreateRasterizerState(&rasDesc, &m_rasState));
 
@@ -450,7 +450,7 @@ class D3D11ShaderPipeline : public IShaderPipeline
         blDesc.RenderTarget[0].DestBlend = BLEND_FACTOR_TABLE[int(dstFac)];
         ThrowIfFailed(ctx->m_dev->CreateBlendState(&blDesc, &m_blState));
 
-        ThrowIfFailed(ctx->m_dev->CreateInputLayout(vtxFmt->m_elements.get(), vtxFmt->m_elementCount, 
+        ThrowIfFailed(ctx->m_dev->CreateInputLayout(vtxFmt->m_elements.get(), vtxFmt->m_elementCount,
             vert->GetBufferPointer(), vert->GetBufferSize(), &m_inLayout));
     }
 public:
@@ -729,7 +729,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
                     ID3D11Texture2D* src = csource->m_tex.Get();
                     self->m_ctx->m_devCtx->CopyResource(dest.Get(), src);
                 }
-                
+
                 self->m_windowCtx->m_swapChain->Present(1, 0);
             }
         }
@@ -1153,7 +1153,7 @@ public:
 thread_local D3D11Data* D3D11DataFactory::m_deferredData;
 
 void D3D11CommandQueue::execute()
-{   
+{
     /* Stage dynamic uploads */
     D3D11DataFactory* gfxF = static_cast<D3D11DataFactory*>(m_parent->getDataFactory());
     gfxF->procDeletes();
