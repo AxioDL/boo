@@ -60,6 +60,13 @@ static const int ContextAttribs[] =
     0
 };
 
+extern "C" const uint8_t MAINICON_NETWM[];
+extern "C" const size_t MAINICON_NETWM_SZ;
+
+/* No icon by default */
+const uint8_t MAINICON_NETWM[] __attribute__ ((weak)) = {};
+const size_t MAINICON_NETWM_SZ __attribute__ ((weak)) = 0;
+
 namespace boo
 {
 static LogVisor::LogModule Log("boo::WindowXCB");
@@ -166,6 +173,9 @@ struct XlibAtoms
 {
     Atom m_wmProtocols = 0;
     Atom m_wmDeleteWindow = 0;
+    Atom m_netSupported = 0;
+    Atom m_netwmIcon = 0;
+    Atom m_netwmIconName = 0;
     Atom m_netwmState = 0;
     Atom m_netwmStateFullscreen = 0;
     Atom m_netwmStateAdd = 0;
@@ -180,6 +190,9 @@ struct XlibAtoms
     {
         m_wmProtocols = XInternAtom(disp, "WM_PROTOCOLS", True);
         m_wmDeleteWindow = XInternAtom(disp, "WM_DELETE_WINDOW", True);
+        m_netSupported = XInternAtom(disp, "_NET_SUPPORTED", True);
+        m_netwmIcon = XInternAtom(disp, "_NET_WM_ICON", False);
+        m_netwmIconName = XInternAtom(disp, "_NET_WM_ICON_NAME", False);
         m_netwmState = XInternAtom(disp, "_NET_WM_STATE", False);
         m_netwmStateFullscreen = XInternAtom(disp, "_NET_WM_STATE_FULLSCREEN", False);
         m_netwmStateAdd = XInternAtom(disp, "_NET_WM_STATE_ADD", False);
@@ -641,6 +654,13 @@ public:
 
         /* Set the title of the window icon */
         XChangeProperty(m_xDisp, m_windowId, XA_WM_ICON_NAME, XA_STRING, 8, PropModeReplace, c_title, title.length());
+
+        /* Add window icon */
+        if (MAINICON_NETWM_SZ && S_ATOMS->m_netwmIcon)
+        {
+            XChangeProperty(display, m_windowId, S_ATOMS->m_netwmIcon, XA_CARDINAL,
+                            32, PropModeReplace, MAINICON_NETWM, MAINICON_NETWM_SZ / sizeof(unsigned long));
+        }
 
         /* Initialize context */
         XMapWindow(m_xDisp, m_windowId);
