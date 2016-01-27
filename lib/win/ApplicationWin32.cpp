@@ -2,6 +2,7 @@
 #include <shellapi.h>
 #include <initguid.h>
 #include <Usbiodef.h>
+#include <winver.h>
 
 #if _DEBUG
 #define D3D11_CREATE_DEVICE_FLAGS D3D11_CREATE_DEVICE_DEBUG
@@ -412,6 +413,7 @@ int ApplicationRun(IApplication::EPlatformType platform,
         0,
         L"BooWindow"
     };
+    wndClass.hIcon = LoadIconW(wndClass.hInstance, MAKEINTRESOURCEW(101));
 
     RegisterClassW(&wndClass);
 
