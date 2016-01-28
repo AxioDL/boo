@@ -32,7 +32,8 @@ if(WIN32)
        lib/inputdev/HIDListenerWinUSB.cpp
        lib/inputdev/HIDDeviceWinUSB.cpp
        lib/graphicsdev/D3D11.cpp
-       lib/graphicsdev/D3D12.cpp)
+       lib/graphicsdev/D3D12.cpp
+       lib/audiodev/XAudio2.cpp)
 
   list(APPEND PLAT_HDRS
         include/boo/graphicsdev/D3D.hpp)
@@ -47,11 +48,12 @@ elseif(APPLE)
        lib/mac/CocoaCommon.hpp
        lib/inputdev/HIDListenerIOKit.cpp
        lib/inputdev/HIDDeviceIOKit.cpp
-       lib/graphicsdev/Metal.mm)
-set_source_files_properties(lib/mac/ApplicationCocoa.mm
-                            lib/mac/WindowCocoa.mm
-                            lib/graphicsdev/Metal.mm
-                            PROPERTIES COMPILE_FLAGS -fobjc-arc)
+       lib/graphicsdev/Metal.mm
+       lib/audiodev/AQS.cpp)
+  set_source_files_properties(lib/mac/ApplicationCocoa.mm
+                              lib/mac/WindowCocoa.mm
+                              lib/graphicsdev/Metal.mm
+                              PROPERTIES COMPILE_FLAGS -fobjc-arc)
 
   list(APPEND PLAT_HDRS
        include/boo/graphicsdev/Metal.hpp)
@@ -78,7 +80,8 @@ else(NOT GEKKO)
        lib/inputdev/HIDDeviceUdev.cpp
        lib/graphicsdev/GL.cpp
        lib/graphicsdev/GLX.cpp
-       lib/graphicsdev/glew.c)
+       lib/graphicsdev/glew.c
+       lib/audiodev/ALSA.cpp)
 
 #    list(APPEND PLAT_HDRS )
 
@@ -156,6 +159,8 @@ add_library(Boo
             include/boo/IGraphicsContext.hpp
             include/boo/graphicsdev/IGraphicsDataFactory.hpp
             include/boo/graphicsdev/IGraphicsCommandQueue.hpp
+            include/boo/audiodev/IAudioVoice.hpp
+            include/boo/audiodev/IAudioVoiceAllocator.hpp
             include/boo/IWindow.hpp
             include/boo/IApplication.hpp
             include/boo/System.hpp
