@@ -94,13 +94,6 @@ public:
       m_args(args),
       m_singleInstance(singleInstance)
     {
-        WIN32_CURSORS.m_arrow = LoadCursor(nullptr, IDC_ARROW);
-        WIN32_CURSORS.m_hResize = LoadCursor(nullptr, IDC_SIZEWE);
-        WIN32_CURSORS.m_vResize = LoadCursor(nullptr, IDC_SIZENS);
-        WIN32_CURSORS.m_ibeam = LoadCursor(nullptr, IDC_IBEAM);
-        WIN32_CURSORS.m_crosshairs = LoadCursor(nullptr, IDC_CROSS);
-        WIN32_CURSORS.m_wait = LoadCursor(nullptr, IDC_WAIT);
-
         HMODULE dxgilib = LoadLibraryW(L"dxgi.dll");
         if (!dxgilib)
             Log.report(LogVisor::FatalError, "unable to load dxgi.dll");
@@ -399,6 +392,13 @@ int ApplicationRun(IApplication::EPlatformType platform,
         platform != IApplication::EPlatformType::Auto)
         return 1;
 
+    WIN32_CURSORS.m_arrow = LoadCursor(nullptr, IDC_ARROW);
+    WIN32_CURSORS.m_hResize = LoadCursor(nullptr, IDC_SIZEWE);
+    WIN32_CURSORS.m_vResize = LoadCursor(nullptr, IDC_SIZENS);
+    WIN32_CURSORS.m_ibeam = LoadCursor(nullptr, IDC_IBEAM);
+    WIN32_CURSORS.m_crosshairs = LoadCursor(nullptr, IDC_CROSS);
+    WIN32_CURSORS.m_wait = LoadCursor(nullptr, IDC_WAIT);
+
     /* One class for *all* boo windows */
     WNDCLASS wndClass =
     {
@@ -414,7 +414,7 @@ int ApplicationRun(IApplication::EPlatformType platform,
         L"BooWindow"
     };
     wndClass.hIcon = LoadIconW(wndClass.hInstance, MAKEINTRESOURCEW(101));
-
+    wndClass.hCursor = WIN32_CURSORS.m_arrow;
     RegisterClassW(&wndClass);
 
     APP = new ApplicationWin32(cb, uniqueName, friendlyName, pname, args, singleInstance);
