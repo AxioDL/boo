@@ -24,7 +24,8 @@ enum class AudioChannel
     FrontCenter,
     LFE,
     SideLeft,
-    SideRight
+    SideRight,
+    Unknown = 0xff
 };
 
 struct ChannelMap
@@ -57,6 +58,12 @@ struct IAudioVoice
     /** Called by client in response to IAudioVoiceCallback::needsNextBuffer()
      *  Supplying channel-interleaved sample data */
     virtual void bufferSampleData(const int16_t* data, size_t frames)=0;
+
+    /** Instructs platform to begin consuming sample data; invoking callback as needed */
+    virtual void start()=0;
+
+    /** Instructs platform to stop consuming sample data */
+    virtual void stop()=0;
 };
 
 }

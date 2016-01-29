@@ -1,6 +1,7 @@
 #include "boo/audiodev/IAudioVoiceAllocator.hpp"
-#include <alsa/asoundlib.h>
 #include <LogVisor/LogVisor.hpp>
+
+#include <alsa/asoundlib.h>
 
 namespace boo
 {
@@ -129,6 +130,9 @@ struct ALSAAudioVoice : IAudioVoice
 
         snd_async_add_pcm_handler(&m_handler, m_pcm, snd_async_callback_t(Callback), this);
         snd_pcm_get_params(m_pcm, &m_bufSize, &m_periodSize);
+
+        for (int i=0 ; i<3 ; ++i)
+            m_cb->needsNextBuffer(this, m_periodSize);
     }
 
     ~ALSAAudioVoice()
@@ -143,6 +147,18 @@ struct ALSAAudioVoice : IAudioVoice
     {
         if (m_pcm)
             snd_pcm_writei(m_pcm, data, frames);
+    }
+
+    void start()
+    {
+        if (m_pcm)
+            snd_pcm_start(m_pcm);
+    }
+
+    void stop()
+    {
+        if (m_pcm)
+            snd_pcm_drain(m_pcm);
     }
 };
 

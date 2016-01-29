@@ -66,8 +66,9 @@ elseif(APPLE)
   endif()
   find_library(QUARTZCORE_LIBRARY QuartzCore)
   find_library(COREVIDEO_LIBRARY CoreVideo)
+  find_library(AUDIOTOOLBOX_LIBRARY AudioToolbox)
   list(APPEND _BOO_SYS_LIBS ${APPKIT_LIBRARY} ${IOKIT_LIBRARY} ${OPENGL_LIBRARY} ${METAL_LIBRARY}
-                            ${QUARTZCORE_LIBRARY} ${COREVIDEO_LIBRARY})
+                            ${QUARTZCORE_LIBRARY} ${COREVIDEO_LIBRARY} ${AUDIOTOOLBOX_LIBRARY})
 else(NOT GEKKO)
   list(APPEND PLAT_SRCS
        lib/x11/XlibCommon.hpp

@@ -18,7 +18,10 @@ struct IAudioVoiceAllocator
 {
     /** Client calls this to request allocation of new mixer-voice.
      *  Returns empty unique_ptr if necessary resources aren't available.
-     *  ChannelLayout automatically reduces to maximum-supported layout by HW. */
+     *  ChannelLayout automatically reduces to maximum-supported layout by HW.
+     *
+     *  Client must be prepared to supply audio frames via the callback when this is called;
+     *  the backing audio-buffers are primed with initial data for low-latency playback start */
     virtual std::unique_ptr<IAudioVoice> allocateNewVoice(AudioChannelSet layoutOut,
                                                           unsigned sampleRate,
                                                           IAudioVoiceCallback* cb)=0;

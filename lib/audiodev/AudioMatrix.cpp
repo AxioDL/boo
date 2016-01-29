@@ -29,7 +29,13 @@ void AudioMatrixMono::bufferMonoSampleData(IAudioVoice& voice, const int16_t* da
     m_interleaveBuf.reserve(samples * chmap.m_channelCount);
     for (size_t s=0 ; s<samples ; ++s, ++data)
         for (int c=0 ; c<chmap.m_channelCount ; ++c)
-            m_interleaveBuf.push_back(data[0] * m_coefs[chmap.m_channels[c]]);
+        {
+            AudioChannel ch = chmap.m_channels[c];
+            if (ch == AudioChannel::Unknown)
+                m_interleaveBuf.push_back(0);
+            else
+                m_interleaveBuf.push_back(data[0] * m_coefs[ch]);
+        }
     voice.bufferSampleData(m_interleaveBuf.data(), samples);
 }
 
@@ -64,8 +70,14 @@ void AudioMatrixStereo::bufferStereoSampleData(IAudioVoice& voice, const int16_t
     m_interleaveBuf.reserve(frames * chmap.m_channelCount);
     for (size_t f=0 ; f<frames ; ++f, data += 2)
         for (int c=0 ; c<chmap.m_channelCount ; ++c)
-            m_interleaveBuf.push_back(data[0] * m_coefs[chmap.m_channels[c][0]] +
-                                      data[1] * m_coefs[chmap.m_channels[c][1]]);
+        {
+            AudioChannel ch = chmap.m_channels[c];
+            if (ch == AudioChannel::Unknown)
+                m_interleaveBuf.push_back(0);
+            else
+                m_interleaveBuf.push_back(data[0] * m_coefs[ch][0] +
+                                          data[1] * m_coefs[ch][1]);
+        }
     voice.bufferSampleData(m_interleaveBuf.data(), frames);
 }
 
