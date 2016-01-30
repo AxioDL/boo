@@ -31,7 +31,7 @@ static AudioChannel AQSChannelToBooChannel(AudioChannelLabel ch)
     return AudioChannel::Unknown;
 }
 
-struct AQSAudioVoice : IAudioVoice
+struct XA2AudioVoice : IAudioVoice
 {
     ChannelMap m_map;
     IAudioVoiceCallback* m_cb;
@@ -46,13 +46,13 @@ struct AQSAudioVoice : IAudioVoice
     unsigned m_primeBuf;
     static void Callback(void* inUserData, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer)
     {
-        AQSAudioVoice* voice = static_cast<AQSAudioVoice*>(inUserData);
+        XA2AudioVoice* voice = static_cast<XA2AudioVoice*>(inUserData);
         voice->m_callbackBuf = inBuffer;
         voice->m_cb->needsNextBuffer(voice, voice->m_bufferFrames);
         voice->m_callbackBuf = nullptr;
     }
 
-    AQSAudioVoice(AudioChannelSet set, unsigned sampleRate, IAudioVoiceCallback* cb)
+    XA2AudioVoice(AudioChannelSet set, unsigned sampleRate, IAudioVoiceCallback* cb)
     : m_cb(cb)
     {
         unsigned chCount = ChannelCount(set);
@@ -171,7 +171,7 @@ struct AQSAudioVoice : IAudioVoice
         AudioQueuePrime(m_queue, 0, nullptr);
     }
 
-    ~AQSAudioVoice()
+    ~XA2AudioVoice()
     {
         AudioQueueDispose(m_queue, false);
     }
@@ -204,13 +204,13 @@ struct AQSAudioVoice : IAudioVoice
     }
 };
 
-struct ALSAAudioVoiceAllocator : IAudioVoiceAllocator
+struct XA2AudioVoiceAllocator : IAudioVoiceAllocator
 {
     std::unique_ptr<IAudioVoice> allocateNewVoice(AudioChannelSet layoutOut,
                                                   unsigned sampleRate,
                                                   IAudioVoiceCallback* cb)
     {
-        AQSAudioVoice* newVoice = new AQSAudioVoice(layoutOut, sampleRate, cb);
+        XA2AudioVoice* newVoice = new XA2AudioVoice(layoutOut, sampleRate, cb);
         std::unique_ptr<IAudioVoice> ret(newVoice);
         if (!newVoice->m_queue)
             return {};
