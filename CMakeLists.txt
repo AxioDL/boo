@@ -77,13 +77,10 @@ else(NOT GEKKO)
        lib/x11/ApplicationWayland.hpp
        lib/x11/WindowXlib.cpp
        lib/x11/WindowWayland.cpp
-       lib/inputdev/HIDListenerUdev.cpp
-       lib/inputdev/HIDDeviceUdev.cpp
        lib/graphicsdev/GL.cpp
        lib/graphicsdev/GLX.cpp
        lib/graphicsdev/glew.c
        lib/audiodev/ALSA.cpp)
-
 #    list(APPEND PLAT_HDRS )
 
   find_package(PkgConfig)
@@ -109,6 +106,7 @@ else(NOT GEKKO)
     PATHS
     # TODO use CMAKE_SYSTEM_PROCESSOR or similar?
     /usr/lib/dbus-1.0/include
+    /usr/local/lib/dbus-1.0/include
     PATH_SUFFIXES
     dbus-1.0/include/)
 
@@ -127,7 +125,18 @@ else(NOT GEKKO)
   endif()
 
   include_directories(${DBUS_INCLUDE_DIR} ${DBUS_ARCH_INCLUDE_DIR})
-  list(APPEND _BOO_SYS_LIBS X11 Xi GL ${DBUS_LIBRARY} udev pthread)
+  list(APPEND _BOO_SYS_LIBS X11 Xi GL ${DBUS_LIBRARY} pthread)
+
+  if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
+      list(APPEND PLAT_SRCS
+          lib/inputdev/HIDListenerUdev.cpp
+          lib/inputdev/HIDDeviceUdev.cpp)
+      list(APPEND _BOO_SYS_LIBS udev)
+  else()
+      list(APPEND PLAT_SRCS
+          lib/inputdev/HIDListenerBSD.cpp
+          lib/inputdev/HIDDeviceBSD.cpp)
+  endif()
 
 endif()
 
