@@ -9,12 +9,14 @@
 #include <X11/extensions/XInput2.h>
 #include <GL/glx.h>
 #include <GL/glxext.h>
+#include <locale>
 
 #include <dbus/dbus.h>
 DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
 
 #include <LogVisor/LogVisor.hpp>
 
+#include <signal.h>
 #include <sys/param.h>
 #include <thread>
 #include <mutex>
