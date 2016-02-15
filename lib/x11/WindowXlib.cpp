@@ -50,14 +50,48 @@ typedef GLXContext (*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXC
 static glXCreateContextAttribsARBProc glXCreateContextAttribsARB = 0;
 typedef int (*glXWaitVideoSyncSGIProc)(int divisor, int remainder, unsigned int* count);
 static glXWaitVideoSyncSGIProc glXWaitVideoSyncSGI = 0;
-static const int ContextAttribs[] =
+static bool s_glxError;
+static int ctxErrorHandler(Display *dpy, XErrorEvent *ev)
 {
-    GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
+    s_glxError = true;
+    return 0;
+}
+
+static const std::vector<std::vector<int>> ContextAttribList =
+{
+{   GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
+    GLX_CONTEXT_MINOR_VERSION_ARB, 5,
+    GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
+    0
+},
+{   GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
+    GLX_CONTEXT_MINOR_VERSION_ARB, 4,
+    GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
+},
+{   GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
     GLX_CONTEXT_MINOR_VERSION_ARB, 3,
     GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
-    //GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_DEBUG_BIT_ARB,
-    //GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
+},
+{   GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
+    GLX_CONTEXT_MINOR_VERSION_ARB, 2,
+    GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
     0
+},
+{   GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
+    GLX_CONTEXT_MINOR_VERSION_ARB, 1,
+    GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
+    0
+},
+{   GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
+    GLX_CONTEXT_MINOR_VERSION_ARB, 0,
+    GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
+    0
+},
+{   GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
+    GLX_CONTEXT_MINOR_VERSION_ARB, 3,
+    GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
+    0
+},
 };
 
 extern "C" const uint8_t MAINICON_NETWM[];
@@ -393,7 +427,15 @@ public:
                 Log.report(LogVisor::FatalError, "unable to resolve glXWaitVideoSyncSGI");
         }
 
-        m_glxCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_lastCtx, True, ContextAttribs);
+        s_glxError = false;
+        XErrorHandler oldHandler = XSetErrorHandler(&ctxErrorHandler);
+        for (const std::vector<int>& attribs : ContextAttribList)
+        {
+            m_glxCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_lastCtx, True, attribs.data());
+            if (m_glxCtx)
+                break;
+        }
+        XSetErrorHandler(oldHandler);
         if (!m_glxCtx)
             Log.report(LogVisor::FatalError, "unable to make new GLX context");
         m_glxWindow = glXCreateWindow(m_xDisp, m_fbconfig, m_parentWindow->getPlatformHandle(), nullptr);
@@ -482,7 +524,15 @@ public:
         XLockDisplay(m_xDisp);
         if (!m_mainCtx)
         {
-            m_mainCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribs);
+            s_glxError = false;
+            XErrorHandler oldHandler = XSetErrorHandler(&ctxErrorHandler);
+            for (const std::vector<int>& attribs : ContextAttribList)
+            {
+                m_mainCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, attribs.data());
+                if (m_mainCtx)
+                    break;
+            }
+            XSetErrorHandler(oldHandler);
             if (!m_mainCtx)
                 Log.report(LogVisor::FatalError, "unable to make main GLX context");
         }
@@ -497,7 +547,15 @@ public:
         XLockDisplay(m_xDisp);
         if (!m_loadCtx)
         {
-            m_loadCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribs);
+            s_glxError = false;
+            XErrorHandler oldHandler = XSetErrorHandler(&ctxErrorHandler);
+            for (const std::vector<int>& attribs : ContextAttribList)
+            {
+                m_loadCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, attribs.data());
+                if (m_loadCtx)
+                    break;
+            }
+            XSetErrorHandler(oldHandler);
             if (!m_loadCtx)
                 Log.report(LogVisor::FatalError, "unable to make load GLX context");
         }
