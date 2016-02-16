@@ -34,8 +34,9 @@ public:
 
     ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                                 const void* data, size_t sz);
-    ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                std::unique_ptr<uint8_t[]>&& data, size_t sz);
+    GraphicsDataToken
+    newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                              const void* data, size_t sz, ITextureS** texOut);
     ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
                                       const void* data, size_t sz);
     ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);

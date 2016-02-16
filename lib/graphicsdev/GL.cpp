@@ -133,6 +133,7 @@ class GLTextureS : public ITextureS
 
         GLenum intFormat, format;
         int pxPitch;
+        bool compressed = false;
         switch (fmt)
         {
         case TextureFormat::RGBA8:
@@ -145,16 +146,34 @@ class GLTextureS : public ITextureS
             format = GL_RED;
             pxPitch = 1;
             break;
+        case TextureFormat::DXT1:
+            intFormat = GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
+            compressed = true;
+            break;
         default:
             Log.report(LogVisor::FatalError, "unsupported tex format");
         }
 
-        for (size_t i=0 ; i<mips ; ++i)
+        if (compressed)
         {
-            glTexImage2D(GL_TEXTURE_2D, i, intFormat, width, height, 0, format, GL_UNSIGNED_BYTE, dataIt);
-            dataIt += width * height * pxPitch;
-            width /= 2;
-            height /= 2;
+            for (size_t i=0 ; i<mips ; ++i)
+            {
+                size_t dataSz = width * height / 2;
+                glCompressedTexImage2D(GL_TEXTURE_2D, i, intFormat, width, height, 0, dataSz, dataIt);
+                dataIt += dataSz;
+                width /= 2;
+                height /= 2;
+            }
+        }
+        else
+        {
+            for (size_t i=0 ; i<mips ; ++i)
+            {
+                glTexImage2D(GL_TEXTURE_2D, i, intFormat, width, height, 0, format, GL_UNSIGNED_BYTE, dataIt);
+                dataIt += width * height * pxPitch;
+                width /= 2;
+                height /= 2;
+            }
         }
     }
 public:
@@ -270,16 +289,23 @@ GLDataFactory::newStaticTexture(size_t width, size_t height, size_t mips, Textur
     return retval;
 }
 
-ITextureS*
-GLDataFactory::newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                std::unique_ptr<uint8_t[]>&& data, size_t sz)
+GraphicsDataToken
+GLDataFactory::newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                                         const void* data, size_t sz, ITextureS** texOut)
 {
-    std::unique_ptr<uint8_t[]> d = std::move(data);
-    GLTextureS* retval = new GLTextureS(width, height, mips, fmt, d.get(), sz);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct GLData());
-    m_deferredData->m_STexs.emplace_back(retval);
-    return retval;
+    GLTextureS* retval = new GLTextureS(width, height, mips, fmt, data, sz);
+    GLData* tokData = new struct GLData();
+    tokData->m_STexs.emplace_back(retval);
+    *texOut = retval;
+
+    std::unique_lock<std::mutex> lk(m_committedMutex);
+    m_committedData.insert(tokData);
+    lk.unlock();
+    /* Let's go ahead and flush to ensure our data gets to the GPU
+       While this isn't strictly required, some drivers might behave
+       differently */
+    glFlush();
+    return GraphicsDataToken(this, tokData);
 }
 
 ITextureSA*
@@ -471,7 +497,7 @@ IShaderPipeline* GLDataFactory::newShaderPipeline
         {
             GLint uniLoc = glGetUniformBlockIndex(shader.m_prog, uniformBlockNames[i]);
             if (uniLoc < 0)
-                Log.report(LogVisor::FatalError, "unable to find uniform block '%s'", uniformBlockNames[i]);
+                Log.report(LogVisor::Error, "unable to find uniform block '%s'", uniformBlockNames[i]);
             shader.m_uniLocs.push_back(uniLoc);
         }
     }
@@ -480,11 +506,14 @@ IShaderPipeline* GLDataFactory::newShaderPipeline
     {
         GLint texLoc = glGetUniformLocation(shader.m_prog, texArrayName);
         if (texLoc < 0)
-            Log.report(LogVisor::FatalError, "unable to find sampler variable '%s'", texArrayName);
-        if (texCount > m_texUnis.size())
-            for (size_t i=m_texUnis.size() ; i<texCount ; ++i)
-                m_texUnis.push_back(i);
-        glUniform1iv(texLoc, m_texUnis.size(), m_texUnis.data());
+            Log.report(LogVisor::Error, "unable to find sampler variable '%s'", texArrayName);
+        else
+        {
+            if (texCount > m_texUnis.size())
+                for (size_t i=m_texUnis.size() ; i<texCount ; ++i)
+                    m_texUnis.push_back(i);
+            glUniform1iv(texLoc, m_texUnis.size(), m_texUnis.data());
+        }
     }
 
     GLShaderPipeline* retval = new GLShaderPipeline(std::move(shader));
@@ -611,6 +640,7 @@ GraphicsDataToken GLDataFactory::commit()
 #endif
     m_deferredData.reset();
     m_committedData.insert(retval);
+    lk.unlock();
     /* Let's go ahead and flush to ensure our data gets to the GPU
        While this isn't strictly required, some drivers might behave
        differently */
