@@ -18,7 +18,7 @@
 namespace boo
 {
 struct MetalContext;
-    
+
 class MetalDataFactory : public IGraphicsDataFactory
 {
     friend struct MetalCommandQueue;
@@ -27,44 +27,45 @@ class MetalDataFactory : public IGraphicsDataFactory
     std::unordered_set<struct MetalData*> m_committedData;
     std::mutex m_committedMutex;
     struct MetalContext* m_ctx;
-    
+
     void destroyData(IGraphicsData*);
     void destroyAllData();
 public:
     MetalDataFactory(IGraphicsContext* parent, MetalContext* ctx);
     ~MetalDataFactory() {}
-    
+
     Platform platform() const {return Platform::Metal;}
     const char* platformName() const {return "Metal";}
-    
+
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
     IGraphicsBufferS* newStaticBuffer(BufferUse use, std::unique_ptr<uint8_t[]>&& data, size_t stride, size_t count);
     IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count);
-    
+
     ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                                 const void* data, size_t sz);
-    ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                std::unique_ptr<uint8_t[]>&& data, size_t sz);
+    GraphicsDataToken
+    newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                              const void* data, size_t sz, ITextureS** texOut);
     ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
                                       const void* data, size_t sz);
     ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
     ITextureR* newRenderTexture(size_t width, size_t height, size_t samples);
-    
+
     bool bindingNeedsVertexFormat() const {return false;}
     IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
-    
+
     IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
                                        IVertexFormat* vtxFmt, unsigned targetSamples,
                                        BlendFactor srcFac, BlendFactor dstFac,
                                        bool depthTest, bool depthWrite, bool backfaceCulling);
-    
+
     IShaderDataBinding*
     newShaderDataBinding(IShaderPipeline* pipeline,
                          IVertexFormat* vtxFormat,
                          IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
                          size_t ubufCount, IGraphicsBuffer** ubufs,
                          size_t texCount, ITexture** texs);
-    
+
     void reset();
     GraphicsDataToken commit();
 };

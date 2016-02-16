@@ -267,12 +267,16 @@ class GraphicsDataToken
     IGraphicsData* m_data = nullptr;
     GraphicsDataToken(IGraphicsDataFactory* factory, IGraphicsData* data)
     : m_factory(factory), m_data(data) {}
+public:
     void doDestroy()
     {
         if (m_factory && m_data)
+        {
             m_factory->destroyData(m_data);
+            m_factory = nullptr;
+            m_data = nullptr;
+        }
     }
-public:
     GraphicsDataToken() = default;
     GraphicsDataToken(const GraphicsDataToken& other) = delete;
     GraphicsDataToken(GraphicsDataToken&& other)

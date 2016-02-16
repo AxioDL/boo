@@ -127,7 +127,10 @@ class GLTextureS : public ITextureS
         glBindTexture(GL_TEXTURE_2D, m_tex);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         if (mips > 1)
+        {
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mips-1);
+        }
         else
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
@@ -147,7 +150,7 @@ class GLTextureS : public ITextureS
             pxPitch = 1;
             break;
         case TextureFormat::DXT1:
-            intFormat = GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
+            intFormat = GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
             compressed = true;
             break;
         default:
@@ -255,12 +258,12 @@ public:
         glActiveTexture(GL_TEXTURE0 + idx);
         glBindTexture(m_target, m_texs[0]);
     }
-    
+
     void resize(size_t width, size_t height)
     {
         m_width = width;
         m_height = height;
-        
+
         if (m_samples > 1)
         {
             glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[0]);
@@ -1115,7 +1118,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
         cmds.emplace_back(Command::Op::Present);
         cmds.back().source = source;
     }
-    
+
     void addVertexFormat(GLVertexFormat* fmt)
     {
         std::unique_lock<std::mutex> lk(m_mt);
