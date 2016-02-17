@@ -166,7 +166,31 @@ class D3D12TextureS : public ITextureS
                   TextureFormat fmt, const void* data, size_t sz)
     : m_fmt(fmt), m_sz(sz)
     {
-        m_gpuDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, mips);
+        DXGI_FORMAT pfmt;
+        int pxPitchNum = 1;
+        int pxPitchDenom = 1;
+        bool compressed = false;
+        switch (fmt)
+        {
+        case TextureFormat::RGBA8:
+            pfmt = DXGI_FORMAT_R8G8B8A8_UNORM;
+            pxPitchNum = 4;
+            break;
+        case TextureFormat::I8:
+            pfmt = DXGI_FORMAT_R8_UNORM;
+            break;
+        case TextureFormat::DXT1:
+            pfmt = DXGI_FORMAT_BC1_UNORM;
+            compressed = true;
+            pxPitchNum = 1;
+            pxPitchDenom = 2;
+            break;
+        default:
+            Log.report(LogVisor::FatalError, "unsupported tex format");
+        }
+
+
+        m_gpuDesc = CD3DX12_RESOURCE_DESC::Tex2D(pfmt, width, height, 1, mips);
         size_t reqSz = GetRequiredIntermediateSize(ctx->m_dev.Get(), &m_gpuDesc, 0, mips);
         ThrowIfFailed(ctx->m_dev->CreateCommittedResource(
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
@@ -178,7 +202,7 @@ class D3D12TextureS : public ITextureS
         for (size_t i=0 ; i<m_gpuDesc.MipLevels && i<16 ; ++i)
         {
             upData[i].pData = dataIt;
-            upData[i].RowPitch = width * 4;
+            upData[i].RowPitch = width * pxPitchNum / pxPitchDenom;
             upData[i].SlicePitch = upData[i].RowPitch * height;
             dataIt += upData[i].SlicePitch;
             width /= 2;
@@ -1361,15 +1385,46 @@ public:
         return retval;
     }
 
-    ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                std::unique_ptr<uint8_t[]>&& data, size_t sz)
+    GraphicsDataToken
+    newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                              const void* data, size_t sz, ITextureS** texOut)
     {
-        std::unique_ptr<uint8_t[]> d = std::move(data);
-        D3D12TextureS* retval = new D3D12TextureS(m_ctx, width, height, mips, fmt, d.get(), sz);
-        if (!m_deferredData)
-            m_deferredData = new struct D3D12Data();
-        static_cast<D3D12Data*>(m_deferredData)->m_STexs.emplace_back(retval);
-        return retval;
+        D3D12TextureS* retval = new D3D12TextureS(m_ctx, width, height, mips, fmt, data, sz);
+        D3D12Data* tokData = new struct D3D12Data();
+        tokData->m_STexs.emplace_back(retval);
+        *texOut = retval;
+
+        /* Create heap */
+        D3D12_RESOURCE_ALLOCATION_INFO texAllocInfo =
+            m_ctx->m_dev->GetResourceAllocationInfo(0, 1, &retval->m_gpuDesc);
+        ThrowIfFailed(m_ctx->m_dev->CreateHeap(&CD3DX12_HEAP_DESC(texAllocInfo,
+            D3D12_HEAP_TYPE_DEFAULT, D3D12_HEAP_FLAG_ALLOW_ONLY_NON_RT_DS_TEXTURES),
+            __uuidof(ID3D12Heap), &tokData->m_texHeap));
+        ID3D12Heap* texHeap = tokData->m_texHeap.Get();
+
+        /* Place resources */
+        PlaceTextureForGPU(retval, m_ctx, texHeap, 0);
+
+        /* Execute static uploads */
+        ThrowIfFailed(m_ctx->m_loadlist->Close());
+        ID3D12CommandList* list[] = {m_ctx->m_loadlist.Get()};
+        m_ctx->m_loadq->ExecuteCommandLists(1, list);
+        ++m_ctx->m_loadfenceval;
+        ThrowIfFailed(m_ctx->m_loadq->Signal(m_ctx->m_loadfence.Get(), m_ctx->m_loadfenceval));
+
+        /* Block handle return until data is ready on GPU */
+        WaitForLoadList(m_ctx);
+
+        /* Reset allocator and list */
+        ThrowIfFailed(m_ctx->m_loadqalloc->Reset());
+        ThrowIfFailed(m_ctx->m_loadlist->Reset(m_ctx->m_loadqalloc.Get(), nullptr));
+
+        /* Delete static upload heap */
+        retval->m_tex.Reset();
+
+        std::unique_lock<std::mutex> lk(m_committedMutex);
+        m_committedData.insert(tokData);
+        return GraphicsDataToken(this, tokData);
     }
 
     ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,

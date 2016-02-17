@@ -858,8 +858,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
             if (glewInit() != GLEW_OK)
                 Log.report(LogVisor::FatalError, "unable to init glew");
             const GLubyte* version = glGetString(GL_VERSION);
-            SystemString v(reinterpret_cast<const char*>(version));
-            Log.report(LogVisor::Info, _S("OpenGL Version: %s"), v.c_str());
+            Log.report(LogVisor::Info, "OpenGL Version: %s", version);
             self->m_parent->postInit();
         }
         self->m_initcv.notify_one();

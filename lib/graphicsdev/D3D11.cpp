@@ -124,7 +124,30 @@ class D3D11TextureS : public ITextureS
                   TextureFormat fmt, const void* data, size_t sz)
     : m_sz(sz)
     {
-        CD3D11_TEXTURE2D_DESC desc(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, mips,
+        DXGI_FORMAT pfmt;
+        int pxPitchNum = 1;
+        int pxPitchDenom = 1;
+        bool compressed = false;
+        switch (fmt)
+        {
+        case TextureFormat::RGBA8:
+            pfmt = DXGI_FORMAT_R8G8B8A8_UNORM;
+            pxPitchNum = 4;
+            break;
+        case TextureFormat::I8:
+            pfmt = DXGI_FORMAT_R8_UNORM;
+            break;
+        case TextureFormat::DXT1:
+            pfmt = DXGI_FORMAT_BC1_UNORM;
+            compressed = true;
+            pxPitchNum = 1;
+            pxPitchDenom = 2;
+            break;
+        default:
+            Log.report(LogVisor::FatalError, "unsupported tex format");
+        }
+
+        CD3D11_TEXTURE2D_DESC desc(pfmt, width, height, 1, mips,
             D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_IMMUTABLE);
 
         const uint8_t* dataIt = static_cast<const uint8_t*>(data);
@@ -132,7 +155,7 @@ class D3D11TextureS : public ITextureS
         for (size_t i=0 ; i<mips && i<16 ; ++i)
         {
             upData[i].pSysMem = dataIt;
-            upData[i].SysMemPitch = width * 4;
+            upData[i].SysMemPitch = width * pxPitchNum / pxPitchDenom;
             upData[i].SysMemSlicePitch = upData[i].SysMemPitch * height;
             dataIt += upData[i].SysMemSlicePitch;
             width /= 2;
@@ -141,7 +164,7 @@ class D3D11TextureS : public ITextureS
 
         ThrowIfFailed(ctx->m_dev->CreateTexture2D(&desc, upData, &m_tex));
         ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_tex.Get(),
-            &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_tex.Get(), D3D_SRV_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8G8B8A8_UNORM, 0, mips), &m_srv));
+            &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_tex.Get(), D3D_SRV_DIMENSION_TEXTURE2D, pfmt, 0, mips), &m_srv));
     }
 public:
     ComPtr<ID3D11Texture2D> m_tex;
@@ -1020,15 +1043,18 @@ public:
         return retval;
     }
 
-    ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                std::unique_ptr<uint8_t[]>&& data, size_t sz)
+    GraphicsDataToken
+    newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                              const void* data, size_t sz, ITextureS** texOut)
     {
-        std::unique_ptr<uint8_t[]> d = std::move(data);
-        D3D11TextureS* retval = new D3D11TextureS(m_ctx, width, height, mips, fmt, d.get(), sz);
-        if (!m_deferredData)
-            m_deferredData = new struct D3D11Data();
-        static_cast<D3D11Data*>(m_deferredData)->m_STexs.emplace_back(retval);
-        return retval;
+        D3D11TextureS* retval = new D3D11TextureS(m_ctx, width, height, mips, fmt, data, sz);
+        D3D11Data* tokData = new struct D3D11Data();
+        tokData->m_STexs.emplace_back(retval);
+        *texOut = retval;
+
+        std::unique_lock<std::mutex> lk(m_committedMutex);
+        m_committedData.insert(tokData);
+        return GraphicsDataToken(this, tokData);
     }
 
     ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
