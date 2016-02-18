@@ -49,7 +49,7 @@ class HIDListenerUdev final : public IHIDListener
 
         int vid = 0, pid = 0;
         udev_list_entry* attrs = udev_device_get_properties_list_entry(device);
-#if 1
+#if 0
         udev_list_entry* att = nullptr;
         udev_list_entry_foreach(att, attrs)
         {
