@@ -725,6 +725,17 @@ static const struct RGBATex2DViewDesc : D3D12_SHADER_RESOURCE_VIEW_DESC
     }
 } RGBATex2DViewDesc;
 
+static const struct DXTTex2DViewDesc : D3D12_SHADER_RESOURCE_VIEW_DESC
+{
+    DXTTex2DViewDesc()
+    {
+        Format = DXGI_FORMAT_BC1_UNORM;
+        ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        Texture2D = {UINT(0), UINT(-1), UINT(0), 0.0f};
+    }
+} DXTTex2DViewDesc;
+
 static const struct GreyTex2DViewDesc : D3D12_SHADER_RESOURCE_VIEW_DESC
 {
     GreyTex2DViewDesc()
@@ -788,6 +799,9 @@ static ID3D12Resource* GetTextureGPUResource(const ITexture* tex, int idx,
             break;
         case TextureFormat::I8:
             descOut = GreyTex2DViewDesc;
+            break;
+        case TextureFormat::DXT1:
+            descOut = DXTTex2DViewDesc;
             break;
         default:break;
         }
