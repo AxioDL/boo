@@ -47,7 +47,7 @@ class HIDDeviceUdev final : public IHIDDevice
             {
                 m_usbIntfOutPipe | USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
                 (unsigned)length,
-                0,
+                30,
                 (void*)data
             };
             int ret = ioctl(m_devFd, USBDEVFS_BULK, &xfer);
@@ -66,7 +66,7 @@ class HIDDeviceUdev final : public IHIDDevice
             {
                 m_usbIntfInPipe | USB_DIR_IN,
                 (unsigned)length,
-                0,
+                30,
                 data
             };
             return ioctl(m_devFd, USBDEVFS_BULK, &xfer);
@@ -204,7 +204,7 @@ class HIDDeviceUdev final : public IHIDDevice
                 message,
                 0,
                 (uint16_t)length,
-                0,
+                30,
                 (void*)data
             };
             int ret = ioctl(m_devFd, USBDEVFS_CONTROL, &xfer);
