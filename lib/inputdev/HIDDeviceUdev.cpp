@@ -45,7 +45,7 @@ class HIDDeviceUdev final : public IHIDDevice
         {
             usbdevfs_bulktransfer xfer =
             {
-                m_usbIntfOutPipe | USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
+                m_usbIntfOutPipe | USB_DIR_OUT,
                 (unsigned)length,
                 30,
                 (void*)data
