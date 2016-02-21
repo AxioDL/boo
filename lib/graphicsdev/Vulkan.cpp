@@ -1427,6 +1427,7 @@ static VkDeviceSize SizeTextureForGPU(ITexture* tex, VulkanContext* ctx,
         return static_cast<VulkanTextureS*>(tex)->sizeForGPU(ctx, memTypeBits, offset);
     case TextureType::StaticArray:
         return static_cast<VulkanTextureSA*>(tex)->sizeForGPU(ctx, memTypeBits, offset);
+    default: break;
     }
     return offset;
 }
@@ -1444,6 +1445,7 @@ static void PlaceTextureForGPU(ITexture* tex, VulkanContext* ctx, VkDeviceMemory
     case TextureType::StaticArray:
         static_cast<VulkanTextureSA*>(tex)->placeForGPU(ctx, mem);
         break;
+    default: break;
     }
 }
 
