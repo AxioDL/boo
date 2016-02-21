@@ -16,7 +16,6 @@ include_directories(include ${LOG_VISOR_INCLUDE_DIR})
 if(NOT GEKKO AND NOT CAFE)
 list(APPEND PLAT_SRCS
     lib/graphicsdev/GL.cpp
-    lib/graphicsdev/Vulkan.cpp
     lib/graphicsdev/glew.c)
 
 list(APPEND PLAT_HDRS
@@ -81,7 +80,6 @@ else(NOT GEKKO)
        lib/graphicsdev/GLX.cpp
        lib/graphicsdev/glew.c
        lib/audiodev/ALSA.cpp)
-#    list(APPEND PLAT_HDRS )
 
   find_package(PkgConfig)
   if(PKG_CONFIG_FOUND)
@@ -126,6 +124,14 @@ else(NOT GEKKO)
 
   include_directories(${DBUS_INCLUDE_DIR} ${DBUS_ARCH_INCLUDE_DIR})
   list(APPEND _BOO_SYS_LIBS X11 Xi GL ${DBUS_LIBRARY} pthread)
+
+  find_library(VULKAN_LIBRARY vulkan)
+  if(NOT VULKAN_LIBRARY-NOTFOUND)
+    message(STATUS "Vulkan loader found; enabling Vulkan support")
+    list(APPEND _BOO_SYS_LIBS ${VULKAN_LIBRARY})
+    list(APPEND PLAT_SRCS
+         lib/graphicsdev/Vulkan.cpp)
+  endif()
 
   if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
       list(APPEND PLAT_SRCS

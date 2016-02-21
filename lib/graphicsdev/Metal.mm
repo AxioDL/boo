@@ -850,15 +850,6 @@ IGraphicsBufferS* MetalDataFactory::newStaticBuffer(BufferUse use, const void* d
     m_deferredData->m_SBufs.emplace_back(retval);
     return retval;
 }
-IGraphicsBufferS* MetalDataFactory::newStaticBuffer(BufferUse use, std::unique_ptr<uint8_t[]>&& data, size_t stride, size_t count)
-{
-    std::unique_ptr<uint8_t[]> d = std::move(data);
-    MetalGraphicsBufferS* retval = new MetalGraphicsBufferS(use, m_ctx, d.get(), stride, count);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct MetalData());
-    m_deferredData->m_SBufs.emplace_back(retval);
-    return retval;
-}
 IGraphicsBufferD* MetalDataFactory::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
 {
     MetalCommandQueue* q = static_cast<MetalCommandQueue*>(m_parent->getCommandQueue());

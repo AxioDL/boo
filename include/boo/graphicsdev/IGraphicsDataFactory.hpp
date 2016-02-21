@@ -193,8 +193,6 @@ struct IGraphicsDataFactory
 
     virtual IGraphicsBufferS*
     newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)=0;
-    virtual IGraphicsBufferS*
-    newStaticBuffer(BufferUse use, std::unique_ptr<uint8_t[]>&& data, size_t stride, size_t count)=0;
     virtual IGraphicsBufferD*
     newDynamicBuffer(BufferUse use, size_t stride, size_t count)=0;
 
@@ -203,7 +201,7 @@ struct IGraphicsDataFactory
                      const void* data, size_t sz)=0;
     virtual GraphicsDataToken
     newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                              const void* data, size_t sz, ITextureS** texOut)=0;
+                              const void* data, size_t sz, ITextureS*& texOut)=0;
     virtual ITextureSA*
     newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
                           const void* data, size_t sz)=0;
@@ -263,6 +261,7 @@ class GraphicsDataToken
     friend class D3D12DataFactory;
     friend class D3D11DataFactory;
     friend class MetalDataFactory;
+    friend class VulkanDataFactory;
     IGraphicsDataFactory* m_factory = nullptr;
     IGraphicsData* m_data = nullptr;
     GraphicsDataToken(IGraphicsDataFactory* factory, IGraphicsData* data)

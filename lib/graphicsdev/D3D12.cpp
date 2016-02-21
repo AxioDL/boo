@@ -1369,16 +1369,6 @@ public:
         return retval;
     }
 
-    IGraphicsBufferS* newStaticBuffer(BufferUse use, std::unique_ptr<uint8_t[]>&& data, size_t stride, size_t count)
-    {
-        std::unique_ptr<uint8_t[]> d = std::move(data);
-        D3D12GraphicsBufferS* retval = new D3D12GraphicsBufferS(use, m_ctx, d.get(), stride, count);
-        if (!m_deferredData)
-            m_deferredData = new struct D3D12Data();
-        static_cast<D3D12Data*>(m_deferredData)->m_SBufs.emplace_back(retval);
-        return retval;
-    }
-
     IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count)
     {
         D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent->getCommandQueue());

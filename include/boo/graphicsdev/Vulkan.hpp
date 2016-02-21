@@ -6,36 +6,68 @@
 #include "boo/IGraphicsContext.hpp"
 #include <vector>
 #include <unordered_set>
+#include <unordered_map>
 #include <mutex>
+#include <vulkan/vulkan.h>
 
 namespace boo
 {
+
+struct VulkanContext
+{
+    VkInstance m_instance;
+    VkPhysicalDevice m_adapter;
+    VkPhysicalDeviceProperties m_devProps;
+    VkPhysicalDeviceMemoryProperties m_memoryProperties;
+    VkDevice m_dev;
+    VkQueue m_queue;
+    VkDescriptorSetLayout m_descSetLayout;
+    VkPipelineLayout m_layout;
+    VkRenderPass m_pass;
+    VkCommandPool m_loadPool;
+    VkCommandBuffer m_loadCmdBuf;
+    VkFence m_loadFence;
+    VkSampler m_linearSampler;
+    struct Window
+    {
+        VkSwapchainKHR m_swapChain;
+        struct Buffer
+        {
+            VkImage m_image;
+            VkImageView m_view;
+        };
+        std::vector<Buffer> m_bufs;
+        uint32_t m_backBuf = 0;
+        size_t width, height;
+    };
+    std::unordered_map<const boo::IWindow*, Window> m_windows;
+};
 
 class VulkanDataFactory : public IGraphicsDataFactory
 {
     friend struct VulkanCommandQueue;
     IGraphicsContext* m_parent;
-    static ThreadLocalPtr<struct GLData> m_deferredData;
-    std::unordered_set<struct GLData*> m_committedData;
+    VulkanContext* m_ctx;
+    static ThreadLocalPtr<struct VulkanData> m_deferredData;
+    std::unordered_set<struct VulkanData*> m_committedData;
     std::mutex m_committedMutex;
     std::vector<int> m_texUnis;
     void destroyData(IGraphicsData*);
     void destroyAllData();
 public:
-    VulkanDataFactory(IGraphicsContext* parent);
+    VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx);
     ~VulkanDataFactory() {destroyAllData();}
 
     Platform platform() const {return Platform::Vulkan;}
     const SystemChar* platformName() const {return _S("Vulkan");}
 
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
-    IGraphicsBufferS* newStaticBuffer(BufferUse use, std::unique_ptr<uint8_t[]>&& data, size_t stride, size_t count);
     IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count);
 
     ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                                 const void* data, size_t sz);
-    ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                std::unique_ptr<uint8_t[]>&& data, size_t sz);
+    GraphicsDataToken newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                                                const void *data, size_t sz, ITextureS*& texOut);
     ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
                                       const void* data, size_t sz);
     ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
@@ -46,24 +78,19 @@ public:
 
     IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
                                        std::vector<unsigned int>& vertBlobOut, std::vector<unsigned int>& fragBlobOut,
-                                       std::vector<unsigned int>& pipelineBlob,
-                                       size_t texCount, const char* texArrayName,
-                                       size_t uniformBlockCount, const char** uniformBlockNames,
+                                       std::vector<unsigned char>& pipelineBlob, IVertexFormat* vtxFmt,
                                        BlendFactor srcFac, BlendFactor dstFac,
                                        bool depthTest, bool depthWrite, bool backfaceCulling);
 
-    IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
-                                       size_t texCount, const char* texArrayName,
-                                       size_t uniformBlockCount, const char** uniformBlockNames,
+    IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource, IVertexFormat* vtxFmt,
                                        BlendFactor srcFac, BlendFactor dstFac,
                                        bool depthTest, bool depthWrite, bool backfaceCulling)
     {
         std::vector<unsigned int> vertBlob;
         std::vector<unsigned int> fragBlob;
-        std::vector<unsigned int> pipelineBlob;
+        std::vector<unsigned char> pipelineBlob;
         return newShaderPipeline(vertSource, fragSource, vertBlob, fragBlob, pipelineBlob,
-                                 texCount, texArrayName, uniformBlockCount, uniformBlockNames,
-                                 srcFac, dstFac, depthTest, depthWrite, backfaceCulling);
+                                 vtxFmt, srcFac, dstFac, depthTest, depthWrite, backfaceCulling);
     }
 
     IShaderDataBinding*

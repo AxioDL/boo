@@ -29,14 +29,13 @@ public:
     const SystemChar* platformName() const {return _S("OGL");}
 
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
-    IGraphicsBufferS* newStaticBuffer(BufferUse use, std::unique_ptr<uint8_t[]>&& data, size_t stride, size_t count);
     IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count);
 
     ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                                 const void* data, size_t sz);
     GraphicsDataToken
     newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                              const void* data, size_t sz, ITextureS** texOut);
+                              const void* data, size_t sz, ITextureS*& texOut);
     ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
                                       const void* data, size_t sz);
     ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);

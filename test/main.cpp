@@ -441,7 +441,6 @@ struct TestApplicationCallback : IApplicationCallback
             float rgba[] = {sinf(frameIdx / 60.0), cosf(frameIdx / 60.0), 0.0, 1.0};
             gfxQ->setClearColor(rgba);
             gfxQ->clearTarget();
-            gfxQ->setDrawPrimitive(Primitive::TriStrips);
 
             gfxQ->setShaderDataBinding(m_binding);
             gfxQ->draw(0, 4);

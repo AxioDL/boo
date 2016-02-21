@@ -7,11 +7,6 @@
 
 namespace boo
 {
-enum class Primitive
-{
-    Triangles,
-    TriStrips
-};
 
 struct IGraphicsCommandQueue
 {
@@ -32,7 +27,6 @@ struct IGraphicsCommandQueue
     virtual void setClearColor(const float rgba[4])=0;
     virtual void clearTarget(bool render=true, bool depth=true)=0;
 
-    virtual void setDrawPrimitive(Primitive prim)=0;
     virtual void draw(size_t start, size_t count)=0;
     virtual void drawIndexed(size_t start, size_t count)=0;
     virtual void drawInstances(size_t start, size_t count, size_t instCount)=0;

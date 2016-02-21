@@ -38,7 +38,6 @@ public:
     const char* platformName() const {return "Metal";}
 
     IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
-    IGraphicsBufferS* newStaticBuffer(BufferUse use, std::unique_ptr<uint8_t[]>&& data, size_t stride, size_t count);
     IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count);
 
     ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,

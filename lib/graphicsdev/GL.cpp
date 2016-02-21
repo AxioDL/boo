@@ -104,17 +104,6 @@ GLDataFactory::newStaticBuffer(BufferUse use, const void* data, size_t stride, s
     return retval;
 }
 
-IGraphicsBufferS*
-GLDataFactory::newStaticBuffer(BufferUse use, std::unique_ptr<uint8_t[]>&& data, size_t stride, size_t count)
-{
-    std::unique_ptr<uint8_t[]> d = std::move(data);
-    GLGraphicsBufferS* retval = new GLGraphicsBufferS(use, d.get(), stride * count);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct GLData());
-    m_deferredData->m_SBufs.emplace_back(retval);
-    return retval;
-}
-
 class GLTextureS : public ITextureS
 {
     friend class GLDataFactory;
@@ -294,12 +283,12 @@ GLDataFactory::newStaticTexture(size_t width, size_t height, size_t mips, Textur
 
 GraphicsDataToken
 GLDataFactory::newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                         const void* data, size_t sz, ITextureS** texOut)
+                                         const void* data, size_t sz, ITextureS*& texOut)
 {
     GLTextureS* retval = new GLTextureS(width, height, mips, fmt, data, sz);
     GLData* tokData = new struct GLData();
     tokData->m_STexs.emplace_back(retval);
-    *texOut = retval;
+    texOut = retval;
 
     std::unique_lock<std::mutex> lk(m_committedMutex);
     m_committedData.insert(tokData);
@@ -728,7 +717,6 @@ struct GLCommandQueue : IGraphicsCommandQueue
             SetScissor,
             SetClearColor,
             ClearTarget,
-            SetDrawPrimitive,
             Draw,
             DrawIndexed,
             DrawInstances,
@@ -743,7 +731,6 @@ struct GLCommandQueue : IGraphicsCommandQueue
             SWindowRect rect;
             float rgba[4];
             GLbitfield flags;
-            GLenum prim;
             struct
             {
                 size_t start;
@@ -911,7 +898,6 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     posts.swap(self->m_pendingPosts2);
             }
             std::vector<Command>& cmds = self->m_cmdBufs[self->m_drawBuf];
-            GLenum prim = GL_TRIANGLES;
             for (const Command& cmd : cmds)
             {
                 switch (cmd.m_op)
@@ -948,20 +934,17 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 case Command::Op::ClearTarget:
                     glClear(cmd.flags);
                     break;
-                case Command::Op::SetDrawPrimitive:
-                    prim = cmd.prim;
-                    break;
                 case Command::Op::Draw:
-                    glDrawArrays(prim, cmd.start, cmd.count);
+                    glDrawArrays(GL_TRIANGLE_STRIP, cmd.start, cmd.count);
                     break;
                 case Command::Op::DrawIndexed:
-                    glDrawElements(prim, cmd.count, GL_UNSIGNED_INT, (void*)cmd.start);
+                    glDrawElements(GL_TRIANGLE_STRIP, cmd.count, GL_UNSIGNED_INT, (void*)cmd.start);
                     break;
                 case Command::Op::DrawInstances:
-                    glDrawArraysInstanced(prim, cmd.start, cmd.count, cmd.instCount);
+                    glDrawArraysInstanced(GL_TRIANGLE_STRIP, cmd.start, cmd.count, cmd.instCount);
                     break;
                 case Command::Op::DrawInstancesIndexed:
-                    glDrawElementsInstanced(prim, cmd.count, GL_UNSIGNED_INT, (void*)cmd.start, cmd.instCount);
+                    glDrawElementsInstanced(GL_TRIANGLE_STRIP, cmd.count, GL_UNSIGNED_INT, (void*)cmd.start, cmd.instCount);
                     break;
                 case Command::Op::Present:
                 {
@@ -1065,16 +1048,6 @@ struct GLCommandQueue : IGraphicsCommandQueue
             cmds.back().flags |= GL_COLOR_BUFFER_BIT;
         if (depth)
             cmds.back().flags |= GL_DEPTH_BUFFER_BIT;
-    }
-
-    void setDrawPrimitive(Primitive prim)
-    {
-        std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-        cmds.emplace_back(Command::Op::SetDrawPrimitive);
-        if (prim == Primitive::Triangles)
-            cmds.back().prim = GL_TRIANGLES;
-        else if (prim == Primitive::TriStrips)
-            cmds.back().prim = GL_TRIANGLE_STRIP;
     }
 
     void draw(size_t start, size_t count)
