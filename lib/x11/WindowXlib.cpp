@@ -3,6 +3,9 @@
 #include "boo/IApplication.hpp"
 #include "boo/graphicsdev/GL.hpp"
 
+#define VK_USE_PLATFORM_XLIB_KHR
+#include "boo/graphicsdev/Vulkan.hpp"
+
 #include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -103,8 +106,13 @@ const size_t MAINICON_NETWM_SZ __attribute__ ((weak)) = 0;
 
 namespace boo
 {
-static LogVisor::LogModule Log("boo::WindowXCB");
+static LogVisor::LogModule Log("boo::WindowXlib");
 IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent);
+#if BOO_HAS_VULKAN
+IGraphicsCommandQueue* _NewVulkanCommandQueue(VulkanContext* ctx,
+                                              VulkanContext::Window* windowCtx,
+                                              IGraphicsContext* parent);
+#endif
 void _XlibUpdateLastGlxCtx(GLXContext lastGlxCtx);
 void GLXExtensionCheck();
 void GLXEnableVSync(Display* disp, GLXWindow drawable);
@@ -264,13 +272,27 @@ static void genFrameDefault(Screen* screen, int& xOut, int& yOut, int& wOut, int
     wOut = width;
     hOut = height;
 }
-    
-struct GraphicsContextGLX : IGraphicsContext
+
+struct GraphicsContextXlib : IGraphicsContext
 {
     EGraphicsAPI m_api;
     EPixelFormat m_pf;
     IWindow* m_parentWindow;
-    Display* m_xDisp = nullptr;
+    Display* m_xDisp;
+
+    std::mutex m_vsyncmt;
+    std::condition_variable m_vsynccv;
+
+    GraphicsContextXlib(EGraphicsAPI api, EPixelFormat pf, IWindow* parentWindow, Display* disp)
+    : m_api(api),
+      m_pf(pf),
+      m_parentWindow(parentWindow),
+      m_xDisp(disp) {}
+    virtual void destroy()=0;
+};
+    
+struct GraphicsContextXlibGLX : GraphicsContextXlib
+{
     GLXContext m_lastCtx = 0;
 
     GLXFBConfig m_fbconfig = 0;
@@ -289,13 +311,10 @@ struct GraphicsContextGLX : IGraphicsContext
 public:
     IWindowCallback* m_callback;
 
-    GraphicsContextGLX(EGraphicsAPI api, IWindow* parentWindow,
-                       Display* display, int defaultScreen,
-                       GLXContext lastCtx, uint32_t& visualIdOut)
-    : m_api(api),
-      m_pf(EPixelFormat::RGBA8_Z24),
-      m_parentWindow(parentWindow),
-      m_xDisp(display),
+    GraphicsContextXlibGLX(EGraphicsAPI api, IWindow* parentWindow,
+                           Display* display, int defaultScreen,
+                           GLXContext lastCtx, uint32_t& visualIdOut)
+    : GraphicsContextXlib(api, EPixelFormat::RGBA8, parentWindow, display),
       m_lastCtx(lastCtx)
     {
         m_dataFactory = new class GLDataFactory(this);
@@ -383,7 +402,7 @@ public:
         }
     }
 
-    ~GraphicsContextGLX() {destroy();}
+    ~GraphicsContextXlibGLX() {destroy();}
 
     void _setCallback(IWindowCallback* cb)
     {
@@ -406,9 +425,6 @@ public:
             return;
         m_pf = pf;
     }
-
-    std::mutex m_vsyncmt;
-    std::condition_variable m_vsynccv;
 
     void initializeContext()
     {
@@ -570,6 +586,302 @@ public:
 
 };
 
+#if BOO_HAS_VULKAN
+struct GraphicsContextXlibVulkan : GraphicsContextXlib
+{
+    VulkanContext* m_ctx;
+    VkSurfaceKHR m_surface;
+    VkFormat m_format;
+
+    GLXFBConfig m_fbconfig = 0;
+    int m_visualid = 0;
+
+    IGraphicsCommandQueue* m_commandQueue = nullptr;
+    IGraphicsDataFactory* m_dataFactory = nullptr;
+
+    std::thread m_vsyncThread;
+    bool m_vsyncRunning;
+
+    static void ThrowIfFailed(VkResult res)
+    {
+        if (res != VK_SUCCESS)
+            Log.report(LogVisor::FatalError, "%d\n", res);
+    }
+
+public:
+    IWindowCallback* m_callback;
+
+    GraphicsContextXlibVulkan(IWindow* parentWindow,
+                              Display* display, int defaultScreen,
+                              VulkanContext* ctx, uint32_t& visualIdOut)
+    : GraphicsContextXlib(EGraphicsAPI::Vulkan, EPixelFormat::RGBA8, parentWindow, display),
+      m_ctx(ctx)
+    {
+        if (ctx->m_instance == VK_NULL_HANDLE)
+            ctx->initVulkan(APP->getProcessName().c_str());
+
+        VulkanContext::Window& m_windowCtx =
+            *ctx->m_windows.emplace(std::make_pair(parentWindow,
+            std::make_unique<VulkanContext::Window>())).first->second;
+        m_dataFactory = new class VulkanDataFactory(this, ctx);
+
+        VkXlibSurfaceCreateInfoKHR surfaceInfo = {};
+        surfaceInfo.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
+        surfaceInfo.dpy = display;
+        surfaceInfo.window = parentWindow->getPlatformHandle();
+        ThrowIfFailed(vkCreateXlibSurfaceKHR(ctx->m_instance, &surfaceInfo, nullptr, &m_surface));
+
+        /* Iterate over each queue to learn whether it supports presenting */
+        VkBool32 *supportsPresent = (VkBool32*)malloc(ctx->m_queueCount * sizeof(VkBool32));
+        for (uint32_t i=0 ; i<ctx->m_queueCount ; ++i)
+            vkGetPhysicalDeviceSurfaceSupportKHR(ctx->m_gpus[0], i, m_surface, &supportsPresent[i]);
+
+        /* Search for a graphics queue and a present queue in the array of queue
+         * families, try to find one that supports both */
+        if (m_ctx->m_graphicsQueueFamilyIndex == UINT32_MAX)
+        {
+            /* First window, init device */
+            for (uint32_t i=0 ; i<ctx->m_queueCount; ++i)
+            {
+                if ((ctx->m_queueProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0)
+                {
+                    if (supportsPresent[i] == VK_TRUE)
+                    {
+                        m_ctx->m_graphicsQueueFamilyIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            /* Generate error if could not find a queue that supports both a graphics
+             * and present */
+            if (m_ctx->m_graphicsQueueFamilyIndex == UINT32_MAX)
+                Log.report(LogVisor::FatalError,
+                           "Could not find a queue that supports both graphics and present");
+
+            m_ctx->initDevice();
+        }
+        else
+        {
+            /* Subsequent window, verify present */
+            if (supportsPresent[m_ctx->m_graphicsQueueFamilyIndex] == VK_FALSE)
+                Log.report(LogVisor::FatalError, "subsequent surface doesn't support present");
+        }
+        free(supportsPresent);
+
+
+        /* Get the list of VkFormats that are supported */
+        uint32_t formatCount;
+        ThrowIfFailed(vkGetPhysicalDeviceSurfaceFormatsKHR(ctx->m_gpus[0], m_surface, &formatCount, nullptr));
+        VkSurfaceFormatKHR* surfFormats = (VkSurfaceFormatKHR*)malloc(formatCount * sizeof(VkSurfaceFormatKHR));
+        ThrowIfFailed(vkGetPhysicalDeviceSurfaceFormatsKHR(ctx->m_gpus[0], m_surface, &formatCount, surfFormats));
+
+        /* If the format list includes just one entry of VK_FORMAT_UNDEFINED,
+         * the surface has no preferred format.  Otherwise, at least one
+         * supported format will be returned. */
+        if (formatCount >= 1)
+        {
+            if (surfFormats[0].format == VK_FORMAT_UNDEFINED)
+                m_format = VK_FORMAT_B8G8R8A8_UNORM;
+            else
+                m_format = surfFormats[0].format;
+        }
+        else
+            Log.report(LogVisor::FatalError, "no surface formats available for Vulkan swapchain");
+
+
+        /* Query framebuffer configurations */
+        GLXFBConfig* fbConfigs = nullptr;
+        int numFBConfigs = 0;
+        fbConfigs = glXGetFBConfigs(display, defaultScreen, &numFBConfigs);
+        if (!fbConfigs || numFBConfigs == 0)
+        {
+            Log.report(LogVisor::FatalError, "glXGetFBConfigs failed");
+            return;
+        }
+
+        for (int i=0 ; i<numFBConfigs ; ++i)
+        {
+            GLXFBConfig config = fbConfigs[i];
+            int visualId, depthSize, colorSize, doubleBuffer;
+            glXGetFBConfigAttrib(display, config, GLX_VISUAL_ID, &visualId);
+            glXGetFBConfigAttrib(display, config, GLX_DEPTH_SIZE, &depthSize);
+            glXGetFBConfigAttrib(display, config, GLX_BUFFER_SIZE, &colorSize);
+            glXGetFBConfigAttrib(display, config, GLX_DOUBLEBUFFER, &doubleBuffer);
+
+            /* Double-buffer only */
+            if (!doubleBuffer)
+                continue;
+
+            if (m_pf == EPixelFormat::RGBA8 && colorSize >= 32)
+            {
+                m_fbconfig = config;
+                m_visualid = visualId;
+                break;
+            }
+            else if (m_pf == EPixelFormat::RGBA8_Z24 && colorSize >= 32 && depthSize >= 24)
+            {
+                m_fbconfig = config;
+                m_visualid = visualId;
+                break;
+            }
+            else if (m_pf == EPixelFormat::RGBAF32 && colorSize >= 128)
+            {
+                m_fbconfig = config;
+                m_visualid = visualId;
+                break;
+            }
+            else if (m_pf == EPixelFormat::RGBAF32_Z24 && colorSize >= 128 && depthSize >= 24)
+            {
+                m_fbconfig = config;
+                m_visualid = visualId;
+                break;
+            }
+        }
+        XFree(fbConfigs);
+
+        if (!m_fbconfig)
+        {
+            Log.report(LogVisor::FatalError, "unable to find suitable pixel format");
+            return;
+        }
+
+        if (!vkGetPhysicalDeviceXlibPresentationSupportKHR(ctx->m_gpus[0], ctx->m_graphicsQueueFamilyIndex, display, m_visualid))
+        {
+            Log.report(LogVisor::FatalError, "unable to find vulkan-compatible pixel format");
+            return;
+        }
+
+        visualIdOut = m_visualid;
+    }
+
+    void destroy()
+    {
+        VulkanContext::Window& m_windowCtx = *m_ctx->m_windows[m_parentWindow];
+        vkDestroySwapchainKHR(m_ctx->m_dev, m_windowCtx.m_swapChain, nullptr);
+        vkDestroySurfaceKHR(m_ctx->m_instance, m_surface, nullptr);
+        for (VulkanContext::Window::Buffer& buf : m_windowCtx.m_bufs)
+            buf.destroy(m_ctx->m_dev);
+        m_windowCtx.m_bufs.clear();
+
+        if (m_vsyncRunning)
+        {
+            m_vsyncRunning = false;
+            m_vsyncThread.join();
+        }
+    }
+
+    ~GraphicsContextXlibVulkan() {destroy();}
+
+    void _setCallback(IWindowCallback* cb)
+    {
+        m_callback = cb;
+    }
+
+    EGraphicsAPI getAPI() const
+    {
+        return m_api;
+    }
+
+    EPixelFormat getPixelFormat() const
+    {
+        return m_pf;
+    }
+
+    void setPixelFormat(EPixelFormat pf)
+    {
+        if (pf > EPixelFormat::RGBAF32_Z24)
+            return;
+        m_pf = pf;
+    }
+
+    void initializeContext()
+    {
+        if (!glXWaitVideoSyncSGI)
+        {
+            glXWaitVideoSyncSGI = (glXWaitVideoSyncSGIProc)
+                    glXGetProcAddressARB((const GLubyte*)"glXWaitVideoSyncSGI");
+            if (!glXWaitVideoSyncSGI)
+                Log.report(LogVisor::FatalError, "unable to resolve glXWaitVideoSyncSGI");
+        }
+
+        /* Spawn vsync thread */
+        m_vsyncRunning = true;
+        std::mutex initmt;
+        std::condition_variable initcv;
+        std::unique_lock<std::mutex> outerLk(initmt);
+        m_vsyncThread = std::thread([&]()
+        {
+            Display* vsyncDisp;
+            GLXContext vsyncCtx;
+            {
+                std::unique_lock<std::mutex> innerLk(initmt);
+
+                vsyncDisp = XOpenDisplay(0);
+                if (!vsyncDisp)
+                    Log.report(LogVisor::FatalError, "unable to open new vsync display");
+                XLockDisplay(vsyncDisp);
+
+                static int attributeList[] = { GLX_RGBA, GLX_DOUBLEBUFFER, GLX_RED_SIZE, 1, GLX_GREEN_SIZE, 1, GLX_BLUE_SIZE, 1, 0 };
+                XVisualInfo *vi = glXChooseVisual(vsyncDisp, DefaultScreen(vsyncDisp), attributeList);
+
+                vsyncCtx = glXCreateContext(vsyncDisp, vi, nullptr, True);
+                if (!vsyncCtx)
+                    Log.report(LogVisor::FatalError, "unable to make new vsync GLX context");
+
+                if (!glXMakeCurrent(vsyncDisp, DefaultRootWindow(vsyncDisp), vsyncCtx))
+                    Log.report(LogVisor::FatalError, "unable to make vsync context current");
+            }
+            initcv.notify_one();
+
+            while (m_vsyncRunning)
+            {
+                unsigned int sync;
+                int err = glXWaitVideoSyncSGI(1, 0, &sync);
+                if (err)
+                    Log.report(LogVisor::FatalError, "wait err");
+                m_vsynccv.notify_one();
+            }
+
+            glXMakeCurrent(vsyncDisp, 0, nullptr);
+            glXDestroyContext(vsyncDisp, vsyncCtx);
+            XUnlockDisplay(vsyncDisp);
+            XCloseDisplay(vsyncDisp);
+        });
+        initcv.wait(outerLk);
+
+        m_commandQueue = _NewVulkanCommandQueue(m_ctx, m_ctx->m_windows[m_parentWindow].get(), this);
+    }
+
+    void makeCurrent() {}
+
+    void postInit() {}
+
+    IGraphicsCommandQueue* getCommandQueue()
+    {
+        return m_commandQueue;
+    }
+
+    IGraphicsDataFactory* getDataFactory()
+    {
+        return m_dataFactory;
+    }
+
+    IGraphicsDataFactory* getMainContextDataFactory()
+    {
+        return getDataFactory();
+    }
+
+    IGraphicsDataFactory* getLoadContextDataFactory()
+    {
+        return getDataFactory();
+    }
+
+    void present() {}
+
+};
+#endif
+
 class WindowXlib : public IWindow
 {
     Display* m_xDisp;
@@ -578,7 +890,7 @@ class WindowXlib : public IWindow
     Window m_windowId;
     XIMStyle m_bestStyle;
     XIC m_xIC = nullptr;
-    GraphicsContextGLX m_gfxCtx;
+    std::unique_ptr<GraphicsContextXlib> m_gfxCtx;
     uint32_t m_visualId;
 
     /* Last known input device id (0xffff if not yet set) */
@@ -624,15 +936,21 @@ class WindowXlib : public IWindow
 public:
     WindowXlib(const std::string& title,
                Display* display, int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
-               GLXContext lastCtx)
+               GLXContext lastCtx, bool useVulkan)
     : m_xDisp(display), m_callback(nullptr),
-      m_gfxCtx(IGraphicsContext::EGraphicsAPI::OpenGL3_3,
-               this, display, defaultScreen,
-               lastCtx, m_visualId),
       m_bestStyle(bestInputStyle)
     {
         if (!S_ATOMS)
             S_ATOMS = new XlibAtoms(display);
+
+#if BOO_HAS_VULKAN
+        if (useVulkan)
+            m_gfxCtx.reset(new GraphicsContextXlibVulkan(this, display, defaultScreen,
+                                                         &g_VulkanContext, m_visualId));
+        else
+#endif
+            m_gfxCtx.reset(new GraphicsContextXlibGLX(IGraphicsContext::EGraphicsAPI::OpenGL3_3,
+                                                      this, display, defaultScreen, lastCtx, m_visualId));
 
         /* Default screen */
         Screen* screen = ScreenOfDisplay(display, defaultScreen);
@@ -726,13 +1044,13 @@ public:
         setCursor(EMouseCursor::Pointer);
         XFlush(m_xDisp);
 
-        m_gfxCtx.initializeContext();
+        m_gfxCtx->initializeContext();
     }
     
     ~WindowXlib()
     {
         XLockDisplay(m_xDisp);
-        m_gfxCtx.destroy();
+        m_gfxCtx->destroy();
         XUnmapWindow(m_xDisp, m_windowId);
         XDestroyWindow(m_xDisp, m_windowId);
         XFreeColormap(m_xDisp, m_colormapId);
@@ -1109,8 +1427,8 @@ public:
 
     void waitForRetrace()
     {
-        std::unique_lock<std::mutex> lk(m_gfxCtx.m_vsyncmt);
-        m_gfxCtx.m_vsynccv.wait(lk);
+        std::unique_lock<std::mutex> lk(m_gfxCtx->m_vsyncmt);
+        m_gfxCtx->m_vsynccv.wait(lk);
     }
 
     uintptr_t getPlatformHandle() const
@@ -1594,22 +1912,22 @@ public:
     
     IGraphicsCommandQueue* getCommandQueue()
     {
-        return m_gfxCtx.getCommandQueue();
+        return m_gfxCtx->getCommandQueue();
     }
 
     IGraphicsDataFactory* getDataFactory()
     {
-        return m_gfxCtx.getDataFactory();
+        return m_gfxCtx->getDataFactory();
     }
 
     IGraphicsDataFactory* getMainContextDataFactory()
     {
-        return m_gfxCtx.getMainContextDataFactory();
+        return m_gfxCtx->getMainContextDataFactory();
     }
 
     IGraphicsDataFactory* getLoadContextDataFactory()
     {
-        return m_gfxCtx.getLoadContextDataFactory();
+        return m_gfxCtx->getLoadContextDataFactory();
     }
 
     bool _isWindowMapped()
@@ -1624,10 +1942,10 @@ public:
 
 IWindow* _WindowXlibNew(const std::string& title,
                        Display* display, int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
-                       GLXContext lastCtx)
+                       GLXContext lastCtx, bool useVulkan)
 {
     XLockDisplay(display);
-    IWindow* ret = new WindowXlib(title, display, defaultScreen, xIM, bestInputStyle, fontset, lastCtx);
+    IWindow* ret = new WindowXlib(title, display, defaultScreen, xIM, bestInputStyle, fontset, lastCtx, useVulkan);
     XUnlockDisplay(display);
     return ret;
 }

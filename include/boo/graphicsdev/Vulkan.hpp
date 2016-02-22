@@ -1,5 +1,6 @@
 #ifndef GDEV_VULKAN_HPP
 #define GDEV_VULKAN_HPP
+#if BOO_HAS_VULKAN
 
 #include "IGraphicsDataFactory.hpp"
 #include "IGraphicsCommandQueue.hpp"
@@ -15,11 +16,18 @@ namespace boo
 
 struct VulkanContext
 {
-    VkInstance m_instance;
-    VkPhysicalDevice m_adapter;
-    VkPhysicalDeviceProperties m_devProps;
+    std::vector<const char*> m_instanceLayerNames;
+    std::vector<const char*> m_instanceExtensionNames;
+    VkInstance m_instance = VK_NULL_HANDLE;
+    std::vector<const char*> m_deviceLayerNames;
+    std::vector<const char*> m_deviceExtensionNames;
+    std::vector<VkPhysicalDevice> m_gpus;
+    VkPhysicalDeviceProperties m_gpuProps;
     VkPhysicalDeviceMemoryProperties m_memoryProperties;
     VkDevice m_dev;
+    uint32_t m_queueCount;
+    uint32_t m_graphicsQueueFamilyIndex = UINT32_MAX;
+    std::vector<VkQueueFamilyProperties> m_queueProps;
     VkQueue m_queue;
     VkDescriptorSetLayout m_descSetLayout;
     VkPipelineLayout m_layout;
@@ -30,18 +38,28 @@ struct VulkanContext
     VkSampler m_linearSampler;
     struct Window
     {
-        VkSwapchainKHR m_swapChain;
+        VkSwapchainKHR m_swapChain = VK_NULL_HANDLE;
         struct Buffer
         {
             VkImage m_image;
             VkImageView m_view;
+            void destroy(VkDevice dev)
+            {
+                vkDestroyImageView(dev, m_view, nullptr);
+                vkDestroyImage(dev, m_image, nullptr);
+            }
         };
         std::vector<Buffer> m_bufs;
         uint32_t m_backBuf = 0;
         size_t width, height;
     };
-    std::unordered_map<const boo::IWindow*, Window> m_windows;
+    std::unordered_map<const boo::IWindow*, std::unique_ptr<Window>> m_windows;
+
+    void initVulkan(const char* appName);
+    void initDevice();
+    void initSwapChain(Window& windowCtx, VkSurfaceKHR surface, VkFormat format);
 };
+extern VulkanContext g_VulkanContext;
 
 class VulkanDataFactory : public IGraphicsDataFactory
 {
@@ -106,4 +124,5 @@ public:
 
 }
 
+#endif
 #endif // GDEV_VULKAN_HPP

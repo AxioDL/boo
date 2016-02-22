@@ -125,12 +125,13 @@ else(NOT GEKKO)
   include_directories(${DBUS_INCLUDE_DIR} ${DBUS_ARCH_INCLUDE_DIR})
   list(APPEND _BOO_SYS_LIBS X11 Xi GL ${DBUS_LIBRARY} pthread)
 
+  unset(VULKAN_LIBRARY CACHE)
   find_library(VULKAN_LIBRARY vulkan)
-  if(NOT VULKAN_LIBRARY-NOTFOUND)
+  if(NOT (VULKAN_LIBRARY STREQUAL VULKAN_LIBRARY-NOTFOUND))
     message(STATUS "Vulkan loader found; enabling Vulkan support")
+    list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_VULKAN=1)
     list(APPEND _BOO_SYS_LIBS ${VULKAN_LIBRARY})
-    list(APPEND PLAT_SRCS
-         lib/graphicsdev/Vulkan.cpp)
+    list(APPEND PLAT_SRCS lib/graphicsdev/Vulkan.cpp)
   endif()
 
   if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")

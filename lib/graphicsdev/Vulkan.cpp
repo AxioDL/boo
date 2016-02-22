@@ -1,3 +1,9 @@
+#ifdef _WIN32
+#define VK_USE_PLATFORM_WIN32_KHR
+#else
+#define VK_USE_PLATFORM_XLIB_KHR
+#endif
+
 #include "boo/graphicsdev/Vulkan.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include <vector>
@@ -8,6 +14,7 @@
 
 #undef min
 #undef max
+#undef None
 
 #define MAX_UNIFORM_COUNT 8
 #define MAX_TEXTURE_COUNT 8
@@ -114,6 +121,7 @@ static const TBuiltInResource DefaultBuiltInResource =
 namespace boo
 {
 static LogVisor::LogModule Log("boo::Vulkan");
+VulkanContext g_VulkanContext;
 
 static inline void ThrowIfFailed(VkResult res)
 {
@@ -125,6 +133,342 @@ static inline void ThrowIfFalse(bool res)
 {
     if (!res)
         Log.report(LogVisor::FatalError, "operation failed\n", res);
+}
+
+static bool MemoryTypeFromProperties(VulkanContext* ctx, uint32_t typeBits,
+                                     VkFlags requirementsMask,
+                                     uint32_t *typeIndex)
+{
+    /* Search memtypes to find first index with those properties */
+    for (uint32_t i = 0; i < 32; i++)
+    {
+        if ((typeBits & 1) == 1)
+        {
+            /* Type is available, does it match user properties? */
+            if ((ctx->m_memoryProperties.memoryTypes[i].propertyFlags &
+                 requirementsMask) == requirementsMask) {
+                *typeIndex = i;
+                return true;
+            }
+        }
+        typeBits >>= 1;
+    }
+    /* No memory types matched, return failure */
+    return false;
+}
+
+static void SetImageLayout(VkCommandBuffer cmd, VkImage image,
+                           VkImageAspectFlags aspectMask,
+                           VkImageLayout old_image_layout,
+                           VkImageLayout new_image_layout)
+{
+    VkImageMemoryBarrier imageMemoryBarrier = {};
+    imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    imageMemoryBarrier.pNext = NULL;
+    imageMemoryBarrier.srcAccessMask = 0;
+    imageMemoryBarrier.dstAccessMask = 0;
+    imageMemoryBarrier.oldLayout = old_image_layout;
+    imageMemoryBarrier.newLayout = new_image_layout;
+    imageMemoryBarrier.image = image;
+    imageMemoryBarrier.subresourceRange.aspectMask = aspectMask;
+    imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
+    imageMemoryBarrier.subresourceRange.levelCount = 1;
+    imageMemoryBarrier.subresourceRange.layerCount = 1;
+
+    if (old_image_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+        imageMemoryBarrier.srcAccessMask =
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    }
+
+    if (new_image_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        /* Make sure anything that was copying from this image has completed */
+        imageMemoryBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+    }
+
+    if (new_image_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        /* Make sure any Copy or CPU writes to image are flushed */
+        imageMemoryBarrier.srcAccessMask =
+            VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+        imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    }
+
+    if (new_image_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+        imageMemoryBarrier.dstAccessMask =
+            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+    }
+
+    if (new_image_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+        imageMemoryBarrier.dstAccessMask =
+            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+    }
+
+    VkPipelineStageFlags src_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    VkPipelineStageFlags dest_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
+    vkCmdPipelineBarrier(cmd, src_stages, dest_stages, 0, 0, NULL, 0, NULL,
+                         1, &imageMemoryBarrier);
+}
+
+void VulkanContext::initVulkan(const char* appName)
+{
+    /* need platform surface extensions */
+    m_instanceExtensionNames.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
+#ifdef _WIN32
+    m_instanceExtensionNames.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+#else
+    m_instanceExtensionNames.push_back(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
+#endif
+
+    /* need swapchain device extension */
+    m_deviceExtensionNames.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+    /* create the instance */
+    VkApplicationInfo appInfo = {};
+    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    appInfo.pNext = nullptr;
+    appInfo.pApplicationName = appName;
+    appInfo.applicationVersion = 1;
+    appInfo.pEngineName = "libBoo";
+    appInfo.engineVersion = 1;
+    appInfo.apiVersion = VK_API_VERSION;
+
+    VkInstanceCreateInfo instInfo = {};
+    instInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    instInfo.pNext = nullptr;
+    instInfo.flags = 0;
+    instInfo.pApplicationInfo = &appInfo;
+    instInfo.enabledLayerCount = m_instanceLayerNames.size();
+    instInfo.ppEnabledLayerNames = m_instanceLayerNames.size()
+                                        ? m_instanceLayerNames.data()
+                                        : nullptr;
+    instInfo.enabledExtensionCount = m_instanceExtensionNames.size();
+    instInfo.ppEnabledExtensionNames = m_instanceExtensionNames.data();
+
+    ThrowIfFailed(vkCreateInstance(&instInfo, nullptr, &m_instance));
+
+    uint32_t gpuCount = 1;
+    ThrowIfFailed(vkEnumeratePhysicalDevices(m_instance, &gpuCount, nullptr));
+    assert(gpuCount);
+    m_gpus.resize(gpuCount);
+
+    ThrowIfFailed(vkEnumeratePhysicalDevices(m_instance, &gpuCount, m_gpus.data()));
+    assert(gpuCount >= 1);
+
+    vkGetPhysicalDeviceQueueFamilyProperties(m_gpus[0], &m_queueCount, nullptr);
+    assert(m_queueCount >= 1);
+
+    m_queueProps.resize(m_queueCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(m_gpus[0], &m_queueCount, m_queueProps.data());
+    assert(m_queueCount >= 1);
+
+    /* This is as good a place as any to do this */
+    vkGetPhysicalDeviceMemoryProperties(m_gpus[0], &m_memoryProperties);
+    vkGetPhysicalDeviceProperties(m_gpus[0], &m_gpuProps);
+}
+
+void VulkanContext::initDevice()
+{
+    if (m_graphicsQueueFamilyIndex == UINT32_MAX)
+        Log.report(LogVisor::FatalError,
+                   "VulkanContext::m_graphicsQueueFamilyIndex hasn't been initialized");
+
+    /* create the device */
+    VkDeviceQueueCreateInfo queueInfo = {};
+    float queuePriorities[1] = {0.0};
+    queueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queueInfo.pNext = nullptr;
+    queueInfo.queueCount = 1;
+    queueInfo.pQueuePriorities = queuePriorities;
+    queueInfo.queueFamilyIndex = m_graphicsQueueFamilyIndex;
+
+    VkDeviceCreateInfo deviceInfo = {};
+    deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    deviceInfo.pNext = nullptr;
+    deviceInfo.queueCreateInfoCount = 1;
+    deviceInfo.pQueueCreateInfos = &queueInfo;
+    deviceInfo.enabledLayerCount = m_deviceLayerNames.size();
+    deviceInfo.ppEnabledLayerNames =
+        deviceInfo.enabledLayerCount ? m_deviceLayerNames.data() : nullptr;
+    deviceInfo.enabledExtensionCount = m_deviceExtensionNames.size();
+    deviceInfo.ppEnabledExtensionNames =
+        deviceInfo.enabledExtensionCount ? m_deviceExtensionNames.data() : nullptr;
+    deviceInfo.pEnabledFeatures = nullptr;
+
+    ThrowIfFailed(vkCreateDevice(m_gpus[0], &deviceInfo, nullptr, &m_dev));
+}
+
+void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR surface, VkFormat format)
+{
+    VkSurfaceCapabilitiesKHR surfCapabilities;
+    ThrowIfFailed(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_gpus[0], surface, &surfCapabilities));
+
+    uint32_t presentModeCount;
+    ThrowIfFailed(vkGetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, nullptr));
+    VkPresentModeKHR* presentModes = (VkPresentModeKHR*)malloc(presentModeCount * sizeof(VkPresentModeKHR));
+
+    ThrowIfFailed(vkGetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, presentModes));
+
+    VkExtent2D swapChainExtent;
+    // width and height are either both -1, or both not -1.
+    if (surfCapabilities.currentExtent.width == (uint32_t)-1)
+    {
+        // If the surface size is undefined, the size is set to
+        // the size of the images requested.
+        swapChainExtent.width = 50;
+        swapChainExtent.height = 50;
+    }
+    else
+    {
+        // If the surface size is defined, the swap chain size must match
+        swapChainExtent = surfCapabilities.currentExtent;
+    }
+
+    // If mailbox mode is available, use it, as is the lowest-latency non-
+    // tearing mode.  If not, try IMMEDIATE which will usually be available,
+    // and is fastest (though it tears).  If not, fall back to FIFO which is
+    // always available.
+    VkPresentModeKHR swapchainPresentMode = VK_PRESENT_MODE_FIFO_KHR;
+    for (size_t i=0 ; i<presentModeCount ; ++i)
+    {
+        if (presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
+        {
+            swapchainPresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+            break;
+        }
+        if ((swapchainPresentMode != VK_PRESENT_MODE_MAILBOX_KHR) &&
+            (presentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR))
+        {
+            swapchainPresentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+        }
+    }
+
+    // Determine the number of VkImage's to use in the swap chain (we desire to
+    // own only 1 image at a time, besides the images being displayed and
+    // queued for display):
+    uint32_t desiredNumberOfSwapChainImages = surfCapabilities.minImageCount + 1;
+    if ((surfCapabilities.maxImageCount > 0) &&
+        (desiredNumberOfSwapChainImages > surfCapabilities.maxImageCount))
+    {
+        // Application must settle for fewer images than desired:
+        desiredNumberOfSwapChainImages = surfCapabilities.maxImageCount;
+    }
+
+    VkSurfaceTransformFlagBitsKHR preTransform;
+    if (surfCapabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+        preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    else
+        preTransform = surfCapabilities.currentTransform;
+
+    VkSwapchainCreateInfoKHR swapChainInfo = {};
+    swapChainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapChainInfo.pNext = nullptr;
+    swapChainInfo.surface = surface;
+    swapChainInfo.minImageCount = desiredNumberOfSwapChainImages;
+    swapChainInfo.imageFormat = format;
+    swapChainInfo.imageExtent.width = swapChainExtent.width;
+    swapChainInfo.imageExtent.height = swapChainExtent.height;
+    swapChainInfo.preTransform = preTransform;
+    swapChainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swapChainInfo.imageArrayLayers = 1;
+    swapChainInfo.presentMode = swapchainPresentMode;
+    swapChainInfo.oldSwapchain = nullptr;
+    swapChainInfo.clipped = true;
+    swapChainInfo.imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+    swapChainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swapChainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapChainInfo.queueFamilyIndexCount = 0;
+    swapChainInfo.pQueueFamilyIndices = nullptr;
+
+    ThrowIfFailed(vkCreateSwapchainKHR(m_dev, &swapChainInfo, nullptr, &windowCtx.m_swapChain));
+
+    uint32_t swapchainImageCount;
+    ThrowIfFailed(vkGetSwapchainImagesKHR(m_dev, windowCtx.m_swapChain, &swapchainImageCount, nullptr));
+
+    VkImage* swapchainImages = (VkImage*)malloc(swapchainImageCount * sizeof(VkImage));
+    ThrowIfFailed(vkGetSwapchainImagesKHR(m_dev, windowCtx.m_swapChain, &swapchainImageCount, swapchainImages));
+
+    windowCtx.m_bufs.resize(swapchainImageCount);
+
+    // Going to need a command buffer to send the memory barriers in
+    // set_image_layout but we couldn't have created one before we knew
+    // what our graphics_queue_family_index is, but now that we have it,
+    // create the command buffer
+
+    VkCommandPoolCreateInfo cmdPoolInfo = {};
+    cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    cmdPoolInfo.pNext = nullptr;
+    cmdPoolInfo.queueFamilyIndex = m_graphicsQueueFamilyIndex;
+    cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    ThrowIfFailed(vkCreateCommandPool(m_dev, &cmdPoolInfo, nullptr, &m_loadPool));
+
+    VkCommandBufferAllocateInfo cmd = {};
+    cmd.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cmd.pNext = nullptr;
+    cmd.commandPool = m_loadPool;
+    cmd.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cmd.commandBufferCount = 1;
+    ThrowIfFailed(vkAllocateCommandBuffers(m_dev, &cmd, &m_loadCmdBuf));
+
+    VkCommandBufferBeginInfo cmdBufBeginInfo = {};
+    cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    cmdBufBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    ThrowIfFailed(vkBeginCommandBuffer(m_loadCmdBuf, &cmdBufBeginInfo));
+
+    vkGetDeviceQueue(m_dev, m_graphicsQueueFamilyIndex, 0, &m_queue);
+
+    for (uint32_t i=0 ; i<swapchainImageCount ; ++i)
+    {
+        VkImageViewCreateInfo colorImageView = {};
+        colorImageView.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        colorImageView.pNext = nullptr;
+        colorImageView.format = format;
+        colorImageView.components.r = VK_COMPONENT_SWIZZLE_R;
+        colorImageView.components.g = VK_COMPONENT_SWIZZLE_G;
+        colorImageView.components.b = VK_COMPONENT_SWIZZLE_B;
+        colorImageView.components.a = VK_COMPONENT_SWIZZLE_A;
+        colorImageView.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        colorImageView.subresourceRange.baseMipLevel = 0;
+        colorImageView.subresourceRange.levelCount = 1;
+        colorImageView.subresourceRange.baseArrayLayer = 0;
+        colorImageView.subresourceRange.layerCount = 1;
+        colorImageView.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        colorImageView.flags = 0;
+
+        windowCtx.m_bufs[i].m_image = swapchainImages[i];
+
+        SetImageLayout(m_loadCmdBuf, windowCtx.m_bufs[i].m_image, VK_IMAGE_ASPECT_COLOR_BIT,
+                       VK_IMAGE_LAYOUT_UNDEFINED,
+                       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+        colorImageView.image = windowCtx.m_bufs[i].m_image;
+
+        ThrowIfFailed(vkCreateImageView(m_dev, &colorImageView, nullptr, &windowCtx.m_bufs[i].m_view));
+    }
+    ThrowIfFailed(vkEndCommandBuffer(m_loadCmdBuf));
+
+    VkFenceCreateInfo fenceInfo;
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    ThrowIfFailed(vkCreateFence(m_dev, &fenceInfo, nullptr, &m_loadFence));
+
+    VkPipelineStageFlags pipeStageFlags = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    VkSubmitInfo submitInfo[1] = {};
+    submitInfo[0].pNext = nullptr;
+    submitInfo[0].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo[0].waitSemaphoreCount = 0;
+    submitInfo[0].pWaitSemaphores = nullptr;
+    submitInfo[0].pWaitDstStageMask = &pipeStageFlags;
+    submitInfo[0].commandBufferCount = 1;
+    submitInfo[0].pCommandBuffers = &m_loadCmdBuf;
+    submitInfo[0].signalSemaphoreCount = 0;
+    submitInfo[0].pSignalSemaphores = nullptr;
+
+    ThrowIfFailed(vkQueueSubmit(m_queue, 1, submitInfo, m_loadFence));
+    ThrowIfFailed(vkWaitForFences(m_dev, 1, &m_loadFence, VK_TRUE, -1));
+
+    /* Reset fence and command buffer */
+    ThrowIfFailed(vkResetFences(m_dev, 1, &m_loadFence));
+    ThrowIfFailed(vkResetCommandBuffer(m_loadCmdBuf, 0));
+    ThrowIfFailed(vkBeginCommandBuffer(m_loadCmdBuf, &cmdBufBeginInfo));
 }
 
 struct VulkanData : IGraphicsData
@@ -156,80 +500,6 @@ static const VkBufferUsageFlagBits USE_TABLE[] =
     VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
 };
-
-static bool MemoryTypeFromProperties(VulkanContext* ctx, uint32_t typeBits,
-                                     VkFlags requirementsMask,
-                                     uint32_t *typeIndex)
-{
-    /* Search memtypes to find first index with those properties */
-    for (uint32_t i = 0; i < 32; i++)
-    {
-        if ((typeBits & 1) == 1)
-        {
-            /* Type is available, does it match user properties? */
-            if ((ctx->m_memoryProperties.memoryTypes[i].propertyFlags &
-                 requirementsMask) == requirementsMask) {
-                *typeIndex = i;
-                return true;
-            }
-        }
-        typeBits >>= 1;
-    }
-    /* No memory types matched, return failure */
-    return false;
-}
-
-static void SetImageLayout(VkCommandBuffer cmd, VkImage image,
-                           VkImageAspectFlags aspectMask,
-                           VkImageLayout old_image_layout,
-                           VkImageLayout new_image_layout)
-{
-    VkImageMemoryBarrier image_memory_barrier = {};
-    image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    image_memory_barrier.pNext = NULL;
-    image_memory_barrier.srcAccessMask = 0;
-    image_memory_barrier.dstAccessMask = 0;
-    image_memory_barrier.oldLayout = old_image_layout;
-    image_memory_barrier.newLayout = new_image_layout;
-    image_memory_barrier.image = image;
-    image_memory_barrier.subresourceRange.aspectMask = aspectMask;
-    image_memory_barrier.subresourceRange.baseMipLevel = 0;
-    image_memory_barrier.subresourceRange.levelCount = 1;
-    image_memory_barrier.subresourceRange.layerCount = 1;
-
-    if (old_image_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
-        image_memory_barrier.srcAccessMask =
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    }
-
-    if (new_image_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-        /* Make sure anything that was copying from this image has completed */
-        image_memory_barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-    }
-
-    if (new_image_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-        /* Make sure any Copy or CPU writes to image are flushed */
-        image_memory_barrier.srcAccessMask =
-            VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-        image_memory_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    }
-
-    if (new_image_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
-        image_memory_barrier.dstAccessMask =
-            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
-    }
-
-    if (new_image_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
-        image_memory_barrier.dstAccessMask =
-            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
-    }
-
-    VkPipelineStageFlags src_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    VkPipelineStageFlags dest_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-
-    vkCmdPipelineBarrier(cmd, src_stages, dest_stages, 0, 0, NULL, 0, NULL,
-                         1, &image_memory_barrier);
-}
 
 class VulkanGraphicsBufferS : public IGraphicsBufferS
 {
@@ -267,11 +537,11 @@ public:
 
     VkDeviceSize sizeForGPU(VulkanContext* ctx, uint32_t& memTypeBits, VkDeviceSize offset)
     {
-        if (m_uniform && ctx->m_devProps.limits.minUniformBufferOffsetAlignment)
+        if (m_uniform && ctx->m_gpuProps.limits.minUniformBufferOffsetAlignment)
         {
             offset = (offset +
-                ctx->m_devProps.limits.minUniformBufferOffsetAlignment - 1) &
-                ~(ctx->m_devProps.limits.minUniformBufferOffsetAlignment - 1);
+                ctx->m_gpuProps.limits.minUniformBufferOffsetAlignment - 1) &
+                ~(ctx->m_gpuProps.limits.minUniformBufferOffsetAlignment - 1);
         }
 
         VkMemoryRequirements memReqs;
@@ -334,11 +604,11 @@ public:
     {
         for (int i=0 ; i<2 ; ++i)
         {
-            if (m_uniform && ctx->m_devProps.limits.minUniformBufferOffsetAlignment)
+            if (m_uniform && ctx->m_gpuProps.limits.minUniformBufferOffsetAlignment)
             {
                 offset = (offset +
-                    ctx->m_devProps.limits.minUniformBufferOffsetAlignment - 1) &
-                    ~(ctx->m_devProps.limits.minUniformBufferOffsetAlignment - 1);
+                    ctx->m_gpuProps.limits.minUniformBufferOffsetAlignment - 1) &
+                    ~(ctx->m_gpuProps.limits.minUniformBufferOffsetAlignment - 1);
             }
 
             VkMemoryRequirements memReqs;

@@ -110,8 +110,8 @@ static Window GetWindowOfEvent(XEvent* event, bool& windowEvent)
 }
     
 IWindow* _WindowXlibNew(const std::string& title,
-                       Display* display, int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
-                       GLXContext lastCtx);
+                        Display* display, int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
+                        GLXContext lastCtx, bool useVulkan);
 
 static XIMStyle ChooseBetterStyle(XIMStyle style1, XIMStyle style2)
 {
@@ -170,6 +170,9 @@ class ApplicationXlib final : public IApplication
     XIMStyle m_bestStyle = 0;
     int m_xDefaultScreen = 0;
     int m_xcbFd, m_dbusFd, m_maxFd;
+
+    /* Vulkan enable */
+    bool m_useVulkan = true;
     
     void _deletedWindow(IWindow* window)
     {
@@ -455,7 +458,8 @@ public:
     
     IWindow* newWindow(const std::string& title)
     {
-        IWindow* newWindow = _WindowXlibNew(title, m_xDisp, m_xDefaultScreen, m_xIM, m_bestStyle, m_fontset, m_lastGlxCtx);
+        IWindow* newWindow = _WindowXlibNew(title, m_xDisp, m_xDefaultScreen, m_xIM,
+                                            m_bestStyle, m_fontset, m_lastGlxCtx, m_useVulkan);
         m_windows[(Window)newWindow->getPlatformHandle()] = newWindow;
         return newWindow;
     }
