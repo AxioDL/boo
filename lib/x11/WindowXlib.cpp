@@ -3,8 +3,11 @@
 #include "boo/IApplication.hpp"
 #include "boo/graphicsdev/GL.hpp"
 
-#define VK_USE_PLATFORM_XLIB_KHR
+#if BOO_HAS_VULKAN
+#define VK_USE_PLATFORM_XCB_KHR
 #include "boo/graphicsdev/Vulkan.hpp"
+#include <X11/Xlib-xcb.h>
+#endif
 
 #include <limits.h>
 #include <stdlib.h>
@@ -60,7 +63,7 @@ static int ctxErrorHandler(Display *dpy, XErrorEvent *ev)
     return 0;
 }
 
-static const std::vector<std::vector<int>> ContextAttribList =
+static const int ContextAttribList[7][7] =
 {
 {   GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
     GLX_CONTEXT_MINOR_VERSION_ARB, 5,
@@ -70,10 +73,12 @@ static const std::vector<std::vector<int>> ContextAttribList =
 {   GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
     GLX_CONTEXT_MINOR_VERSION_ARB, 4,
     GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
+    0
 },
 {   GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
     GLX_CONTEXT_MINOR_VERSION_ARB, 3,
     GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
+    0
 },
 {   GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
     GLX_CONTEXT_MINOR_VERSION_ARB, 2,
@@ -445,9 +450,9 @@ public:
 
         s_glxError = false;
         XErrorHandler oldHandler = XSetErrorHandler(&ctxErrorHandler);
-        for (const std::vector<int>& attribs : ContextAttribList)
+        for (int i=0 ; i<std::extent<decltype(ContextAttribList)>::value ; ++i)
         {
-            m_glxCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_lastCtx, True, attribs.data());
+            m_glxCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_lastCtx, True, ContextAttribList[i]);
             if (m_glxCtx)
                 break;
         }
@@ -542,9 +547,9 @@ public:
         {
             s_glxError = false;
             XErrorHandler oldHandler = XSetErrorHandler(&ctxErrorHandler);
-            for (const std::vector<int>& attribs : ContextAttribList)
+            for (int i=0 ; i<std::extent<decltype(ContextAttribList)>::value ; ++i)
             {
-                m_mainCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, attribs.data());
+                m_mainCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribList[i]);
                 if (m_mainCtx)
                     break;
             }
@@ -565,9 +570,9 @@ public:
         {
             s_glxError = false;
             XErrorHandler oldHandler = XSetErrorHandler(&ctxErrorHandler);
-            for (const std::vector<int>& attribs : ContextAttribList)
+            for (int i=0 ; i<std::extent<decltype(ContextAttribList)>::value ; ++i)
             {
-                m_loadCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, attribs.data());
+                m_loadCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribList[i]);
                 if (m_loadCtx)
                     break;
             }
@@ -589,8 +594,9 @@ public:
 #if BOO_HAS_VULKAN
 struct GraphicsContextXlibVulkan : GraphicsContextXlib
 {
+    xcb_connection_t* m_xcbConn;
     VulkanContext* m_ctx;
-    VkSurfaceKHR m_surface;
+    VkSurfaceKHR m_surface = VK_NULL_HANDLE;
     VkFormat m_format;
 
     GLXFBConfig m_fbconfig = 0;
@@ -612,84 +618,11 @@ public:
     IWindowCallback* m_callback;
 
     GraphicsContextXlibVulkan(IWindow* parentWindow,
-                              Display* display, int defaultScreen,
+                              Display* display, xcb_connection_t* xcbConn, int defaultScreen,
                               VulkanContext* ctx, uint32_t& visualIdOut)
     : GraphicsContextXlib(EGraphicsAPI::Vulkan, EPixelFormat::RGBA8, parentWindow, display),
-      m_ctx(ctx)
+      m_xcbConn(xcbConn), m_ctx(ctx)
     {
-        if (ctx->m_instance == VK_NULL_HANDLE)
-            ctx->initVulkan(APP->getProcessName().c_str());
-
-        VulkanContext::Window& m_windowCtx =
-            *ctx->m_windows.emplace(std::make_pair(parentWindow,
-            std::make_unique<VulkanContext::Window>())).first->second;
-        m_dataFactory = new class VulkanDataFactory(this, ctx);
-
-        VkXlibSurfaceCreateInfoKHR surfaceInfo = {};
-        surfaceInfo.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
-        surfaceInfo.dpy = display;
-        surfaceInfo.window = parentWindow->getPlatformHandle();
-        ThrowIfFailed(vkCreateXlibSurfaceKHR(ctx->m_instance, &surfaceInfo, nullptr, &m_surface));
-
-        /* Iterate over each queue to learn whether it supports presenting */
-        VkBool32 *supportsPresent = (VkBool32*)malloc(ctx->m_queueCount * sizeof(VkBool32));
-        for (uint32_t i=0 ; i<ctx->m_queueCount ; ++i)
-            vkGetPhysicalDeviceSurfaceSupportKHR(ctx->m_gpus[0], i, m_surface, &supportsPresent[i]);
-
-        /* Search for a graphics queue and a present queue in the array of queue
-         * families, try to find one that supports both */
-        if (m_ctx->m_graphicsQueueFamilyIndex == UINT32_MAX)
-        {
-            /* First window, init device */
-            for (uint32_t i=0 ; i<ctx->m_queueCount; ++i)
-            {
-                if ((ctx->m_queueProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0)
-                {
-                    if (supportsPresent[i] == VK_TRUE)
-                    {
-                        m_ctx->m_graphicsQueueFamilyIndex = i;
-                        break;
-                    }
-                }
-            }
-
-            /* Generate error if could not find a queue that supports both a graphics
-             * and present */
-            if (m_ctx->m_graphicsQueueFamilyIndex == UINT32_MAX)
-                Log.report(LogVisor::FatalError,
-                           "Could not find a queue that supports both graphics and present");
-
-            m_ctx->initDevice();
-        }
-        else
-        {
-            /* Subsequent window, verify present */
-            if (supportsPresent[m_ctx->m_graphicsQueueFamilyIndex] == VK_FALSE)
-                Log.report(LogVisor::FatalError, "subsequent surface doesn't support present");
-        }
-        free(supportsPresent);
-
-
-        /* Get the list of VkFormats that are supported */
-        uint32_t formatCount;
-        ThrowIfFailed(vkGetPhysicalDeviceSurfaceFormatsKHR(ctx->m_gpus[0], m_surface, &formatCount, nullptr));
-        VkSurfaceFormatKHR* surfFormats = (VkSurfaceFormatKHR*)malloc(formatCount * sizeof(VkSurfaceFormatKHR));
-        ThrowIfFailed(vkGetPhysicalDeviceSurfaceFormatsKHR(ctx->m_gpus[0], m_surface, &formatCount, surfFormats));
-
-        /* If the format list includes just one entry of VK_FORMAT_UNDEFINED,
-         * the surface has no preferred format.  Otherwise, at least one
-         * supported format will be returned. */
-        if (formatCount >= 1)
-        {
-            if (surfFormats[0].format == VK_FORMAT_UNDEFINED)
-                m_format = VK_FORMAT_B8G8R8A8_UNORM;
-            else
-                m_format = surfFormats[0].format;
-        }
-        else
-            Log.report(LogVisor::FatalError, "no surface formats available for Vulkan swapchain");
-
-
         /* Query framebuffer configurations */
         GLXFBConfig* fbConfigs = nullptr;
         int numFBConfigs = 0;
@@ -746,12 +679,6 @@ public:
             return;
         }
 
-        if (!vkGetPhysicalDeviceXlibPresentationSupportKHR(ctx->m_gpus[0], ctx->m_graphicsQueueFamilyIndex, display, m_visualid))
-        {
-            Log.report(LogVisor::FatalError, "unable to find vulkan-compatible pixel format");
-            return;
-        }
-
         visualIdOut = m_visualid;
     }
 
@@ -805,6 +732,85 @@ public:
                 Log.report(LogVisor::FatalError, "unable to resolve glXWaitVideoSyncSGI");
         }
 
+        if (m_ctx->m_instance == VK_NULL_HANDLE)
+            m_ctx->initVulkan(APP->getUniqueName().c_str());
+
+        VulkanContext::Window& m_windowCtx =
+            *m_ctx->m_windows.emplace(std::make_pair(m_parentWindow,
+            std::make_unique<VulkanContext::Window>())).first->second;
+
+        VkXcbSurfaceCreateInfoKHR surfaceInfo = {};
+        surfaceInfo.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
+        surfaceInfo.connection = m_xcbConn;
+        surfaceInfo.window = m_parentWindow->getPlatformHandle();
+        ThrowIfFailed(vkCreateXcbSurfaceKHR(m_ctx->m_instance, &surfaceInfo, nullptr, &m_surface));
+
+        /* Iterate over each queue to learn whether it supports presenting */
+        VkBool32 *supportsPresent = (VkBool32*)malloc(m_ctx->m_queueCount * sizeof(VkBool32));
+        for (uint32_t i=0 ; i<m_ctx->m_queueCount ; ++i)
+            vkGetPhysicalDeviceSurfaceSupportKHR(m_ctx->m_gpus[0], i, m_surface, &supportsPresent[i]);
+
+        /* Search for a graphics queue and a present queue in the array of queue
+         * families, try to find one that supports both */
+        if (m_ctx->m_graphicsQueueFamilyIndex == UINT32_MAX)
+        {
+            /* First window, init device */
+            for (uint32_t i=0 ; i<m_ctx->m_queueCount; ++i)
+            {
+                if ((m_ctx->m_queueProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0)
+                {
+                    if (supportsPresent[i] == VK_TRUE)
+                    {
+                        m_ctx->m_graphicsQueueFamilyIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            /* Generate error if could not find a queue that supports both a graphics
+             * and present */
+            if (m_ctx->m_graphicsQueueFamilyIndex == UINT32_MAX)
+                Log.report(LogVisor::FatalError,
+                           "Could not find a queue that supports both graphics and present");
+
+            m_ctx->initDevice();
+        }
+        else
+        {
+            /* Subsequent window, verify present */
+            if (supportsPresent[m_ctx->m_graphicsQueueFamilyIndex] == VK_FALSE)
+                Log.report(LogVisor::FatalError, "subsequent surface doesn't support present");
+        }
+        free(supportsPresent);
+
+        if (!vkGetPhysicalDeviceXcbPresentationSupportKHR(m_ctx->m_gpus[0], m_ctx->m_graphicsQueueFamilyIndex, m_xcbConn, m_visualid))
+        {
+            Log.report(LogVisor::FatalError, "XCB visual doesn't support vulkan present");
+            return;
+        }
+
+        /* Get the list of VkFormats that are supported */
+        uint32_t formatCount;
+        ThrowIfFailed(vkGetPhysicalDeviceSurfaceFormatsKHR(m_ctx->m_gpus[0], m_surface, &formatCount, nullptr));
+        VkSurfaceFormatKHR* surfFormats = (VkSurfaceFormatKHR*)malloc(formatCount * sizeof(VkSurfaceFormatKHR));
+        ThrowIfFailed(vkGetPhysicalDeviceSurfaceFormatsKHR(m_ctx->m_gpus[0], m_surface, &formatCount, surfFormats));
+
+
+        /* If the format list includes just one entry of VK_FORMAT_UNDEFINED,
+         * the surface has no preferred format.  Otherwise, at least one
+         * supported format will be returned. */
+        if (formatCount >= 1)
+        {
+            if (surfFormats[0].format == VK_FORMAT_UNDEFINED)
+                m_format = VK_FORMAT_B8G8R8A8_UNORM;
+            else
+                m_format = surfFormats[0].format;
+        }
+        else
+            Log.report(LogVisor::FatalError, "no surface formats available for Vulkan swapchain");
+
+        m_ctx->initSwapChain(m_windowCtx, m_surface, m_format);
+
         /* Spawn vsync thread */
         m_vsyncRunning = true;
         std::mutex initmt;
@@ -850,6 +856,7 @@ public:
         });
         initcv.wait(outerLk);
 
+        m_dataFactory = new class VulkanDataFactory(this, m_ctx);
         m_commandQueue = _NewVulkanCommandQueue(m_ctx, m_ctx->m_windows[m_parentWindow].get(), this);
     }
 
@@ -935,7 +942,8 @@ class WindowXlib : public IWindow
 
 public:
     WindowXlib(const std::string& title,
-               Display* display, int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
+               Display* display, void* xcbConn,
+               int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
                GLXContext lastCtx, bool useVulkan)
     : m_xDisp(display), m_callback(nullptr),
       m_bestStyle(bestInputStyle)
@@ -945,7 +953,7 @@ public:
 
 #if BOO_HAS_VULKAN
         if (useVulkan)
-            m_gfxCtx.reset(new GraphicsContextXlibVulkan(this, display, defaultScreen,
+            m_gfxCtx.reset(new GraphicsContextXlibVulkan(this, display, (xcb_connection_t*)xcbConn, defaultScreen,
                                                          &g_VulkanContext, m_visualId));
         else
 #endif
@@ -1941,11 +1949,12 @@ public:
 };
 
 IWindow* _WindowXlibNew(const std::string& title,
-                       Display* display, int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
+                       Display* display, void* xcbConn,
+                        int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
                        GLXContext lastCtx, bool useVulkan)
 {
     XLockDisplay(display);
-    IWindow* ret = new WindowXlib(title, display, defaultScreen, xIM, bestInputStyle, fontset, lastCtx, useVulkan);
+    IWindow* ret = new WindowXlib(title, display, xcbConn, defaultScreen, xIM, bestInputStyle, fontset, lastCtx, useVulkan);
     XUnlockDisplay(display);
     return ret;
 }

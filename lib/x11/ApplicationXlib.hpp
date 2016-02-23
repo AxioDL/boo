@@ -25,12 +25,15 @@ DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
 #include "XlibCommon.hpp"
 #include <X11/cursorfont.h>
 
+#if BOO_HAS_VULKAN
+#include <X11/Xlib-xcb.h>
+#endif
+
 namespace boo
 {
 static LogVisor::LogModule Log("boo::ApplicationXlib");
 XlibCursors X_CURSORS;
 
-int XCB_GLX_EVENT_BASE = 0;
 int XINPUT_OPCODE = 0;
 
 static Window GetWindowOfEvent(XEvent* event, bool& windowEvent)
@@ -110,8 +113,9 @@ static Window GetWindowOfEvent(XEvent* event, bool& windowEvent)
 }
     
 IWindow* _WindowXlibNew(const std::string& title,
-                        Display* display, int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
-                        GLXContext lastCtx, bool useVulkan);
+                       Display* display, void* xcbConn,
+                        int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
+                       GLXContext lastCtx, bool useVulkan);
 
 static XIMStyle ChooseBetterStyle(XIMStyle style1, XIMStyle style2)
 {
@@ -169,10 +173,13 @@ class ApplicationXlib final : public IApplication
     XFontSet m_fontset;
     XIMStyle m_bestStyle = 0;
     int m_xDefaultScreen = 0;
-    int m_xcbFd, m_dbusFd, m_maxFd;
+    int m_x11Fd, m_dbusFd, m_maxFd;
 
+#if BOO_HAS_VULKAN
     /* Vulkan enable */
     bool m_useVulkan = true;
+    xcb_connection_t* m_xcbConn;
+#endif
     
     void _deletedWindow(IWindow* window)
     {
@@ -256,6 +263,16 @@ public:
             return;
         }
 
+#if BOO_HAS_VULKAN
+        /* Cast Display to XCB connection for vulkan */
+        m_xcbConn = XGetXCBConnection(m_xDisp);
+        if (!m_xcbConn)
+        {
+            Log.report(LogVisor::FatalError, "Can't cast Display to XCB connection for Vulkan");
+            return;
+        }
+#endif
+
         /* Configure locale */
         if (!XSupportsLocale()) {
             Log.report(LogVisor::FatalError, "X does not support locale %s.",
@@ -316,9 +333,9 @@ public:
         XkbSetDetectableAutoRepeat(m_xDisp, True, nullptr);
 
         /* Get file descriptors of xcb and dbus interfaces */
-        m_xcbFd = ConnectionNumber(m_xDisp);
+        m_x11Fd = ConnectionNumber(m_xDisp);
         dbus_connection_get_unix_fd(m_dbus, &m_dbusFd);
-        m_maxFd = MAX(m_xcbFd, m_dbusFd);
+        m_maxFd = MAX(m_x11Fd, m_dbusFd);
 
         XFlush(m_xDisp);
     }
@@ -375,7 +392,7 @@ public:
         {
             fd_set fds;
             FD_ZERO(&fds);
-            FD_SET(m_xcbFd, &fds);
+            FD_SET(m_x11Fd, &fds);
             FD_SET(m_dbusFd, &fds);
             if (pselect(m_maxFd+1, &fds, NULL, NULL, NULL, &origmask) < 0)
             {
@@ -384,7 +401,7 @@ public:
                     break;
             }
 
-            if (FD_ISSET(m_xcbFd, &fds))
+            if (FD_ISSET(m_x11Fd, &fds))
             {
                 XLockDisplay(m_xDisp);
                 while (XPending(m_xDisp))
@@ -458,8 +475,13 @@ public:
     
     IWindow* newWindow(const std::string& title)
     {
-        IWindow* newWindow = _WindowXlibNew(title, m_xDisp, m_xDefaultScreen, m_xIM,
+#if BOO_HAS_VULKAN
+        IWindow* newWindow = _WindowXlibNew(title, m_xDisp, m_xcbConn, m_xDefaultScreen, m_xIM,
                                             m_bestStyle, m_fontset, m_lastGlxCtx, m_useVulkan);
+#else
+        IWindow* newWindow = _WindowXlibNew(title, m_xDisp, nullptr, m_xDefaultScreen, m_xIM,
+                                            m_bestStyle, m_fontset, m_lastGlxCtx, false);
+#endif
         m_windows[(Window)newWindow->getPlatformHandle()] = newWindow;
         return newWindow;
     }

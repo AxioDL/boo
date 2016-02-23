@@ -16,10 +16,16 @@ namespace boo
 
 struct VulkanContext
 {
-    std::vector<const char*> m_instanceLayerNames;
+    struct LayerProperties
+    {
+        VkLayerProperties properties;
+        std::vector<VkExtensionProperties> extensions;
+    };
+
+    std::vector<LayerProperties> m_instanceLayerProperties;
+    std::vector<const char*> m_layerNames;
     std::vector<const char*> m_instanceExtensionNames;
     VkInstance m_instance = VK_NULL_HANDLE;
-    std::vector<const char*> m_deviceLayerNames;
     std::vector<const char*> m_deviceExtensionNames;
     std::vector<VkPhysicalDevice> m_gpus;
     VkPhysicalDeviceProperties m_gpuProps;

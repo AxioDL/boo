@@ -1,7 +1,7 @@
 #ifdef _WIN32
 #define VK_USE_PLATFORM_WIN32_KHR
 #else
-#define VK_USE_PLATFORM_XLIB_KHR
+#define VK_USE_PLATFORM_XCB_KHR
 #endif
 
 #include "boo/graphicsdev/Vulkan.hpp"
@@ -135,6 +135,33 @@ static inline void ThrowIfFalse(bool res)
         Log.report(LogVisor::FatalError, "operation failed\n", res);
 }
 
+static VKAPI_ATTR VkBool32 VKAPI_CALL
+dbgFunc(VkDebugReportFlagsEXT msgFlags, VkDebugReportObjectTypeEXT objType,
+        uint64_t srcObject, size_t location, int32_t msgCode,
+        const char *pLayerPrefix, const char *pMsg, void *pUserData)
+{
+    if (msgFlags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
+        Log.report(LogVisor::FatalError, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
+    } else if (msgFlags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
+        Log.report(LogVisor::Warning, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
+    } else if (msgFlags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT) {
+        Log.report(LogVisor::Warning, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
+    } else if (msgFlags & VK_DEBUG_REPORT_INFORMATION_BIT_EXT) {
+        Log.report(LogVisor::Info, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
+    } else if (msgFlags & VK_DEBUG_REPORT_DEBUG_BIT_EXT) {
+        Log.report(LogVisor::Info, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
+    }
+
+    /*
+     * false indicates that layer should not bail-out of an
+     * API call that had validation failures. This may mean that the
+     * app dies inside the driver due to invalid parameter(s).
+     * That's what would happen without validation layers, so we'll
+     * keep that behavior here.
+     */
+    return false;
+}
+
 static bool MemoryTypeFromProperties(VulkanContext* ctx, uint32_t typeBits,
                                      VkFlags requirementsMask,
                                      uint32_t *typeIndex)
@@ -209,18 +236,127 @@ static void SetImageLayout(VkCommandBuffer cmd, VkImage image,
                          1, &imageMemoryBarrier);
 }
 
+static VkResult InitGlobalExtensionProperties(VulkanContext::LayerProperties& layerProps) {
+    VkExtensionProperties *instance_extensions;
+    uint32_t instance_extension_count;
+    VkResult res;
+    char *layer_name = nullptr;
+
+    layer_name = layerProps.properties.layerName;
+
+    do {
+        res = vkEnumerateInstanceExtensionProperties(
+            layer_name, &instance_extension_count, nullptr);
+        if (res)
+            return res;
+
+        if (instance_extension_count == 0) {
+            return VK_SUCCESS;
+        }
+
+        layerProps.extensions.resize(instance_extension_count);
+        instance_extensions = layerProps.extensions.data();
+        res = vkEnumerateInstanceExtensionProperties(
+            layer_name, &instance_extension_count, instance_extensions);
+    } while (res == VK_INCOMPLETE);
+
+    return res;
+}
+
+/*
+ * Return 1 (true) if all layer names specified in check_names
+ * can be found in given layer properties.
+ */
+static void demo_check_layers(const std::vector<VulkanContext::LayerProperties>& layerProps,
+                              const std::vector<const char*> &layerNames) {
+    uint32_t check_count = layerNames.size();
+    uint32_t layer_count = layerProps.size();
+    for (uint32_t i = 0; i < check_count; i++) {
+        VkBool32 found = 0;
+        for (uint32_t j = 0; j < layer_count; j++) {
+            if (!strcmp(layerNames[i], layerProps[j].properties.layerName)) {
+                found = 1;
+            }
+        }
+        if (!found) {
+            Log.report(LogVisor::FatalError, "Cannot find layer: %s", layerNames[i]);
+        }
+    }
+}
+
 void VulkanContext::initVulkan(const char* appName)
 {
+    if (!glslang::InitializeProcess())
+        Log.report(LogVisor::FatalError, "unable to initialize glslang");
+
+    uint32_t instanceLayerCount;
+    VkLayerProperties* vkProps = nullptr;
+    VkResult res;
+
+    /*
+     * It's possible, though very rare, that the number of
+     * instance layers could change. For example, installing something
+     * could include new layers that the loader would pick up
+     * between the initial query for the count and the
+     * request for VkLayerProperties. The loader indicates that
+     * by returning a VK_INCOMPLETE status and will update the
+     * the count parameter.
+     * The count parameter will be updated with the number of
+     * entries loaded into the data pointer - in case the number
+     * of layers went down or is smaller than the size given.
+     */
+    putenv("VK_LAYER_PATH=/usr/share/vulkan/explicit_layer.d");
+    do {
+        ThrowIfFailed(vkEnumerateInstanceLayerProperties(&instanceLayerCount, nullptr));
+
+        if (instanceLayerCount == 0)
+            break;
+
+        vkProps = (VkLayerProperties *)realloc(vkProps, instanceLayerCount * sizeof(VkLayerProperties));
+
+        res = vkEnumerateInstanceLayerProperties(&instanceLayerCount, vkProps);
+    } while (res == VK_INCOMPLETE);
+
+    /*
+     * Now gather the extension list for each instance layer.
+     */
+    for (uint32_t i=0 ; i<instanceLayerCount ; ++i)
+    {
+        LayerProperties layerProps;
+        layerProps.properties = vkProps[i];
+        ThrowIfFailed(InitGlobalExtensionProperties(layerProps));
+        m_instanceLayerProperties.push_back(layerProps);
+    }
+    free(vkProps);
+
     /* need platform surface extensions */
     m_instanceExtensionNames.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
 #ifdef _WIN32
     m_instanceExtensionNames.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
 #else
-    m_instanceExtensionNames.push_back(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
+    m_instanceExtensionNames.push_back(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
 #endif
 
     /* need swapchain device extension */
     m_deviceExtensionNames.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+#ifndef NDEBUG
+    m_layerNames.push_back("VK_LAYER_LUNARG_object_tracker");
+    m_layerNames.push_back("VK_LAYER_LUNARG_draw_state");
+    m_layerNames.push_back("VK_LAYER_LUNARG_mem_tracker");
+    m_layerNames.push_back("VK_LAYER_LUNARG_param_checker");
+    m_layerNames.push_back("VK_LAYER_LUNARG_image");
+    m_layerNames.push_back("VK_LAYER_LUNARG_threading");
+    m_layerNames.push_back("VK_LAYER_LUNARG_swapchain");
+    m_layerNames.push_back("VK_LAYER_LUNARG_device_limits");
+#endif
+
+    demo_check_layers(m_instanceLayerProperties, m_layerNames);
+
+#ifndef NDEBUG
+    /* Enable debug callback extension */
+    m_instanceExtensionNames.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+#endif
 
     /* create the instance */
     VkApplicationInfo appInfo = {};
@@ -237,14 +373,31 @@ void VulkanContext::initVulkan(const char* appName)
     instInfo.pNext = nullptr;
     instInfo.flags = 0;
     instInfo.pApplicationInfo = &appInfo;
-    instInfo.enabledLayerCount = m_instanceLayerNames.size();
-    instInfo.ppEnabledLayerNames = m_instanceLayerNames.size()
-                                        ? m_instanceLayerNames.data()
+    instInfo.enabledLayerCount = m_layerNames.size();
+    instInfo.ppEnabledLayerNames = m_layerNames.size()
+                                        ? m_layerNames.data()
                                         : nullptr;
     instInfo.enabledExtensionCount = m_instanceExtensionNames.size();
     instInfo.ppEnabledExtensionNames = m_instanceExtensionNames.data();
 
     ThrowIfFailed(vkCreateInstance(&instInfo, nullptr, &m_instance));
+
+#ifndef NDEBUG
+    VkDebugReportCallbackEXT debugReportCallback;
+
+    PFN_vkCreateDebugReportCallbackEXT createDebugReportCallback =
+        (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(m_instance, "vkCreateDebugReportCallbackEXT");
+    if (!createDebugReportCallback)
+        Log.report(LogVisor::FatalError, "GetInstanceProcAddr: Unable to find vkCreateDebugReportCallbackEXT function.");
+
+    VkDebugReportCallbackCreateInfoEXT debugCreateInfo = {};
+    debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
+    debugCreateInfo.pNext = nullptr;
+    debugCreateInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
+    debugCreateInfo.pfnCallback = dbgFunc;
+    debugCreateInfo.pUserData = nullptr;
+    ThrowIfFailed(createDebugReportCallback(m_instance, &debugCreateInfo, nullptr, &debugReportCallback));
+#endif
 
     uint32_t gpuCount = 1;
     ThrowIfFailed(vkEnumeratePhysicalDevices(m_instance, &gpuCount, nullptr));
@@ -286,9 +439,9 @@ void VulkanContext::initDevice()
     deviceInfo.pNext = nullptr;
     deviceInfo.queueCreateInfoCount = 1;
     deviceInfo.pQueueCreateInfos = &queueInfo;
-    deviceInfo.enabledLayerCount = m_deviceLayerNames.size();
+    deviceInfo.enabledLayerCount = m_layerNames.size();
     deviceInfo.ppEnabledLayerNames =
-        deviceInfo.enabledLayerCount ? m_deviceLayerNames.data() : nullptr;
+        deviceInfo.enabledLayerCount ? m_layerNames.data() : nullptr;
     deviceInfo.enabledExtensionCount = m_deviceExtensionNames.size();
     deviceInfo.ppEnabledExtensionNames =
         deviceInfo.enabledExtensionCount ? m_deviceExtensionNames.data() : nullptr;
@@ -723,7 +876,7 @@ class VulkanTextureS : public ITextureS
 
             size_t srcRowPitch = width * pxPitchNum / pxPitchDenom;
 
-            for (size_t y=0 ; y<height ; ++i)
+            for (size_t y=0 ; y<height ; ++y)
             {
                 memcpy(dstDataIt, srcDataIt, srcRowPitch);
                 srcDataIt += srcRowPitch;
@@ -959,7 +1112,7 @@ class VulkanTextureSA : public ITextureSA
 
             size_t srcRowPitch = width * pxPitchNum / pxPitchDenom;
 
-            for (size_t y=0 ; y<height ; ++i)
+            for (size_t y=0 ; y<height ; ++y)
             {
                 memcpy(dstDataIt, srcDataIt, srcRowPitch);
                 srcDataIt += srcRowPitch;
@@ -1982,6 +2135,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         VkCommandPoolCreateInfo poolInfo = {};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         poolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+        poolInfo.queueFamilyIndex = m_ctx->m_graphicsQueueFamilyIndex;
         ThrowIfFailed(vkCreateCommandPool(ctx->m_dev, &poolInfo, nullptr, &m_cmdPool));
         ThrowIfFailed(vkCreateCommandPool(ctx->m_dev, &poolInfo, nullptr, &m_dynamicCmdPool));
 
