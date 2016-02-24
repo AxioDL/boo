@@ -23,9 +23,10 @@ namespace boo {class ApplicationCocoa;}
 namespace boo
 {
 static LogVisor::LogModule Log("boo::ApplicationCocoa");
-    
-IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx, MetalContext* metalCtx);
-    
+
+IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx,
+                         MetalContext* metalCtx, uint32_t sampleCount);
+
 class ApplicationCocoa : public IApplication
 {
 public:
@@ -36,14 +37,14 @@ private:
     const SystemString m_friendlyName;
     const SystemString m_pname;
     const std::vector<SystemString> m_args;
-    
+
     NSPanel* aboutPanel;
-    
+
     /* All windows */
     std::unordered_map<uintptr_t, IWindow*> m_windows;
-    
+
     MetalContext m_metalCtx;
-    
+
     void _deletedWindow(IWindow* window)
     {
         m_windows.erase(window->getPlatformHandle());
@@ -62,11 +63,11 @@ public:
       m_args(args)
     {
         [[NSApplication sharedApplication] setActivationPolicy:NSApplicationActivationPolicyRegular];
-        
+
         /* Delegate (OS X callbacks) */
         m_appDelegate = [[AppDelegate alloc] initWithApp:this];
         [[NSApplication sharedApplication] setDelegate:m_appDelegate];
-        
+
         /* App menu */
         NSMenu* rootMenu = [[NSMenu alloc] initWithTitle:@"main"];
         NSMenu* appMenu = [[NSMenu alloc] initWithTitle:[NSString stringWithUTF8String:m_friendlyName.c_str()]];
@@ -82,7 +83,7 @@ public:
         [[rootMenu addItemWithTitle:[NSString stringWithUTF8String:m_friendlyName.c_str()]
                             action:nil keyEquivalent:@""] setSubmenu:appMenu];
         [[NSApplication sharedApplication] setMainMenu:rootMenu];
-        
+
         /* Determine which graphics API to use */
 #if BOO_HAS_METAL
         for (const SystemString& arg : args)
@@ -99,12 +100,12 @@ public:
         Log.report(LogVisor::Info, "using OpenGL renderer");
 #endif
     }
-    
+
     EPlatformType getPlatformType() const
     {
         return EPlatformType::Cocoa;
     }
-    
+
     std::thread m_clientThread;
     int m_clientReturn = 0;
     int run()
@@ -114,54 +115,54 @@ public:
         {
             /* Run app */
             m_clientReturn = m_callback.appMain(this);
-            
+
             /* Cleanup here */
             std::vector<std::unique_ptr<IWindow>> toDelete;
             toDelete.reserve(m_windows.size());
             for (auto& window : m_windows)
                 toDelete.emplace_back(window.second);
         });
-        
+
         /* Already in Cocoa's event loop; return now */
         return 0;
     }
-    
+
     void quit()
     {
         [NSApp terminate:nil];
     }
-    
+
     const SystemString& getUniqueName() const
     {
         return m_uniqueName;
     }
-    
+
     const SystemString& getFriendlyName() const
     {
         return m_friendlyName;
     }
-    
+
     const SystemString& getProcessName() const
     {
         return m_pname;
     }
-    
+
     const std::vector<SystemString>& getArgs() const
     {
         return m_args;
     }
-    
-    IWindow* newWindow(const std::string& title)
+
+    IWindow* newWindow(const std::string& title, uint32_t sampleCount)
     {
-        IWindow* newWindow = _WindowCocoaNew(title, m_lastGLCtx, &m_metalCtx);
+        IWindow* newWindow = _WindowCocoaNew(title, m_lastGLCtx, &m_metalCtx, sampleCount);
         m_windows[newWindow->getPlatformHandle()] = newWindow;
         return newWindow;
     }
-    
+
     /* Last GL context */
     NSOpenGLContext* m_lastGLCtx = nullptr;
 };
-    
+
 void _CocoaUpdateLastGLCtx(NSOpenGLContext* lastGLCtx)
 {
     static_cast<ApplicationCocoa*>(APP)->m_lastGLCtx = lastGLCtx;
@@ -189,7 +190,7 @@ int ApplicationRun(IApplication::EPlatformType platform,
         return static_cast<ApplicationCocoa*>(APP)->m_clientReturn;
     }
 }
-    
+
 }
 
 @implementation AppDelegate

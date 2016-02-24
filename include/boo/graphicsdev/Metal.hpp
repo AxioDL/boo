@@ -27,11 +27,12 @@ class MetalDataFactory : public IGraphicsDataFactory
     std::unordered_set<struct MetalData*> m_committedData;
     std::mutex m_committedMutex;
     struct MetalContext* m_ctx;
+    uint32_t m_sampleCount;
 
     void destroyData(IGraphicsData*);
     void destroyAllData();
 public:
-    MetalDataFactory(IGraphicsContext* parent, MetalContext* ctx);
+    MetalDataFactory(IGraphicsContext* parent, MetalContext* ctx, uint32_t sampleCount);
     ~MetalDataFactory() {}
 
     Platform platform() const {return Platform::Metal;}
@@ -44,11 +45,11 @@ public:
                                 const void* data, size_t sz);
     GraphicsDataToken
     newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                              const void* data, size_t sz, ITextureS** texOut);
+                              const void* data, size_t sz, ITextureS*& texOut);
     ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
                                       const void* data, size_t sz);
     ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
-    ITextureR* newRenderTexture(size_t width, size_t height, size_t samples);
+    ITextureR* newRenderTexture(size_t width, size_t height);
 
     bool bindingNeedsVertexFormat() const {return false;}
     IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);

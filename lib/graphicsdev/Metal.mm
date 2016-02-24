@@ -648,23 +648,14 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         setRenderTarget(m_boundTarget);
     }
 
-    MTLPrimitiveType m_primType = MTLPrimitiveTypeTriangle;
-    void setDrawPrimitive(Primitive prim)
-    {
-        if (prim == Primitive::Triangles)
-            m_primType = MTLPrimitiveTypeTriangle;
-        else if (prim == Primitive::TriStrips)
-            m_primType = MTLPrimitiveTypeTriangleStrip;
-    }
-
     void draw(size_t start, size_t count)
     {
-        [m_enc drawPrimitives:m_primType vertexStart:start vertexCount:count];
+        [m_enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:start vertexCount:count];
     }
 
     void drawIndexed(size_t start, size_t count)
     {
-        [m_enc drawIndexedPrimitives:m_primType
+        [m_enc drawIndexedPrimitives:MTLPrimitiveTypeTriangleStrip
                           indexCount:count
                            indexType:MTLIndexTypeUInt32
                          indexBuffer:GetBufferGPUResource(m_boundData->m_ibuf, m_fillBuf)
@@ -673,12 +664,13 @@ struct MetalCommandQueue : IGraphicsCommandQueue
 
     void drawInstances(size_t start, size_t count, size_t instCount)
     {
-        [m_enc drawPrimitives:m_primType vertexStart:start vertexCount:count instanceCount:instCount];
+        [m_enc drawPrimitives:MTLPrimitiveTypeTriangleStrip
+                  vertexStart:start vertexCount:count instanceCount:instCount];
     }
 
     void drawInstancesIndexed(size_t start, size_t count, size_t instCount)
     {
-        [m_enc drawIndexedPrimitives:m_primType
+        [m_enc drawIndexedPrimitives:MTLPrimitiveTypeTriangleStrip
                           indexCount:count
                            indexType:MTLIndexTypeUInt32
                          indexBuffer:GetBufferGPUResource(m_boundData->m_ibuf, m_fillBuf)
@@ -839,8 +831,8 @@ void MetalTextureD::unmap()
     m_validSlots = 0;
 }
 
-MetalDataFactory::MetalDataFactory(IGraphicsContext* parent, MetalContext* ctx)
-: m_parent(parent), m_ctx(ctx) {}
+MetalDataFactory::MetalDataFactory(IGraphicsContext* parent, MetalContext* ctx, uint32_t sampleCount)
+: m_parent(parent), m_ctx(ctx), m_sampleCount(sampleCount) {}
 
 IGraphicsBufferS* MetalDataFactory::newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
 {
@@ -871,12 +863,12 @@ ITextureS* MetalDataFactory::newStaticTexture(size_t width, size_t height, size_
 }
 GraphicsDataToken
 MetalDataFactory::newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                            const void* data, size_t sz, ITextureS** texOut)
+                                            const void* data, size_t sz, ITextureS*& texOut)
 {
     MetalTextureS* retval = new MetalTextureS(m_ctx, width, height, mips, fmt, data, sz);
     MetalData* tokData = new struct MetalData();
     tokData->m_STexs.emplace_back(retval);
-    *texOut = retval;
+    texOut = retval;
 
     std::unique_lock<std::mutex> lk(m_committedMutex);
     m_committedData.insert(tokData);
@@ -900,9 +892,9 @@ ITextureD* MetalDataFactory::newDynamicTexture(size_t width, size_t height, Text
     m_deferredData->m_DTexs.emplace_back(retval);
     return retval;
 }
-ITextureR* MetalDataFactory::newRenderTexture(size_t width, size_t height, size_t samples)
+ITextureR* MetalDataFactory::newRenderTexture(size_t width, size_t height)
 {
-    MetalTextureR* retval = new MetalTextureR(m_ctx, width, height, samples);
+    MetalTextureR* retval = new MetalTextureR(m_ctx, width, height, m_sampleCount);
     if (!m_deferredData.get())
         m_deferredData.reset(new struct MetalData());
     m_deferredData->m_RTexs.emplace_back(retval);
