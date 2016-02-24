@@ -766,6 +766,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         m_initcv.wait(m_initlk);
         m_initlk.unlock();
         ThrowIfFailed(ctx->m_dev->CreateDeferredContext1(0, &m_deferredCtx));
+        m_deferredCtx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     }
 
     void stopRenderer()
@@ -844,14 +845,6 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
             m_deferredCtx->ClearRenderTargetView(m_boundTarget->m_rtv.Get(), m_clearColor);
         if (depth)
             m_deferredCtx->ClearDepthStencilView(m_boundTarget->m_dsv.Get(), D3D11_CLEAR_DEPTH, 1.0, 0);
-    }
-
-    void setDrawPrimitive(Primitive prim)
-    {
-        if (prim == Primitive::Triangles)
-            m_deferredCtx->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        else if (prim == Primitive::TriStrips)
-            m_deferredCtx->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     }
 
     void draw(size_t start, size_t count)
@@ -958,6 +951,7 @@ class D3D11DataFactory : public ID3DDataFactory
     std::unordered_set<D3D11Data*> m_committedData;
     std::mutex m_committedMutex;
     std::unordered_set<D3D11Data*> m_deletedData;
+    uint32_t m_sampleCount;
 
     void destroyData(IGraphicsData* d)
     {
@@ -996,8 +990,8 @@ class D3D11DataFactory : public ID3DDataFactory
     }
 
 public:
-    D3D11DataFactory(IGraphicsContext* parent, D3D11Context* ctx)
-    : m_parent(parent), m_ctx(ctx)
+    D3D11DataFactory(IGraphicsContext* parent, D3D11Context* ctx, uint32_t sampleCount)
+    : m_parent(parent), m_ctx(ctx), m_sampleCount(sampleCount)
     {}
     ~D3D11DataFactory() {destroyAllData();}
 
@@ -1035,12 +1029,12 @@ public:
 
     GraphicsDataToken
     newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                              const void* data, size_t sz, ITextureS** texOut)
+                              const void* data, size_t sz, ITextureS*& texOut)
     {
         D3D11TextureS* retval = new D3D11TextureS(m_ctx, width, height, mips, fmt, data, sz);
         D3D11Data* tokData = new struct D3D11Data();
         tokData->m_STexs.emplace_back(retval);
-        *texOut = retval;
+        texOut = retval;
 
         std::unique_lock<std::mutex> lk(m_committedMutex);
         m_committedData.insert(tokData);
@@ -1067,10 +1061,10 @@ public:
         return retval;
     }
 
-    ITextureR* newRenderTexture(size_t width, size_t height, size_t samples)
+    ITextureR* newRenderTexture(size_t width, size_t height)
     {
         D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent->getCommandQueue());
-        D3D11TextureR* retval = new D3D11TextureR(m_ctx, width, height, samples);
+        D3D11TextureR* retval = new D3D11TextureR(m_ctx, width, height, m_sampleCount);
         if (!m_deferredData)
             m_deferredData = new struct D3D11Data();
         static_cast<D3D11Data*>(m_deferredData)->m_RTexs.emplace_back(retval);
@@ -1216,9 +1210,9 @@ IGraphicsCommandQueue* _NewD3D11CommandQueue(D3D11Context* ctx, D3D11Context::Wi
     return new D3D11CommandQueue(ctx, windowCtx, parent);
 }
 
-IGraphicsDataFactory* _NewD3D11DataFactory(D3D11Context* ctx, IGraphicsContext* parent)
+IGraphicsDataFactory* _NewD3D11DataFactory(D3D11Context* ctx, IGraphicsContext* parent, uint32_t sampleCount)
 {
-    return new D3D11DataFactory(parent, ctx);
+    return new D3D11DataFactory(parent, ctx, sampleCount);
 }
 
 }

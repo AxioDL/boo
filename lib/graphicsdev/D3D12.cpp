@@ -981,6 +981,7 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         ThrowIfFailed(m_ctx->m_qalloc[m_fillBuf]->Reset());
         ThrowIfFailed(m_cmdList->Reset(m_ctx->m_qalloc[m_fillBuf].Get(), nullptr));
         m_cmdList->SetGraphicsRootSignature(m_ctx->m_rs.Get());
+        m_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     }
 
     void resetDynamicCommandList()
@@ -1027,6 +1028,7 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
                                                     nullptr, __uuidof(ID3D12GraphicsCommandList), &m_cmdList));
         m_renderFenceHandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
         m_cmdList->SetGraphicsRootSignature(m_ctx->m_rs.Get());
+        m_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
         ThrowIfFailed(ctx->m_dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), &m_dynamicBufFence));
         m_dynamicBufFenceHandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
@@ -1129,14 +1131,6 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
             CD3DX12_CPU_DESCRIPTOR_HANDLE handle(m_boundTarget->m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
             m_cmdList->ClearDepthStencilView(handle, D3D12_CLEAR_FLAG_DEPTH, 1.0, 0, 0, nullptr);
         }
-    }
-
-    void setDrawPrimitive(Primitive prim)
-    {
-        if (prim == Primitive::Triangles)
-            m_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        else if (prim == Primitive::TriStrips)
-            m_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     }
 
     void draw(size_t start, size_t count)
@@ -1317,6 +1311,7 @@ class D3D12DataFactory : public ID3DDataFactory
     struct D3D12Context* m_ctx;
     std::unordered_set<D3D12Data*> m_committedData;
     std::mutex m_committedMutex;
+    uint32_t m_sampleCount;
 
     void destroyData(IGraphicsData* d)
     {
@@ -1334,8 +1329,8 @@ class D3D12DataFactory : public ID3DDataFactory
         m_committedData.clear();
     }
 public:
-    D3D12DataFactory(IGraphicsContext* parent, D3D12Context* ctx)
-    : m_parent(parent), m_ctx(ctx)
+    D3D12DataFactory(IGraphicsContext* parent, D3D12Context* ctx, uint32_t sampleCount)
+    : m_parent(parent), m_ctx(ctx), m_sampleCount(sampleCount)
     {
         CD3DX12_DESCRIPTOR_RANGE ranges[] =
         {
@@ -1391,12 +1386,12 @@ public:
 
     GraphicsDataToken
     newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                              const void* data, size_t sz, ITextureS** texOut)
+                              const void* data, size_t sz, ITextureS*& texOut)
     {
         D3D12TextureS* retval = new D3D12TextureS(m_ctx, width, height, mips, fmt, data, sz);
         D3D12Data* tokData = new struct D3D12Data();
         tokData->m_STexs.emplace_back(retval);
-        *texOut = retval;
+        texOut = retval;
 
         /* Create heap */
         D3D12_RESOURCE_ALLOCATION_INFO texAllocInfo =
@@ -1451,10 +1446,10 @@ public:
         return retval;
     }
 
-    ITextureR* newRenderTexture(size_t width, size_t height, size_t samples)
+    ITextureR* newRenderTexture(size_t width, size_t height)
     {
         D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent->getCommandQueue());
-        D3D12TextureR* retval = new D3D12TextureR(m_ctx, q, width, height, samples);
+        D3D12TextureR* retval = new D3D12TextureR(m_ctx, q, width, height, m_sampleCount);
         if (!m_deferredData)
             m_deferredData = new struct D3D12Data();
         static_cast<D3D12Data*>(m_deferredData)->m_RTexs.emplace_back(retval);
@@ -1724,9 +1719,9 @@ IGraphicsCommandQueue* _NewD3D12CommandQueue(D3D12Context* ctx, D3D12Context::Wi
     return new struct D3D12CommandQueue(ctx, windowCtx, parent, cmdQueueOut);
 }
 
-IGraphicsDataFactory* _NewD3D12DataFactory(D3D12Context* ctx, IGraphicsContext* parent)
+IGraphicsDataFactory* _NewD3D12DataFactory(D3D12Context* ctx, IGraphicsContext* parent, uint32_t sampleCount)
 {
-    return new D3D12DataFactory(parent, ctx);
+    return new D3D12DataFactory(parent, ctx, sampleCount);
 }
 
 }

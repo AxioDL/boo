@@ -60,7 +60,7 @@ namespace boo
 static LogVisor::LogModule Log("boo::ApplicationWin32");
 Win32Cursors WIN32_CURSORS;
 
-IWindow* _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx);
+IWindow* _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx, uint32_t sampleCount);
 
 class ApplicationWin32 final : public IApplication
 {
@@ -303,7 +303,7 @@ public:
                     /* New-window message (coalesced onto main thread) */
                     std::unique_lock<std::mutex> lk(m_nwmt);
                     const SystemString* title = reinterpret_cast<const SystemString*>(msg.wParam);
-                    m_mwret = newWindow(*title);
+                    m_mwret = newWindow(*title, 1);
                     lk.unlock();
                     m_nwcv.notify_one();
                     continue;
@@ -359,7 +359,7 @@ public:
     std::mutex m_nwmt;
     std::condition_variable m_nwcv;
     IWindow* m_mwret = nullptr;
-    IWindow* newWindow(const SystemString& title)
+    IWindow* newWindow(const SystemString& title, uint32_t sampleCount)
     {
         if (GetCurrentThreadId() != g_mainThreadId)
         {
@@ -370,7 +370,7 @@ public:
             return m_mwret;
         }
 
-        IWindow* window = _WindowWin32New(title, m_3dCtx);
+        IWindow* window = _WindowWin32New(title, m_3dCtx, sampleCount);
         HWND hwnd = HWND(window->getPlatformHandle());
         m_allWindows[hwnd] = window;
         return window;

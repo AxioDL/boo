@@ -25,10 +25,10 @@ static LogVisor::LogModule Log("boo::WindowWin32");
 #if _WIN32_WINNT_WIN10
 IGraphicsCommandQueue* _NewD3D12CommandQueue(D3D12Context* ctx, D3D12Context::Window* windowCtx, IGraphicsContext* parent,
                                              ID3D12CommandQueue** cmdQueueOut);
-IGraphicsDataFactory* _NewD3D12DataFactory(D3D12Context* ctx, IGraphicsContext* parent);
+IGraphicsDataFactory* _NewD3D12DataFactory(D3D12Context* ctx, IGraphicsContext* parent, uint32_t sampleCount);
 #endif
 IGraphicsCommandQueue* _NewD3D11CommandQueue(D3D11Context* ctx, D3D11Context::Window* windowCtx, IGraphicsContext* parent);
-IGraphicsDataFactory* _NewD3D11DataFactory(D3D11Context* ctx, IGraphicsContext* parent);
+IGraphicsDataFactory* _NewD3D11DataFactory(D3D11Context* ctx, IGraphicsContext* parent, uint32_t sampleCount);
 IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent);
 
 struct GraphicsContextWin32 : IGraphicsContext
@@ -55,7 +55,8 @@ struct GraphicsContextWin32D3D : GraphicsContextWin32
 public:
     IWindowCallback* m_callback;
 
-    GraphicsContextWin32D3D(EGraphicsAPI api, IWindow* parentWindow, HWND hwnd, Boo3DAppContext& b3dCtx)
+    GraphicsContextWin32D3D(EGraphicsAPI api, IWindow* parentWindow, HWND hwnd,
+                            Boo3DAppContext& b3dCtx, uint32_t sampleCount)
     : GraphicsContextWin32(api, parentWindow, b3dCtx)
     {
         /* Create Swap Chain */
@@ -74,11 +75,11 @@ public:
             D3D12Context::Window& w = insIt.first->second;
 
             ID3D12CommandQueue* cmdQueue;
-            m_dataFactory = _NewD3D12DataFactory(&b3dCtx.m_ctx12, this);
+            m_dataFactory = _NewD3D12DataFactory(&b3dCtx.m_ctx12, this, sampleCount);
             m_commandQueue = _NewD3D12CommandQueue(&b3dCtx.m_ctx12, &w, this, &cmdQueue);
 
             scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-            HRESULT hr = b3dCtx.m_ctx12.m_dxFactory->CreateSwapChainForHwnd(cmdQueue, 
+            HRESULT hr = b3dCtx.m_ctx12.m_dxFactory->CreateSwapChainForHwnd(cmdQueue,
                 hwnd, &scDesc, nullptr, nullptr, &m_swapChain);
             if (FAILED(hr))
                 Log.report(LogVisor::FatalError, "unable to create swap chain");
@@ -98,11 +99,11 @@ public:
         else
 #endif
         {
-            if (FAILED(b3dCtx.m_ctx11.m_dxFactory->CreateSwapChainForHwnd(b3dCtx.m_ctx11.m_dev.Get(), 
+            if (FAILED(b3dCtx.m_ctx11.m_dxFactory->CreateSwapChainForHwnd(b3dCtx.m_ctx11.m_dev.Get(),
                 hwnd, &scDesc, nullptr, nullptr, &m_swapChain)))
                 Log.report(LogVisor::FatalError, "unable to create swap chain");
             b3dCtx.m_ctx11.m_dxFactory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
-            
+
             auto insIt = b3dCtx.m_ctx11.m_windows.emplace(std::make_pair(parentWindow, D3D11Context::Window()));
             D3D11Context::Window& w = insIt.first->second;
 
@@ -113,7 +114,7 @@ public:
             fbRes->GetDesc(&resDesc);
             w.width = resDesc.Width;
             w.height = resDesc.Height;
-            m_dataFactory = _NewD3D11DataFactory(&b3dCtx.m_ctx11, this);
+            m_dataFactory = _NewD3D11DataFactory(&b3dCtx.m_ctx11, this, sampleCount);
             m_commandQueue = _NewD3D11CommandQueue(&b3dCtx.m_ctx11, &insIt.first->second, this);
 
             if (FAILED(m_swapChain->GetContainingOutput(&m_output)))
@@ -190,7 +191,8 @@ struct GraphicsContextWin32GL : GraphicsContextWin32
 public:
     IWindowCallback* m_callback;
 
-    GraphicsContextWin32GL(EGraphicsAPI api, IWindow* parentWindow, HWND hwnd, Boo3DAppContext& b3dCtx)
+    GraphicsContextWin32GL(EGraphicsAPI api, IWindow* parentWindow, HWND hwnd,
+                           Boo3DAppContext& b3dCtx, uint32_t sampleCount)
     : GraphicsContextWin32(api, parentWindow, b3dCtx)
     {
 
@@ -250,7 +252,7 @@ public:
                 0, 0, 0
             };
 
-            int pf = ChoosePixelFormat(w.m_deviceContext, &pfd); 
+            int pf = ChoosePixelFormat(w.m_deviceContext, &pfd);
             SetPixelFormat(w.m_deviceContext, pf, &pfd);
         }
 
@@ -262,7 +264,7 @@ public:
                 Log.report(LogVisor::FatalError, "unable to share contexts");
         m_3dCtx.m_ctxOgl.m_lastContext = w.m_mainContext;
 
-        m_dataFactory = new GLDataFactory(this);
+        m_dataFactory = new GLDataFactory(this, sampleCount);
         m_commandQueue = _NewGLCommandQueue(this);
     }
 
@@ -295,14 +297,14 @@ public:
 
     void initializeContext() {}
 
-    void makeCurrent() 
+    void makeCurrent()
     {
         OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
         if (!wglMakeCurrent(w.m_deviceContext, w.m_mainContext))
             Log.report(LogVisor::FatalError, "unable to make WGL context current");
     }
 
-    void postInit() 
+    void postInit()
     {
         OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
 
@@ -319,7 +321,7 @@ public:
         wglSwapIntervalEXT(1);
     }
 
-    void present() 
+    void present()
     {
         OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
         SwapBuffers(w.m_deviceContext);
@@ -676,7 +678,7 @@ static std::unique_ptr<uint8_t[]> MakeUnicodeLF(const wchar_t* data, size_t sz, 
     }
     return ret;
 }
-    
+
 class WindowWin32 : public IWindow
 {
     friend struct GraphicsContextWin32;
@@ -707,7 +709,7 @@ class WindowWin32 : public IWindow
 
 public:
 
-    WindowWin32(const SystemString& title, Boo3DAppContext& b3dCtx)
+    WindowWin32(const SystemString& title, Boo3DAppContext& b3dCtx, uint32_t sampleCount)
     {
         m_hwnd = CreateWindowW(L"BooWindow", title.c_str(), WS_OVERLAPPEDWINDOW,
                                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
@@ -720,10 +722,11 @@ public:
 #endif
         if (b3dCtx.m_ctxOgl.m_dxFactory)
         {
-            m_gfxCtx.reset(new GraphicsContextWin32GL(IGraphicsContext::EGraphicsAPI::OpenGL3_3, this, m_hwnd, b3dCtx));
+            m_gfxCtx.reset(new GraphicsContextWin32GL(IGraphicsContext::EGraphicsAPI::OpenGL3_3,
+                                                      this, m_hwnd, b3dCtx, sampleCount));
             return;
         }
-        m_gfxCtx.reset(new GraphicsContextWin32D3D(api, this, m_hwnd, b3dCtx));
+        m_gfxCtx.reset(new GraphicsContextWin32D3D(api, this, m_hwnd, b3dCtx, sampleCount));
     }
 
     ~WindowWin32()
@@ -1288,9 +1291,9 @@ public:
 
 };
 
-IWindow* _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx)
+IWindow* _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx, uint32_t sampleCount)
 {
-    return new WindowWin32(title, d3dCtx);
+    return new WindowWin32(title, d3dCtx, sampleCount);
 }
-    
+
 }
