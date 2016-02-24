@@ -177,7 +177,7 @@ class ApplicationXlib final : public IApplication
 
 #if BOO_HAS_VULKAN
     /* Vulkan enable */
-    bool m_useVulkan = true;
+    bool m_useVulkan = false;
     xcb_connection_t* m_xcbConn;
 #endif
     
