@@ -71,7 +71,7 @@ public:
         return m_args;
     }
     
-    IWindow* newWindow(const std::string& title)
+    IWindow* newWindow(const std::string& title, uint32_t drawSamples)
     {
         return _WindowWaylandNew(title);
     }

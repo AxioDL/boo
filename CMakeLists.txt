@@ -19,6 +19,7 @@ list(APPEND PLAT_SRCS
     lib/graphicsdev/glew.c)
 
 list(APPEND PLAT_HDRS
+     include/boo/graphicsdev/GLSLMacros.hpp
      include/boo/graphicsdev/GL.hpp
      include/boo/graphicsdev/Vulkan.hpp)
 endif()

@@ -5,6 +5,7 @@
 #include "IGraphicsDataFactory.hpp"
 #include "IGraphicsCommandQueue.hpp"
 #include "boo/IGraphicsContext.hpp"
+#include "GLSLMacros.hpp"
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
@@ -36,7 +37,7 @@ struct VulkanContext
     std::vector<VkQueueFamilyProperties> m_queueProps;
     VkQueue m_queue;
     VkDescriptorSetLayout m_descSetLayout;
-    VkPipelineLayout m_layout;
+    VkPipelineLayout m_pipelinelayout;
     VkRenderPass m_pass;
     VkCommandPool m_loadPool;
     VkCommandBuffer m_loadCmdBuf;
@@ -72,6 +73,7 @@ class VulkanDataFactory : public IGraphicsDataFactory
     friend struct VulkanCommandQueue;
     IGraphicsContext* m_parent;
     VulkanContext* m_ctx;
+    uint32_t m_drawSamples;
     static ThreadLocalPtr<struct VulkanData> m_deferredData;
     std::unordered_set<struct VulkanData*> m_committedData;
     std::mutex m_committedMutex;
@@ -79,7 +81,7 @@ class VulkanDataFactory : public IGraphicsDataFactory
     void destroyData(IGraphicsData*);
     void destroyAllData();
 public:
-    VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx);
+    VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx, uint32_t drawSamples);
     ~VulkanDataFactory() {destroyAllData();}
 
     Platform platform() const {return Platform::Vulkan;}
@@ -95,7 +97,7 @@ public:
     ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
                                       const void* data, size_t sz);
     ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
-    ITextureR* newRenderTexture(size_t width, size_t height, size_t samples);
+    ITextureR* newRenderTexture(size_t width, size_t height);
 
     bool bindingNeedsVertexFormat() const {return true;}
     IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);

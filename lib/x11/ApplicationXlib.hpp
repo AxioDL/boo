@@ -113,9 +113,9 @@ static Window GetWindowOfEvent(XEvent* event, bool& windowEvent)
 }
     
 IWindow* _WindowXlibNew(const std::string& title,
-                       Display* display, void* xcbConn,
+                        Display* display, void* xcbConn,
                         int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
-                       GLXContext lastCtx, bool useVulkan);
+                        GLXContext lastCtx, bool useVulkan, uint32_t drawSamples);
 
 static XIMStyle ChooseBetterStyle(XIMStyle style1, XIMStyle style2)
 {
@@ -473,14 +473,14 @@ public:
         return m_args;
     }
     
-    IWindow* newWindow(const std::string& title)
+    IWindow* newWindow(const std::string& title, uint32_t drawSamples)
     {
 #if BOO_HAS_VULKAN
         IWindow* newWindow = _WindowXlibNew(title, m_xDisp, m_xcbConn, m_xDefaultScreen, m_xIM,
-                                            m_bestStyle, m_fontset, m_lastGlxCtx, m_useVulkan);
+                                            m_bestStyle, m_fontset, m_lastGlxCtx, m_useVulkan, drawSamples);
 #else
         IWindow* newWindow = _WindowXlibNew(title, m_xDisp, nullptr, m_xDefaultScreen, m_xIM,
-                                            m_bestStyle, m_fontset, m_lastGlxCtx, false);
+                                            m_bestStyle, m_fontset, m_lastGlxCtx, false, drawSamples);
 #endif
         m_windows[(Window)newWindow->getPlatformHandle()] = newWindow;
         return newWindow;

@@ -282,15 +282,17 @@ struct GraphicsContextXlib : IGraphicsContext
 {
     EGraphicsAPI m_api;
     EPixelFormat m_pf;
+    uint32_t m_drawSamples;
     IWindow* m_parentWindow;
     Display* m_xDisp;
 
     std::mutex m_vsyncmt;
     std::condition_variable m_vsynccv;
 
-    GraphicsContextXlib(EGraphicsAPI api, EPixelFormat pf, IWindow* parentWindow, Display* disp)
+    GraphicsContextXlib(EGraphicsAPI api, EPixelFormat pf, IWindow* parentWindow, Display* disp, uint32_t drawSamples)
     : m_api(api),
       m_pf(pf),
+      m_drawSamples(drawSamples),
       m_parentWindow(parentWindow),
       m_xDisp(disp) {}
     virtual void destroy()=0;
@@ -318,11 +320,11 @@ public:
 
     GraphicsContextXlibGLX(EGraphicsAPI api, IWindow* parentWindow,
                            Display* display, int defaultScreen,
-                           GLXContext lastCtx, uint32_t& visualIdOut)
-    : GraphicsContextXlib(api, EPixelFormat::RGBA8, parentWindow, display),
+                           GLXContext lastCtx, uint32_t& visualIdOut, uint32_t drawSamples)
+    : GraphicsContextXlib(api, EPixelFormat::RGBA8, parentWindow, display, drawSamples),
       m_lastCtx(lastCtx)
     {
-        m_dataFactory = new class GLDataFactory(this);
+        m_dataFactory = new class GLDataFactory(this, drawSamples);
 
         /* Query framebuffer configurations */
         GLXFBConfig* fbConfigs = nullptr;
@@ -619,8 +621,8 @@ public:
 
     GraphicsContextXlibVulkan(IWindow* parentWindow,
                               Display* display, xcb_connection_t* xcbConn, int defaultScreen,
-                              VulkanContext* ctx, uint32_t& visualIdOut)
-    : GraphicsContextXlib(EGraphicsAPI::Vulkan, EPixelFormat::RGBA8, parentWindow, display),
+                              VulkanContext* ctx, uint32_t& visualIdOut, uint32_t drawSamples)
+    : GraphicsContextXlib(EGraphicsAPI::Vulkan, EPixelFormat::RGBA8, parentWindow, display, drawSamples),
       m_xcbConn(xcbConn), m_ctx(ctx)
     {
         /* Query framebuffer configurations */
@@ -856,7 +858,7 @@ public:
         });
         initcv.wait(outerLk);
 
-        m_dataFactory = new class VulkanDataFactory(this, m_ctx);
+        m_dataFactory = new class VulkanDataFactory(this, m_ctx, m_drawSamples);
         m_commandQueue = _NewVulkanCommandQueue(m_ctx, m_ctx->m_windows[m_parentWindow].get(), this);
     }
 
@@ -944,7 +946,7 @@ public:
     WindowXlib(const std::string& title,
                Display* display, void* xcbConn,
                int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
-               GLXContext lastCtx, bool useVulkan)
+               GLXContext lastCtx, bool useVulkan, uint32_t drawSamples)
     : m_xDisp(display), m_callback(nullptr),
       m_bestStyle(bestInputStyle)
     {
@@ -954,11 +956,11 @@ public:
 #if BOO_HAS_VULKAN
         if (useVulkan)
             m_gfxCtx.reset(new GraphicsContextXlibVulkan(this, display, (xcb_connection_t*)xcbConn, defaultScreen,
-                                                         &g_VulkanContext, m_visualId));
+                                                         &g_VulkanContext, m_visualId, drawSamples));
         else
 #endif
             m_gfxCtx.reset(new GraphicsContextXlibGLX(IGraphicsContext::EGraphicsAPI::OpenGL3_3,
-                                                      this, display, defaultScreen, lastCtx, m_visualId));
+                                                      this, display, defaultScreen, lastCtx, m_visualId, drawSamples));
 
         /* Default screen */
         Screen* screen = ScreenOfDisplay(display, defaultScreen);
@@ -1949,12 +1951,13 @@ public:
 };
 
 IWindow* _WindowXlibNew(const std::string& title,
-                       Display* display, void* xcbConn,
+                        Display* display, void* xcbConn,
                         int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
-                       GLXContext lastCtx, bool useVulkan)
+                        GLXContext lastCtx, bool useVulkan, uint32_t drawSamples)
 {
     XLockDisplay(display);
-    IWindow* ret = new WindowXlib(title, display, xcbConn, defaultScreen, xIM, bestInputStyle, fontset, lastCtx, useVulkan);
+    IWindow* ret = new WindowXlib(title, display, xcbConn, defaultScreen, xIM,
+                                  bestInputStyle, fontset, lastCtx, useVulkan, drawSamples);
     XUnlockDisplay(display);
     return ret;
 }

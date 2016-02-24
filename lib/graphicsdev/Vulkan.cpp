@@ -9,6 +9,8 @@
 #include <vector>
 #include <glslang/Public/ShaderLang.h>
 #include <SPIRV/GlslangToSpv.h>
+#include <SPIRV/disassemble.h>
+#include "boo/graphicsdev/GLSLMacros.hpp"
 
 #include <LogVisor/LogVisor.hpp>
 
@@ -16,10 +18,7 @@
 #undef max
 #undef None
 
-#define MAX_UNIFORM_COUNT 8
-#define MAX_TEXTURE_COUNT 8
-
-static const TBuiltInResource DefaultBuiltInResource =
+static TBuiltInResource DefaultBuiltInResource =
 {
     32,
     6,
@@ -117,6 +116,101 @@ static const TBuiltInResource DefaultBuiltInResource =
         1
     }
 };
+
+static void init_resources(TBuiltInResource &Resources) {
+    Resources.maxLights = 32;
+    Resources.maxClipPlanes = 6;
+    Resources.maxTextureUnits = 32;
+    Resources.maxTextureCoords = 32;
+    Resources.maxVertexAttribs = 64;
+    Resources.maxVertexUniformComponents = 4096;
+    Resources.maxVaryingFloats = 64;
+    Resources.maxVertexTextureImageUnits = 32;
+    Resources.maxCombinedTextureImageUnits = 80;
+    Resources.maxTextureImageUnits = 32;
+    Resources.maxFragmentUniformComponents = 4096;
+    Resources.maxDrawBuffers = 32;
+    Resources.maxVertexUniformVectors = 128;
+    Resources.maxVaryingVectors = 8;
+    Resources.maxFragmentUniformVectors = 16;
+    Resources.maxVertexOutputVectors = 16;
+    Resources.maxFragmentInputVectors = 15;
+    Resources.minProgramTexelOffset = -8;
+    Resources.maxProgramTexelOffset = 7;
+    Resources.maxClipDistances = 8;
+    Resources.maxComputeWorkGroupCountX = 65535;
+    Resources.maxComputeWorkGroupCountY = 65535;
+    Resources.maxComputeWorkGroupCountZ = 65535;
+    Resources.maxComputeWorkGroupSizeX = 1024;
+    Resources.maxComputeWorkGroupSizeY = 1024;
+    Resources.maxComputeWorkGroupSizeZ = 64;
+    Resources.maxComputeUniformComponents = 1024;
+    Resources.maxComputeTextureImageUnits = 16;
+    Resources.maxComputeImageUniforms = 8;
+    Resources.maxComputeAtomicCounters = 8;
+    Resources.maxComputeAtomicCounterBuffers = 1;
+    Resources.maxVaryingComponents = 60;
+    Resources.maxVertexOutputComponents = 64;
+    Resources.maxGeometryInputComponents = 64;
+    Resources.maxGeometryOutputComponents = 128;
+    Resources.maxFragmentInputComponents = 128;
+    Resources.maxImageUnits = 8;
+    Resources.maxCombinedImageUnitsAndFragmentOutputs = 8;
+    Resources.maxCombinedShaderOutputResources = 8;
+    Resources.maxImageSamples = 0;
+    Resources.maxVertexImageUniforms = 0;
+    Resources.maxTessControlImageUniforms = 0;
+    Resources.maxTessEvaluationImageUniforms = 0;
+    Resources.maxGeometryImageUniforms = 0;
+    Resources.maxFragmentImageUniforms = 8;
+    Resources.maxCombinedImageUniforms = 8;
+    Resources.maxGeometryTextureImageUnits = 16;
+    Resources.maxGeometryOutputVertices = 256;
+    Resources.maxGeometryTotalOutputComponents = 1024;
+    Resources.maxGeometryUniformComponents = 1024;
+    Resources.maxGeometryVaryingComponents = 64;
+    Resources.maxTessControlInputComponents = 128;
+    Resources.maxTessControlOutputComponents = 128;
+    Resources.maxTessControlTextureImageUnits = 16;
+    Resources.maxTessControlUniformComponents = 1024;
+    Resources.maxTessControlTotalOutputComponents = 4096;
+    Resources.maxTessEvaluationInputComponents = 128;
+    Resources.maxTessEvaluationOutputComponents = 128;
+    Resources.maxTessEvaluationTextureImageUnits = 16;
+    Resources.maxTessEvaluationUniformComponents = 1024;
+    Resources.maxTessPatchComponents = 120;
+    Resources.maxPatchVertices = 32;
+    Resources.maxTessGenLevel = 64;
+    Resources.maxViewports = 16;
+    Resources.maxVertexAtomicCounters = 0;
+    Resources.maxTessControlAtomicCounters = 0;
+    Resources.maxTessEvaluationAtomicCounters = 0;
+    Resources.maxGeometryAtomicCounters = 0;
+    Resources.maxFragmentAtomicCounters = 8;
+    Resources.maxCombinedAtomicCounters = 8;
+    Resources.maxAtomicCounterBindings = 1;
+    Resources.maxVertexAtomicCounterBuffers = 0;
+    Resources.maxTessControlAtomicCounterBuffers = 0;
+    Resources.maxTessEvaluationAtomicCounterBuffers = 0;
+    Resources.maxGeometryAtomicCounterBuffers = 0;
+    Resources.maxFragmentAtomicCounterBuffers = 1;
+    Resources.maxCombinedAtomicCounterBuffers = 1;
+    Resources.maxAtomicCounterBufferSize = 16384;
+    Resources.maxTransformFeedbackBuffers = 4;
+    Resources.maxTransformFeedbackInterleavedComponents = 64;
+    Resources.maxCullDistances = 8;
+    Resources.maxCombinedClipAndCullDistances = 8;
+    Resources.maxSamples = 4;
+    Resources.limits.nonInductiveForLoops = 1;
+    Resources.limits.whileLoops = 1;
+    Resources.limits.doWhileLoops = 1;
+    Resources.limits.generalUniformIndexing = 1;
+    Resources.limits.generalAttributeMatrixVectorIndexing = 1;
+    Resources.limits.generalVaryingIndexing = 1;
+    Resources.limits.generalSamplerIndexing = 1;
+    Resources.limits.generalVariableIndexing = 1;
+    Resources.limits.generalConstantMatrixVectorIndexing = 1;
+}
 
 namespace boo
 {
@@ -305,7 +399,7 @@ void VulkanContext::initVulkan(const char* appName)
      * entries loaded into the data pointer - in case the number
      * of layers went down or is smaller than the size given.
      */
-    putenv("VK_LAYER_PATH=/usr/share/vulkan/explicit_layer.d");
+    setenv("VK_LAYER_PATH", "/usr/share/vulkan/explicit_layer.d", 1);
     do {
         ThrowIfFailed(vkEnumerateInstanceLayerProperties(&instanceLayerCount, nullptr));
 
@@ -1814,7 +1908,7 @@ class VulkanShaderPipeline : public IShaderPipeline
         pipelineCreateInfo.pDepthStencilState = &depthStencilInfo;
         pipelineCreateInfo.pColorBlendState = &colorBlendInfo;
         pipelineCreateInfo.pDynamicState = &dynamicState;
-        pipelineCreateInfo.layout = ctx->m_layout;
+        pipelineCreateInfo.layout = ctx->m_pipelinelayout;
         pipelineCreateInfo.renderPass = ctx->m_pass;
 
         ThrowIfFailed(vkCreateGraphicsPipelines(ctx->m_dev, pipelineCache, 1, &pipelineCreateInfo,
@@ -2004,7 +2098,7 @@ struct VulkanShaderDataBinding : IShaderDataBinding
 
     void commit(VulkanContext* ctx)
     {
-        VkWriteDescriptorSet writes[(MAX_UNIFORM_COUNT + MAX_TEXTURE_COUNT) * 2] = {};
+        VkWriteDescriptorSet writes[(BOO_GLSL_MAX_UNIFORM_COUNT + BOO_GLSL_MAX_TEXTURE_COUNT) * 2] = {};
         size_t totalWrites = 0;
         for (int b=0 ; b<2 ; ++b)
         {
@@ -2028,7 +2122,7 @@ struct VulkanShaderDataBinding : IShaderDataBinding
             }
 
             size_t binding = 0;
-            for (size_t i=0 ; i<MAX_UNIFORM_COUNT ; ++i)
+            for (size_t i=0 ; i<BOO_GLSL_MAX_UNIFORM_COUNT ; ++i)
             {
                 if (i<m_ubufCount)
                 {
@@ -2044,7 +2138,7 @@ struct VulkanShaderDataBinding : IShaderDataBinding
                 }
                 ++binding;
             }
-            for (size_t i=0 ; i<MAX_TEXTURE_COUNT ; ++i)
+            for (size_t i=0 ; i<BOO_GLSL_MAX_TEXTURE_COUNT ; ++i)
             {
                 if (i<m_texCount)
                 {
@@ -2078,7 +2172,7 @@ struct VulkanShaderDataBinding : IShaderDataBinding
 #endif
 
         vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline->m_pipeline);
-        vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_ctx->m_layout, 0, 1, &m_descSets[b], 0, nullptr);
+        vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_ctx->m_pipelinelayout, 0, 1, &m_descSets[b], 0, nullptr);
         vkCmdBindVertexBuffers(cmdBuf, 0, 2, m_vboBufs[b], m_vboOffs[b]);
         if (m_ibuf)
             vkCmdBindIndexBuffer(cmdBuf, m_iboBufs[b], m_iboOffs[b], VK_INDEX_TYPE_UINT32);
@@ -2610,8 +2704,8 @@ void VulkanDataFactory::destroyAllData()
     m_committedData.clear();
 }
 
-VulkanDataFactory::VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx)
-: m_parent(parent), m_ctx(ctx)
+VulkanDataFactory::VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx, uint32_t drawSamples)
+: m_parent(parent), m_ctx(ctx), m_drawSamples(drawSamples)
 {
     VkSamplerCreateInfo samplerInfo = {};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -2625,8 +2719,8 @@ VulkanDataFactory::VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ct
     samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     ThrowIfFailed(vkCreateSampler(ctx->m_dev, &samplerInfo, nullptr, &ctx->m_linearSampler));
 
-    VkDescriptorSetLayoutBinding layoutBindings[MAX_UNIFORM_COUNT + MAX_TEXTURE_COUNT];
-    for (int i=0 ; i<MAX_UNIFORM_COUNT ; ++i)
+    VkDescriptorSetLayoutBinding layoutBindings[BOO_GLSL_MAX_UNIFORM_COUNT + BOO_GLSL_MAX_TEXTURE_COUNT];
+    for (int i=0 ; i<BOO_GLSL_MAX_UNIFORM_COUNT ; ++i)
     {
         layoutBindings[i].binding = i;
         layoutBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
@@ -2634,7 +2728,7 @@ VulkanDataFactory::VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ct
         layoutBindings[i].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
         layoutBindings[i].pImmutableSamplers = nullptr;
     }
-    for (int i=MAX_UNIFORM_COUNT ; i<MAX_UNIFORM_COUNT+MAX_TEXTURE_COUNT ; ++i)
+    for (int i=BOO_GLSL_MAX_UNIFORM_COUNT ; i<BOO_GLSL_MAX_UNIFORM_COUNT+BOO_GLSL_MAX_TEXTURE_COUNT ; ++i)
     {
         layoutBindings[i].binding = i;
         layoutBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -2646,11 +2740,57 @@ VulkanDataFactory::VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ct
     VkDescriptorSetLayoutCreateInfo descriptorLayout = {};
     descriptorLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     descriptorLayout.pNext = nullptr;
-    descriptorLayout.bindingCount = MAX_UNIFORM_COUNT + MAX_TEXTURE_COUNT;
+    descriptorLayout.bindingCount = BOO_GLSL_MAX_UNIFORM_COUNT + BOO_GLSL_MAX_TEXTURE_COUNT;
     descriptorLayout.pBindings = layoutBindings;
 
     ThrowIfFailed(vkCreateDescriptorSetLayout(ctx->m_dev, &descriptorLayout, nullptr,
                                               &ctx->m_descSetLayout));
+
+    VkPipelineLayoutCreateInfo pipelineLayout = {};
+    pipelineLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayout.setLayoutCount = 1;
+    pipelineLayout.pSetLayouts = &ctx->m_descSetLayout;
+    ThrowIfFailed(vkCreatePipelineLayout(ctx->m_dev, &pipelineLayout, nullptr, &ctx->m_pipelinelayout));
+
+    VkAttachmentDescription attachments[2] = {};
+
+    /* color attachment */
+    attachments[0].format = VK_FORMAT_R8G8B8A8_UNORM;
+    attachments[0].samples = VkSampleCountFlagBits(drawSamples);
+    attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    VkAttachmentReference colorAttachmentRef = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+
+    /* depth attachment */
+    attachments[1].format = VK_FORMAT_D24_UNORM_S8_UINT;
+    attachments[1].samples = VkSampleCountFlagBits(drawSamples);
+    attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[1].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    VkAttachmentReference depthAttachmentRef = {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+
+    /* render subpass */
+    VkSubpassDescription subpass = {};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorAttachmentRef;
+    subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
+    /* render pass */
+    VkRenderPassCreateInfo renderPass = {};
+    renderPass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPass.attachmentCount = 2;
+    renderPass.pAttachments = attachments;
+    renderPass.subpassCount = 1;
+    renderPass.pSubpasses = &subpass;
+    ThrowIfFailed(vkCreateRenderPass(ctx->m_dev, &renderPass, nullptr, &ctx->m_pass));
 }
 
 IShaderPipeline* VulkanDataFactory::newShaderPipeline
@@ -2662,33 +2802,37 @@ IShaderPipeline* VulkanDataFactory::newShaderPipeline
 {
     if (vertBlobOut.empty() || fragBlobOut.empty())
     {
+        const EShMessages messages = EShMessages(EShMsgSpvRules | EShMsgVulkanRules);
+        //init_resources(DefaultBuiltInResource);
+
         glslang::TShader vs(EShLangVertex);
         vs.setStrings(&vertSource, 1);
-        if (!vs.parse(&DefaultBuiltInResource, 110, true, EShMsgDefault))
+        if (!vs.parse(&DefaultBuiltInResource, 110, false, messages))
         {
-            Log.report(LogVisor::Error, "unable to compile vertex shader\n%s", vs.getInfoLog());
+            Log.report(LogVisor::FatalError, "unable to compile vertex shader\n%s", vs.getInfoLog());
             return nullptr;
         }
 
         glslang::TShader fs(EShLangFragment);
         fs.setStrings(&fragSource, 1);
-        if (!fs.parse(&DefaultBuiltInResource, 110, true, EShMsgDefault))
+        if (!fs.parse(&DefaultBuiltInResource, 110, false, messages))
         {
-            Log.report(LogVisor::Error, "unable to compile fragment shader\n%s", fs.getInfoLog());
+            Log.report(LogVisor::FatalError, "unable to compile fragment shader\n%s", fs.getInfoLog());
             return nullptr;
         }
 
         glslang::TProgram prog;
         prog.addShader(&vs);
         prog.addShader(&fs);
-        if (!prog.link(EShMsgDefault))
+        if (!prog.link(messages))
         {
-            Log.report(LogVisor::Error, "unable to link shader program\n%s", prog.getInfoLog());
+            Log.report(LogVisor::FatalError, "unable to link shader program\n%s", prog.getInfoLog());
             return nullptr;
         }
-
         glslang::GlslangToSpv(*prog.getIntermediate(EShLangVertex), vertBlobOut);
+        spv::Disassemble(std::cerr, vertBlobOut);
         glslang::GlslangToSpv(*prog.getIntermediate(EShLangFragment), fragBlobOut);
+        spv::Disassemble(std::cerr, fragBlobOut);
     }
 
     VkShaderModuleCreateInfo smCreateInfo = {};
@@ -2731,6 +2875,10 @@ IShaderPipeline* VulkanDataFactory::newShaderPipeline
             pipelineBlob.resize(cacheSz);
         }
     }
+
+    vkDestroyPipelineCache(m_ctx->m_dev, pipelineCache, nullptr);
+    vkDestroyShaderModule(m_ctx->m_dev, fragModule, nullptr);
+    vkDestroyShaderModule(m_ctx->m_dev, vertModule, nullptr);
 
     if (!m_deferredData.get())
         m_deferredData.reset(new struct VulkanData(m_ctx));
@@ -2839,10 +2987,10 @@ ITextureD* VulkanDataFactory::newDynamicTexture(size_t width, size_t height, Tex
     return retval;
 }
 
-ITextureR* VulkanDataFactory::newRenderTexture(size_t width, size_t height, size_t samples)
+ITextureR* VulkanDataFactory::newRenderTexture(size_t width, size_t height)
 {
     VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(m_parent->getCommandQueue());
-    VulkanTextureR* retval = new VulkanTextureR(m_ctx, q, width, height, samples);
+    VulkanTextureR* retval = new VulkanTextureR(m_ctx, q, width, height, m_drawSamples);
     if (!m_deferredData.get())
         m_deferredData.reset(new struct VulkanData(m_ctx));
     static_cast<VulkanData*>(m_deferredData.get())->m_RTexs.emplace_back(retval);
@@ -2906,47 +3054,54 @@ GraphicsDataToken VulkanDataFactory::commit()
     for (std::unique_ptr<VulkanTextureD>& tex : retval->m_DTexs)
         texMemSize = tex->sizeForGPU(m_ctx, texMemTypeBits, texMemSize);
 
-    /* allocate memory */
-    VkMemoryAllocateInfo memAlloc = {};
-    memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memAlloc.pNext = nullptr;
-    memAlloc.memoryTypeIndex = 0;
-    memAlloc.allocationSize = bufMemSize;
-    ThrowIfFalse(MemoryTypeFromProperties(m_ctx, bufMemTypeBits, 0, &memAlloc.memoryTypeIndex));
-    ThrowIfFailed(vkAllocateMemory(m_ctx->m_dev, &memAlloc, nullptr, &retval->m_bufMem));
+    /* allocate memory and place textures */
+    if (bufMemSize)
+    {
+        VkMemoryAllocateInfo memAlloc = {};
+        memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        memAlloc.allocationSize = bufMemSize;
+        ThrowIfFalse(MemoryTypeFromProperties(m_ctx, bufMemTypeBits, 0, &memAlloc.memoryTypeIndex));
+        ThrowIfFailed(vkAllocateMemory(m_ctx->m_dev, &memAlloc, nullptr, &retval->m_bufMem));
 
-    memAlloc.allocationSize = texMemSize;
-    ThrowIfFalse(MemoryTypeFromProperties(m_ctx, texMemTypeBits, 0, &memAlloc.memoryTypeIndex));
-    ThrowIfFailed(vkAllocateMemory(m_ctx->m_dev, &memAlloc, nullptr, &retval->m_texMem));
+        /* place resources */
+        uint8_t* mappedData;
+        ThrowIfFailed(vkMapMemory(m_ctx->m_dev, retval->m_bufMem, 0, bufMemSize, 0, reinterpret_cast<void**>(&mappedData)));
 
-    /* place resources */
-    uint8_t* mappedData;
-    ThrowIfFailed(vkMapMemory(m_ctx->m_dev, retval->m_bufMem, 0, bufMemSize, 0, reinterpret_cast<void**>(&mappedData)));
+        for (std::unique_ptr<VulkanGraphicsBufferS>& buf : retval->m_SBufs)
+            buf->placeForGPU(m_ctx, retval->m_bufMem, mappedData);
 
-    for (std::unique_ptr<VulkanGraphicsBufferS>& buf : retval->m_SBufs)
-        buf->placeForGPU(m_ctx, retval->m_bufMem, mappedData);
+        /* flush static buffers to gpu */
+        VkMappedMemoryRange mappedRange;
+        mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+        mappedRange.pNext = nullptr;
+        mappedRange.memory = retval->m_bufMem;
+        mappedRange.offset = 0;
+        mappedRange.size = bufMemSize;
+        ThrowIfFailed(vkFlushMappedMemoryRanges(m_ctx->m_dev, 1, &mappedRange));
+        vkUnmapMemory(m_ctx->m_dev, retval->m_bufMem);
 
-    /* flush static buffers to gpu */
-    VkMappedMemoryRange mappedRange;
-    mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-    mappedRange.pNext = nullptr;
-    mappedRange.memory = retval->m_bufMem;
-    mappedRange.offset = 0;
-    mappedRange.size = bufMemSize;
-    ThrowIfFailed(vkFlushMappedMemoryRanges(m_ctx->m_dev, 1, &mappedRange));
-    vkUnmapMemory(m_ctx->m_dev, retval->m_bufMem);
+        for (std::unique_ptr<VulkanGraphicsBufferD>& buf : retval->m_DBufs)
+            buf->placeForGPU(m_ctx, retval->m_bufMem);
+    }
 
-    for (std::unique_ptr<VulkanGraphicsBufferD>& buf : retval->m_DBufs)
-        buf->placeForGPU(m_ctx, retval->m_bufMem);
+    /* allocate memory and place textures */
+    if (texMemSize)
+    {
+        VkMemoryAllocateInfo memAlloc = {};
+        memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        memAlloc.allocationSize = texMemSize;
+        ThrowIfFalse(MemoryTypeFromProperties(m_ctx, texMemTypeBits, 0, &memAlloc.memoryTypeIndex));
+        ThrowIfFailed(vkAllocateMemory(m_ctx->m_dev, &memAlloc, nullptr, &retval->m_texMem));
 
-    for (std::unique_ptr<VulkanTextureS>& tex : retval->m_STexs)
-        tex->placeForGPU(m_ctx, retval->m_texMem);
+        for (std::unique_ptr<VulkanTextureS>& tex : retval->m_STexs)
+            tex->placeForGPU(m_ctx, retval->m_texMem);
 
-    for (std::unique_ptr<VulkanTextureSA>& tex : retval->m_SATexs)
-        tex->placeForGPU(m_ctx, retval->m_texMem);
+        for (std::unique_ptr<VulkanTextureSA>& tex : retval->m_SATexs)
+            tex->placeForGPU(m_ctx, retval->m_texMem);
 
-    for (std::unique_ptr<VulkanTextureD>& tex : retval->m_DTexs)
-        tex->placeForGPU(m_ctx, retval->m_texMem);
+        for (std::unique_ptr<VulkanTextureD>& tex : retval->m_DTexs)
+            tex->placeForGPU(m_ctx, retval->m_texMem);
+    }
 
     /* Execute static uploads */
     ThrowIfFailed(vkEndCommandBuffer(m_ctx->m_loadCmdBuf));
@@ -3094,9 +3249,5 @@ IGraphicsCommandQueue* _NewVulkanCommandQueue(VulkanContext* ctx, VulkanContext:
     return new struct VulkanCommandQueue(ctx, windowCtx, parent);
 }
 
-IGraphicsDataFactory* _NewVulkanDataFactory(VulkanContext* ctx, IGraphicsContext* parent)
-{
-    return new VulkanDataFactory(parent, ctx);
-}
 
 }

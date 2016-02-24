@@ -235,7 +235,7 @@ struct TestApplicationCallback : IApplicationCallback
         /* Create render target */
         int x, y, w, h;
         self->mainWindow->getWindowFrame(x, y, w, h);
-        self->m_renderTarget = factory->newRenderTexture(w, h, 1);
+        self->m_renderTarget = factory->newRenderTexture(w, h);
 
         /* Make Tri-strip VBO */
         struct Vert
@@ -294,8 +294,9 @@ struct TestApplicationCallback : IApplicationCallback
 
             static const char* FS =
             "#version 330\n"
+            BOO_GLSL_BINDING_HEAD
             "precision highp float;\n"
-            "uniform sampler2D texs[1];\n"
+            "TBINDING0 uniform sampler2D texs[1];\n"
             "layout(location=0) out vec4 out_frag;\n"
             "in vec2 out_uv;\n"
             "void main()\n"
@@ -395,7 +396,7 @@ struct TestApplicationCallback : IApplicationCallback
 
     int appMain(IApplication* app)
     {
-        mainWindow = app->newWindow(_S("YAY!"));
+        mainWindow = app->newWindow(_S("YAY!"), 1);
         mainWindow->setCallback(&windowCallback);
         mainWindow->showWindow();
         windowCallback.m_lastRect = mainWindow->getWindowFrame();

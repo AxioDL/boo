@@ -611,8 +611,8 @@ GLDataFactory::newShaderDataBinding(IShaderPipeline* pipeline,
     return retval;
 }
 
-GLDataFactory::GLDataFactory(IGraphicsContext* parent)
-: m_parent(parent) {}
+GLDataFactory::GLDataFactory(IGraphicsContext* parent, uint32_t drawSamples)
+: m_parent(parent), m_drawSamples(drawSamples) {}
 
 void GLDataFactory::reset()
 {
@@ -1304,10 +1304,10 @@ GLTextureR::GLTextureR(GLCommandQueue* q, size_t width, size_t height, size_t sa
 GLTextureR::~GLTextureR() {glDeleteTextures(2, m_texs); m_q->delFBO(this);}
 
 ITextureR*
-GLDataFactory::newRenderTexture(size_t width, size_t height, size_t samples)
+GLDataFactory::newRenderTexture(size_t width, size_t height)
 {
     GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
-    GLTextureR* retval = new GLTextureR(q, width, height, samples);
+    GLTextureR* retval = new GLTextureR(q, width, height, m_drawSamples);
     q->resizeRenderTexture(retval, width, height);
     if (!m_deferredData.get())
         m_deferredData.reset(new struct GLData());

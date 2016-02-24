@@ -4,6 +4,7 @@
 #include "IGraphicsDataFactory.hpp"
 #include "IGraphicsCommandQueue.hpp"
 #include "boo/IGraphicsContext.hpp"
+#include "GLSLMacros.hpp"
 #include <vector>
 #include <unordered_set>
 #include <mutex>
@@ -15,6 +16,7 @@ class GLDataFactory : public IGraphicsDataFactory
 {
     friend struct GLCommandQueue;
     IGraphicsContext* m_parent;
+    uint32_t m_drawSamples;
     static ThreadLocalPtr<struct GLData> m_deferredData;
     std::unordered_set<struct GLData*> m_committedData;
     std::mutex m_committedMutex;
@@ -22,7 +24,7 @@ class GLDataFactory : public IGraphicsDataFactory
     void destroyData(IGraphicsData*);
     void destroyAllData();
 public:
-    GLDataFactory(IGraphicsContext* parent);
+    GLDataFactory(IGraphicsContext* parent, uint32_t drawSamples);
     ~GLDataFactory() {destroyAllData();}
 
     Platform platform() const {return Platform::OGL;}
@@ -39,7 +41,7 @@ public:
     ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
                                       const void* data, size_t sz);
     ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
-    ITextureR* newRenderTexture(size_t width, size_t height, size_t samples);
+    ITextureR* newRenderTexture(size_t width, size_t height);
 
     bool bindingNeedsVertexFormat() const {return true;}
     IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
