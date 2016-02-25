@@ -2464,12 +2464,12 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         m_doPresent = true;
     }
 
-    void resolveBindTexture(ITextureR* texture, const SWindowRect& rect, bool tlOrigin)
+    void resolveBindTexture(ITextureR* texture, const SWindowRect& rect, bool tlOrigin, bool color, bool depth)
     {
         VkCommandBuffer cmdBuf = m_cmdBufs[m_fillBuf];
         VulkanTextureR* ctexture = static_cast<VulkanTextureR*>(texture);
 
-        if (ctexture->m_enableShaderColorBinding)
+        if (color && ctexture->m_enableShaderColorBinding)
         {
             if (ctexture == m_boundTarget)
                 SetImageLayout(cmdBuf, ctexture->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
@@ -2509,7 +2509,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
 
-        if (ctexture->m_enableShaderDepthBinding)
+        if (depth && ctexture->m_enableShaderDepthBinding)
         {
             if (ctexture == m_boundTarget)
                 SetImageLayout(cmdBuf, ctexture->m_depthTex, VK_IMAGE_ASPECT_DEPTH_BIT,
