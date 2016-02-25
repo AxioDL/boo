@@ -678,6 +678,11 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                        instanceCount:instCount];
     }
 
+    void resolveBindTexture(ITextureR* texture, const SWindowRect& rect, bool tlOrigin, bool color, bool depth)
+    {
+
+    }
+
     MetalTextureR* m_needsDisplay = nullptr;
     void resolveDisplay(ITextureR* source)
     {
@@ -892,7 +897,8 @@ ITextureD* MetalDataFactory::newDynamicTexture(size_t width, size_t height, Text
     m_deferredData->m_DTexs.emplace_back(retval);
     return retval;
 }
-ITextureR* MetalDataFactory::newRenderTexture(size_t width, size_t height)
+ITextureR* MetalDataFactory::newRenderTexture(size_t width, size_t height,
+                                              bool enableShaderColorBinding, bool enableShaderDepthBinding)
 {
     MetalTextureR* retval = new MetalTextureR(m_ctx, width, height, m_sampleCount);
     if (!m_deferredData.get())

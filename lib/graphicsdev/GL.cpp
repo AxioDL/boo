@@ -767,6 +767,8 @@ struct GLCommandQueue : IGraphicsCommandQueue
             };
         };
         const ITextureR* resolveTex;
+        bool resolveColor : 1;
+        bool resolveDepth : 1;
         Command(Op op) : m_op(op) {}
     };
     std::vector<Command> m_cmdBufs[3];
@@ -980,15 +982,15 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     const GLTextureR* tex = static_cast<const GLTextureR*>(cmd.resolveTex);
                     GLenum target = (tex->m_samples > 1) ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, tex->m_fbo);
-                    glReadBuffer(GL_BACK);
+                    //glReadBuffer(GL_FRONT);
                     glActiveTexture(GL_TEXTURE9);
-                    if (tex->m_bindTexs[0])
+                    if (cmd.resolveColor && tex->m_bindTexs[0])
                     {
                         glBindTexture(target, tex->m_bindTexs[0]);
                         glCopyTexSubImage2D(target, 0, cmd.rect.location[0], cmd.rect.location[1],
                                             cmd.rect.location[0], cmd.rect.location[1], cmd.rect.size[0], cmd.rect.size[1]);
                     }
-                    if (tex->m_bindTexs[1])
+                    if (cmd.resolveDepth && tex->m_bindTexs[1])
                     {
                         glBindTexture(target, tex->m_bindTexs[1]);
                         glCopyTexSubImage2D(target, 0, cmd.rect.location[0], cmd.rect.location[1],
@@ -1134,14 +1136,16 @@ struct GLCommandQueue : IGraphicsCommandQueue
         cmds.back().instCount = instCount;
     }
 
-    void resolveBindTexture(ITextureR* texture, const SWindowRect& rect, bool tlOrigin)
+    void resolveBindTexture(ITextureR* texture, const SWindowRect& rect, bool tlOrigin, bool color, bool depth)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::Op::ResolveBindTexture);
         cmds.back().resolveTex = texture;
         cmds.back().rect = rect;
+        cmds.back().resolveColor = color;
+        cmds.back().resolveDepth = depth;
         if (tlOrigin)
-            cmds.back().rect.location[1] = static_cast<GLTextureR*>(texture)->m_height - rect.location[1];
+            cmds.back().rect.location[1] = static_cast<GLTextureR*>(texture)->m_height - rect.location[1] - rect.size[1];
     }
 
     void resolveDisplay(ITextureR* source)
