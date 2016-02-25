@@ -208,7 +208,8 @@ struct IGraphicsDataFactory
     virtual ITextureD*
     newDynamicTexture(size_t width, size_t height, TextureFormat fmt)=0;
     virtual ITextureR*
-    newRenderTexture(size_t width, size_t height)=0;
+    newRenderTexture(size_t width, size_t height,
+                     bool enableShaderColorBinding, bool enableShaderDepthBinding)=0;
 
     virtual bool bindingNeedsVertexFormat() const=0;
     virtual IVertexFormat*

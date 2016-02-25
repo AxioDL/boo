@@ -235,7 +235,7 @@ struct TestApplicationCallback : IApplicationCallback
         /* Create render target */
         int x, y, w, h;
         self->mainWindow->getWindowFrame(x, y, w, h);
-        self->m_renderTarget = factory->newRenderTexture(w, h);
+        self->m_renderTarget = factory->newRenderTexture(w, h, false, false);
 
         /* Make Tri-strip VBO */
         struct Vert

@@ -97,7 +97,8 @@ public:
     ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
                                       const void* data, size_t sz);
     ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
-    ITextureR* newRenderTexture(size_t width, size_t height);
+    ITextureR* newRenderTexture(size_t width, size_t height,
+                                bool enableShaderColorBinding, bool enableShaderDepthBinding);
 
     bool bindingNeedsVertexFormat() const {return true;}
     IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);

@@ -32,6 +32,7 @@ struct IGraphicsCommandQueue
     virtual void drawInstances(size_t start, size_t count, size_t instCount)=0;
     virtual void drawInstancesIndexed(size_t start, size_t count, size_t instCount)=0;
 
+    virtual void resolveBindTexture(ITextureR* texture, const SWindowRect& rect, bool tlOrigin)=0;
     virtual void resolveDisplay(ITextureR* source)=0;
     virtual void execute()=0;
 

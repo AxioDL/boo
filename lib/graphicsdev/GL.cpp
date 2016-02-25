@@ -233,19 +233,21 @@ class GLTextureR : public ITextureR
     friend struct GLCommandQueue;
     struct GLCommandQueue* m_q;
     GLuint m_texs[2];
+    GLuint m_bindTexs[2] = {};
     GLuint m_fbo = 0;
     size_t m_width = 0;
     size_t m_height = 0;
     size_t m_samples = 0;
     GLenum m_target;
-    GLTextureR(GLCommandQueue* q, size_t width, size_t height, size_t samples);
+    GLTextureR(GLCommandQueue* q, size_t width, size_t height, size_t samples,
+               bool enableShaderColorBinding, bool enableShaderDepthBinding);
 public:
     ~GLTextureR();
 
     void bind(size_t idx) const
     {
         glActiveTexture(GL_TEXTURE0 + idx);
-        glBindTexture(m_target, m_texs[0]);
+        glBindTexture(m_target, m_bindTexs[0]);
     }
 
     void resize(size_t width, size_t height)
@@ -259,6 +261,17 @@ public:
             glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_samples, GL_RGBA, width, height, GL_FALSE);
             glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[1]);
             glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_samples, GL_DEPTH_COMPONENT24, width, height, GL_FALSE);
+
+            if (m_bindTexs[0])
+            {
+                glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_bindTexs[0]);
+                glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_samples, GL_RGBA, width, height, GL_FALSE);
+            }
+            if (m_bindTexs[1])
+            {
+                glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_bindTexs[1]);
+                glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_samples, GL_DEPTH_COMPONENT24, width, height, GL_FALSE);
+            }
         }
         else
         {
@@ -266,6 +279,17 @@ public:
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
             glBindTexture(GL_TEXTURE_2D, m_texs[1]);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+
+            if (m_bindTexs[0])
+            {
+                glBindTexture(GL_TEXTURE_2D, m_bindTexs[0]);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            }
+            if (m_bindTexs[1])
+            {
+                glBindTexture(GL_TEXTURE_2D, m_bindTexs[1]);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+            }
         }
     }
 };
@@ -590,6 +614,9 @@ struct GLShaderDataBinding : IShaderDataBinding
             case TextureType::StaticArray:
                 static_cast<GLTextureSA*>(tex)->bind(i);
                 break;
+            case TextureType::Render:
+                static_cast<GLTextureR*>(tex)->bind(i);
+                break;
             default: break;
             }
         }
@@ -721,6 +748,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
             DrawIndexed,
             DrawInstances,
             DrawInstancesIndexed,
+            ResolveBindTexture,
             Present
         } m_op;
         union
@@ -738,6 +766,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 size_t instCount;
             };
         };
+        const ITextureR* resolveTex;
         Command(Op op) : m_op(op) {}
     };
     std::vector<Command> m_cmdBufs[3];
@@ -946,6 +975,27 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 case Command::Op::DrawInstancesIndexed:
                     glDrawElementsInstanced(GL_TRIANGLE_STRIP, cmd.count, GL_UNSIGNED_INT, (void*)cmd.start, cmd.instCount);
                     break;
+                case Command::Op::ResolveBindTexture:
+                {
+                    const GLTextureR* tex = static_cast<const GLTextureR*>(cmd.resolveTex);
+                    GLenum target = (tex->m_samples > 1) ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER, tex->m_fbo);
+                    glReadBuffer(GL_BACK);
+                    glActiveTexture(GL_TEXTURE9);
+                    if (tex->m_bindTexs[0])
+                    {
+                        glBindTexture(target, tex->m_bindTexs[0]);
+                        glCopyTexSubImage2D(target, 0, cmd.rect.location[0], cmd.rect.location[1],
+                                            cmd.rect.location[0], cmd.rect.location[1], cmd.rect.size[0], cmd.rect.size[1]);
+                    }
+                    if (tex->m_bindTexs[1])
+                    {
+                        glBindTexture(target, tex->m_bindTexs[1]);
+                        glCopyTexSubImage2D(target, 0, cmd.rect.location[0], cmd.rect.location[1],
+                                            cmd.rect.location[0], cmd.rect.location[1], cmd.rect.size[0], cmd.rect.size[1]);
+                    }
+                    break;
+                }
                 case Command::Op::Present:
                 {
                     const GLTextureR* tex = static_cast<const GLTextureR*>(cmd.source);
@@ -1082,6 +1132,16 @@ struct GLCommandQueue : IGraphicsCommandQueue
         cmds.back().start = start;
         cmds.back().count = count;
         cmds.back().instCount = instCount;
+    }
+
+    void resolveBindTexture(ITextureR* texture, const SWindowRect& rect, bool tlOrigin)
+    {
+        std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
+        cmds.emplace_back(Command::Op::ResolveBindTexture);
+        cmds.back().resolveTex = texture;
+        cmds.back().rect = rect;
+        if (tlOrigin)
+            cmds.back().rect.location[1] = static_cast<GLTextureR*>(texture)->m_height - rect.location[1];
     }
 
     void resolveDisplay(ITextureR* source)
@@ -1279,10 +1339,15 @@ GLDataFactory::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
     return retval;
 }
 
-GLTextureR::GLTextureR(GLCommandQueue* q, size_t width, size_t height, size_t samples)
+GLTextureR::GLTextureR(GLCommandQueue* q, size_t width, size_t height, size_t samples,
+                       bool enableShaderColorBinding, bool enableShaderDepthBinding)
 : m_q(q), m_width(width), m_height(height), m_samples(samples)
 {
     glGenTextures(2, m_texs);
+    if (enableShaderColorBinding)
+        glGenTextures(1, &m_bindTexs[0]);
+    if (enableShaderDepthBinding)
+        glGenTextures(1, &m_bindTexs[1]);
     if (samples > 1)
     {
         m_target = GL_TEXTURE_2D_MULTISAMPLE;
@@ -1290,6 +1355,17 @@ GLTextureR::GLTextureR(GLCommandQueue* q, size_t width, size_t height, size_t sa
         glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGBA, width, height, GL_FALSE);
         glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[1]);
         glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_DEPTH_COMPONENT24, width, height, GL_FALSE);
+
+        if (enableShaderColorBinding)
+        {
+            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_bindTexs[0]);
+            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGBA, width, height, GL_FALSE);
+        }
+        if (enableShaderDepthBinding)
+        {
+            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_bindTexs[1]);
+            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_DEPTH_COMPONENT24, width, height, GL_FALSE);
+        }
     }
     else
     {
@@ -1298,16 +1374,38 @@ GLTextureR::GLTextureR(GLCommandQueue* q, size_t width, size_t height, size_t sa
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
         glBindTexture(GL_TEXTURE_2D, m_texs[1]);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+
+        if (enableShaderColorBinding)
+        {
+            glBindTexture(GL_TEXTURE_2D, m_bindTexs[0]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        }
+        if (enableShaderDepthBinding)
+        {
+            glBindTexture(GL_TEXTURE_2D, m_bindTexs[1]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        }
     }
     m_q->addFBO(this);
 }
-GLTextureR::~GLTextureR() {glDeleteTextures(2, m_texs); m_q->delFBO(this);}
+GLTextureR::~GLTextureR()
+{
+    glDeleteTextures(2, m_texs);
+    glDeleteTextures(2, m_bindTexs);
+    m_q->delFBO(this);
+}
 
 ITextureR*
-GLDataFactory::newRenderTexture(size_t width, size_t height)
+GLDataFactory::newRenderTexture(size_t width, size_t height,
+                                bool enableShaderColorBinding, bool enableShaderDepthBinding)
 {
     GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
-    GLTextureR* retval = new GLTextureR(q, width, height, m_drawSamples);
+    GLTextureR* retval = new GLTextureR(q, width, height, m_drawSamples,
+                                        enableShaderColorBinding, enableShaderDepthBinding);
     q->resizeRenderTexture(retval, width, height);
     if (!m_deferredData.get())
         m_deferredData.reset(new struct GLData());
