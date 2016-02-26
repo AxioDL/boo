@@ -232,8 +232,10 @@ class MetalTextureR : public ITextureR
     size_t m_width = 0;
     size_t m_height = 0;
     size_t m_samples = 0;
+    bool m_enableShaderBindTexture;
 
-    void Setup(MetalContext* ctx, size_t width, size_t height, size_t samples)
+    void Setup(MetalContext* ctx, size_t width, size_t height, size_t samples,
+               bool enableShaderBindTexture)
     {
         @autoreleasepool
         {
@@ -241,57 +243,73 @@ class MetalTextureR : public ITextureR
             [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
                                                                width:width height:height
                                                            mipmapped:NO];
-            m_passDesc = [MTLRenderPassDescriptor renderPassDescriptor];
-            desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
             desc.storageMode = MTLStorageModePrivate;
-
-            m_tex = [ctx->m_dev newTextureWithDescriptor:desc];
 
             if (samples > 1)
             {
                 desc.textureType = MTLTextureType2DMultisample;
                 desc.sampleCount = samples;
-                m_msaaTex = [ctx->m_dev newTextureWithDescriptor:desc];
+                m_colorTex = [ctx->m_dev newTextureWithDescriptor:desc];
 
+                if (enableShaderBindTexture)
+                {
+                    desc.usage = MTLTextureUsageShaderRead;
+                    m_colorBindTex = [ctx->m_dev newTextureWithDescriptor:desc];
+                }
+
+                desc.usage = MTLTextureUsageRenderTarget;
                 desc.pixelFormat = MTLPixelFormatDepth32Float;
                 m_depthTex = [ctx->m_dev newTextureWithDescriptor:desc];
 
-                m_passDesc.colorAttachments[0].texture = m_msaaTex;
-                m_passDesc.colorAttachments[0].resolveTexture = m_tex;
-                m_passDesc.colorAttachments[0].loadAction = MTLLoadActionClear;
-                m_passDesc.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
-
-                m_passDesc.depthAttachment.texture = m_depthTex;
-                m_passDesc.depthAttachment.loadAction = MTLLoadActionClear;
-                m_passDesc.depthAttachment.storeAction = MTLStoreActionDontCare;
-            }
-            else
-            {
-                desc.pixelFormat = MTLPixelFormatDepth32Float;
-                m_depthTex = [ctx->m_dev newTextureWithDescriptor:desc];
-
-                m_passDesc.colorAttachments[0].texture = m_tex;
-                m_passDesc.colorAttachments[0].loadAction = MTLLoadActionClear;
+                m_passDesc.colorAttachments[0].texture = m_colorTex;
+                m_passDesc.colorAttachments[0].loadAction = MTLLoadActionLoad;
                 m_passDesc.colorAttachments[0].storeAction = MTLStoreActionStore;
 
                 m_passDesc.depthAttachment.texture = m_depthTex;
-                m_passDesc.depthAttachment.loadAction = MTLLoadActionClear;
-                m_passDesc.depthAttachment.storeAction = MTLStoreActionDontCare;
+                m_passDesc.depthAttachment.loadAction = MTLLoadActionLoad;
+                m_passDesc.depthAttachment.storeAction = MTLStoreActionStore;
             }
+            else
+            {
+                desc.textureType = MTLTextureType2D;
+                desc.sampleCount = 1;
+                m_colorTex = [ctx->m_dev newTextureWithDescriptor:desc];
+
+                if (enableShaderBindTexture)
+                {
+                    desc.usage = MTLTextureUsageShaderRead;
+                    m_colorBindTex = [ctx->m_dev newTextureWithDescriptor:desc];
+                }
+
+                desc.usage = MTLTextureUsageRenderTarget;
+                desc.pixelFormat = MTLPixelFormatDepth32Float;
+                m_depthTex = [ctx->m_dev newTextureWithDescriptor:desc];
+            }
+
+            m_passDesc = [MTLRenderPassDescriptor renderPassDescriptor];
+
+            m_passDesc.colorAttachments[0].texture = m_colorTex;
+            m_passDesc.colorAttachments[0].loadAction = MTLLoadActionLoad;
+            m_passDesc.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+            m_passDesc.depthAttachment.texture = m_depthTex;
+            m_passDesc.depthAttachment.loadAction = MTLLoadActionLoad;
+            m_passDesc.depthAttachment.storeAction = MTLStoreActionStore;
         }
     }
 
-    MetalTextureR(MetalContext* ctx, size_t width, size_t height, size_t samples)
-    : m_width(width), m_height(height), m_samples(samples)
+    MetalTextureR(MetalContext* ctx, size_t width, size_t height, size_t samples,
+                  bool enableShaderBindTexture)
+    : m_width(width), m_height(height), m_samples(samples), m_enableShaderBindTexture(enableShaderBindTexture)
     {
         if (samples == 0) m_samples = 1;
-        Setup(ctx, width, height, samples);
+        Setup(ctx, width, height, samples, enableShaderBindTexture);
     }
 public:
     size_t samples() const {return m_samples;}
-    id<MTLTexture> m_tex;
-    id<MTLTexture> m_msaaTex;
+    id<MTLTexture> m_colorTex;
     id<MTLTexture> m_depthTex;
+    id<MTLTexture> m_colorBindTex;
     MTLRenderPassDescriptor* m_passDesc;
     ~MetalTextureR() = default;
 
@@ -303,10 +321,8 @@ public:
             height = 1;
         m_width = width;
         m_height = height;
-        Setup(ctx, width, height, m_samples);
+        Setup(ctx, width, height, m_samples, m_enableShaderBindTexture);
     }
-
-    id<MTLTexture> getRenderColorRes() {if (m_samples > 1) return m_msaaTex; return m_tex;}
 };
 
 static const size_t SEMANTIC_SIZE_TABLE[] =
@@ -494,7 +510,7 @@ static id<MTLTexture> GetTextureGPUResource(const ITexture* tex, int idx)
     case TextureType::Render:
     {
         const MetalTextureR* ctex = static_cast<const MetalTextureR*>(tex);
-        return ctex->m_tex;
+        return ctex->m_colorBindTex;
     }
     default: break;
     }
@@ -680,7 +696,28 @@ struct MetalCommandQueue : IGraphicsCommandQueue
 
     void resolveBindTexture(ITextureR* texture, const SWindowRect& rect, bool tlOrigin, bool color, bool depth)
     {
-
+        MetalTextureR* tex = static_cast<MetalTextureR*>(texture);
+        if (color && tex->m_enableShaderBindTexture)
+        {
+            [m_enc endEncoding];
+            @autoreleasepool
+            {
+                NSUInteger y = tlOrigin ? rect.location[1] : tex->m_height - rect.location[1] - rect.size[1];
+                MTLOrigin origin = {NSUInteger(rect.location[0]), y, 0};
+                id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf blitCommandEncoder];
+                [blitEnc copyFromTexture:tex->m_colorTex
+                             sourceSlice:0
+                             sourceLevel:0
+                            sourceOrigin:origin
+                              sourceSize:MTLSizeMake(rect.size[0], rect.size[1], 1)
+                               toTexture:tex->m_colorBindTex
+                        destinationSlice:0
+                        destinationLevel:0
+                       destinationOrigin:origin];
+                [blitEnc endEncoding];
+                m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:tex->m_passDesc];
+            }
+        }
     }
 
     MetalTextureR* m_needsDisplay = nullptr;
@@ -749,11 +786,11 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                     if (drawable)
                     {
                         id<MTLTexture> dest = drawable.texture;
-                        if (m_needsDisplay->m_tex.width == dest.width &&
-                            m_needsDisplay->m_tex.height == dest.height)
+                        if (m_needsDisplay->m_colorTex.width == dest.width &&
+                            m_needsDisplay->m_colorTex.height == dest.height)
                         {
                             id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf blitCommandEncoder];
-                            [blitEnc copyFromTexture:m_needsDisplay->m_tex
+                            [blitEnc copyFromTexture:m_needsDisplay->m_colorTex
                                          sourceSlice:0
                                          sourceLevel:0
                                         sourceOrigin:MTLOriginMake(0, 0, 0)
@@ -900,7 +937,7 @@ ITextureD* MetalDataFactory::newDynamicTexture(size_t width, size_t height, Text
 ITextureR* MetalDataFactory::newRenderTexture(size_t width, size_t height,
                                               bool enableShaderColorBinding, bool enableShaderDepthBinding)
 {
-    MetalTextureR* retval = new MetalTextureR(m_ctx, width, height, m_sampleCount);
+    MetalTextureR* retval = new MetalTextureR(m_ctx, width, height, m_sampleCount, enableShaderColorBinding);
     if (!m_deferredData.get())
         m_deferredData.reset(new struct MetalData());
     m_deferredData->m_RTexs.emplace_back(retval);
