@@ -1195,6 +1195,15 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         const D3D12TextureR* tex = static_cast<const D3D12TextureR*>(texture);
         if (color && tex->m_enableShaderColorBind)
         {
+            D3D12_RESOURCE_BARRIER copySetup[] =
+            {
+                CD3DX12_RESOURCE_BARRIER::Transition(tex->m_colorTex.Get(),
+                    D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE),
+                CD3DX12_RESOURCE_BARRIER::Transition(tex->m_colorBindTex.Get(),
+                    D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST)
+            };
+            m_cmdList->ResourceBarrier(2, copySetup);
+
             if (tex->m_samples > 1)
             {
                 m_cmdList->CopyResource(tex->m_colorBindTex.Get(), tex->m_colorTex.Get());
@@ -1209,10 +1218,37 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
                 src.SubresourceIndex = 0;
                 m_cmdList->CopyTextureRegion(&dst, rect.location[0], y, 0, &src, &box);
             }
+
+            D3D12_RESOURCE_BARRIER copyTeardown[] =
+            {
+                CD3DX12_RESOURCE_BARRIER::Transition(tex->m_colorTex.Get(),
+                    D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET),
+                CD3DX12_RESOURCE_BARRIER::Transition(tex->m_colorBindTex.Get(),
+                    D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
+            };
+            m_cmdList->ResourceBarrier(2, copyTeardown);
         }
         if (depth && tex->m_enableShaderDepthBind)
         {
+            D3D12_RESOURCE_BARRIER copySetup[] =
+            {
+                CD3DX12_RESOURCE_BARRIER::Transition(tex->m_depthTex.Get(),
+                    D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_COPY_SOURCE),
+                CD3DX12_RESOURCE_BARRIER::Transition(tex->m_depthBindTex.Get(),
+                    D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST)
+            };
+            m_cmdList->ResourceBarrier(2, copySetup);
+
             m_cmdList->CopyResource(tex->m_depthBindTex.Get(), tex->m_depthTex.Get());
+
+            D3D12_RESOURCE_BARRIER copyTeardown[] =
+            {
+                CD3DX12_RESOURCE_BARRIER::Transition(tex->m_depthTex.Get(),
+                    D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE),
+                CD3DX12_RESOURCE_BARRIER::Transition(tex->m_depthBindTex.Get(),
+                    D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
+            };
+            m_cmdList->ResourceBarrier(2, copyTeardown);
         }
     }
 

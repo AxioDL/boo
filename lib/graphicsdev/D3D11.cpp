@@ -333,10 +333,10 @@ class D3D11TextureR : public ITextureR
 
         if (enableShaderDepthBind)
         {
-            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_D24_UNORM_S8_UINT, width, height,
+            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R24G8_TYPELESS, width, height,
                 1, 1, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, samples), nullptr, &m_depthBindTex));
             ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_depthBindTex.Get(),
-                &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_depthBindTex.Get(), srvDim), &m_depthSrv));
+                &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_depthBindTex.Get(), srvDim, DXGI_FORMAT_R24G8_TYPELESS), &m_depthSrv));
         }
     }
 
@@ -1218,6 +1218,7 @@ void D3D11CommandQueue::execute()
     gfxF->procDeletes();
 
     ThrowIfFailed(m_deferredCtx->FinishCommandList(false, &m_cmdLists[m_fillBuf]));
+    m_deferredCtx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     m_workDoPresent[m_fillBuf] = m_doPresent;
     m_doPresent = nullptr;
 
