@@ -1140,11 +1140,16 @@ struct GLCommandQueue : IGraphicsCommandQueue
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::Op::ResolveBindTexture);
         cmds.back().resolveTex = texture;
-        cmds.back().rect = rect;
         cmds.back().resolveColor = color;
         cmds.back().resolveDepth = depth;
+        SWindowRect& targetRect = cmds.back().rect;
+        targetRect.location[0] = std::max(0, rect.location[0]);
         if (tlOrigin)
-            cmds.back().rect.location[1] = static_cast<GLTextureR*>(texture)->m_height - rect.location[1] - rect.size[1];
+            targetRect.location[1] = std::max(0, int(static_cast<GLTextureR*>(texture)->m_height) - rect.location[1] - rect.size[1]);
+        else
+            targetRect.location[1] = std::max(0, rect.location[1]);
+        targetRect.size[0] = std::max(0, rect.size[0]);
+        targetRect.size[1] = std::max(0, rect.size[1]);
     }
 
     void resolveDisplay(ITextureR* source)

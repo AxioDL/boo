@@ -902,9 +902,10 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
             }
             else
             {
-                UINT y = tlOrigin ? rect.location[1] : (tex->m_height - rect.size[1] - rect.location[1]);
-                D3D11_BOX box = {UINT(rect.location[0]), y, 0, UINT(rect.location[0] + rect.size[0]), y + rect.size[1], 1};
-                m_deferredCtx->CopySubresourceRegion1(tex->m_colorBindTex.Get(), 0, rect.location[0], y, 0,
+                int y = tlOrigin ? rect.location[1] : (tex->m_height - rect.size[1] - rect.location[1]);
+                D3D11_BOX box = {UINT(std::max(0, rect.location[0])), UINT(std::max(0, y)), 0,
+                                 UINT(std::max(0, rect.location[0] + rect.size[0])), UINT(std::max(0, y + rect.size[1])), 1};
+                m_deferredCtx->CopySubresourceRegion1(tex->m_colorBindTex.Get(), 0, box.left, box.top, 0,
                                                       tex->m_colorTex.Get(), 0, &box, D3D11_COPY_DISCARD);
             }
         }

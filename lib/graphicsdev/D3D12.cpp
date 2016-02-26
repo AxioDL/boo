@@ -1210,13 +1210,14 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
             }
             else
             {
-                UINT y = tlOrigin ? rect.location[1] : (tex->m_height - rect.size[1] - rect.location[1]);
-                D3D12_BOX box = {UINT(rect.location[0]), y, 0, UINT(rect.location[0] + rect.size[0]), y + rect.size[1], 1};
+                int y = tlOrigin ? rect.location[1] : (tex->m_height - rect.size[1] - rect.location[1]);
+                D3D12_BOX box = {UINT(std::max(0, rect.location[0])), UINT(std::max(0, y)), 0,
+                                 UINT(std::max(0, rect.location[0] + rect.size[0])), UINT(std::max(0, y + rect.size[1])), 1};
                 D3D12_TEXTURE_COPY_LOCATION dst = {tex->m_colorBindTex.Get(), D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
                 dst.SubresourceIndex = 0;
                 D3D12_TEXTURE_COPY_LOCATION src = {tex->m_colorTex.Get(), D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
                 src.SubresourceIndex = 0;
-                m_cmdList->CopyTextureRegion(&dst, rect.location[0], y, 0, &src, &box);
+                m_cmdList->CopyTextureRegion(&dst, box.left, box.top, 0, &src, &box);
             }
 
             D3D12_RESOURCE_BARRIER copyTeardown[] =
