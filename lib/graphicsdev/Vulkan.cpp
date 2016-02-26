@@ -2491,7 +2491,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
             if (tlOrigin)
                 copyInfo.srcOffset.y = rect.location[1];
             else
-                copyInfo.srcOffset.y = ctexture->m_height - rect.location[1];
+                copyInfo.srcOffset.y = ctexture->m_height - rect.location[1] - rect.size[1];
             copyInfo.dstOffset = copyInfo.srcOffset;
             copyInfo.extent.width = ctexture->m_width;
             copyInfo.extent.height = ctexture->m_height;
@@ -2531,7 +2531,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
             if (tlOrigin)
                 copyInfo.srcOffset.y = rect.location[1];
             else
-                copyInfo.srcOffset.y = ctexture->m_height - rect.location[1];
+                copyInfo.srcOffset.y = ctexture->m_height - rect.location[1] - rect.size[1];
             copyInfo.dstOffset = copyInfo.srcOffset;
             copyInfo.extent.width = ctexture->m_width;
             copyInfo.extent.height = ctexture->m_height;

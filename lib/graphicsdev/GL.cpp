@@ -982,7 +982,6 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     const GLTextureR* tex = static_cast<const GLTextureR*>(cmd.resolveTex);
                     GLenum target = (tex->m_samples > 1) ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, tex->m_fbo);
-                    //glReadBuffer(GL_FRONT);
                     glActiveTexture(GL_TEXTURE9);
                     if (cmd.resolveColor && tex->m_bindTexs[0])
                     {
