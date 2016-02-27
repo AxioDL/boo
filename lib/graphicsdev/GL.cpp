@@ -1137,19 +1137,21 @@ struct GLCommandQueue : IGraphicsCommandQueue
 
     void resolveBindTexture(ITextureR* texture, const SWindowRect& rect, bool tlOrigin, bool color, bool depth)
     {
+        GLTextureR* tex = static_cast<GLTextureR*>(texture);
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::Op::ResolveBindTexture);
         cmds.back().resolveTex = texture;
         cmds.back().resolveColor = color;
         cmds.back().resolveDepth = depth;
+        SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, tex->m_width, tex->m_height));
         SWindowRect& targetRect = cmds.back().rect;
-        targetRect.location[0] = std::max(0, rect.location[0]);
+        targetRect.location[0] = intersectRect.location[0];
         if (tlOrigin)
-            targetRect.location[1] = std::max(0, int(static_cast<GLTextureR*>(texture)->m_height) - rect.location[1] - rect.size[1]);
+            targetRect.location[1] = tex->m_height - intersectRect.location[1] - intersectRect.size[1];
         else
-            targetRect.location[1] = std::max(0, rect.location[1]);
-        targetRect.size[0] = std::max(0, rect.size[0]);
-        targetRect.size[1] = std::max(0, rect.size[1]);
+            targetRect.location[1] = intersectRect.location[1];
+        targetRect.size[0] = intersectRect.size[0];
+        targetRect.size[1] = intersectRect.size[1];
     }
 
     void resolveDisplay(ITextureR* source)

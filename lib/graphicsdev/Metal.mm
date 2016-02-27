@@ -249,6 +249,7 @@ class MetalTextureR : public ITextureR
             {
                 desc.textureType = MTLTextureType2DMultisample;
                 desc.sampleCount = samples;
+                desc.usage = MTLTextureUsageRenderTarget;
                 m_colorTex = [ctx->m_dev newTextureWithDescriptor:desc];
 
                 if (enableShaderBindTexture)
@@ -260,19 +261,12 @@ class MetalTextureR : public ITextureR
                 desc.usage = MTLTextureUsageRenderTarget;
                 desc.pixelFormat = MTLPixelFormatDepth32Float;
                 m_depthTex = [ctx->m_dev newTextureWithDescriptor:desc];
-
-                m_passDesc.colorAttachments[0].texture = m_colorTex;
-                m_passDesc.colorAttachments[0].loadAction = MTLLoadActionLoad;
-                m_passDesc.colorAttachments[0].storeAction = MTLStoreActionStore;
-
-                m_passDesc.depthAttachment.texture = m_depthTex;
-                m_passDesc.depthAttachment.loadAction = MTLLoadActionLoad;
-                m_passDesc.depthAttachment.storeAction = MTLStoreActionStore;
             }
             else
             {
                 desc.textureType = MTLTextureType2D;
                 desc.sampleCount = 1;
+                desc.usage = MTLTextureUsageRenderTarget;
                 m_colorTex = [ctx->m_dev newTextureWithDescriptor:desc];
 
                 if (enableShaderBindTexture)
@@ -627,9 +621,10 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     {
         if (m_boundTarget)
         {
-            MTLScissorRect scissor = {NSUInteger(rect.location[0]),
-                NSUInteger(m_boundTarget->m_height - rect.location[1] - rect.size[1]),
-                NSUInteger(rect.size[0]), NSUInteger(rect.size[1])};
+            SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, m_boundTarget->m_width, m_boundTarget->m_height));
+            MTLScissorRect scissor = {NSUInteger(intersectRect.location[0]),
+                NSUInteger(m_boundTarget->m_height - intersectRect.location[1] - intersectRect.size[1]),
+                NSUInteger(intersectRect.size[0]), NSUInteger(intersectRect.size[1])};
             [m_enc setScissorRect:scissor];
         }
     }
@@ -702,14 +697,15 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             [m_enc endEncoding];
             @autoreleasepool
             {
-                NSUInteger y = tlOrigin ? rect.location[1] : tex->m_height - rect.location[1] - rect.size[1];
-                MTLOrigin origin = {NSUInteger(rect.location[0]), y, 0};
+                SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, tex->m_width, tex->m_height));
+                NSUInteger y = tlOrigin ? intersectRect.location[1] : int(tex->m_height) - intersectRect.location[1] - intersectRect.size[1];
+                MTLOrigin origin = {NSUInteger(intersectRect.location[0]), y, 0};
                 id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf blitCommandEncoder];
                 [blitEnc copyFromTexture:tex->m_colorTex
                              sourceSlice:0
                              sourceLevel:0
                             sourceOrigin:origin
-                              sourceSize:MTLSizeMake(rect.size[0], rect.size[1], 1)
+                              sourceSize:MTLSizeMake(intersectRect.size[0], intersectRect.size[1], 1)
                                toTexture:tex->m_colorBindTex
                         destinationSlice:0
                         destinationLevel:0
