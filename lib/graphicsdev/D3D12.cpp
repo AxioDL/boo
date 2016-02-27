@@ -448,11 +448,11 @@ class D3D12TextureR : public ITextureR
         }
 
         ThrowIfFailed(ctx->m_dev->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE,
-            &rtvresdesc, D3D12_RESOURCE_STATE_COPY_SOURCE, &CD3DX12_CLEAR_VALUE(DXGI_FORMAT_R8G8B8A8_UNORM, BLACK_COLOR),
+            &rtvresdesc, D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr,
             __uuidof(ID3D12Resource), &m_colorTex));
 
         ThrowIfFailed(ctx->m_dev->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE,
-            &dsvresdesc, D3D12_RESOURCE_STATE_COPY_SOURCE, &CD3DX12_CLEAR_VALUE(DXGI_FORMAT_D24_UNORM_S8_UINT, 1.0, 0),
+            &dsvresdesc, D3D12_RESOURCE_STATE_DEPTH_WRITE, nullptr,
             __uuidof(ID3D12Resource), &m_depthTex));
 
         D3D12_RENDER_TARGET_VIEW_DESC rtvvdesc = {DXGI_FORMAT_R8G8B8A8_UNORM, rtvDim};
@@ -1097,21 +1097,8 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
     {
         D3D12TextureR* ctarget = static_cast<D3D12TextureR*>(target);
 
-        if (m_boundTarget)
-        {
-            m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_boundTarget->m_colorTex.Get(),
-                D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE));
-            m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_boundTarget->m_depthTex.Get(),
-                D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_COPY_SOURCE));
-        }
-
         m_cmdList->OMSetRenderTargets(1, &ctarget->m_rtvHeap->GetCPUDescriptorHandleForHeapStart(),
                                       false, &ctarget->m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
-
-        m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(ctarget->m_colorTex.Get(),
-            D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET));
-        m_cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(ctarget->m_depthTex.Get(),
-            D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE));
 
         m_boundTarget = ctarget;
     }
@@ -1210,9 +1197,10 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
             }
             else
             {
-                int y = tlOrigin ? rect.location[1] : (tex->m_height - rect.size[1] - rect.location[1]);
-                D3D12_BOX box = {UINT(std::max(0, rect.location[0])), UINT(std::max(0, y)), 0,
-                                 UINT(std::max(0, rect.location[0] + rect.size[0])), UINT(std::max(0, y + rect.size[1])), 1};
+                SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, tex->m_width, tex->m_height));
+                int y = tlOrigin ? intersectRect.location[1] : (tex->m_height - intersectRect.size[1] - intersectRect.location[1]);
+                D3D12_BOX box = {UINT(intersectRect.location[0]), UINT(y), 0,
+                                 UINT(intersectRect.location[0] + intersectRect.size[0]), UINT(y + intersectRect.size[1]), 1};
                 D3D12_TEXTURE_COPY_LOCATION dst = {tex->m_colorBindTex.Get(), D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
                 dst.SubresourceIndex = 0;
                 D3D12_TEXTURE_COPY_LOCATION src = {tex->m_colorTex.Get(), D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
