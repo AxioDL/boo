@@ -1,6 +1,6 @@
 #include "../win/Win32Common.hpp"
 #if _WIN32_WINNT_WIN10
-#include <LogVisor/LogVisor.hpp>
+#include "logvisor/logvisor.hpp"
 #include "boo/graphicsdev/D3D.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include <vector>
@@ -21,7 +21,7 @@ extern pD3DCompile D3DCompilePROC;
 
 namespace boo
 {
-static LogVisor::LogModule Log("boo::D3D12");
+static logvisor::Module Log("boo::D3D12");
 
 static inline void ThrowIfFailed(HRESULT hr)
 {
@@ -30,7 +30,7 @@ static inline void ThrowIfFailed(HRESULT hr)
         // Set a breakpoint on this line to catch Win32 API errors.
         _com_error err(hr);
         LPCTSTR errMsg = err.ErrorMessage();
-        Log.report(LogVisor::FatalError, errMsg);
+        Log.report(logvisor::Fatal, errMsg);
     }
 }
 
@@ -83,7 +83,7 @@ class D3D12GraphicsBufferS : public IGraphicsBufferS
 
         D3D12_SUBRESOURCE_DATA upData = {data, LONG_PTR(m_sz), LONG_PTR(m_sz)};
         if (!PrepSubresources<1>(ctx->m_dev.Get(), &m_gpuDesc, m_buf.Get(), 0, 0, 1, &upData))
-            Log.report(LogVisor::FatalError, "error preparing resource for upload");
+            Log.report(logvisor::Fatal, "error preparing resource for upload");
     }
 public:
     size_t m_stride;
@@ -186,7 +186,7 @@ class D3D12TextureS : public ITextureS
             pxPitchDenom = 2;
             break;
         default:
-            Log.report(LogVisor::FatalError, "unsupported tex format");
+            Log.report(logvisor::Fatal, "unsupported tex format");
         }
 
 
@@ -210,7 +210,7 @@ class D3D12TextureS : public ITextureS
         }
 
         if (!PrepSubresources<16>(ctx->m_dev.Get(), &m_gpuDesc, m_tex.Get(), 0, 0, m_gpuDesc.MipLevels, upData))
-            Log.report(LogVisor::FatalError, "error preparing resource for upload");
+            Log.report(logvisor::Fatal, "error preparing resource for upload");
     }
 public:
     ComPtr<ID3D12Resource> m_tex;
@@ -258,7 +258,7 @@ class D3D12TextureSA : public ITextureSA
             pixelFmt = DXGI_FORMAT_R8_UNORM;
             break;
         default:
-            Log.report(LogVisor::FatalError, "unsupported tex format");
+            Log.report(logvisor::Fatal, "unsupported tex format");
         }
 
         m_gpuDesc = CD3DX12_RESOURCE_DESC::Tex2D(pixelFmt, width, height, layers, 1);
@@ -281,7 +281,7 @@ class D3D12TextureSA : public ITextureSA
                 dataIt += upData[i].SlicePitch;
             }
             if (!PrepSubresources(ctx->m_dev.Get(), &m_gpuDesc, m_tex.Get(), 0, 0, layers, upData.get()))
-                Log.report(LogVisor::FatalError, "error preparing resource for upload");
+                Log.report(logvisor::Fatal, "error preparing resource for upload");
         }
         else
         {
@@ -294,7 +294,7 @@ class D3D12TextureSA : public ITextureSA
                 dataIt += upData[i].SlicePitch;
             }
             if (!PrepSubresources<16>(ctx->m_dev.Get(), &m_gpuDesc, m_tex.Get(), 0, 0, layers, upData))
-                Log.report(LogVisor::FatalError, "error preparing resource for upload");
+                Log.report(logvisor::Fatal, "error preparing resource for upload");
         }
     }
 public:
@@ -353,7 +353,7 @@ class D3D12TextureD : public ITextureD
             pixelFmt = DXGI_FORMAT_R8_UNORM;
             break;
         default:
-            Log.report(LogVisor::FatalError, "unsupported tex format");
+            Log.report(logvisor::Fatal, "unsupported tex format");
         }
 
         m_gpuDesc = CD3DX12_RESOURCE_DESC::Tex2D(pixelFmt, width, height);
@@ -958,7 +958,7 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
     {
 #ifndef NDEBUG
         if (!m_committed)
-            Log.report(LogVisor::FatalError,
+            Log.report(logvisor::Fatal,
                        "attempted to use uncommitted D3D12ShaderDataBinding");
 #endif
 
@@ -1357,7 +1357,7 @@ void D3D12GraphicsBufferD::update(int b)
         m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
             m_state, D3D12_RESOURCE_STATE_COPY_DEST));
         if (!UpdateSubresources<1>(m_q->m_dynamicCmdList.Get(), gpuRes, res, 0, 0, 1, &d))
-            Log.report(LogVisor::FatalError, "unable to update dynamic buffer data");
+            Log.report(logvisor::Fatal, "unable to update dynamic buffer data");
         m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
             D3D12_RESOURCE_STATE_COPY_DEST, m_state));
         m_validSlots |= slot;
@@ -1393,7 +1393,7 @@ void D3D12TextureD::update(int b)
         m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST));
         if (!UpdateSubresources<1>(m_q->m_dynamicCmdList.Get(), gpuRes, res, 0, 0, 1, &d))
-            Log.report(LogVisor::FatalError, "unable to update dynamic texture data");
+            Log.report(logvisor::Fatal, "unable to update dynamic texture data");
         m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
             D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
         m_validSlots |= slot;
@@ -1600,7 +1600,7 @@ public:
             if (FAILED(D3DCompilePROC(vertSource, strlen(vertSource), "HECL Vert Source", nullptr, nullptr, "main",
                 "vs_5_0", BOO_D3DCOMPILE_FLAG, 0, &vertBlobOut, &errBlob)))
             {
-                Log.report(LogVisor::FatalError, "error compiling vert shader: %s", errBlob->GetBufferPointer());
+                Log.report(logvisor::Fatal, "error compiling vert shader: %s", errBlob->GetBufferPointer());
                 return nullptr;
             }
         }
@@ -1610,7 +1610,7 @@ public:
             if (FAILED(D3DCompilePROC(fragSource, strlen(fragSource), "HECL Pixel Source", nullptr, nullptr, "main",
                 "ps_5_0", BOO_D3DCOMPILE_FLAG, 0, &fragBlobOut, &errBlob)))
             {
-                Log.report(LogVisor::FatalError, "error compiling pixel shader: %s", errBlob->GetBufferPointer());
+                Log.report(logvisor::Fatal, "error compiling pixel shader: %s", errBlob->GetBufferPointer());
                 return nullptr;
             }
         }

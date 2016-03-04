@@ -16,7 +16,7 @@
 #include "boo/IApplication.hpp"
 #include "boo/inputdev/DeviceFinder.hpp"
 #include "boo/graphicsdev/D3D.hpp"
-#include <LogVisor/LogVisor.hpp>
+#include "logvisor/logvisor.hpp"
 
 DWORD g_mainThreadId = 0;
 
@@ -57,7 +57,7 @@ static bool FindBestD3DCompile()
 
 namespace boo
 {
-static LogVisor::LogModule Log("boo::ApplicationWin32");
+static logvisor::Module Log("boo::ApplicationWin32");
 Win32Cursors WIN32_CURSORS;
 
 IWindow* _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx, uint32_t sampleCount);
@@ -96,12 +96,12 @@ public:
     {
         HMODULE dxgilib = LoadLibraryW(L"dxgi.dll");
         if (!dxgilib)
-            Log.report(LogVisor::FatalError, "unable to load dxgi.dll");
+            Log.report(logvisor::Fatal, "unable to load dxgi.dll");
 
         typedef HRESULT(WINAPI*CreateDXGIFactory1PROC)(REFIID riid, _COM_Outptr_ void **ppFactory);
         CreateDXGIFactory1PROC MyCreateDXGIFactory1 = (CreateDXGIFactory1PROC)GetProcAddress(dxgilib, "CreateDXGIFactory1");
         if (!MyCreateDXGIFactory1)
-            Log.report(LogVisor::FatalError, "unable to find CreateDXGIFactory1 in DXGI.dll\n");
+            Log.report(logvisor::Fatal, "unable to find CreateDXGIFactory1 in DXGI.dll\n");
 
         bool no12 = false;
         bool noD3d = false;
@@ -129,7 +129,7 @@ public:
             }
 #endif
             if (!FindBestD3DCompile())
-                Log.report(LogVisor::FatalError, "unable to find D3DCompile_[43-47].dll");
+                Log.report(logvisor::Fatal, "unable to find D3DCompile_[43-47].dll");
 
             D3D12SerializeRootSignaturePROC =
             (PFN_D3D12_SERIALIZE_ROOT_SIGNATURE)GetProcAddress(d3d12lib, "D3D12SerializeRootSignature");
@@ -137,22 +137,22 @@ public:
             /* Create device */
             PFN_D3D12_CREATE_DEVICE MyD3D12CreateDevice = (PFN_D3D12_CREATE_DEVICE)GetProcAddress(d3d12lib, "D3D12CreateDevice");
             if (!MyD3D12CreateDevice)
-                Log.report(LogVisor::FatalError, "unable to find D3D12CreateDevice in D3D12.dll");
+                Log.report(logvisor::Fatal, "unable to find D3D12CreateDevice in D3D12.dll");
 
             /* Create device */
             HRESULT hr = MyD3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), &m_3dCtx.m_ctx12.m_dev);
             if (FAILED(hr))
-                Log.report(LogVisor::FatalError, "unable to create D3D12 device");
+                Log.report(logvisor::Fatal, "unable to create D3D12 device");
 
             /* Obtain DXGI Factory */
             hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory2), &m_3dCtx.m_ctx12.m_dxFactory);
             if (FAILED(hr))
-                Log.report(LogVisor::FatalError, "unable to create DXGI factory");
+                Log.report(logvisor::Fatal, "unable to create DXGI factory");
 
             /* Establish loader objects */
             if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
                 __uuidof(ID3D12CommandAllocator), &m_3dCtx.m_ctx12.m_loadqalloc)))
-                Log.report(LogVisor::FatalError, "unable to create loader allocator");
+                Log.report(logvisor::Fatal, "unable to create loader allocator");
 
             D3D12_COMMAND_QUEUE_DESC desc =
             {
@@ -161,18 +161,18 @@ public:
                 D3D12_COMMAND_QUEUE_FLAG_NONE
             };
             if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandQueue(&desc, __uuidof(ID3D12CommandQueue), &m_3dCtx.m_ctx12.m_loadq)))
-                Log.report(LogVisor::FatalError, "unable to create loader queue");
+                Log.report(logvisor::Fatal, "unable to create loader queue");
 
             if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), &m_3dCtx.m_ctx12.m_loadfence)))
-                Log.report(LogVisor::FatalError, "unable to create loader fence");
+                Log.report(logvisor::Fatal, "unable to create loader fence");
 
             m_3dCtx.m_ctx12.m_loadfencehandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 
             if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_3dCtx.m_ctx12.m_loadqalloc.Get(),
                 nullptr, __uuidof(ID3D12GraphicsCommandList), &m_3dCtx.m_ctx12.m_loadlist)))
-                Log.report(LogVisor::FatalError, "unable to create loader list");
+                Log.report(logvisor::Fatal, "unable to create loader list");
 
-            Log.report(LogVisor::Info, "initialized D3D12 renderer");
+            Log.report(logvisor::Info, "initialized D3D12 renderer");
             return;
         }
 #endif
@@ -180,12 +180,12 @@ public:
         if (d3d11lib && !noD3d)
         {
             if (!FindBestD3DCompile())
-                Log.report(LogVisor::FatalError, "unable to find D3DCompile_[43-47].dll");
+                Log.report(logvisor::Fatal, "unable to find D3DCompile_[43-47].dll");
 
             /* Create device proc */
             PFN_D3D11_CREATE_DEVICE MyD3D11CreateDevice = (PFN_D3D11_CREATE_DEVICE)GetProcAddress(d3d11lib, "D3D11CreateDevice");
             if (!MyD3D11CreateDevice)
-                Log.report(LogVisor::FatalError, "unable to find D3D11CreateDevice in D3D11.dll");
+                Log.report(logvisor::Fatal, "unable to find D3D11CreateDevice in D3D11.dll");
 
             /* Create device */
             D3D_FEATURE_LEVEL level = D3D_FEATURE_LEVEL_11_0;
@@ -193,7 +193,7 @@ public:
             ComPtr<ID3D11DeviceContext> tempCtx;
             if (FAILED(MyD3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_FLAGS, &level,
                                            1, D3D11_SDK_VERSION, &tempDev, nullptr, &tempCtx)))
-                Log.report(LogVisor::FatalError, "unable to create D3D11 device");
+                Log.report(logvisor::Fatal, "unable to create D3D11 device");
             tempDev.As<ID3D11Device1>(&m_3dCtx.m_ctx11.m_dev);
             tempCtx.As<ID3D11DeviceContext1>(&m_3dCtx.m_ctx11.m_devCtx);
 
@@ -211,7 +211,7 @@ public:
             sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
             m_3dCtx.m_ctx11.m_dev->CreateSamplerState(&sampDesc, &m_3dCtx.m_ctx11.m_ss);
 
-            Log.report(LogVisor::Info, "initialized D3D11 renderer");
+            Log.report(logvisor::Info, "initialized D3D11 renderer");
             return;
         }
 
@@ -220,13 +220,13 @@ public:
             /* Obtain DXGI Factory */
             HRESULT hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory1), &m_3dCtx.m_ctxOgl.m_dxFactory);
             if (FAILED(hr))
-                Log.report(LogVisor::FatalError, "unable to create DXGI factory");
+                Log.report(logvisor::Fatal, "unable to create DXGI factory");
 
-            Log.report(LogVisor::Info, "initialized OpenGL renderer");
+            Log.report(logvisor::Info, "initialized OpenGL renderer");
             return;
         }
 
-        Log.report(LogVisor::FatalError, "system doesn't support OGL, D3D11 or D3D12");
+        Log.report(logvisor::Fatal, "system doesn't support OGL, D3D11 or D3D12");
     }
 
     EPlatformType getPlatformType() const
@@ -365,7 +365,7 @@ public:
         {
             std::unique_lock<std::mutex> lk(m_nwmt);
             if (!PostThreadMessage(g_mainThreadId, WM_USER, WPARAM(&title), 0))
-                Log.report(LogVisor::FatalError, "PostThreadMessage error");
+                Log.report(logvisor::Fatal, "PostThreadMessage error");
             m_nwcv.wait(lk);
             return m_mwret;
         }

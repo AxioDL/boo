@@ -12,7 +12,7 @@
 #include <SPIRV/disassemble.h>
 #include "boo/graphicsdev/GLSLMacros.hpp"
 
-#include <LogVisor/LogVisor.hpp>
+#include "logvisor/logvisor.hpp"
 
 #undef min
 #undef max
@@ -214,19 +214,19 @@ static void init_resources(TBuiltInResource &Resources) {
 
 namespace boo
 {
-static LogVisor::LogModule Log("boo::Vulkan");
+static logvisor::Module Log("boo::Vulkan");
 VulkanContext g_VulkanContext;
 
 static inline void ThrowIfFailed(VkResult res)
 {
     if (res != VK_SUCCESS)
-        Log.report(LogVisor::FatalError, "%d\n", res);
+        Log.report(logvisor::Fatal, "%d\n", res);
 }
 
 static inline void ThrowIfFalse(bool res)
 {
     if (!res)
-        Log.report(LogVisor::FatalError, "operation failed\n", res);
+        Log.report(logvisor::Fatal, "operation failed\n", res);
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL
@@ -235,15 +235,15 @@ dbgFunc(VkDebugReportFlagsEXT msgFlags, VkDebugReportObjectTypeEXT objType,
         const char *pLayerPrefix, const char *pMsg, void *pUserData)
 {
     if (msgFlags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
-        Log.report(LogVisor::FatalError, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
+        Log.report(logvisor::Fatal, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
     } else if (msgFlags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
-        Log.report(LogVisor::Warning, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
+        Log.report(logvisor::Warning, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
     } else if (msgFlags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT) {
-        Log.report(LogVisor::Warning, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
+        Log.report(logvisor::Warning, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
     } else if (msgFlags & VK_DEBUG_REPORT_INFORMATION_BIT_EXT) {
-        Log.report(LogVisor::Info, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
+        Log.report(logvisor::Info, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
     } else if (msgFlags & VK_DEBUG_REPORT_DEBUG_BIT_EXT) {
-        Log.report(LogVisor::Info, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
+        Log.report(logvisor::Info, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
     }
 
     /*
@@ -373,7 +373,7 @@ static void demo_check_layers(const std::vector<VulkanContext::LayerProperties>&
             }
         }
         if (!found) {
-            Log.report(LogVisor::FatalError, "Cannot find layer: %s", layerNames[i]);
+            Log.report(logvisor::Fatal, "Cannot find layer: %s", layerNames[i]);
         }
     }
 }
@@ -381,7 +381,7 @@ static void demo_check_layers(const std::vector<VulkanContext::LayerProperties>&
 void VulkanContext::initVulkan(const char* appName)
 {
     if (!glslang::InitializeProcess())
-        Log.report(LogVisor::FatalError, "unable to initialize glslang");
+        Log.report(logvisor::Fatal, "unable to initialize glslang");
 
     uint32_t instanceLayerCount;
     VkLayerProperties* vkProps = nullptr;
@@ -482,7 +482,7 @@ void VulkanContext::initVulkan(const char* appName)
     PFN_vkCreateDebugReportCallbackEXT createDebugReportCallback =
         (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(m_instance, "vkCreateDebugReportCallbackEXT");
     if (!createDebugReportCallback)
-        Log.report(LogVisor::FatalError, "GetInstanceProcAddr: Unable to find vkCreateDebugReportCallbackEXT function.");
+        Log.report(logvisor::Fatal, "GetInstanceProcAddr: Unable to find vkCreateDebugReportCallbackEXT function.");
 
     VkDebugReportCallbackCreateInfoEXT debugCreateInfo = {};
     debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
@@ -516,7 +516,7 @@ void VulkanContext::initVulkan(const char* appName)
 void VulkanContext::initDevice()
 {
     if (m_graphicsQueueFamilyIndex == UINT32_MAX)
-        Log.report(LogVisor::FatalError,
+        Log.report(logvisor::Fatal,
                    "VulkanContext::m_graphicsQueueFamilyIndex hasn't been initialized");
 
     /* create the device */
@@ -909,7 +909,7 @@ class VulkanTextureS : public ITextureS
             pxPitchDenom = 2;
             break;
         default:
-            Log.report(LogVisor::FatalError, "unsupported tex format");
+            Log.report(logvisor::Fatal, "unsupported tex format");
         }
         m_vkFmt = pfmt;
 
@@ -1145,7 +1145,7 @@ class VulkanTextureSA : public ITextureSA
             pfmt = VK_FORMAT_R8_UNORM;
             break;
         default:
-            Log.report(LogVisor::FatalError, "unsupported tex format");
+            Log.report(logvisor::Fatal, "unsupported tex format");
         }
         m_vkFmt = pfmt;
 
@@ -1371,7 +1371,7 @@ class VulkanTextureD : public ITextureD
             m_cpuSz = m_srcRowPitch * height;
             break;
         default:
-            Log.report(LogVisor::FatalError, "unsupported tex format");
+            Log.report(logvisor::Fatal, "unsupported tex format");
         }
         m_cpuBuf.reset(new uint8_t[m_cpuSz]);
 
@@ -2190,7 +2190,7 @@ struct VulkanShaderDataBinding : IShaderDataBinding
     {
 #ifndef NDEBUG
         if (!m_committed)
-            Log.report(LogVisor::FatalError,
+            Log.report(logvisor::Fatal,
                        "attempted to use uncommitted VulkanShaderDataBinding");
 #endif
 
@@ -2878,7 +2878,7 @@ IShaderPipeline* VulkanDataFactory::newShaderPipeline
         vs.setStrings(&vertSource, 1);
         if (!vs.parse(&DefaultBuiltInResource, 110, false, messages))
         {
-            Log.report(LogVisor::FatalError, "unable to compile vertex shader\n%s", vs.getInfoLog());
+            Log.report(logvisor::Fatal, "unable to compile vertex shader\n%s", vs.getInfoLog());
             return nullptr;
         }
 
@@ -2886,7 +2886,7 @@ IShaderPipeline* VulkanDataFactory::newShaderPipeline
         fs.setStrings(&fragSource, 1);
         if (!fs.parse(&DefaultBuiltInResource, 110, false, messages))
         {
-            Log.report(LogVisor::FatalError, "unable to compile fragment shader\n%s", fs.getInfoLog());
+            Log.report(logvisor::Fatal, "unable to compile fragment shader\n%s", fs.getInfoLog());
             return nullptr;
         }
 
@@ -2895,7 +2895,7 @@ IShaderPipeline* VulkanDataFactory::newShaderPipeline
         prog.addShader(&fs);
         if (!prog.link(messages))
         {
-            Log.report(LogVisor::FatalError, "unable to link shader program\n%s", prog.getInfoLog());
+            Log.report(logvisor::Fatal, "unable to link shader program\n%s", prog.getInfoLog());
             return nullptr;
         }
         glslang::GlslangToSpv(*prog.getIntermediate(EShLangVertex), vertBlobOut);

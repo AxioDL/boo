@@ -2,7 +2,7 @@
 #include <Windowsx.h>
 #include "boo/IWindow.hpp"
 #include "boo/IGraphicsContext.hpp"
-#include <LogVisor/LogVisor.hpp>
+#include "logvisor/logvisor.hpp"
 
 #include "boo/graphicsdev/D3D.hpp"
 #include "boo/graphicsdev/GL.hpp"
@@ -21,7 +21,7 @@ static const int ContextAttribs[] =
 
 namespace boo
 {
-static LogVisor::LogModule Log("boo::WindowWin32");
+static logvisor::Module Log("boo::WindowWin32");
 #if _WIN32_WINNT_WIN10
 IGraphicsCommandQueue* _NewD3D12CommandQueue(D3D12Context* ctx, D3D12Context::Window* windowCtx, IGraphicsContext* parent,
                                              ID3D12CommandQueue** cmdQueueOut);
@@ -82,7 +82,7 @@ public:
             HRESULT hr = b3dCtx.m_ctx12.m_dxFactory->CreateSwapChainForHwnd(cmdQueue,
                 hwnd, &scDesc, nullptr, nullptr, &m_swapChain);
             if (FAILED(hr))
-                Log.report(LogVisor::FatalError, "unable to create swap chain");
+                Log.report(logvisor::Fatal, "unable to create swap chain");
             b3dCtx.m_ctx12.m_dxFactory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
 
             m_swapChain.As<IDXGISwapChain3>(&w.m_swapChain);
@@ -94,14 +94,14 @@ public:
             w.height = resDesc.Height;
 
             if (FAILED(m_swapChain->GetContainingOutput(&m_output)))
-                Log.report(LogVisor::FatalError, "unable to get DXGI output");
+                Log.report(logvisor::Fatal, "unable to get DXGI output");
         }
         else
 #endif
         {
             if (FAILED(b3dCtx.m_ctx11.m_dxFactory->CreateSwapChainForHwnd(b3dCtx.m_ctx11.m_dev.Get(),
                 hwnd, &scDesc, nullptr, nullptr, &m_swapChain)))
-                Log.report(LogVisor::FatalError, "unable to create swap chain");
+                Log.report(logvisor::Fatal, "unable to create swap chain");
             b3dCtx.m_ctx11.m_dxFactory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
 
             auto insIt = b3dCtx.m_ctx11.m_windows.emplace(std::make_pair(parentWindow, D3D11Context::Window()));
@@ -118,7 +118,7 @@ public:
             m_commandQueue = _NewD3D11CommandQueue(&b3dCtx.m_ctx11, &insIt.first->second, this);
 
             if (FAILED(m_swapChain->GetContainingOutput(&m_output)))
-                Log.report(LogVisor::FatalError, "unable to get DXGI output");
+                Log.report(logvisor::Fatal, "unable to get DXGI output");
         }
     }
 
@@ -221,14 +221,14 @@ public:
         }
 
         if (!m_output)
-            Log.report(LogVisor::FatalError, "unable to find window's IDXGIOutput");
+            Log.report(logvisor::Fatal, "unable to find window's IDXGIOutput");
 
         auto insIt = b3dCtx.m_ctxOgl.m_windows.emplace(std::make_pair(parentWindow, OGLContext::Window()));
         OGLContext::Window& w = insIt.first->second;
         w.m_hwnd = hwnd;
         w.m_deviceContext = GetDC(hwnd);
         if (!w.m_deviceContext)
-            Log.report(LogVisor::FatalError, "unable to create window's device context");
+            Log.report(logvisor::Fatal, "unable to create window's device context");
 
         if (!m_3dCtx.m_ctxOgl.m_lastContext)
         {
@@ -258,10 +258,10 @@ public:
 
         w.m_mainContext = wglCreateContext(w.m_deviceContext);
         if (!w.m_mainContext)
-            Log.report(LogVisor::FatalError, "unable to create window's main context");
+            Log.report(logvisor::Fatal, "unable to create window's main context");
         if (m_3dCtx.m_ctxOgl.m_lastContext)
             if (!wglShareLists(w.m_mainContext, m_3dCtx.m_ctxOgl.m_lastContext))
-                Log.report(LogVisor::FatalError, "unable to share contexts");
+                Log.report(logvisor::Fatal, "unable to share contexts");
         m_3dCtx.m_ctxOgl.m_lastContext = w.m_mainContext;
 
         m_dataFactory = new GLDataFactory(this, sampleCount);
@@ -301,7 +301,7 @@ public:
     {
         OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
         if (!wglMakeCurrent(w.m_deviceContext, w.m_mainContext))
-            Log.report(LogVisor::FatalError, "unable to make WGL context current");
+            Log.report(logvisor::Fatal, "unable to make WGL context current");
     }
 
     void postInit()
@@ -312,12 +312,12 @@ public:
             wglGetProcAddress("wglCreateContextAttribsARB");
         w.m_renderContext = wglCreateContextAttribsARB(w.m_deviceContext, w.m_mainContext, ContextAttribs);
         if (!w.m_renderContext)
-            Log.report(LogVisor::FatalError, "unable to make new WGL context");
+            Log.report(logvisor::Fatal, "unable to make new WGL context");
         if (!wglMakeCurrent(w.m_deviceContext, w.m_renderContext))
-            Log.report(LogVisor::FatalError, "unable to make WGL context current");
+            Log.report(logvisor::Fatal, "unable to make WGL context current");
 
         if (!WGLEW_EXT_swap_control)
-            Log.report(LogVisor::FatalError, "WGL_EXT_swap_control not available");
+            Log.report(logvisor::Fatal, "WGL_EXT_swap_control not available");
         wglSwapIntervalEXT(1);
     }
 
@@ -346,10 +346,10 @@ public:
         {
             m_mainCtx = wglCreateContextAttribsARB(w.m_deviceContext, w.m_mainContext, ContextAttribs);
             if (!m_mainCtx)
-                Log.report(LogVisor::FatalError, "unable to make main WGL context");
+                Log.report(logvisor::Fatal, "unable to make main WGL context");
         }
         if (!wglMakeCurrent(w.m_deviceContext, m_mainCtx))
-            Log.report(LogVisor::FatalError, "unable to make main WGL context current");
+            Log.report(logvisor::Fatal, "unable to make main WGL context current");
         return m_dataFactory;
     }
 
@@ -362,10 +362,10 @@ public:
         {
             m_loadCtx = wglCreateContextAttribsARB(w.m_deviceContext, w.m_mainContext, ContextAttribs);
             if (!m_loadCtx)
-                Log.report(LogVisor::FatalError, "unable to make load WGL context");
+                Log.report(logvisor::Fatal, "unable to make load WGL context");
         }
         if (!wglMakeCurrent(w.m_deviceContext, m_loadCtx))
-            Log.report(LogVisor::FatalError, "unable to make load WGL context current");
+            Log.report(logvisor::Fatal, "unable to make load WGL context current");
         return m_dataFactory;
     }
 };
@@ -581,7 +581,7 @@ static HGLOBAL MakeUnicodeCRLF(const char* data, size_t sz)
         int32_t ch;
         int chSz = utf8proc_iterate(reinterpret_cast<const uint8_t*>(data+i), -1, &ch);
         if (chSz < 0)
-            Log.report(LogVisor::FatalError, "invalid UTF-8 char");
+            Log.report(logvisor::Fatal, "invalid UTF-8 char");
         if (ch <= 0xffff)
         {
             if (ch == '\n' && lastCh != '\r')
@@ -855,7 +855,7 @@ public:
         if (GetCurrentThreadId() != g_mainThreadId)
         {
             if (!PostThreadMessage(g_mainThreadId, WM_USER+3, WPARAM(m_imc), LPARAM(open)))
-                Log.report(LogVisor::FatalError, "PostThreadMessage error");
+                Log.report(logvisor::Fatal, "PostThreadMessage error");
             return;
         }
         ImmSetOpenStatus(m_imc, open);
@@ -872,7 +872,7 @@ public:
         if (GetCurrentThreadId() != g_mainThreadId)
         {
             if (!PostThreadMessage(g_mainThreadId, WM_USER+4, WPARAM(m_imc), LPARAM(&m_cForm)))
-                Log.report(LogVisor::FatalError, "PostThreadMessage error");
+                Log.report(logvisor::Fatal, "PostThreadMessage error");
             return;
         }
         ImmSetCompositionWindow(m_imc, &m_cForm);

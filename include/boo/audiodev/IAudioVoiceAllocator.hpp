@@ -9,7 +9,7 @@ namespace boo
 
 struct IAudioVoiceCallback
 {
-    /** Boo calls this on behalf of the audio platform to request more audio
+    /** boo calls this on behalf of the audio platform to request more audio
      *  frames from the client */
     virtual void needsNextBuffer(IAudioVoice* voice, size_t frames)=0;
 };

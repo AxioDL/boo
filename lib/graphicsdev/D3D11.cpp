@@ -1,5 +1,5 @@
 #include "../win/Win32Common.hpp"
-#include <LogVisor/LogVisor.hpp>
+#include "logvisor/logvisor.hpp"
 #include "boo/graphicsdev/D3D.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include <vector>
@@ -19,7 +19,7 @@ extern pD3DCompile D3DCompilePROC;
 
 namespace boo
 {
-static LogVisor::LogModule Log("boo::D3D11");
+static logvisor::Module Log("boo::D3D11");
 
 static inline void ThrowIfFailed(HRESULT hr)
 {
@@ -28,7 +28,7 @@ static inline void ThrowIfFailed(HRESULT hr)
         // Set a breakpoint on this line to catch Win32 API errors.
         _com_error err(hr);
         LPCTSTR errMsg = err.ErrorMessage();
-        Log.report(LogVisor::FatalError, errMsg);
+        Log.report(logvisor::Fatal, errMsg);
     }
 }
 
@@ -48,7 +48,7 @@ struct D3D11Data : IGraphicsData
     bool decref()
     {
         if (!m_deleteCountdown)
-            Log.report(LogVisor::FatalError, "Can't decrement 0-data");
+            Log.report(logvisor::Fatal, "Can't decrement 0-data");
         --m_deleteCountdown;
         if (!m_deleteCountdown)
         {
@@ -144,7 +144,7 @@ class D3D11TextureS : public ITextureS
             pxPitchDenom = 2;
             break;
         default:
-            Log.report(LogVisor::FatalError, "unsupported tex format");
+            Log.report(logvisor::Fatal, "unsupported tex format");
         }
 
         CD3D11_TEXTURE2D_DESC desc(pfmt, width, height, 1, mips,
@@ -257,7 +257,7 @@ class D3D11TextureD : public ITextureD
             pxPitch = 1;
             break;
         default:
-            Log.report(LogVisor::FatalError, "unsupported tex format");
+            Log.report(logvisor::Fatal, "unsupported tex format");
         }
 
         m_cpuSz = width * height * pxPitch;
@@ -567,7 +567,7 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
     {
 #ifndef NDEBUG
         if (!m_committed)
-            Log.report(LogVisor::FatalError,
+            Log.report(logvisor::Fatal,
                        "attempted to use uncommitted D3D11ShaderDataBinding");
 #endif
 
@@ -1152,7 +1152,7 @@ public:
             if (FAILED(D3DCompilePROC(vertSource, strlen(vertSource), "HECL Vert Source", nullptr, nullptr, "main",
                 "vs_5_0", BOO_D3DCOMPILE_FLAG, 0, &vertBlobOut, &errBlob)))
             {
-                Log.report(LogVisor::FatalError, "error compiling vert shader: %s", errBlob->GetBufferPointer());
+                Log.report(logvisor::Fatal, "error compiling vert shader: %s", errBlob->GetBufferPointer());
                 return nullptr;
             }
         }
@@ -1162,7 +1162,7 @@ public:
             if (FAILED(D3DCompilePROC(fragSource, strlen(fragSource), "HECL Pixel Source", nullptr, nullptr, "main",
                 "ps_5_0", BOO_D3DCOMPILE_FLAG, 0, &fragBlobOut, &errBlob)))
             {
-                Log.report(LogVisor::FatalError, "error compiling pixel shader: %s", errBlob->GetBufferPointer());
+                Log.report(logvisor::Fatal, "error compiling pixel shader: %s", errBlob->GetBufferPointer());
                 return nullptr;
             }
         }

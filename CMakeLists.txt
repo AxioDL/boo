@@ -1,17 +1,17 @@
 cmake_minimum_required(VERSION 3.0)
-project(libBoo)
+project(boo)
 
 if (NOT MSVC)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
 endif()
 
-if (NOT TARGET LogVisor)
-    add_subdirectory(LogVisor)
+if (NOT TARGET logvisor)
+    add_subdirectory(logvisor)
 endif()
 
-set(BOO_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE PATH "libBoo include path" FORCE)
+set(BOO_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE PATH "boo include path" FORCE)
 
-include_directories(include ${LOG_VISOR_INCLUDE_DIR})
+include_directories(include ${LOGVISOR_INCLUDE_DIR})
 
 if(NOT GEKKO AND NOT CAFE)
 list(APPEND PLAT_SRCS
@@ -120,7 +120,7 @@ else(NOT GEKKO)
     lib64)
 
   if(DBUS_INCLUDE_DIR-NOTFOUND)
-    message(FATAL_ERROR "Unix build of libBoo requires dbus")
+    message(FATAL_ERROR "Unix build of boo requires dbus")
   endif()
 
   include_directories(${DBUS_INCLUDE_DIR} ${DBUS_ARCH_INCLUDE_DIR})
@@ -158,13 +158,13 @@ add_subdirectory(glslang/OGLCompilersDLL)
 add_subdirectory(glslang/SPIRV)
 list(APPEND _BOO_SYS_LIBS glslang OSDependent OGLCompiler SPIRV)
 
-set(BOO_SYS_LIBS ${_BOO_SYS_LIBS} CACHE PATH "Boo System Libraries" FORCE)
-set(BOO_SYS_DEFINES ${_BOO_SYS_DEFINES} CACHE PATH "Boo System Defines" FORCE)
+set(BOO_SYS_LIBS ${_BOO_SYS_LIBS} CACHE PATH "boo system libraries" FORCE)
+set(BOO_SYS_DEFINES ${_BOO_SYS_DEFINES} CACHE PATH "boo system defines" FORCE)
 
 add_definitions(${_BOO_SYS_DEFINES})
 include_directories(include glslang)
 
-add_library(Boo
+add_library(boo
             lib/inputdev/CafeProPad.cpp include/boo/inputdev/CafeProPad.hpp
             lib/inputdev/RevolutionPad.cpp include/boo/inputdev/RevolutionPad.hpp
             lib/inputdev/DolphinSmashAdapter.cpp include/boo/inputdev/DolphinSmashAdapter.hpp

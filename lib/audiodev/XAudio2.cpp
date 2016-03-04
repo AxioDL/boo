@@ -1,12 +1,12 @@
 #include "../win/Win32Common.hpp"
 #include "boo/audiodev/IAudioVoiceAllocator.hpp"
-#include <LogVisor/LogVisor.hpp>
+#include "logvisor/logvisor.hpp"
 
 #include <xaudio2.h>
 
 namespace boo
 {
-static LogVisor::LogModule Log("boo::XAudio2");
+static logvisor::Module Log("boo::XAudio2");
 
 struct XA2AudioVoice : IAudioVoice
 {
@@ -52,7 +52,7 @@ struct XA2AudioVoice : IAudioVoice
 
         if FAILED(xa2.CreateSourceVoice(&m_voiceQueue, &desc, 0, XAUDIO2_DEFAULT_FREQ_RATIO, &m_xaCb))
         {
-            Log.report(LogVisor::Error, "unable to create source voice");
+            Log.report(logvisor::Error, "unable to create source voice");
             return;
         }
 
@@ -101,7 +101,7 @@ struct XA2AudioVoice : IAudioVoice
             m_map.m_channels[7] = AudioChannel::SideRight;
             break;
         default:
-            Log.report(LogVisor::Error, "unknown channel layout %u; using stereo", voxDetails.InputChannels);
+            Log.report(logvisor::Error, "unknown channel layout %u; using stereo", voxDetails.InputChannels);
             m_map.m_channelCount = 2;
             m_map.m_channels[0] = AudioChannel::FrontLeft;
             m_map.m_channels[1] = AudioChannel::FrontRight;
@@ -153,18 +153,18 @@ struct XA2AudioVoiceAllocator : IAudioVoiceAllocator
     {
         if (FAILED(XAudio2Create(&m_xa2)))
         {
-            Log.report(LogVisor::Error, "Unable to initialize XAudio2");
+            Log.report(logvisor::Error, "Unable to initialize XAudio2");
             return;
         }
         if (FAILED(m_xa2->CreateMasteringVoice(&m_masterVoice)))
         {
-            Log.report(LogVisor::Error, "Unable to initialize XAudio2 mastering voice");
+            Log.report(logvisor::Error, "Unable to initialize XAudio2 mastering voice");
             return;
         }
         DWORD channelMask;
         if (FAILED(m_masterVoice->GetChannelMask(&channelMask)))
         {
-            Log.report(LogVisor::Error, "Unable to get mastering voice's channel mask");
+            Log.report(logvisor::Error, "Unable to get mastering voice's channel mask");
             return;
         }
         if ((channelMask & (SPEAKER_FRONT_LEFT|SPEAKER_FRONT_RIGHT)) == (SPEAKER_FRONT_LEFT|SPEAKER_FRONT_RIGHT))

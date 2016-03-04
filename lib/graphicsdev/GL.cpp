@@ -7,14 +7,14 @@
 #include <condition_variable>
 #include <array>
 
-#include <LogVisor/LogVisor.hpp>
+#include "logvisor/logvisor.hpp"
 
 #undef min
 #undef max
 
 namespace boo
 {
-static LogVisor::LogModule Log("boo::GL");
+static logvisor::Module Log("boo::GL");
 
 ThreadLocalPtr<struct GLData> GLDataFactory::m_deferredData;
 struct GLData : IGraphicsData
@@ -143,7 +143,7 @@ class GLTextureS : public ITextureS
             compressed = true;
             break;
         default:
-            Log.report(LogVisor::FatalError, "unsupported tex format");
+            Log.report(logvisor::Fatal, "unsupported tex format");
         }
 
         if (compressed)
@@ -453,7 +453,7 @@ IShaderPipeline* GLDataFactory::newShaderPipeline
     GLShaderPipeline shader;
     if (!shader.initObjects())
     {
-        Log.report(LogVisor::Error, "unable to create shader objects\n");
+        Log.report(logvisor::Error, "unable to create shader objects\n");
         return nullptr;
     }
     shader.m_sfactor = BLEND_FACTOR_TABLE[int(srcFac)];
@@ -472,7 +472,7 @@ IShaderPipeline* GLDataFactory::newShaderPipeline
         glGetShaderiv(shader.m_vert, GL_INFO_LOG_LENGTH, &logLen);
         char* log = (char*)malloc(logLen);
         glGetShaderInfoLog(shader.m_vert, logLen, nullptr, log);
-        Log.report(LogVisor::Error, "unable to compile vert source\n%s\n%s\n", log, vertSource);
+        Log.report(logvisor::Error, "unable to compile vert source\n%s\n%s\n", log, vertSource);
         free(log);
         return nullptr;
     }
@@ -486,7 +486,7 @@ IShaderPipeline* GLDataFactory::newShaderPipeline
         glGetShaderiv(shader.m_frag, GL_INFO_LOG_LENGTH, &logLen);
         char* log = (char*)malloc(logLen);
         glGetShaderInfoLog(shader.m_frag, logLen, nullptr, log);
-        Log.report(LogVisor::Error, "unable to compile frag source\n%s\n%s\n", log, fragSource);
+        Log.report(logvisor::Error, "unable to compile frag source\n%s\n%s\n", log, fragSource);
         free(log);
         return nullptr;
     }
@@ -499,7 +499,7 @@ IShaderPipeline* GLDataFactory::newShaderPipeline
         glGetProgramiv(shader.m_prog, GL_INFO_LOG_LENGTH, &logLen);
         char* log = (char*)malloc(logLen);
         glGetProgramInfoLog(shader.m_prog, logLen, nullptr, log);
-        Log.report(LogVisor::Error, "unable to link shader program\n%s\n", log);
+        Log.report(logvisor::Error, "unable to link shader program\n%s\n", log);
         free(log);
         return nullptr;
     }
@@ -513,7 +513,7 @@ IShaderPipeline* GLDataFactory::newShaderPipeline
         {
             GLint uniLoc = glGetUniformBlockIndex(shader.m_prog, uniformBlockNames[i]);
             if (uniLoc < 0)
-                Log.report(LogVisor::Error, "unable to find uniform block '%s'", uniformBlockNames[i]);
+                Log.report(logvisor::Error, "unable to find uniform block '%s'", uniformBlockNames[i]);
             shader.m_uniLocs.push_back(uniLoc);
         }
     }
@@ -522,7 +522,7 @@ IShaderPipeline* GLDataFactory::newShaderPipeline
     {
         GLint texLoc = glGetUniformLocation(shader.m_prog, texArrayName);
         if (texLoc < 0)
-            Log.report(LogVisor::Error, "unable to find sampler variable '%s'", texArrayName);
+            Log.report(logvisor::Error, "unable to find sampler variable '%s'", texArrayName);
         else
         {
             if (texCount > m_texUnis.size())
@@ -585,7 +585,7 @@ struct GLShaderDataBinding : IShaderDataBinding
     {
 #ifndef NDEBUG
         if (!m_committed)
-            Log.report(LogVisor::FatalError,
+            Log.report(logvisor::Fatal,
                        "attempted to use uncommitted GLShaderDataBinding");
 #endif
 
@@ -874,9 +874,9 @@ struct GLCommandQueue : IGraphicsCommandQueue
             std::unique_lock<std::mutex> lk(self->m_initmt);
             self->m_parent->makeCurrent();
             if (glewInit() != GLEW_OK)
-                Log.report(LogVisor::FatalError, "unable to init glew");
+                Log.report(logvisor::Fatal, "unable to init glew");
             const GLubyte* version = glGetString(GL_VERSION);
-            Log.report(LogVisor::Info, "OpenGL Version: %s", version);
+            Log.report(logvisor::Info, "OpenGL Version: %s", version);
             self->m_parent->postInit();
         }
         self->m_initcv.notify_one();
@@ -1290,7 +1290,7 @@ GLTextureD::GLTextureD(size_t width, size_t height, TextureFormat fmt)
         pxPitch = 1;
         break;
     default:
-        Log.report(LogVisor::FatalError, "unsupported tex format");
+        Log.report(logvisor::Fatal, "unsupported tex format");
     }
     m_cpuSz = width * height * pxPitch;
     m_cpuBuf.reset(new uint8_t[m_cpuSz]);

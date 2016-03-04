@@ -1,16 +1,16 @@
 #include "boo/graphicsdev/glxew.h"
-#include <LogVisor/LogVisor.hpp>
+#include "logvisor/logvisor.hpp"
 
 namespace boo
 {
-static LogVisor::LogModule Log("boo::GLX");
+static logvisor::Module Log("boo::GLX");
 
 void GLXExtensionCheck()
 {
     if (!GLXEW_SGI_video_sync)
-        Log.report(LogVisor::FatalError, "GLX_SGI_video_sync not available");
+        Log.report(logvisor::Fatal, "GLX_SGI_video_sync not available");
     if (!GLXEW_EXT_swap_control && !GLXEW_MESA_swap_control && !GLXEW_SGI_swap_control)
-        Log.report(LogVisor::FatalError, "swap_control not available");
+        Log.report(logvisor::Fatal, "swap_control not available");
 }
 
 void GLXEnableVSync(Display* disp, GLXWindow drawable)

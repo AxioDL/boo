@@ -1,11 +1,11 @@
 #include "boo/audiodev/IAudioVoiceAllocator.hpp"
-#include <LogVisor/LogVisor.hpp>
+#include "logvisor/logvisor.hpp"
 
 #include <alsa/asoundlib.h>
 
 namespace boo
 {
-static LogVisor::LogModule Log("boo::ALSA");
+static logvisor::Module Log("boo::ALSA");
 
 struct ALSAAudioVoice : IAudioVoice
 {
@@ -29,7 +29,7 @@ struct ALSAAudioVoice : IAudioVoice
     {
         if (snd_pcm_open(&m_pcm, "default", SND_PCM_STREAM_PLAYBACK, SND_PCM_ASYNC) < 0)
         {
-            Log.report(LogVisor::Error, "unable to allocate ALSA voice");
+            Log.report(logvisor::Error, "unable to allocate ALSA voice");
             return;
         }
 
@@ -47,7 +47,7 @@ struct ALSAAudioVoice : IAudioVoice
         {
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
-            Log.report(LogVisor::Error, "unable to set ALSA voice params");
+            Log.report(logvisor::Error, "unable to set ALSA voice params");
             return;
         }
 
@@ -56,7 +56,7 @@ struct ALSAAudioVoice : IAudioVoice
         {
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
-            Log.report(LogVisor::Error, "unable to query ALSA voice chmaps");
+            Log.report(logvisor::Error, "unable to query ALSA voice chmaps");
             return;
         }
         snd_pcm_chmap_t* foundChmap = nullptr;
@@ -119,7 +119,7 @@ struct ALSAAudioVoice : IAudioVoice
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
             snd_pcm_free_chmaps(chmaps);
-            Log.report(LogVisor::Error, "unable to find matching ALSA voice chmap");
+            Log.report(logvisor::Error, "unable to find matching ALSA voice chmap");
             return;
         }
         m_map.m_channelCount = chCount;

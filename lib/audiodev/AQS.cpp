@@ -1,11 +1,11 @@
 #include "boo/audiodev/IAudioVoiceAllocator.hpp"
-#include <LogVisor/LogVisor.hpp>
+#include "logvisor/logvisor.hpp"
 
 #include <AudioToolbox/AudioToolbox.h>
 
 namespace boo
 {
-static LogVisor::LogModule Log("boo::AQS");
+static logvisor::Module Log("boo::AQS");
 
 static AudioChannel AQSChannelToBooChannel(AudioChannelLabel ch)
 {
@@ -80,7 +80,7 @@ struct AQSAudioVoice : IAudioVoice
         }
         if (err)
         {
-            Log.report(LogVisor::Error, "unable to create output audio queue");
+            Log.report(logvisor::Error, "unable to create output audio queue");
             return;
         }
 
@@ -88,7 +88,7 @@ struct AQSAudioVoice : IAudioVoice
         UInt32 layoutSz = sizeof(layout);
         if (AudioQueueGetProperty(m_queue, kAudioQueueProperty_ChannelLayout, &layout, &layoutSz))
         {
-            Log.report(LogVisor::Error, "unable to get channel layout from audio queue");
+            Log.report(logvisor::Error, "unable to get channel layout from audio queue");
             return;
         }
 
@@ -142,7 +142,7 @@ struct AQSAudioVoice : IAudioVoice
             m_map.m_channels[4] = AudioChannel::FrontCenter;
             break;
         default:
-            Log.report(LogVisor::Error, "unknown channel layout %u; using stereo", layout.mChannelLayoutTag);
+            Log.report(logvisor::Error, "unknown channel layout %u; using stereo", layout.mChannelLayoutTag);
             m_map.m_channelCount = 2;
             m_map.m_channels[0] = AudioChannel::FrontLeft;
             m_map.m_channels[1] = AudioChannel::FrontRight;
@@ -155,7 +155,7 @@ struct AQSAudioVoice : IAudioVoice
         for (int i=0 ; i<3 ; ++i)
             if (AudioQueueAllocateBuffer(m_queue, m_bufferFrames * chCount * 2, &m_buffers[i]))
             {
-                Log.report(LogVisor::Error, "unable to create audio queue buffer");
+                Log.report(logvisor::Error, "unable to create audio queue buffer");
                 AudioQueueDispose(m_queue, false);
                 m_queue = nullptr;
                 return;

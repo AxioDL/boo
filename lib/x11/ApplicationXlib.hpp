@@ -14,7 +14,7 @@
 #include <dbus/dbus.h>
 DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
 
-#include <LogVisor/LogVisor.hpp>
+#include "logvisor/logvisor.hpp"
 
 #include <signal.h>
 #include <sys/param.h>
@@ -31,7 +31,7 @@ DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
 
 namespace boo
 {
-static LogVisor::LogModule Log("boo::ApplicationXlib");
+static logvisor::Module Log("boo::ApplicationXlib");
 XlibCursors X_CURSORS;
 
 int XINPUT_OPCODE = 0;
@@ -245,13 +245,13 @@ public:
 
         if (!XInitThreads())
         {
-            Log.report(LogVisor::FatalError, "X doesn't support multithreading");
+            Log.report(logvisor::Fatal, "X doesn't support multithreading");
             return;
         }
 
         if (setlocale(LC_ALL, "") == nullptr)
         {
-            Log.report(LogVisor::FatalError, "Can't setlocale");
+            Log.report(logvisor::Fatal, "Can't setlocale");
             return;
         }
 
@@ -259,7 +259,7 @@ public:
         m_xDisp = XOpenDisplay(0);
         if (!m_xDisp)
         {
-            Log.report(LogVisor::FatalError, "Can't open X display");
+            Log.report(logvisor::Fatal, "Can't open X display");
             return;
         }
 
@@ -268,19 +268,19 @@ public:
         m_xcbConn = XGetXCBConnection(m_xDisp);
         if (!m_xcbConn)
         {
-            Log.report(LogVisor::FatalError, "Can't cast Display to XCB connection for Vulkan");
+            Log.report(logvisor::Fatal, "Can't cast Display to XCB connection for Vulkan");
             return;
         }
 #endif
 
         /* Configure locale */
         if (!XSupportsLocale()) {
-            Log.report(LogVisor::FatalError, "X does not support locale %s.",
+            Log.report(logvisor::Fatal, "X does not support locale %s.",
                        setlocale(LC_ALL, nullptr));
             return;
         }
         if (XSetLocaleModifiers("") == nullptr)
-            Log.report(LogVisor::Warning, "Cannot set locale modifiers.");
+            Log.report(logvisor::Warning, "Cannot set locale modifiers.");
 
         if ((m_xIM = XOpenIM(m_xDisp, nullptr, nullptr, nullptr)))
         {
@@ -313,7 +313,7 @@ public:
             /* if we couldn't support any of them, print an error and exit */
             if (m_bestStyle == 0)
             {
-                Log.report(LogVisor::FatalError, "interaction style not supported.");
+                Log.report(logvisor::Fatal, "interaction style not supported.");
                 return;
             }
             XFree(im_supported_styles);

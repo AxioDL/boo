@@ -5,7 +5,7 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
-#include <LogVisor/LogVisor.hpp>
+#include "logvisor/logvisor.hpp"
 
 #if _WIN32
 #include <boo/graphicsdev/D3D.hpp>
@@ -490,10 +490,10 @@ int wmain(int argc, const boo::SystemChar** argv)
 int main(int argc, const boo::SystemChar** argv)
 #endif
 {
-    LogVisor::RegisterConsoleLogger();
+    logvisor::RegisterConsoleLogger();
     boo::TestApplicationCallback appCb;
     int ret = ApplicationRun(boo::IApplication::EPlatformType::Auto,
-        appCb, _S("boo"), _S("Boo"), argc, argv);
+        appCb, _S("boo"), _S("boo"), argc, argv);
     printf("IM DYING!!\n");
     return ret;
 }
@@ -510,7 +510,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int)
     for (int i=0 ; i<argc ; ++i)
         booArgv[i+1] = argv[i];
 
-    LogVisor::CreateWin32Console();
+    logvisor::CreateWin32Console();
     return wmain(argc+1, booArgv);
 }
 #endif
