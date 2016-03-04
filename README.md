@@ -1,6 +1,6 @@
 <p align="center">
-  <a href="http://axiodl.github.io/libBoo/mascot_big.png">
-    <img src="http://axiodl.github.io/libBoo/mascot.png" alt="Boo Mascot" width="256" height="256"/><br><em>Charlie</em>
+  <a href="http://axiodl.github.io/boo/mascot_big.png">
+    <img src="http://axiodl.github.io/boo/mascot.png" alt="Boo Mascot" width="256" height="256"/><br><em>Charlie</em>
   </a>
 </p>
 
