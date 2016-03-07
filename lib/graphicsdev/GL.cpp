@@ -1042,6 +1042,10 @@ struct GLCommandQueue : IGraphicsCommandQueue
 
     void setShaderDataBinding(IShaderDataBinding* binding)
     {
+#ifndef NDEBUG
+        if (!binding)
+            Log.report(logvisor::Fatal, "binding may not be empty");
+#endif
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::Op::SetShaderDataBinding);
         cmds.back().binding = binding;
@@ -1296,12 +1300,13 @@ GLTextureD::GLTextureD(size_t width, size_t height, TextureFormat fmt)
     m_cpuBuf.reset(new uint8_t[m_cpuSz]);
 
     glGenTextures(3, m_texs);
-    glBindTexture(GL_TEXTURE_2D, m_texs[0]);
-    glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, width, height, 0, m_format, GL_UNSIGNED_BYTE, nullptr);
-    glBindTexture(GL_TEXTURE_2D, m_texs[1]);
-    glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, width, height, 0, m_format, GL_UNSIGNED_BYTE, nullptr);
-    glBindTexture(GL_TEXTURE_2D, m_texs[2]);
-    glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, width, height, 0, m_format, GL_UNSIGNED_BYTE, nullptr);
+    for (int i=0 ; i<3 ; ++i)
+    {
+        glBindTexture(GL_TEXTURE_2D, m_texs[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, width, height, 0, m_format, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    }
 }
 GLTextureD::~GLTextureD() {glDeleteTextures(3, m_texs);}
 
