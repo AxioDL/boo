@@ -100,7 +100,7 @@ public:
     ITextureR* newRenderTexture(size_t width, size_t height,
                                 bool enableShaderColorBinding, bool enableShaderDepthBinding);
 
-    bool bindingNeedsVertexFormat() const {return true;}
+    bool bindingNeedsVertexFormat() const {return false;}
     IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
 
     IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,

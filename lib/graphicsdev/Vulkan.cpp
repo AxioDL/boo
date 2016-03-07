@@ -458,7 +458,7 @@ void VulkanContext::initVulkan(const char* appName)
     appInfo.pNext = nullptr;
     appInfo.pApplicationName = appName;
     appInfo.applicationVersion = 1;
-    appInfo.pEngineName = "libBoo";
+    appInfo.pEngineName = "Boo";
     appInfo.engineVersion = 1;
     appInfo.apiVersion = VK_API_VERSION;
 
@@ -3078,7 +3078,7 @@ IVertexFormat* VulkanDataFactory::newVertexFormat(size_t elementCount, const Ver
 }
 
 IShaderDataBinding* VulkanDataFactory::newShaderDataBinding(IShaderPipeline* pipeline,
-        IVertexFormat* vtxFormat,
+        IVertexFormat* /*vtxFormat*/,
         IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbuf, IGraphicsBuffer* ibuf,
         size_t ubufCount, IGraphicsBuffer** ubufs,
         size_t texCount, ITexture** texs)
