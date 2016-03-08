@@ -1,6 +1,6 @@
 #include "../mac/CocoaCommon.hpp"
 #if BOO_HAS_METAL
-#include <LogVisor/LogVisor.hpp>
+#include "logvisor/logvisor.hpp"
 #include "boo/graphicsdev/Metal.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include <vector>
@@ -14,7 +14,7 @@
 
 namespace boo
 {
-static LogVisor::LogModule Log("boo::Metal");
+static logvisor::Module Log("boo::Metal");
 struct MetalCommandQueue;
 
 ThreadLocalPtr<struct MetalData> MetalDataFactory::m_deferredData;
@@ -198,7 +198,7 @@ class MetalTextureD : public ITextureD
             m_pxPitch = 1;
             break;
         default:
-            Log.report(LogVisor::FatalError, "unsupported tex format");
+            Log.report(logvisor::Fatal, "unsupported tex format");
         }
 
         m_cpuSz = width * height * m_pxPitch;
@@ -444,7 +444,7 @@ class MetalShaderPipeline : public IShaderPipeline
         NSError* err = nullptr;
         m_state = [ctx->m_dev newRenderPipelineStateWithDescriptor:desc error:&err];
         if (err)
-            Log.report(LogVisor::FatalError, "error making shader pipeline: %s",
+            Log.report(logvisor::Fatal, "error making shader pipeline: %s",
                        [[err localizedDescription] UTF8String]);
 
         MTLDepthStencilDescriptor* dsDesc = [MTLDepthStencilDescriptor new];
@@ -962,14 +962,14 @@ IShaderPipeline* MetalDataFactory::newShaderPipeline(const char* vertSource, con
                                                               options:compOpts
                                                                 error:&err];
     if (err)
-        Log.report(LogVisor::FatalError, "error compiling vert shader: %s", [[err localizedDescription] UTF8String]);
+        Log.report(logvisor::Fatal, "error compiling vert shader: %s", [[err localizedDescription] UTF8String]);
     id<MTLFunction> vertFunc = [vertShaderLib newFunctionWithName:@"vmain"];
 
     id<MTLLibrary> fragShaderLib = [m_ctx->m_dev newLibraryWithSource:@(fragSource)
                                                               options:compOpts
                                                                 error:&err];
     if (err)
-        Log.report(LogVisor::FatalError, "error compiling frag shader: %s", [[err localizedDescription] UTF8String]);
+        Log.report(logvisor::Fatal, "error compiling frag shader: %s", [[err localizedDescription] UTF8String]);
     id<MTLFunction> fragFunc = [fragShaderLib newFunctionWithName:@"fmain"];
 
     MetalShaderPipeline* retval = new MetalShaderPipeline(m_ctx, vertFunc, fragFunc,

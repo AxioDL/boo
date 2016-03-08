@@ -5,7 +5,7 @@
 #include "boo/graphicsdev/Metal.hpp"
 #include "CocoaCommon.hpp"
 
-#include <LogVisor/LogVisor.hpp>
+#include "logvisor/logvisor.hpp"
 
 #if !__has_feature(objc_arc)
 #error ARC Required
@@ -22,7 +22,7 @@ namespace boo {class ApplicationCocoa;}
 
 namespace boo
 {
-static LogVisor::LogModule Log("boo::ApplicationCocoa");
+static logvisor::Module Log("boo::ApplicationCocoa");
 
 IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx,
                          MetalContext* metalCtx, uint32_t sampleCount);
@@ -91,11 +91,11 @@ public:
             {
                 m_metalCtx.m_dev = MTLCreateSystemDefaultDevice();
                 m_metalCtx.m_q = [m_metalCtx.m_dev newCommandQueue];
-                Log.report(LogVisor::Info, "using Metal renderer");
+                Log.report(logvisor::Info, "using Metal renderer");
                 break;
             }
         if (!m_metalCtx.m_dev)
-            Log.report(LogVisor::Info, "using OpenGL renderer");
+            Log.report(logvisor::Info, "using OpenGL renderer");
 #else
         Log.report(LogVisor::Info, "using OpenGL renderer");
 #endif
