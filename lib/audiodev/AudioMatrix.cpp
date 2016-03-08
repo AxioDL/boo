@@ -28,7 +28,7 @@ void AudioMatrixMono::bufferMonoSampleData(IAudioVoice& voice, const int16_t* da
     m_interleaveBuf.clear();
     m_interleaveBuf.reserve(samples * chmap.m_channelCount);
     for (size_t s=0 ; s<samples ; ++s, ++data)
-        for (int c=0 ; c<chmap.m_channelCount ; ++c)
+        for (unsigned c=0 ; c<chmap.m_channelCount ; ++c)
         {
             AudioChannel ch = chmap.m_channels[c];
             if (ch == AudioChannel::Unknown)
@@ -64,7 +64,7 @@ void AudioMatrixStereo::bufferStereoSampleData(IAudioVoice& voice, const int16_t
     m_interleaveBuf.clear();
     m_interleaveBuf.reserve(frames * chmap.m_channelCount);
     for (size_t f=0 ; f<frames ; ++f, data += 2)
-        for (int c=0 ; c<chmap.m_channelCount ; ++c)
+        for (unsigned c=0 ; c<chmap.m_channelCount ; ++c)
         {
             AudioChannel ch = chmap.m_channels[c];
             if (ch == AudioChannel::Unknown)

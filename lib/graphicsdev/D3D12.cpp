@@ -338,23 +338,31 @@ class D3D12TextureD : public ITextureD
     D3D12CommandQueue* m_q;
     D3D12_RESOURCE_DESC m_gpuDesc;
     std::unique_ptr<uint8_t[]> m_cpuBuf;
+    size_t m_rowPitch;
     size_t m_cpuSz;
     int m_validSlots = 0;
     D3D12TextureD(D3D12CommandQueue* q, D3D12Context* ctx, size_t width, size_t height, TextureFormat fmt)
-    : m_fmt(fmt), m_q(q)
+    : m_width(width), m_height(height), m_fmt(fmt), m_q(q)
     {
         DXGI_FORMAT pixelFmt;
+        size_t pxPitch;
         switch (fmt)
         {
         case TextureFormat::RGBA8:
             pixelFmt = DXGI_FORMAT_R8G8B8A8_UNORM;
+            pxPitch = 4;
             break;
         case TextureFormat::I8:
             pixelFmt = DXGI_FORMAT_R8_UNORM;
+            pxPitch = 1;
             break;
         default:
             Log.report(logvisor::Fatal, "unsupported tex format");
         }
+
+        m_cpuSz = width * height * pxPitch;
+        m_rowPitch = width * pxPitch;
+        m_cpuBuf.reset(new uint8_t[m_cpuSz]);
 
         m_gpuDesc = CD3DX12_RESOURCE_DESC::Tex2D(pixelFmt, width, height);
         size_t reqSz = GetRequiredIntermediateSize(ctx->m_dev.Get(), &m_gpuDesc, 0, 1);
@@ -1389,13 +1397,21 @@ void D3D12TextureD::update(int b)
         m_q->stallDynamicUpload();
         ID3D12Resource* res = m_texs[b].Get();
         ID3D12Resource* gpuRes = m_gpuTexs[b].Get();
-        D3D12_SUBRESOURCE_DATA d = {m_cpuBuf.get(), LONG_PTR(m_width * 4), LONG_PTR(m_cpuSz)};
-        m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
-            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST));
+        D3D12_SUBRESOURCE_DATA d = {m_cpuBuf.get(), LONG_PTR(m_rowPitch), LONG_PTR(m_cpuSz)};
+        D3D12_RESOURCE_BARRIER setupCopy[] =
+        {
+            CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+                        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST),
+        };
+        m_q->m_dynamicCmdList->ResourceBarrier(1, setupCopy);
         if (!UpdateSubresources<1>(m_q->m_dynamicCmdList.Get(), gpuRes, res, 0, 0, 1, &d))
             Log.report(logvisor::Fatal, "unable to update dynamic texture data");
-        m_q->m_dynamicCmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
-            D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+        D3D12_RESOURCE_BARRIER teardownCopy[] =
+        {
+            CD3DX12_RESOURCE_BARRIER::Transition(gpuRes,
+                        D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
+        };
+        m_q->m_dynamicCmdList->ResourceBarrier(1, teardownCopy);
         m_validSlots |= slot;
     }
 }

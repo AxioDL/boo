@@ -264,7 +264,7 @@ class D3D11TextureD : public ITextureD
         m_cpuBuf.reset(new uint8_t[m_cpuSz]);
 
         CD3D11_TEXTURE2D_DESC desc(pixelFmt, width, height, 1, 1,
-            D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, D3D11_CPU_ACCESS_WRITE);
+            D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DYNAMIC, D3D11_CPU_ACCESS_WRITE);
         for (int i=0 ; i<3 ; ++i)
         {
             ThrowIfFailed(ctx->m_dev->CreateTexture2D(&desc, nullptr, &m_texs[i]));

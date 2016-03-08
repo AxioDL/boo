@@ -14,7 +14,7 @@ struct XA2AudioVoice : IAudioVoice
     IAudioVoiceCallback* m_cb;
     IXAudio2SourceVoice* m_voiceQueue;
     XAUDIO2_BUFFER m_buffers[3] = {};
-    size_t m_bufferFrames = 2048;
+    size_t m_bufferFrames = 1024;
     size_t m_frameSize;
 
     const ChannelMap& channelMap() const {return m_map;}
@@ -27,7 +27,7 @@ struct XA2AudioVoice : IAudioVoice
 
         STDMETHOD_(void, OnBufferEnd)(void* pBufferContext)
         {
-            m_voice.m_cb->needsNextBuffer(&m_voice, m_voice.m_bufferFrames);
+            m_voice.m_cb->needsNextBuffer(m_voice, m_voice.m_bufferFrames);
         }
         STDMETHOD_(void, OnBufferStart)(void* pBufferContext) {}
         STDMETHOD_(void, OnLoopEnd)(void* pBufferContext) {}
@@ -48,11 +48,12 @@ struct XA2AudioVoice : IAudioVoice
         desc.nSamplesPerSec = sampleRate;
         desc.wBitsPerSample = 16;
         desc.nBlockAlign = desc.nChannels * desc.wBitsPerSample / 8;
-        desc.nAvgBytesPerSec = desc.nAvgBytesPerSec * desc.nBlockAlign;
+        desc.nAvgBytesPerSec = desc.nSamplesPerSec * desc.nBlockAlign;
 
-        if FAILED(xa2.CreateSourceVoice(&m_voiceQueue, &desc, 0, XAUDIO2_DEFAULT_FREQ_RATIO, &m_xaCb))
+        HRESULT err = xa2.CreateSourceVoice(&m_voiceQueue, &desc, 0, XAUDIO2_DEFAULT_FREQ_RATIO, &m_xaCb);
+        if (FAILED(err))
         {
-            Log.report(logvisor::Error, "unable to create source voice");
+            Log.report(logvisor::Fatal, "unable to create source voice");
             return;
         }
 
@@ -114,7 +115,7 @@ struct XA2AudioVoice : IAudioVoice
         m_frameSize = chCount * 2;
 
         for (unsigned i=0 ; i<3 ; ++i)
-            m_cb->needsNextBuffer(this, m_bufferFrames);
+            m_cb->needsNextBuffer(*this, m_bufferFrames);
     }
 
     void bufferSampleData(const int16_t* data, size_t frames)
@@ -122,8 +123,15 @@ struct XA2AudioVoice : IAudioVoice
         XAUDIO2_BUFFER* buf = &m_buffers[m_fillBuf++];
         if (m_fillBuf == 3)
             m_fillBuf = 0;
+        buf->Flags = 0;
         buf->AudioBytes = frames * m_frameSize;
         buf->pAudioData = reinterpret_cast<const BYTE*>(data);
+        buf->PlayBegin = 0;
+        buf->PlayLength = 0;
+        buf->LoopBegin = 0;
+        buf->LoopLength = 0;
+        buf->LoopCount = 0;
+        buf->pContext = nullptr;
         m_voiceQueue->SubmitSourceBuffer(buf);
     }
 
@@ -143,28 +151,43 @@ struct XA2AudioVoice : IAudioVoice
     }
 };
 
+typedef HRESULT (__stdcall *PFN_XAudio2Create)(_Outptr_ IXAudio2** ppXAudio2, UINT32 Flags,
+                                               XAUDIO2_PROCESSOR XAudio2Processor);
+
+static PFN_XAudio2Create MyXAudio2Create = nullptr;
+
 struct XA2AudioVoiceAllocator : IAudioVoiceAllocator
 {
     ComPtr<IXAudio2> m_xa2;
     IXAudio2MasteringVoice* m_masterVoice;
-    AudioChannelSet m_maxSet;
+    AudioChannelSet m_maxSet = AudioChannelSet::Unknown;
 
     XA2AudioVoiceAllocator()
     {
-        if (FAILED(XAudio2Create(&m_xa2)))
+        if (!MyXAudio2Create)
         {
-            Log.report(logvisor::Error, "Unable to initialize XAudio2");
+            HMODULE mod = LoadLibraryW(XAUDIO2_DLL_W);
+            if (!mod)
+                Log.report(logvisor::Fatal, L"unable to load " XAUDIO2_DLL_W);
+            MyXAudio2Create = PFN_XAudio2Create(GetProcAddress(mod, "XAudio2Create"));
+            if (!MyXAudio2Create)
+                Log.report(logvisor::Fatal, L"unable to find XAudio2Create in " XAUDIO2_DLL_W);
+        }
+
+        if (FAILED(MyXAudio2Create(&m_xa2, 0, XAUDIO2_DEFAULT_PROCESSOR)))
+        {
+            Log.report(logvisor::Fatal, "Unable to initialize XAudio2");
             return;
         }
         if (FAILED(m_xa2->CreateMasteringVoice(&m_masterVoice)))
         {
-            Log.report(logvisor::Error, "Unable to initialize XAudio2 mastering voice");
+            Log.report(logvisor::Fatal, "Unable to initialize XAudio2 mastering voice");
             return;
         }
         DWORD channelMask;
         if (FAILED(m_masterVoice->GetChannelMask(&channelMask)))
         {
-            Log.report(logvisor::Error, "Unable to get mastering voice's channel mask");
+            Log.report(logvisor::Fatal, "Unable to get mastering voice's channel mask");
             return;
         }
         if ((channelMask & (SPEAKER_FRONT_LEFT|SPEAKER_FRONT_RIGHT)) == (SPEAKER_FRONT_LEFT|SPEAKER_FRONT_RIGHT))
@@ -190,17 +213,24 @@ struct XA2AudioVoiceAllocator : IAudioVoiceAllocator
         m_masterVoice->DestroyVoice();
     }
 
+    AudioChannelSet getAvailableSet()
+    {
+        return m_maxSet;
+    }
+
     std::unique_ptr<IAudioVoice> allocateNewVoice(AudioChannelSet layoutOut,
                                                   unsigned sampleRate,
                                                   IAudioVoiceCallback* cb)
     {
         AudioChannelSet acset = std::min(layoutOut, m_maxSet);
-        XA2AudioVoice* newVoice = new XA2AudioVoice(*m_xa2.Get(), acset, sampleRate, cb);
-        std::unique_ptr<IAudioVoice> ret(newVoice);
-        if (!newVoice->m_voiceQueue)
+        std::unique_ptr<IAudioVoice> newVoice = std::make_unique<XA2AudioVoice>
+            (*m_xa2.Get(), acset, sampleRate, cb);
+        if (!static_cast<XA2AudioVoice*>(newVoice.get())->m_voiceQueue)
             return {};
-        return ret;
+        return newVoice;
     }
+
+    void pumpVoices() {}
 };
 
 std::unique_ptr<IAudioVoiceAllocator> NewAudioVoiceAllocator()

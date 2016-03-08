@@ -285,6 +285,7 @@ public:
         int clientReturn = 0;
         std::thread clientThread([&]()
         {
+            CoInitializeEx(nullptr, COINIT_MULTITHREADED);
             clientReturn = m_callback.appMain(this);
             PostThreadMessage(g_mainThreadId, WM_USER+1, 0, 0);
         });
