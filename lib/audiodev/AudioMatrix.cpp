@@ -9,16 +9,16 @@ void AudioMatrixMono::setDefaultMatrixCoefficients()
     memset(m_coefs, 0, sizeof(m_coefs));
     switch (m_setOut)
     {
-    case AudioChannelSet::Mono:
     case AudioChannelSet::Stereo:
     case AudioChannelSet::Quad:
-        m_coefs[AudioChannel::FrontLeft] = 1.0;
-        m_coefs[AudioChannel::FrontRight] = 1.0;
+        m_coefs[int(AudioChannel::FrontLeft)] = 1.0;
+        m_coefs[int(AudioChannel::FrontRight)] = 1.0;
         break;
     case AudioChannelSet::Surround51:
     case AudioChannelSet::Surround71:
-        m_coefs[AudioChannel::FrontCenter] = 1.0;
+        m_coefs[int(AudioChannel::FrontCenter)] = 1.0;
         break;
+    default: break;
     }
 }
 
@@ -34,7 +34,7 @@ void AudioMatrixMono::bufferMonoSampleData(IAudioVoice& voice, const int16_t* da
             if (ch == AudioChannel::Unknown)
                 m_interleaveBuf.push_back(0);
             else
-                m_interleaveBuf.push_back(data[0] * m_coefs[ch]);
+                m_interleaveBuf.push_back(data[0] * m_coefs[int(ch)]);
         }
     voice.bufferSampleData(m_interleaveBuf.data(), samples);
 }
@@ -44,22 +44,17 @@ void AudioMatrixStereo::setDefaultMatrixCoefficients()
     memset(m_coefs, 0, sizeof(m_coefs));
     switch (m_setOut)
     {
-    case AudioChannelSet::Mono:
-        m_coefs[AudioChannel::FrontLeft][0] = 0.5;
-        m_coefs[AudioChannel::FrontLeft][1] = 0.5;
-        m_coefs[AudioChannel::FrontRight][0] = 0.5;
-        m_coefs[AudioChannel::FrontRight][1] = 0.5;
-        break;
     case AudioChannelSet::Stereo:
     case AudioChannelSet::Quad:
-        m_coefs[AudioChannel::FrontLeft][0] = 1.0;
-        m_coefs[AudioChannel::FrontRight][1] = 1.0;
+        m_coefs[int(AudioChannel::FrontLeft)][0] = 1.0;
+        m_coefs[int(AudioChannel::FrontRight)][1] = 1.0;
         break;
     case AudioChannelSet::Surround51:
     case AudioChannelSet::Surround71:
-        m_coefs[AudioChannel::FrontLeft][0] = 1.0;
-        m_coefs[AudioChannel::FrontRight][1] = 1.0;
+        m_coefs[int(AudioChannel::FrontLeft)][0] = 1.0;
+        m_coefs[int(AudioChannel::FrontRight)][1] = 1.0;
         break;
+    default: break;
     }
 }
 
@@ -75,8 +70,8 @@ void AudioMatrixStereo::bufferStereoSampleData(IAudioVoice& voice, const int16_t
             if (ch == AudioChannel::Unknown)
                 m_interleaveBuf.push_back(0);
             else
-                m_interleaveBuf.push_back(data[0] * m_coefs[ch][0] +
-                                          data[1] * m_coefs[ch][1]);
+                m_interleaveBuf.push_back(data[0] * m_coefs[int(ch)][0] +
+                                          data[1] * m_coefs[int(ch)][1]);
         }
     voice.bufferSampleData(m_interleaveBuf.data(), frames);
 }

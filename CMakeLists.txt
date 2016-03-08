@@ -124,7 +124,7 @@ else(NOT GEKKO)
   endif()
 
   include_directories(${DBUS_INCLUDE_DIR} ${DBUS_ARCH_INCLUDE_DIR})
-  list(APPEND _BOO_SYS_LIBS X11 Xi GL ${DBUS_LIBRARY} pthread)
+  list(APPEND _BOO_SYS_LIBS X11 Xi GL asound ${DBUS_LIBRARY} pthread)
 
   unset(VULKAN_LIBRARY CACHE)
   find_library(VULKAN_LIBRARY vulkan)
@@ -172,8 +172,9 @@ add_library(boo
             lib/inputdev/GenericPad.cpp include/boo/inputdev/GenericPad.hpp
             lib/inputdev/DeviceBase.cpp include/boo/inputdev/DeviceBase.hpp
             lib/inputdev/DeviceSignature.cpp include/boo/inputdev/DeviceSignature.hpp
-            include/boo/inputdev/IHIDListener.hpp
             lib/inputdev/IHIDDevice.hpp
+            lib/audiodev/AudioMatrix.cpp
+            include/boo/inputdev/IHIDListener.hpp
             include/boo/IGraphicsContext.hpp
             include/boo/graphicsdev/IGraphicsDataFactory.hpp
             include/boo/graphicsdev/IGraphicsCommandQueue.hpp

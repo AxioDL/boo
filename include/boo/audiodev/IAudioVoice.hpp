@@ -12,7 +12,8 @@ enum class AudioChannelSet
     Stereo,
     Quad,
     Surround51,
-    Surround71
+    Surround71,
+    Unknown = 0xff
 };
 
 enum class AudioChannel
@@ -46,12 +47,15 @@ static inline unsigned ChannelCount(AudioChannelSet layout)
         return 6;
     case AudioChannelSet::Surround71:
         return 8;
+    default: break;
     }
     return 0;
 }
 
 struct IAudioVoice
 {
+    virtual ~IAudioVoice() = default;
+
     /** Get voice's actual channel-map based on client request and HW capabilities */
     virtual const ChannelMap& channelMap() const=0;
 

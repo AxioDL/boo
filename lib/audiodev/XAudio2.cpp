@@ -203,4 +203,9 @@ struct XA2AudioVoiceAllocator : IAudioVoiceAllocator
     }
 };
 
+std::unique_ptr<IAudioVoiceAllocator> NewAudioVoiceAllocator()
+{
+    return std::make_unique<XA2AudioVoiceAllocator>();
+}
+
 }

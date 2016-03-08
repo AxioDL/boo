@@ -10,14 +10,14 @@ namespace boo
 
 class AudioMatrixMono
 {
-    AudioChannelSet m_setOut;
+    AudioChannelSet m_setOut = AudioChannelSet::Stereo;
     float m_coefs[8];
     std::vector<int16_t> m_interleaveBuf;
 public:
-    AudioMatrixMono(AudioChannelSet setOut)
-    : m_setOut(setOut) {setDefaultMatrixCoefficients();}
+    AudioMatrixMono() {setDefaultMatrixCoefficients();}
 
-    AudioChannelSet setOut() const {return m_setOut;}
+    AudioChannelSet audioChannelSet() const {return m_setOut;}
+    void setAudioChannelSet(AudioChannelSet set) {m_setOut = set;}
     void setDefaultMatrixCoefficients();
     void setMatrixCoefficients(const float coefs[8])
     {
@@ -30,14 +30,14 @@ public:
 
 class AudioMatrixStereo
 {
-    AudioChannelSet m_setOut;
+    AudioChannelSet m_setOut = AudioChannelSet::Stereo;
     float m_coefs[8][2];
     std::vector<int16_t> m_interleaveBuf;
 public:
-    AudioMatrixStereo(AudioChannelSet setOut)
-    : m_setOut(setOut) {setDefaultMatrixCoefficients();}
+    AudioMatrixStereo() {setDefaultMatrixCoefficients();}
 
-    AudioChannelSet setOut() const {return m_setOut;}
+    AudioChannelSet audioChannelSet() const {return m_setOut;}
+    void setAudioChannelSet(AudioChannelSet set) {m_setOut = set;}
     void setDefaultMatrixCoefficients();
     void setMatrixCoefficients(const float coefs[8][2])
     {

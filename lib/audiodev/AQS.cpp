@@ -218,4 +218,9 @@ struct AQSAudioVoiceAllocator : IAudioVoiceAllocator
     }
 };
 
+std::unique_ptr<IAudioVoiceAllocator> NewAudioVoiceAllocator()
+{
+    return std::make_unique<AQSAudioVoiceAllocator>();
+}
+
 }
