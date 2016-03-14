@@ -460,7 +460,7 @@ void VulkanContext::initVulkan(const char* appName)
     appInfo.applicationVersion = 1;
     appInfo.pEngineName = "Boo";
     appInfo.engineVersion = 1;
-    appInfo.apiVersion = VK_API_VERSION;
+    appInfo.apiVersion = VK_API_VERSION_1_0;
 
     VkInstanceCreateInfo instInfo = {};
     instInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
