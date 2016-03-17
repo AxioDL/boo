@@ -1603,8 +1603,14 @@ public:
             XGetWindowAttributes(m_xDisp, m_windowId, &wxa);
             m_wrect.location[0] = x - wxa.x;
             m_wrect.location[1] = y - wxa.y;
+#if 0
+            /* This breaks with GNOME, why? */
             m_wrect.size[0] = event->xexpose.width;
             m_wrect.size[1] = event->xexpose.height;
+#else
+            m_wrect.size[0] = wxa.width;
+            m_wrect.size[1] = wxa.height;
+#endif
             if (m_callback)
             {
                 XUnlockDisplay(m_xDisp);
