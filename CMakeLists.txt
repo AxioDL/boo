@@ -9,6 +9,12 @@ if (NOT TARGET logvisor)
     add_subdirectory(logvisor)
 endif()
 
+set(WITH_LSR_BINDINGS OFF)
+set(BUILD_TESTS OFF)
+set(BUILD_SHARED_LIBS OFF)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/soxr/cmake/Modules")
+add_subdirectory(soxr)
+
 set(BOO_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE PATH "boo include path" FORCE)
 
 include_directories(include ${LOGVISOR_INCLUDE_DIR})
