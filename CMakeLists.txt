@@ -33,7 +33,7 @@ if(WIN32)
        lib/inputdev/HIDDeviceWinUSB.cpp
        lib/graphicsdev/D3D11.cpp
        lib/graphicsdev/D3D12.cpp
-       lib/audiodev/XAudio2.cpp)
+       lib/audiodev/WASAPI.cpp)
 
   list(APPEND PLAT_HDRS
         include/boo/graphicsdev/D3D.hpp)
