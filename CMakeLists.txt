@@ -162,13 +162,13 @@ endif()
 add_subdirectory(glslang/glslang)
 add_subdirectory(glslang/OGLCompilersDLL)
 add_subdirectory(glslang/SPIRV)
-list(APPEND _BOO_SYS_LIBS glslang OSDependent OGLCompiler SPIRV)
+list(APPEND _BOO_SYS_LIBS glslang soxr OSDependent OGLCompiler SPIRV)
 
 set(BOO_SYS_LIBS ${_BOO_SYS_LIBS} CACHE PATH "boo system libraries" FORCE)
 set(BOO_SYS_DEFINES ${_BOO_SYS_DEFINES} CACHE PATH "boo system defines" FORCE)
 
 add_definitions(${_BOO_SYS_DEFINES})
-include_directories(include glslang)
+include_directories(include glslang soxr/src)
 
 add_library(boo
             lib/inputdev/CafeProPad.cpp include/boo/inputdev/CafeProPad.hpp
@@ -180,6 +180,8 @@ add_library(boo
             lib/inputdev/DeviceSignature.cpp include/boo/inputdev/DeviceSignature.hpp
             lib/inputdev/IHIDDevice.hpp
             lib/audiodev/AudioMatrix.cpp
+            lib/audiodev/AudioVoice.hpp
+            lib/audiodev/AudioVoice.cpp
             include/boo/inputdev/IHIDListener.hpp
             include/boo/IGraphicsContext.hpp
             include/boo/graphicsdev/IGraphicsDataFactory.hpp

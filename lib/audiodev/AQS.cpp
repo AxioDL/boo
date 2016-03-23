@@ -68,7 +68,8 @@ struct AQSAudioVoice : IAudioVoice
         desc.mBitsPerChannel = 16;
 
         OSStatus err;
-        while ((err = AudioQueueNewOutput(&desc, AudioQueueOutputCallback(Callback), this, nullptr, nullptr, 0, &m_queue)))
+        while ((err = AudioQueueNewOutput(&desc, AudioQueueOutputCallback(Callback),
+                                          this, nullptr, nullptr, 0, &m_queue)))
         {
             if (set == AudioChannelSet::Stereo)
                 break;
@@ -144,7 +145,9 @@ struct AQSAudioVoice : IAudioVoice
                 m_map.m_channels[4] = AudioChannel::FrontCenter;
                 break;
             default:
-                Log.report(logvisor::Fatal, "unknown channel layout %u; using stereo", layout.mChannelLayoutTag);
+                Log.report(logvisor::Fatal,
+                           "unknown channel layout %u; using stereo",
+                           layout.mChannelLayoutTag);
                 m_map.m_channelCount = 2;
                 m_map.m_channels[0] = AudioChannel::FrontLeft;
                 m_map.m_channels[1] = AudioChannel::FrontRight;
@@ -188,14 +191,16 @@ struct AQSAudioVoice : IAudioVoice
     {
         if (m_callbackBuf)
         {
-            m_callbackBuf->mAudioDataByteSize = std::min(UInt32(frames * m_frameSize), m_callbackBuf->mAudioDataBytesCapacity);
+            m_callbackBuf->mAudioDataByteSize =
+                std::min(UInt32(frames * m_frameSize), m_callbackBuf->mAudioDataBytesCapacity);
             memcpy(m_callbackBuf->mAudioData, data, m_callbackBuf->mAudioDataByteSize);
             AudioQueueEnqueueBuffer(m_queue, m_callbackBuf, 0, nullptr);
         }
         else
         {
             AudioQueueBufferRef buf = m_buffers[m_primeBuf];
-            buf->mAudioDataByteSize = std::min(UInt32(frames * m_frameSize), buf->mAudioDataBytesCapacity);
+            buf->mAudioDataByteSize =
+                std::min(UInt32(frames * m_frameSize), buf->mAudioDataBytesCapacity);
             memcpy(buf->mAudioData, data, buf->mAudioDataByteSize);
             AudioQueueEnqueueBuffer(m_queue, buf, 0, nullptr);
         }

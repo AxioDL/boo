@@ -52,20 +52,20 @@ endif ()
 
 # Libsoxr:
 
-add_library (${PROJECT_NAME} ${LIB_TYPE} ${PROJECT_NAME}.c data-io dbesi0 filter fft4g64
+add_library (soxr ${LIB_TYPE} soxr.c data-io dbesi0 filter fft4g64
   ${SP_SOURCES} vr32 ${DP_SOURCES} ${SIMD_SOURCES})
-set_target_properties (${PROJECT_NAME} PROPERTIES
+set_target_properties (soxr PROPERTIES
   VERSION "${SO_VERSION}"
   SOVERSION ${SO_VERSION_MAJOR}
   INSTALL_NAME_DIR ${LIB_INSTALL_DIR}
   LINK_INTERFACE_LIBRARIES ""
-  PUBLIC_HEADER "${PROJECT_NAME}.h")
+  PUBLIC_HEADER "soxr.h")
 if (BUILD_FRAMEWORK)
-  set_target_properties (${PROJECT_NAME} PROPERTIES FRAMEWORK TRUE)
+  set_target_properties (soxr PROPERTIES FRAMEWORK TRUE)
 elseif (NOT WIN32)
-  set (TARGET_PCS ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.pc)
-  configure_file (${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}.pc.in ${TARGET_PCS})
-  install (FILES ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.pc DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
+  set (TARGET_PCS ${CMAKE_CURRENT_BINARY_DIR}/soxr.pc)
+  configure_file (${CMAKE_CURRENT_SOURCE_DIR}/soxr.pc.in ${TARGET_PCS})
+  install (FILES ${CMAKE_CURRENT_BINARY_DIR}/soxr.pc DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
 endif ()
 
 
@@ -73,11 +73,11 @@ endif ()
 # LSR bindings:
 
 if (WITH_LSR_BINDINGS)
-  set (LSR ${PROJECT_NAME}-lsr)
+  set (LSR soxr-lsr)
   set (LSR_SO_VERSION 0.1.9)
   set (LSR_SO_VERSION_MAJOR 0)
   add_library (${LSR} ${LIB_TYPE} lsr)
-  target_link_libraries (${LSR} ${PROJECT_NAME})
+  target_link_libraries (${LSR} soxr)
   set_target_properties (${LSR} PROPERTIES
     VERSION "${LSR_SO_VERSION}"
     SOVERSION ${LSR_SO_VERSION_MAJOR}
@@ -97,7 +97,7 @@ endif ()
 
 # Installation (from build from source):
 
-install (TARGETS ${PROJECT_NAME} ${LSR}
+install (TARGETS soxr ${LSR}
   FRAMEWORK DESTINATION ${FRAMEWORK_INSTALL_DIR}
   LIBRARY DESTINATION ${LIB_INSTALL_DIR}
   RUNTIME DESTINATION ${BIN_INSTALL_DIR}
@@ -108,11 +108,11 @@ install (TARGETS ${PROJECT_NAME} ${LSR}
 
 # Packaging (for unix-like distributions):
 
-#get_property (LIB1 TARGET ${PROJECT_NAME} PROPERTY LOCATION)
+#get_property (LIB1 TARGET soxr PROPERTY LOCATION)
 #if (BUILD_SHARED_LIBS)
 #  set (LIB1 ${LIB1}.${SO_VERSION_MAJOR} ${LIB1}.${SO_VERSION})
 #endif ()
-#list (APPEND TARGET_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}.h")
+#list (APPEND TARGET_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/soxr.h")
 #if (WITH_LSR_BINDINGS)
 #  get_property (LIB2 TARGET ${LSR} PROPERTY LOCATION)
 #  if (BUILD_SHARED_LIBS)

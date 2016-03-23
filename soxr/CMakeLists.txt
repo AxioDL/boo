@@ -3,8 +3,8 @@
 
 cmake_minimum_required (VERSION 2.8 FATAL_ERROR)
 
-project (soxr C)
-set (DESCRIPTION_SUMMARY "High quality, one-dimensional sample-rate conversion library")
+#project (soxr C)
+#set (DESCRIPTION_SUMMARY "High quality, one-dimensional sample-rate conversion library")
 
 
 
@@ -34,9 +34,9 @@ if (NOT CMAKE_BUILD_TYPE)
   set (CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel." FORCE)
 endif ()
 
-option (BUILD_TESTS "Build sanity-tests."  ON)
-option (BUILD_SHARED_LIBS "Build shared libraries." ON)
-option (BUILD_EXAMPLES "Build examples." OFF)
+#option (BUILD_TESTS "Build sanity-tests."  ON)
+#option (BUILD_SHARED_LIBS "Build shared libraries." ON)
+#option (BUILD_EXAMPLES "Build examples." OFF)
 option (WITH_OPENMP "Include OpenMP threading." ON)
 option (WITH_LSR_BINDINGS "Include a `libsamplerate'-like interface." ON)
 cmake_dependent_option (WITH_SINGLE_PRECISION "Build with single precision (for up to 20-bit accuracy)." ON
@@ -50,7 +50,7 @@ cmake_dependent_option (WITH_AVFFT "Use libavcodec (LGPL) for SIMD DFT." OFF
 cmake_dependent_option (WITH_PFFFT "Use PFFFT (BSD-like licence) for SIMD DFT." ON
   "WITH_SIMD;NOT WITH_AVFFT" OFF)
 if (UNIX)
-  if (EXISTS ${PROJECT_SOURCE_DIR}/lsr-tests)
+  if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/lsr-tests)
     cmake_dependent_option (BUILD_LSR_TESTS "Build LSR tests." OFF
       "WITH_LSR_BINDINGS" OFF)
   endif ()
@@ -157,7 +157,7 @@ endif ()
 # Build configuration:
 
 if (${BUILD_SHARED_LIBS} AND ${CMAKE_SYSTEM_NAME} STREQUAL Windows) # Allow exes to find dlls:
-  set (BIN ${PROJECT_BINARY_DIR}/bin/)
+  set (BIN ${CMAKE_CURRENT_BINARY_DIR}/bin/)
   set (EXAMPLES_BIN ${BIN})
   set (CMAKE_LIBRARY_OUTPUT_DIRECTORY ${BIN})
   set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${BIN})
@@ -189,7 +189,7 @@ if (NOT DEFINED INCLUDE_INSTALL_DIR)
 endif ()
 if (NOT DEFINED DOC_INSTALL_DIR)
   if (UNIX)
-    set (DOC_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/share/doc/lib${PROJECT_NAME}")
+    set (DOC_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/share/doc/libsoxr")
   else ()
     set (DOC_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/doc")
   endif ()
@@ -211,9 +211,9 @@ math (EXPR SO_VERSION_PATCH "${SO_VERSION_REVISION}")
 set (SO_VERSION ${SO_VERSION_MAJOR}.${SO_VERSION_MINOR}.${SO_VERSION_PATCH})
 
 configure_file (
-  ${PROJECT_SOURCE_DIR}/${PROJECT_NAME}-config.h.in
-  ${PROJECT_BINARY_DIR}/${PROJECT_NAME}-config.h)
-include_directories (${PROJECT_BINARY_DIR})
+  ${CMAKE_CURRENT_SOURCE_DIR}/soxr-config.h.in
+  ${CMAKE_CURRENT_BINARY_DIR}/soxr-config.h)
+include_directories (${CMAKE_CURRENT_BINARY_DIR})
 
 if (BUILD_TESTS OR BUILD_LSR_TESTS)
   enable_testing ()
@@ -229,7 +229,7 @@ install (FILES
 
 # Subdirectories:
 
-include_directories (${PROJECT_SOURCE_DIR}/src)
+include_directories (${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 add_subdirectory (src)
 if (BUILD_TESTS)
@@ -246,53 +246,53 @@ endif ()
 
 # Rough-and-ready distclean for anyone still doing in-tree builds:
 
-if (UNIX)
-  add_custom_target (distclean
-    COMMAND make clean && rm -rf
-      CMakeCache.txt
-      CMakeFiles
-      cmake_install.cmake
-      CPackConfig.cmake
-      CPackSourceConfig.cmake
-      deinstall.cmake
-      Makefile
-      soxr-config.h
-      src/CMakeFiles
-      src/cmake_install.cmake
-      src/libsoxr-dev.src
-      src/libsoxr-lsr.pc
-      src/libsoxr.pc
-      src/libsoxr.src
-      src/Makefile)
-endif ()
+#if (UNIX)
+#  add_custom_target (distclean
+#    COMMAND make clean && rm -rf
+#      CMakeCache.txt
+#      CMakeFiles
+#      cmake_install.cmake
+#      CPackConfig.cmake
+#      CPackSourceConfig.cmake
+#      deinstall.cmake
+#      Makefile
+#      soxr-config.h
+#      src/CMakeFiles
+#      src/cmake_install.cmake
+#      src/libsoxr-dev.src
+#      src/libsoxr-lsr.pc
+#      src/libsoxr.pc
+#      src/libsoxr.src
+#      src/Makefile)
+#endif ()
 
 
 
 # Deinstallation:
 
-configure_file (
-  "${CMAKE_CURRENT_SOURCE_DIR}/deinstall.cmake.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/deinstall.cmake"
-  IMMEDIATE @ONLY)
+#configure_file (
+#  "${CMAKE_CURRENT_SOURCE_DIR}/deinstall.cmake.in"
+#  "${CMAKE_CURRENT_BINARY_DIR}/deinstall.cmake"
+#  IMMEDIATE @ONLY)
 
-add_custom_target (deinstall
-  COMMAND ${CMAKE_COMMAND} -P "${CMAKE_CURRENT_BINARY_DIR}/deinstall.cmake")
+#add_custom_target (deinstall
+#  COMMAND ${CMAKE_COMMAND} -P "${CMAKE_CURRENT_BINARY_DIR}/deinstall.cmake")
 
 
 
 # Packaging:
 
-if (UNIX)
-  set (CPACK_PACKAGE_VERSION_MAJOR "${PROJECT_VERSION_MAJOR}")
-  set (CPACK_PACKAGE_VERSION_MINOR "${PROJECT_VERSION_MINOR}")
-  set (CPACK_PACKAGE_VERSION_PATCH "${PROJECT_VERSION_PATCH}")
-
-  set (CPACK_SOURCE_GENERATOR "TGZ")
-  set (CPACK_SOURCE_IGNORE_FILES "dist;/lsr-tests/;/Debug/;/Release/;/cpack/;\\\\.swp$;\\\\.gitignore;/\\\\.git/")
-
-  include (CPack)
-
-  if (IS_DIRECTORY ${PROJECT_SOURCE_DIR}/cpack)
-    add_subdirectory (cpack)
-  endif ()
-endif ()
+#if (UNIX)
+#  set (CPACK_PACKAGE_VERSION_MAJOR "${PROJECT_VERSION_MAJOR}")
+#  set (CPACK_PACKAGE_VERSION_MINOR "${PROJECT_VERSION_MINOR}")
+#  set (CPACK_PACKAGE_VERSION_PATCH "${PROJECT_VERSION_PATCH}")
+#
+#  set (CPACK_SOURCE_GENERATOR "TGZ")
+#  set (CPACK_SOURCE_IGNORE_FILES "dist;/lsr-tests/;/Debug/;/Release/;/cpack/;\\\\.swp$;\\\\.gitignore;/\\\\.git/")
+#
+#  include (CPack)
+#
+#  if (IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/cpack)
+#    add_subdirectory (cpack)
+#  endif ()
+#endif ()
