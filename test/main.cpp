@@ -126,7 +126,7 @@ struct CTestWindowCallback : IWindowCallback
     SWindowRect m_lastRect;
     bool m_rectDirty = false;
     bool m_windowInvalid = false;
-    
+
     void resized(const SWindowRect& rect)
     {
         m_lastRect = rect;
@@ -209,7 +209,7 @@ struct CTestWindowCallback : IWindowCallback
     }
 
 };
-    
+
 struct TestApplicationCallback : IApplicationCallback
 {
     IWindow* mainWindow;
@@ -219,19 +219,19 @@ struct TestApplicationCallback : IApplicationCallback
 
     IShaderDataBinding* m_binding = nullptr;
     ITextureR* m_renderTarget = nullptr;
-    
+
     std::mutex m_mt;
     std::condition_variable m_cv;
-    
+
     std::mutex m_initmt;
     std::condition_variable m_initcv;
 
     static void LoaderProc(TestApplicationCallback* self)
     {
         std::unique_lock<std::mutex> lk(self->m_initmt);
-        
+
         IGraphicsDataFactory* factory = self->mainWindow->getLoadContextDataFactory();
-        
+
         /* Create render target */
         int x, y, w, h;
         self->mainWindow->getWindowFrame(x, y, w, h);
@@ -306,7 +306,7 @@ struct TestApplicationCallback : IApplicationCallback
 
             pipeline = glF->newShaderPipeline(VS, FS, 1, "texs", 0, nullptr,
                                               BlendFactor::One, BlendFactor::Zero,
-                                              true, true, false);
+                                              Primitive::TriStrips, true, true, false);
         }
 #if _WIN32
         else if (factory->platform() == IGraphicsDataFactory::Platform::D3D12 ||
@@ -344,7 +344,7 @@ struct TestApplicationCallback : IApplicationCallback
         else if (factory->platform() == IGraphicsDataFactory::Platform::Metal)
         {
             MetalDataFactory* metalF = dynamic_cast<MetalDataFactory*>(factory);
-            
+
             static const char* VS =
             "#include <metal_stdlib>\n"
             "using namespace metal;\n"
@@ -357,7 +357,7 @@ struct TestApplicationCallback : IApplicationCallback
             "    retval.out_uv = v.in_uv;\n"
             "    return retval;\n"
             "}\n";
-            
+
             static const char* FS =
             "#include <metal_stdlib>\n"
             "using namespace metal;\n"
@@ -367,9 +367,10 @@ struct TestApplicationCallback : IApplicationCallback
             "{\n"
             "    return tex.sample(samp, d.out_uv);\n"
             "}\n";
-            
+
             pipeline = metalF->newShaderPipeline(VS, FS, vfmt, 1,
-                                                 BlendFactor::One, BlendFactor::Zero, true, true, false);
+                                                 BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
+                                                 true, true, false);
         }
 #endif
 
@@ -379,7 +380,7 @@ struct TestApplicationCallback : IApplicationCallback
 
         /* Commit objects */
         GraphicsDataToken data = factory->commit();
-        
+
         /* Return control to client */
         lk.unlock();
         self->m_initcv.notify_one();

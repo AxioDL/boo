@@ -110,7 +110,7 @@ public:
                                        bool depthTest, bool depthWrite, bool backfaceCulling);
 
     IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource, IVertexFormat* vtxFmt,
-                                       BlendFactor srcFac, BlendFactor dstFac,
+                                       BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                                        bool depthTest, bool depthWrite, bool backfaceCulling)
     {
         std::vector<unsigned int> vertBlob;

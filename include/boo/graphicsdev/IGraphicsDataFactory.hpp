@@ -156,6 +156,13 @@ struct IGraphicsData {};
 class GraphicsDataToken;
 
 /** Used by platform shader pipeline constructors */
+enum class Primitive
+{
+    Triangles,
+    TriStrips
+};
+
+/** Used by platform shader pipeline constructors */
 enum class BlendFactor
 {
     Zero,

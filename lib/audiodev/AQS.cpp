@@ -43,17 +43,17 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
     std::mutex m_engineMutex;
     std::condition_variable m_engineCv;
 
-    static void Callback(AQSAudioVoiceEngine* voice, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer)
+    static void Callback(AQSAudioVoiceEngine* engine, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer)
     {
-        std::unique_lock<std::mutex> lk(voice->m_engineMutex);
-        voice->m_engineCv.wait(lk);
+        std::unique_lock<std::mutex> lk(engine->m_engineMutex);
+        engine->m_engineCv.wait(lk);
 
-        voice->_pumpAndMixVoices(voice->m_mixInfo.m_periodFrames, reinterpret_cast<int32_t*>(inBuffer->mAudioData));
-        inBuffer->mAudioDataByteSize = voice->m_frameBytes;
+        engine->_pumpAndMixVoices(engine->m_mixInfo.m_periodFrames, reinterpret_cast<int32_t*>(inBuffer->mAudioData));
+        inBuffer->mAudioDataByteSize = engine->m_frameBytes;
         AudioQueueEnqueueBuffer(inAQ, inBuffer, 0, nullptr);
     }
 
-    static void DummyCallback(AQSAudioVoiceEngine* voice, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer) {}
+    static void DummyCallback(AQSAudioVoiceEngine* engine, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer) {}
 
     AudioChannelSet _getAvailableSet()
     {

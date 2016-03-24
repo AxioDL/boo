@@ -50,7 +50,7 @@ public:
     IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
                                        size_t texCount, const char* texArrayName,
                                        size_t uniformBlockCount, const char** uniformBlockNames,
-                                       BlendFactor srcFac, BlendFactor dstFac,
+                                       BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                                        bool depthTest, bool depthWrite, bool backfaceCulling);
 
     IShaderDataBinding*

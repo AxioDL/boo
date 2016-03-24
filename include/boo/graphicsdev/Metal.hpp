@@ -57,7 +57,7 @@ public:
 
     IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
                                        IVertexFormat* vtxFmt, unsigned targetSamples,
-                                       BlendFactor srcFac, BlendFactor dstFac,
+                                       BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                                        bool depthTest, bool depthWrite, bool backfaceCulling);
 
     IShaderDataBinding*

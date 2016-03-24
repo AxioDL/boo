@@ -338,12 +338,14 @@ GLDataFactory::newStaticArrayTexture(size_t width, size_t height, size_t layers,
 class GLShaderPipeline : public IShaderPipeline
 {
     friend class GLDataFactory;
+    friend class GLCommandQueue;
     friend struct GLShaderDataBinding;
     GLuint m_vert = 0;
     GLuint m_frag = 0;
     GLuint m_prog = 0;
     GLenum m_sfactor = GL_ONE;
     GLenum m_dfactor = GL_ZERO;
+    GLenum m_drawPrim = GL_TRIANGLES;
     bool m_depthTest = true;
     bool m_depthWrite = true;
     bool m_backfaceCulling = true;
@@ -396,6 +398,7 @@ public:
         m_depthWrite = other.m_depthWrite;
         m_backfaceCulling = other.m_backfaceCulling;
         m_uniLocs = std::move(other.m_uniLocs);
+        m_drawPrim = other.m_drawPrim;
         return *this;
     }
     GLShaderPipeline(GLShaderPipeline&& other) {*this = std::move(other);}
@@ -427,6 +430,12 @@ public:
     }
 };
 
+static const GLenum PRIMITIVE_TABLE[] =
+{
+    GL_TRIANGLES,
+    GL_TRIANGLE_STRIP
+};
+
 static const GLenum BLEND_FACTOR_TABLE[] =
 {
     GL_ZERO,
@@ -447,7 +456,7 @@ IShaderPipeline* GLDataFactory::newShaderPipeline
 (const char* vertSource, const char* fragSource,
  size_t texCount, const char* texArrayName,
  size_t uniformBlockCount, const char** uniformBlockNames,
- BlendFactor srcFac, BlendFactor dstFac,
+ BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
  bool depthTest, bool depthWrite, bool backfaceCulling)
 {
     GLShaderPipeline shader;
@@ -461,6 +470,7 @@ IShaderPipeline* GLDataFactory::newShaderPipeline
     shader.m_depthTest = depthTest;
     shader.m_depthWrite = depthWrite;
     shader.m_backfaceCulling = backfaceCulling;
+    shader.m_drawPrim = PRIMITIVE_TABLE[int(prim)];
 
     glShaderSource(shader.m_vert, 1, &vertSource, nullptr);
     glCompileShader(shader.m_vert);
@@ -929,13 +939,18 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     posts.swap(self->m_pendingPosts2);
             }
             std::vector<Command>& cmds = self->m_cmdBufs[self->m_drawBuf];
+            GLenum currentPrim = GL_TRIANGLES;
             for (const Command& cmd : cmds)
             {
                 switch (cmd.m_op)
                 {
                 case Command::Op::SetShaderDataBinding:
-                    static_cast<const GLShaderDataBinding*>(cmd.binding)->bind(self->m_drawBuf);
+                {
+                    const GLShaderDataBinding* binding = static_cast<const GLShaderDataBinding*>(cmd.binding);
+                    binding->bind(self->m_drawBuf);
+                    currentPrim = binding->m_pipeline->m_drawPrim;
                     break;
+                }
                 case Command::Op::SetRenderTarget:
                 {
                     const GLTextureR* tex = static_cast<const GLTextureR*>(cmd.target);
@@ -966,16 +981,16 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     glClear(cmd.flags);
                     break;
                 case Command::Op::Draw:
-                    glDrawArrays(GL_TRIANGLE_STRIP, cmd.start, cmd.count);
+                    glDrawArrays(currentPrim, cmd.start, cmd.count);
                     break;
                 case Command::Op::DrawIndexed:
-                    glDrawElements(GL_TRIANGLE_STRIP, cmd.count, GL_UNSIGNED_INT, (void*)cmd.start);
+                    glDrawElements(currentPrim, cmd.count, GL_UNSIGNED_INT, (void*)cmd.start);
                     break;
                 case Command::Op::DrawInstances:
-                    glDrawArraysInstanced(GL_TRIANGLE_STRIP, cmd.start, cmd.count, cmd.instCount);
+                    glDrawArraysInstanced(currentPrim, cmd.start, cmd.count, cmd.instCount);
                     break;
                 case Command::Op::DrawInstancesIndexed:
-                    glDrawElementsInstanced(GL_TRIANGLE_STRIP, cmd.count, GL_UNSIGNED_INT, (void*)cmd.start, cmd.instCount);
+                    glDrawElementsInstanced(currentPrim, cmd.count, GL_UNSIGNED_INT, (void*)cmd.start, cmd.instCount);
                     break;
                 case Command::Op::ResolveBindTexture:
                 {

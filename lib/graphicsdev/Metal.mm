@@ -417,15 +417,24 @@ static const MTLBlendFactor BLEND_FACTOR_TABLE[] =
     MTLBlendFactorOneMinusDestinationAlpha
 };
 
+static const MTLPrimitiveType PRIMITIVE_TABLE[] =
+{
+    MTLPrimitiveTypeTriangle,
+    MTLPrimitiveTypeTriangleStrip
+};
+
 class MetalShaderPipeline : public IShaderPipeline
 {
     friend class MetalDataFactory;
+    friend class MetalCommandQueue;
     MTLCullMode m_cullMode = MTLCullModeNone;
+    MTLPrimitiveType m_drawPrim;
 
     MetalShaderPipeline(MetalContext* ctx, id<MTLFunction> vert, id<MTLFunction> frag,
                         const MetalVertexFormat* vtxFmt, NSUInteger targetSamples,
-                        BlendFactor srcFac, BlendFactor dstFac,
+                        BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                         bool depthTest, bool depthWrite, bool backfaceCulling)
+    : m_drawPrim(PRIMITIVE_TABLE[int(prim)])
     {
         if (backfaceCulling)
             m_cullMode = MTLCullModeBack;
@@ -591,11 +600,13 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     }
 
     MetalShaderDataBinding* m_boundData = nullptr;
+    MTLPrimitiveType m_currentPrimitive = MTLPrimitiveTypeTriangle;
     void setShaderDataBinding(IShaderDataBinding* binding)
     {
         MetalShaderDataBinding* cbind = static_cast<MetalShaderDataBinding*>(binding);
         cbind->bind(m_enc, m_fillBuf);
         m_boundData = cbind;
+        m_currentPrimitive = cbind->m_pipeline->m_drawPrim;
     }
 
     MetalTextureR* m_boundTarget = nullptr;
@@ -661,12 +672,12 @@ struct MetalCommandQueue : IGraphicsCommandQueue
 
     void draw(size_t start, size_t count)
     {
-        [m_enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:start vertexCount:count];
+        [m_enc drawPrimitives:m_currentPrimitive vertexStart:start vertexCount:count];
     }
 
     void drawIndexed(size_t start, size_t count)
     {
-        [m_enc drawIndexedPrimitives:MTLPrimitiveTypeTriangleStrip
+        [m_enc drawIndexedPrimitives:m_currentPrimitive
                           indexCount:count
                            indexType:MTLIndexTypeUInt32
                          indexBuffer:GetBufferGPUResource(m_boundData->m_ibuf, m_fillBuf)
@@ -675,13 +686,13 @@ struct MetalCommandQueue : IGraphicsCommandQueue
 
     void drawInstances(size_t start, size_t count, size_t instCount)
     {
-        [m_enc drawPrimitives:MTLPrimitiveTypeTriangleStrip
+        [m_enc drawPrimitives:m_currentPrimitive
                   vertexStart:start vertexCount:count instanceCount:instCount];
     }
 
     void drawInstancesIndexed(size_t start, size_t count, size_t instCount)
     {
-        [m_enc drawIndexedPrimitives:MTLPrimitiveTypeTriangleStrip
+        [m_enc drawIndexedPrimitives:m_currentPrimitive
                           indexCount:count
                            indexType:MTLIndexTypeUInt32
                          indexBuffer:GetBufferGPUResource(m_boundData->m_ibuf, m_fillBuf)
@@ -951,7 +962,7 @@ IVertexFormat* MetalDataFactory::newVertexFormat(size_t elementCount, const Vert
 
 IShaderPipeline* MetalDataFactory::newShaderPipeline(const char* vertSource, const char* fragSource,
                                                      IVertexFormat* vtxFmt, unsigned targetSamples,
-                                                     BlendFactor srcFac, BlendFactor dstFac,
+                                                     BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                                                      bool depthTest, bool depthWrite, bool backfaceCulling)
 {
     MTLCompileOptions* compOpts = [MTLCompileOptions new];
@@ -974,7 +985,7 @@ IShaderPipeline* MetalDataFactory::newShaderPipeline(const char* vertSource, con
 
     MetalShaderPipeline* retval = new MetalShaderPipeline(m_ctx, vertFunc, fragFunc,
                                                           static_cast<const MetalVertexFormat*>(vtxFmt), targetSamples,
-                                                          srcFac, dstFac, depthTest, depthWrite, backfaceCulling);
+                                                          srcFac, dstFac, prim, depthTest, depthWrite, backfaceCulling);
     if (!m_deferredData.get())
         m_deferredData.reset(new struct MetalData());
     m_deferredData->m_SPs.emplace_back(retval);
