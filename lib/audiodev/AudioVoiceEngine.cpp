@@ -28,12 +28,6 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, float* dataOut)
             vox->pumpAndMix(m_mixInfo, frames, dataOut);
 }
 
-BaseAudioVoiceEngine::BaseAudioVoiceEngine
-    (const std::function<AudioVoiceEngineMixInfo()>& getEngineMixInfo)
-{
-    m_mixInfo = getEngineMixInfo();
-}
-
 std::unique_ptr<IAudioVoice>
 BaseAudioVoiceEngine::allocateNewMonoVoice(double sampleRate,
                                        IAudioVoiceCallback* cb,

@@ -31,8 +31,6 @@ protected:
     void _pumpAndMixVoices(size_t frames, float* dataOut);
 
 public:
-    BaseAudioVoiceEngine(const std::function<AudioVoiceEngineMixInfo()>& getEngineMixInfo);
-
     std::unique_ptr<IAudioVoice> allocateNewMonoVoice(double sampleRate,
                                                       IAudioVoiceCallback* cb,
                                                       bool dynamicPitch=false);
