@@ -1,7 +1,10 @@
-#include "boo/audiodev/IAudioVoiceAllocator.hpp"
+#include "AudioVoiceEngine.hpp"
 #include "logvisor/logvisor.hpp"
 
 #include <AudioToolbox/AudioToolbox.h>
+
+#include <mutex>
+#include <condition_variable>
 
 namespace boo
 {
@@ -31,208 +34,39 @@ static AudioChannel AQSChannelToBooChannel(AudioChannelLabel ch)
     return AudioChannel::Unknown;
 }
 
-struct AQSAudioVoice : IAudioVoice
+struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 {
-    ChannelMap m_map;
-    IAudioVoiceCallback* m_cb;
     AudioQueueRef m_queue = nullptr;
     AudioQueueBufferRef m_buffers[3];
-    size_t m_bufferFrames = 1024;
-    size_t m_frameSize;
+    size_t m_frameBytes;
 
-    const ChannelMap& channelMap() const {return m_map;}
+    std::mutex m_engineMutex;
+    std::condition_variable m_engineCv;
 
-    AudioQueueBufferRef m_callbackBuf = nullptr;
-    unsigned m_primeBuf;
-    static void Callback(void* inUserData, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer)
+    static void Callback(AQSAudioVoiceEngine* voice, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer)
     {
-        AQSAudioVoice* voice = static_cast<AQSAudioVoice*>(inUserData);
-        voice->m_callbackBuf = inBuffer;
-        voice->m_cb->needsNextBuffer(*voice, voice->m_bufferFrames);
-        voice->m_callbackBuf = nullptr;
+        std::unique_lock<std::mutex> lk(voice->m_engineMutex);
+        voice->m_engineCv.wait(lk);
+
+        voice->_pumpAndMixVoices(voice->m_mixInfo.m_periodFrames, reinterpret_cast<int32_t*>(inBuffer->mAudioData));
+        inBuffer->mAudioDataByteSize = voice->m_frameBytes;
+        AudioQueueEnqueueBuffer(inAQ, inBuffer, 0, nullptr);
     }
 
-    AQSAudioVoice(AudioChannelSet set, unsigned sampleRate, IAudioVoiceCallback* cb)
-    : m_cb(cb)
-    {
-        unsigned chCount = ChannelCount(set);
+    static void DummyCallback(AQSAudioVoiceEngine* voice, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer) {}
 
-        AudioStreamBasicDescription desc = {};
-        desc.mSampleRate = sampleRate;
-        desc.mFormatID = kAudioFormatLinearPCM;
-        desc.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger;
-        desc.mBytesPerPacket = chCount * 2;
-        desc.mFramesPerPacket = 1;
-        desc.mBytesPerFrame = chCount * 2;
-        desc.mChannelsPerFrame = chCount;
-        desc.mBitsPerChannel = 16;
-
-        OSStatus err;
-        while ((err = AudioQueueNewOutput(&desc, AudioQueueOutputCallback(Callback),
-                                          this, nullptr, nullptr, 0, &m_queue)))
-        {
-            if (set == AudioChannelSet::Stereo)
-                break;
-            set = AudioChannelSet(int(set) - 1);
-            chCount = ChannelCount(set);
-            desc.mBytesPerPacket = chCount * 2;
-            desc.mBytesPerFrame = chCount * 2;
-            desc.mChannelsPerFrame = chCount;
-        }
-        if (err)
-        {
-            Log.report(logvisor::Fatal, "unable to create output audio queue");
-            return;
-        }
-
-        if (chCount > 2)
-        {
-            AudioChannelLayout layout;
-            UInt32 layoutSz = sizeof(layout);
-            if (AudioQueueGetProperty(m_queue, kAudioQueueProperty_ChannelLayout, &layout, &layoutSz))
-            {
-                Log.report(logvisor::Fatal, "unable to get channel layout from audio queue");
-                return;
-            }
-
-            switch (layout.mChannelLayoutTag)
-            {
-            case kAudioChannelLayoutTag_UseChannelDescriptions:
-                m_map.m_channelCount = layout.mNumberChannelDescriptions;
-                for (int i=0 ; i<layout.mNumberChannelDescriptions ; ++i)
-                {
-                    AudioChannel ch = AQSChannelToBooChannel(layout.mChannelDescriptions[i].mChannelLabel);
-                    m_map.m_channels[i] = ch;
-                }
-                break;
-            case kAudioChannelLayoutTag_UseChannelBitmap:
-                if ((layout.mChannelBitmap & kAudioChannelBit_Left) != 0)
-                    m_map.m_channels[m_map.m_channelCount++] = AudioChannel::FrontLeft;
-                if ((layout.mChannelBitmap & kAudioChannelBit_Right) != 0)
-                    m_map.m_channels[m_map.m_channelCount++] = AudioChannel::FrontRight;
-                if ((layout.mChannelBitmap & kAudioChannelBit_Center) != 0)
-                    m_map.m_channels[m_map.m_channelCount++] = AudioChannel::FrontCenter;
-                if ((layout.mChannelBitmap & kAudioChannelBit_LFEScreen) != 0)
-                    m_map.m_channels[m_map.m_channelCount++] = AudioChannel::LFE;
-                if ((layout.mChannelBitmap & kAudioChannelBit_LeftSurround) != 0)
-                    m_map.m_channels[m_map.m_channelCount++] = AudioChannel::RearLeft;
-                if ((layout.mChannelBitmap & kAudioChannelBit_RightSurround) != 0)
-                    m_map.m_channels[m_map.m_channelCount++] = AudioChannel::RearRight;
-                if ((layout.mChannelBitmap & kAudioChannelBit_LeftSurroundDirect) != 0)
-                    m_map.m_channels[m_map.m_channelCount++] = AudioChannel::SideLeft;
-                if ((layout.mChannelBitmap & kAudioChannelBit_RightSurroundDirect) != 0)
-                    m_map.m_channels[m_map.m_channelCount++] = AudioChannel::SideRight;
-                break;
-            case kAudioChannelLayoutTag_Stereo:
-            case kAudioChannelLayoutTag_StereoHeadphones:
-                m_map.m_channelCount = 2;
-                m_map.m_channels[0] = AudioChannel::FrontLeft;
-                m_map.m_channels[1] = AudioChannel::FrontRight;
-                break;
-            case kAudioChannelLayoutTag_Quadraphonic:
-                m_map.m_channelCount = 4;
-                m_map.m_channels[0] = AudioChannel::FrontLeft;
-                m_map.m_channels[1] = AudioChannel::FrontRight;
-                m_map.m_channels[2] = AudioChannel::RearLeft;
-                m_map.m_channels[3] = AudioChannel::RearRight;
-                break;
-            case kAudioChannelLayoutTag_Pentagonal:
-                m_map.m_channelCount = 5;
-                m_map.m_channels[0] = AudioChannel::FrontLeft;
-                m_map.m_channels[1] = AudioChannel::FrontRight;
-                m_map.m_channels[2] = AudioChannel::RearLeft;
-                m_map.m_channels[3] = AudioChannel::RearRight;
-                m_map.m_channels[4] = AudioChannel::FrontCenter;
-                break;
-            default:
-                Log.report(logvisor::Fatal,
-                           "unknown channel layout %u; using stereo",
-                           layout.mChannelLayoutTag);
-                m_map.m_channelCount = 2;
-                m_map.m_channels[0] = AudioChannel::FrontLeft;
-                m_map.m_channels[1] = AudioChannel::FrontRight;
-                break;
-            }
-        }
-        else
-        {
-            m_map.m_channels[m_map.m_channelCount++] = AudioChannel::FrontLeft;
-            m_map.m_channels[m_map.m_channelCount++] = AudioChannel::FrontRight;
-        }
-
-        while (m_map.m_channelCount < chCount)
-            m_map.m_channels[m_map.m_channelCount++] = AudioChannel::Unknown;
-
-        for (int i=0 ; i<3 ; ++i)
-            if (AudioQueueAllocateBuffer(m_queue, m_bufferFrames * chCount * 2, &m_buffers[i]))
-            {
-                Log.report(logvisor::Fatal, "unable to create audio queue buffer");
-                AudioQueueDispose(m_queue, false);
-                m_queue = nullptr;
-                return;
-            }
-
-        m_frameSize = chCount * 2;
-
-        for (unsigned i=0 ; i<3 ; ++i)
-        {
-            m_primeBuf = i;
-            m_cb->needsNextBuffer(*this, m_bufferFrames);
-        }
-        AudioQueuePrime(m_queue, 0, nullptr);
-    }
-
-    ~AQSAudioVoice()
-    {
-        AudioQueueDispose(m_queue, false);
-    }
-
-    void bufferSampleData(const int16_t* data, size_t frames)
-    {
-        if (m_callbackBuf)
-        {
-            m_callbackBuf->mAudioDataByteSize =
-                std::min(UInt32(frames * m_frameSize), m_callbackBuf->mAudioDataBytesCapacity);
-            memcpy(m_callbackBuf->mAudioData, data, m_callbackBuf->mAudioDataByteSize);
-            AudioQueueEnqueueBuffer(m_queue, m_callbackBuf, 0, nullptr);
-        }
-        else
-        {
-            AudioQueueBufferRef buf = m_buffers[m_primeBuf];
-            buf->mAudioDataByteSize =
-                std::min(UInt32(frames * m_frameSize), buf->mAudioDataBytesCapacity);
-            memcpy(buf->mAudioData, data, buf->mAudioDataByteSize);
-            AudioQueueEnqueueBuffer(m_queue, buf, 0, nullptr);
-        }
-    }
-
-    void start()
-    {
-        AudioQueueStart(m_queue, nullptr);
-    }
-
-    void stop()
-    {
-        AudioQueueStop(m_queue, false);
-    }
-};
-
-struct AQSAudioVoiceAllocator : IAudioVoiceEngine
-{
-    static void DummyCallback(void* inUserData, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer) {}
-
-    AudioChannelSet getAvailableSet()
+    AudioChannelSet _getAvailableSet()
     {
         const unsigned chCount = 8;
         AudioStreamBasicDescription desc = {};
-        desc.mSampleRate = 32000;
+        desc.mSampleRate = 96000;
         desc.mFormatID = kAudioFormatLinearPCM;
         desc.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger;
-        desc.mBytesPerPacket = chCount * 2;
+        desc.mBytesPerPacket = chCount * 4;
         desc.mFramesPerPacket = 1;
-        desc.mBytesPerFrame = chCount * 2;
+        desc.mBytesPerFrame = chCount * 4;
         desc.mChannelsPerFrame = chCount;
-        desc.mBitsPerChannel = 16;
+        desc.mBitsPerChannel = 32;
 
         AudioQueueRef queue;
         if (AudioQueueNewOutput(&desc, AudioQueueOutputCallback(DummyCallback),
@@ -269,23 +103,154 @@ struct AQSAudioVoiceAllocator : IAudioVoiceEngine
         return AudioChannelSet::Unknown;
     }
 
-    std::unique_ptr<IAudioVoice> allocateNewVoice(AudioChannelSet layoutOut,
-                                                  unsigned sampleRate,
-                                                  IAudioVoiceCallback* cb)
+    AQSAudioVoiceEngine()
     {
-        AQSAudioVoice* newVoice = new AQSAudioVoice(layoutOut, sampleRate, cb);
-        std::unique_ptr<IAudioVoice> ret(newVoice);
-        if (!newVoice->m_queue)
-            return {};
-        return ret;
+        m_mixInfo.m_channels = _getAvailableSet();
+        unsigned chCount = ChannelCount(m_mixInfo.m_channels);
+
+        AudioStreamBasicDescription desc = {};
+        desc.mSampleRate = 96000;
+        desc.mFormatID = kAudioFormatLinearPCM;
+        desc.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger;
+        desc.mBytesPerPacket = chCount * 4;
+        desc.mFramesPerPacket = 1;
+        desc.mBytesPerFrame = chCount * 4;
+        desc.mChannelsPerFrame = chCount;
+        desc.mBitsPerChannel = 32;
+
+        OSStatus err;
+        if ((err = AudioQueueNewOutput(&desc, AudioQueueOutputCallback(Callback),
+                                       this, nullptr, nullptr, 0, &m_queue)))
+        {
+            Log.report(logvisor::Fatal, "unable to create output audio queue");
+            return;
+        }
+
+        m_mixInfo.m_sampleRate = 96000.0;
+        m_mixInfo.m_sampleFormat = SOXR_INT32_I;
+        m_mixInfo.m_bitsPerSample = 32;
+
+        ChannelMap& chMapOut = m_mixInfo.m_channelMap;
+        if (chCount > 2)
+        {
+            AudioChannelLayout layout;
+            UInt32 layoutSz = sizeof(layout);
+            if (AudioQueueGetProperty(m_queue, kAudioQueueProperty_ChannelLayout, &layout, &layoutSz))
+            {
+                Log.report(logvisor::Fatal, "unable to get channel layout from audio queue");
+                return;
+            }
+
+            switch (layout.mChannelLayoutTag)
+            {
+            case kAudioChannelLayoutTag_UseChannelDescriptions:
+                chMapOut.m_channelCount = layout.mNumberChannelDescriptions;
+                for (int i=0 ; i<layout.mNumberChannelDescriptions ; ++i)
+                {
+                    AudioChannel ch = AQSChannelToBooChannel(layout.mChannelDescriptions[i].mChannelLabel);
+                    chMapOut.m_channels[i] = ch;
+                }
+                break;
+            case kAudioChannelLayoutTag_UseChannelBitmap:
+                if ((layout.mChannelBitmap & kAudioChannelBit_Left) != 0)
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontLeft;
+                if ((layout.mChannelBitmap & kAudioChannelBit_Right) != 0)
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontRight;
+                if ((layout.mChannelBitmap & kAudioChannelBit_Center) != 0)
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontCenter;
+                if ((layout.mChannelBitmap & kAudioChannelBit_LFEScreen) != 0)
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::LFE;
+                if ((layout.mChannelBitmap & kAudioChannelBit_LeftSurround) != 0)
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::RearLeft;
+                if ((layout.mChannelBitmap & kAudioChannelBit_RightSurround) != 0)
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::RearRight;
+                if ((layout.mChannelBitmap & kAudioChannelBit_LeftSurroundDirect) != 0)
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::SideLeft;
+                if ((layout.mChannelBitmap & kAudioChannelBit_RightSurroundDirect) != 0)
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::SideRight;
+                break;
+            case kAudioChannelLayoutTag_Stereo:
+            case kAudioChannelLayoutTag_StereoHeadphones:
+                chMapOut.m_channelCount = 2;
+                chMapOut.m_channels[0] = AudioChannel::FrontLeft;
+                chMapOut.m_channels[1] = AudioChannel::FrontRight;
+                break;
+            case kAudioChannelLayoutTag_Quadraphonic:
+                chMapOut.m_channelCount = 4;
+                chMapOut.m_channels[0] = AudioChannel::FrontLeft;
+                chMapOut.m_channels[1] = AudioChannel::FrontRight;
+                chMapOut.m_channels[2] = AudioChannel::RearLeft;
+                chMapOut.m_channels[3] = AudioChannel::RearRight;
+                break;
+            case kAudioChannelLayoutTag_Pentagonal:
+                chMapOut.m_channelCount = 5;
+                chMapOut.m_channels[0] = AudioChannel::FrontLeft;
+                chMapOut.m_channels[1] = AudioChannel::FrontRight;
+                chMapOut.m_channels[2] = AudioChannel::RearLeft;
+                chMapOut.m_channels[3] = AudioChannel::RearRight;
+                chMapOut.m_channels[4] = AudioChannel::FrontCenter;
+                break;
+            default:
+                Log.report(logvisor::Fatal,
+                           "unknown channel layout %u; using stereo",
+                           layout.mChannelLayoutTag);
+                chMapOut.m_channelCount = 2;
+                chMapOut.m_channels[0] = AudioChannel::FrontLeft;
+                chMapOut.m_channels[1] = AudioChannel::FrontRight;
+                break;
+            }
+        }
+        else
+        {
+            chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontLeft;
+            chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontRight;
+        }
+
+        while (chMapOut.m_channelCount < chCount)
+            chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::Unknown;
+
+        m_mixInfo.m_periodFrames = 2400;
+        for (int i=0 ; i<3 ; ++i)
+            if (AudioQueueAllocateBuffer(m_queue, m_mixInfo.m_periodFrames * chCount * 4, &m_buffers[i]))
+            {
+                Log.report(logvisor::Fatal, "unable to create audio queue buffer");
+                AudioQueueDispose(m_queue, false);
+                m_queue = nullptr;
+                return;
+            }
+
+        m_frameBytes = m_mixInfo.m_periodFrames * m_mixInfo.m_channelMap.m_channelCount * 4;
+
+        for (unsigned i=0 ; i<3 ; ++i)
+        {
+            _pumpAndMixVoices(m_mixInfo.m_periodFrames, reinterpret_cast<int32_t*>(m_buffers[i]->mAudioData));
+            m_buffers[i]->mAudioDataByteSize = m_frameBytes;
+            AudioQueueEnqueueBuffer(m_queue, m_buffers[i], 0, nullptr);
+        }
+        AudioQueuePrime(m_queue, 0, nullptr);
+        AudioQueueStart(m_queue, nullptr);
     }
 
-    void pumpVoices() {}
+    ~AQSAudioVoiceEngine()
+    {
+        AudioQueueDispose(m_queue, false);
+    }
+
+    void pumpAndMixVoices()
+    {
+        std::unique_lock<std::mutex> lk(m_engineMutex);
+        m_engineCv.notify_one();
+        lk.unlock();
+        lk.lock();
+    }
 };
 
-std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceAllocator()
+std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine()
 {
-    return std::make_unique<AQSAudioVoiceAllocator>();
+    std::unique_ptr<IAudioVoiceEngine> ret = std::make_unique<AQSAudioVoiceEngine>();
+    if (!static_cast<AQSAudioVoiceEngine&>(*ret).m_queue)
+        return {};
+    return ret;
 }
 
 }
