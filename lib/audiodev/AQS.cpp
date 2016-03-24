@@ -217,7 +217,7 @@ struct AQSAudioVoice : IAudioVoice
     }
 };
 
-struct AQSAudioVoiceAllocator : IAudioVoiceAllocator
+struct AQSAudioVoiceAllocator : IAudioVoiceEngine
 {
     static void DummyCallback(void* inUserData, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer) {}
 
@@ -283,7 +283,7 @@ struct AQSAudioVoiceAllocator : IAudioVoiceAllocator
     void pumpVoices() {}
 };
 
-std::unique_ptr<IAudioVoiceAllocator> NewAudioVoiceAllocator()
+std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceAllocator()
 {
     return std::make_unique<AQSAudioVoiceAllocator>();
 }

@@ -56,18 +56,33 @@ struct IAudioVoice
 {
     virtual ~IAudioVoice() = default;
 
-    /** Get voice's actual channel-map based on client request and HW capabilities */
-    virtual const ChannelMap& channelMap() const=0;
+    /** Reset channel-gains to voice defaults */
+    virtual void setDefaultMatrixCoefficients()=0;
 
-    /** Called by client in response to IAudioVoiceCallback::needsNextBuffer()
-     *  Supplying channel-interleaved sample data */
-    virtual void bufferSampleData(const int16_t* data, size_t frames)=0;
+    /** Set channel-gains for mono audio source (AudioChannel enum for array index) */
+    virtual void setMonoMatrixCoefficients(const float coefs[8])=0;
+
+    /** Set channel-gains for stereo audio source (AudioChannel enum for array index) */
+    virtual void setStereoMatrixCoefficients(const float coefs[8][2])=0;
+
+    /** Called by client to dynamically adjust the pitch of voices with dynamic pitch enabled */
+    virtual void setPitchRatio(double ratio)=0;
 
     /** Instructs platform to begin consuming sample data; invoking callback as needed */
     virtual void start()=0;
 
     /** Instructs platform to stop consuming sample data */
     virtual void stop()=0;
+
+    /** Invalidates this voice by removing it from the AudioVoiceEngine */
+    virtual void unbindVoice()=0;
+};
+
+struct IAudioVoiceCallback
+{
+    /** boo calls this on behalf of the audio platform to request more audio
+     *  frames from the client */
+    virtual size_t supplyAudio(IAudioVoice& voice, size_t frames, int16_t* data)=0;
 };
 
 }

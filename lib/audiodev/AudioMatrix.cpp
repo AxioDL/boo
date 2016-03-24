@@ -1,13 +1,42 @@
-#include "boo/audiodev/AudioMatrix.hpp"
+#include "AudioMatrix.hpp"
+#include "AudioVoiceEngine.hpp"
 #include <string.h>
+#include <limits.h>
 
 namespace boo
 {
 
-void AudioMatrixMono::setDefaultMatrixCoefficients()
+static inline int16_t Clamp16(float in)
+{
+    if (in < SHRT_MIN)
+        return SHRT_MIN;
+    else if (in > SHRT_MAX)
+        return SHRT_MAX;
+    return in;
+}
+
+static inline int32_t Clamp32(float in)
+{
+    if (in < INT_MIN)
+        return INT_MIN;
+    else if (in > INT_MAX)
+        return INT_MAX;
+    return in;
+}
+
+static inline float ClampFlt(float in)
+{
+    if (in < -1.f)
+        return -1.f;
+    else if (in > 1.f)
+        return 1.f;
+    return in;
+}
+
+void AudioMatrixMono::setDefaultMatrixCoefficients(AudioChannelSet acSet)
 {
     memset(m_coefs, 0, sizeof(m_coefs));
-    switch (m_setOut)
+    switch (acSet)
     {
     case AudioChannelSet::Stereo:
     case AudioChannelSet::Quad:
@@ -22,27 +51,58 @@ void AudioMatrixMono::setDefaultMatrixCoefficients()
     }
 }
 
-void AudioMatrixMono::bufferMonoSampleData(IAudioVoice& voice, const int16_t* data, size_t samples)
+void AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
+                                        const int16_t* dataIn, int16_t* dataOut, size_t samples) const
 {
-    const ChannelMap& chmap = voice.channelMap();
-    m_interleaveBuf.clear();
-    m_interleaveBuf.reserve(samples * chmap.m_channelCount);
-    for (size_t s=0 ; s<samples ; ++s, ++data)
+    const ChannelMap& chmap = info.m_channelMap;
+    for (size_t s=0 ; s<samples ; ++s, ++dataIn)
         for (unsigned c=0 ; c<chmap.m_channelCount ; ++c)
         {
             AudioChannel ch = chmap.m_channels[c];
-            if (ch == AudioChannel::Unknown)
-                m_interleaveBuf.push_back(0);
-            else
-                m_interleaveBuf.push_back(data[0] * m_coefs[int(ch)]);
+            if (ch != AudioChannel::Unknown)
+            {
+                *dataOut = Clamp16(*dataOut + *dataIn * m_coefs[int(ch)]);
+                ++dataOut;
+            }
         }
-    voice.bufferSampleData(m_interleaveBuf.data(), samples);
 }
 
-void AudioMatrixStereo::setDefaultMatrixCoefficients()
+void AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
+                                        const int32_t* dataIn, int32_t* dataOut, size_t samples) const
+{
+    const ChannelMap& chmap = info.m_channelMap;
+    for (size_t s=0 ; s<samples ; ++s, ++dataIn)
+        for (unsigned c=0 ; c<chmap.m_channelCount ; ++c)
+        {
+            AudioChannel ch = chmap.m_channels[c];
+            if (ch != AudioChannel::Unknown)
+            {
+                *dataOut = Clamp32(*dataOut + *dataIn * m_coefs[int(ch)]);
+                ++dataOut;
+            }
+        }
+}
+
+void AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
+                                        const float* dataIn, float* dataOut, size_t samples) const
+{
+    const ChannelMap& chmap = info.m_channelMap;
+    for (size_t s=0 ; s<samples ; ++s, ++dataIn)
+        for (unsigned c=0 ; c<chmap.m_channelCount ; ++c)
+        {
+            AudioChannel ch = chmap.m_channels[c];
+            if (ch != AudioChannel::Unknown)
+            {
+                *dataOut = ClampFlt(*dataOut + *dataIn * m_coefs[int(ch)]);
+                ++dataOut;
+            }
+        }
+}
+
+void AudioMatrixStereo::setDefaultMatrixCoefficients(AudioChannelSet acSet)
 {
     memset(m_coefs, 0, sizeof(m_coefs));
-    switch (m_setOut)
+    switch (acSet)
     {
     case AudioChannelSet::Stereo:
     case AudioChannelSet::Quad:
@@ -58,22 +118,58 @@ void AudioMatrixStereo::setDefaultMatrixCoefficients()
     }
 }
 
-void AudioMatrixStereo::bufferStereoSampleData(IAudioVoice& voice, const int16_t* data, size_t frames)
+void AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
+                                            const int16_t* dataIn, int16_t* dataOut, size_t frames) const
 {
-    const ChannelMap& chmap = voice.channelMap();
-    m_interleaveBuf.clear();
-    m_interleaveBuf.reserve(frames * chmap.m_channelCount);
-    for (size_t f=0 ; f<frames ; ++f, data += 2)
+    const ChannelMap& chmap = info.m_channelMap;
+    for (size_t f=0 ; f<frames ; ++f, dataIn += 2)
         for (unsigned c=0 ; c<chmap.m_channelCount ; ++c)
         {
             AudioChannel ch = chmap.m_channels[c];
-            if (ch == AudioChannel::Unknown)
-                m_interleaveBuf.push_back(0);
-            else
-                m_interleaveBuf.push_back(data[0] * m_coefs[int(ch)][0] +
-                                          data[1] * m_coefs[int(ch)][1]);
+            if (ch != AudioChannel::Unknown)
+            {
+                *dataOut = Clamp16(*dataOut +
+                                   dataIn[0] * m_coefs[int(ch)][0] +
+                                   dataIn[1] * m_coefs[int(ch)][1]);
+                ++dataOut;
+            }
         }
-    voice.bufferSampleData(m_interleaveBuf.data(), frames);
+}
+
+void AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
+                                            const int32_t* dataIn, int32_t* dataOut, size_t frames) const
+{
+    const ChannelMap& chmap = info.m_channelMap;
+    for (size_t f=0 ; f<frames ; ++f, dataIn += 2)
+        for (unsigned c=0 ; c<chmap.m_channelCount ; ++c)
+        {
+            AudioChannel ch = chmap.m_channels[c];
+            if (ch != AudioChannel::Unknown)
+            {
+                *dataOut = Clamp32(*dataOut +
+                                   dataIn[0] * m_coefs[int(ch)][0] +
+                                   dataIn[1] * m_coefs[int(ch)][1]);
+                ++dataOut;
+            }
+        }
+}
+
+void AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
+                                            const float* dataIn, float* dataOut, size_t frames) const
+{
+    const ChannelMap& chmap = info.m_channelMap;
+    for (size_t f=0 ; f<frames ; ++f, dataIn += 2)
+        for (unsigned c=0 ; c<chmap.m_channelCount ; ++c)
+        {
+            AudioChannel ch = chmap.m_channels[c];
+            if (ch != AudioChannel::Unknown)
+            {
+                *dataOut = ClampFlt(*dataOut +
+                                    dataIn[0] * m_coefs[int(ch)][0] +
+                                    dataIn[1] * m_coefs[int(ch)][1]);
+                ++dataOut;
+            }
+        }
 }
 
 }

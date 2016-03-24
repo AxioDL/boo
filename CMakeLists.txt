@@ -179,7 +179,10 @@ add_library(boo
             lib/inputdev/DeviceBase.cpp include/boo/inputdev/DeviceBase.hpp
             lib/inputdev/DeviceSignature.cpp include/boo/inputdev/DeviceSignature.hpp
             lib/inputdev/IHIDDevice.hpp
+            lib/audiodev/AudioMatrix.hpp
             lib/audiodev/AudioMatrix.cpp
+            lib/audiodev/AudioVoiceEngine.hpp
+            lib/audiodev/AudioVoiceEngine.cpp
             lib/audiodev/AudioVoice.hpp
             lib/audiodev/AudioVoice.cpp
             include/boo/inputdev/IHIDListener.hpp
@@ -187,7 +190,7 @@ add_library(boo
             include/boo/graphicsdev/IGraphicsDataFactory.hpp
             include/boo/graphicsdev/IGraphicsCommandQueue.hpp
             include/boo/audiodev/IAudioVoice.hpp
-            include/boo/audiodev/IAudioVoiceAllocator.hpp
+            include/boo/audiodev/IAudioVoiceEngine.hpp
             include/boo/IWindow.hpp
             include/boo/IApplication.hpp
             include/boo/System.hpp
