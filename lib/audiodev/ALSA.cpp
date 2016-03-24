@@ -98,15 +98,13 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
         return AudioChannelSet::Unknown;
     }
 
-    AudioVoiceEngineMixInfo _getEngineMixInfo()
+    ALSAAudioVoiceEngine()
     {
         if (snd_pcm_open(&m_pcm, "default", SND_PCM_STREAM_PLAYBACK, 0) < 0)
         {
             Log.report(logvisor::Error, "unable to allocate ALSA voice");
-            return {};
+            return;
         }
-
-        AudioVoiceEngineMixInfo ret = {};
 
         /* Query audio card for best supported format amd sample-rate */
         snd_pcm_hw_params_t* hwParams;
@@ -117,68 +115,68 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
         if (!snd_pcm_hw_params_test_format(m_pcm, hwParams, SND_PCM_FORMAT_S32))
         {
             bestFmt = SND_PCM_FORMAT_S32;
-            ret.m_sampleFormat = SOXR_INT32_I;
-            ret.m_bitsPerSample = 32;
+            m_mixInfo.m_sampleFormat = SOXR_INT32_I;
+            m_mixInfo.m_bitsPerSample = 32;
         }
         else if (!snd_pcm_hw_params_test_format(m_pcm, hwParams, SND_PCM_FORMAT_S16))
         {
             bestFmt = SND_PCM_FORMAT_S16;
-            ret.m_sampleFormat = SOXR_INT16_I;
-            ret.m_bitsPerSample = 16;
+            m_mixInfo.m_sampleFormat = SOXR_INT16_I;
+            m_mixInfo.m_bitsPerSample = 16;
         }
         else
         {
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
             Log.report(logvisor::Fatal, "unsupported audio formats on default ALSA device");
-            return {};
+            return;
         }
 
         unsigned int bestRate;
         if (!snd_pcm_hw_params_test_rate(m_pcm, hwParams, 96000, 0))
         {
             bestRate = 96000;
-            ret.m_sampleRate = 96000.0;
+            m_mixInfo.m_sampleRate = 96000.0;
         }
         else if (!snd_pcm_hw_params_test_rate(m_pcm, hwParams, 48000, 0))
         {
             bestRate = 48000;
-            ret.m_sampleRate = 48000.0;
+            m_mixInfo.m_sampleRate = 48000.0;
         }
         else
         {
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
             Log.report(logvisor::Fatal, "unsupported audio sample rates on default ALSA device");
-            return {};
+            return;
         }
 
         snd_pcm_hw_params_free(hwParams);
 
         /* Query audio card for channel map */
-        ret.m_channels = _getAvailableSet();
+        m_mixInfo.m_channels = _getAvailableSet();
 
         /* Populate channel map */
-        unsigned chCount = ChannelCount(ret.m_channels);
+        unsigned chCount = ChannelCount(m_mixInfo.m_channels);
         int err;
         while ((err = snd_pcm_set_params(m_pcm, bestFmt, SND_PCM_ACCESS_RW_INTERLEAVED,
                                          chCount, bestRate, 0, 100000)) < 0)
         {
-            if (ret.m_channels == AudioChannelSet::Stereo)
+            if (m_mixInfo.m_channels == AudioChannelSet::Stereo)
                 break;
-            ret.m_channels = AudioChannelSet(int(ret.m_channels) - 1);
-            chCount = ChannelCount(ret.m_channels);
+            m_mixInfo.m_channels = AudioChannelSet(int(m_mixInfo.m_channels) - 1);
+            chCount = ChannelCount(m_mixInfo.m_channels);
         }
         if (err < 0)
         {
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
             Log.report(logvisor::Error, "unable to set ALSA voice params");
-            return {};
+            return;
         }
 
         snd_pcm_chmap_query_t** chmaps = snd_pcm_query_chmaps(m_pcm);
-        ChannelMap& chmapOut = ret.m_channelMap;
+        ChannelMap& chmapOut = m_mixInfo.m_channelMap;
         if (chmaps)
         {
             snd_pcm_chmap_t* foundChmap = nullptr;
@@ -192,7 +190,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
                         chBits |= 1 << chm->pos[c];
 
                     bool good = false;
-                    switch (ret.m_channels)
+                    switch (m_mixInfo.m_channels)
                     {
                     case AudioChannelSet::Stereo:
                         if ((chBits & (1 << SND_CHMAP_FL)) != 0 &&
@@ -243,7 +241,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
                 m_pcm = nullptr;
                 snd_pcm_free_chmaps(chmaps);
                 Log.report(logvisor::Error, "unable to find matching ALSA voice chmap");
-                return {};
+                return;
             }
             chmapOut.m_channelCount = chCount;
             for (int c=0 ; c<foundChmap->channels ; ++c)
@@ -258,13 +256,6 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             chmapOut.m_channels[1] = AudioChannel::FrontRight;
         }
 
-        return ret;
-    }
-
-    ALSAAudioVoiceEngine()
-    : BaseAudioVoiceEngine(std::bind(&ALSAAudioVoiceEngine::_getEngineMixInfo, this))
-    {
-        /* Base class will call _getEngineMixInfo first */
         snd_pcm_get_params(m_pcm, &m_bufSize, &m_periodSize);
         snd_pcm_prepare(m_pcm);
         m_mixInfo.m_periodFrames = m_periodSize;
