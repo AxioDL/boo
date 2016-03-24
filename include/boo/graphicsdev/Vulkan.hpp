@@ -106,7 +106,7 @@ public:
     IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
                                        std::vector<unsigned int>& vertBlobOut, std::vector<unsigned int>& fragBlobOut,
                                        std::vector<unsigned char>& pipelineBlob, IVertexFormat* vtxFmt,
-                                       BlendFactor srcFac, BlendFactor dstFac,
+                                       BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                                        bool depthTest, bool depthWrite, bool backfaceCulling);
 
     IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource, IVertexFormat* vtxFmt,
@@ -117,7 +117,7 @@ public:
         std::vector<unsigned int> fragBlob;
         std::vector<unsigned char> pipelineBlob;
         return newShaderPipeline(vertSource, fragSource, vertBlob, fragBlob, pipelineBlob,
-                                 vtxFmt, srcFac, dstFac, depthTest, depthWrite, backfaceCulling);
+                                 vtxFmt, srcFac, dstFac, prim, depthTest, depthWrite, backfaceCulling);
     }
 
     IShaderDataBinding*

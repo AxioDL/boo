@@ -1794,6 +1794,12 @@ struct VulkanVertexFormat : IVertexFormat
     }
 };
 
+static const VkPrimitiveTopology PRIMITIVE_TABLE[] =
+{
+    VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+    VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP
+};
+
 static const VkBlendFactor BLEND_FACTOR_TABLE[] =
 {
     VK_BLEND_FACTOR_ZERO,
@@ -1819,7 +1825,7 @@ class VulkanShaderPipeline : public IShaderPipeline
                          VkShaderModule frag,
                          VkPipelineCache pipelineCache,
                          const VulkanVertexFormat* vtxFmt,
-                         BlendFactor srcFac, BlendFactor dstFac,
+                         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                          bool depthTest, bool depthWrite, bool backfaceCulling)
     : m_ctx(ctx)
     {
@@ -1853,7 +1859,7 @@ class VulkanShaderPipeline : public IShaderPipeline
         assemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         assemblyInfo.pNext = nullptr;
         assemblyInfo.flags = 0;
-        assemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+        assemblyInfo.topology = PRIMITIVE_TABLE[int(prim)];
         assemblyInfo.primitiveRestartEnable = VK_FALSE;
 
         VkPipelineViewportStateCreateInfo viewportInfo = {};
@@ -2866,7 +2872,7 @@ IShaderPipeline* VulkanDataFactory::newShaderPipeline
 (const char* vertSource, const char* fragSource,
  std::vector<unsigned int>& vertBlobOut, std::vector<unsigned int>& fragBlobOut,
  std::vector<unsigned char>& pipelineBlob, IVertexFormat* vtxFmt,
- BlendFactor srcFac, BlendFactor dstFac,
+ BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
  bool depthTest, bool depthWrite, bool backfaceCulling)
 {
     if (vertBlobOut.empty() || fragBlobOut.empty())
@@ -2931,7 +2937,7 @@ IShaderPipeline* VulkanDataFactory::newShaderPipeline
 
     VulkanShaderPipeline* retval = new VulkanShaderPipeline(m_ctx, vertModule, fragModule, pipelineCache,
                                                             static_cast<const VulkanVertexFormat*>(vtxFmt),
-                                                            srcFac, dstFac, depthTest, depthWrite, backfaceCulling);
+                                                            srcFac, dstFac, prim, depthTest, depthWrite, backfaceCulling);
 
     if (pipelineBlob.empty())
     {
