@@ -338,7 +338,8 @@ struct TestApplicationCallback : IApplicationCallback
             ComPtr<ID3DBlob> psCompile;
             ComPtr<ID3DBlob> cachedPipeline;
             pipeline = d3dF->newShaderPipeline(VS, PS, vsCompile, psCompile, cachedPipeline, vfmt,
-                                               BlendFactor::One, BlendFactor::Zero, true, true, false);
+                                               BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
+                                               true, true, false);
         }
 #elif BOO_HAS_METAL
         else if (factory->platform() == IGraphicsDataFactory::Platform::Metal)

@@ -458,6 +458,12 @@ struct D3D11VertexFormat : IVertexFormat
     }
 };
 
+static const D3D11_PRIMITIVE_TOPOLOGY PRIMITIVE_TABLE[] =
+{
+    D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST,
+    D3D10_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP
+};
+
 static const D3D11_BLEND BLEND_FACTOR_TABLE[] =
 {
     D3D11_BLEND_ZERO,
@@ -479,8 +485,9 @@ class D3D11ShaderPipeline : public IShaderPipeline
     friend class D3D11DataFactory;
     D3D11ShaderPipeline(D3D11Context* ctx, ID3DBlob* vert, ID3DBlob* pixel,
         const D3D11VertexFormat* vtxFmt,
-        BlendFactor srcFac, BlendFactor dstFac,
+        BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
         bool depthTest, bool depthWrite, bool backfaceCulling)
+    : m_topology(PRIMITIVE_TABLE[int(prim)])
     {
         ThrowIfFailed(ctx->m_dev->CreateVertexShader(vert->GetBufferPointer(), vert->GetBufferSize(), nullptr, &m_vShader));
         ThrowIfFailed(ctx->m_dev->CreatePixelShader(pixel->GetBufferPointer(), pixel->GetBufferSize(), nullptr, &m_pShader));
@@ -512,6 +519,7 @@ public:
     ComPtr<ID3D11DepthStencilState> m_dsState;
     ComPtr<ID3D11BlendState> m_blState;
     ComPtr<ID3D11InputLayout> m_inLayout;
+    D3D11_PRIMITIVE_TOPOLOGY m_topology;
     ~D3D11ShaderPipeline() = default;
     D3D11ShaderPipeline& operator=(const D3D11ShaderPipeline&) = delete;
     D3D11ShaderPipeline(const D3D11ShaderPipeline&) = delete;
@@ -524,6 +532,7 @@ public:
         ctx->OMSetDepthStencilState(m_dsState.Get(), 0);
         ctx->OMSetBlendState(m_blState.Get(), nullptr, 0xffffffff);
         ctx->IASetInputLayout(m_inLayout.Get());
+        ctx->IASetPrimitiveTopology(m_topology);
     }
 };
 
@@ -790,7 +799,6 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         m_initcv.wait(m_initlk);
         m_initlk.unlock();
         ThrowIfFailed(ctx->m_dev->CreateDeferredContext1(0, &m_deferredCtx));
-        m_deferredCtx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     }
 
     void stopRenderer()
@@ -1142,7 +1150,7 @@ public:
         (const char* vertSource, const char* fragSource,
          ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,
          ComPtr<ID3DBlob>& pipelineBlob, IVertexFormat* vtxFmt,
-         BlendFactor srcFac, BlendFactor dstFac,
+         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
          bool depthTest, bool depthWrite, bool backfaceCulling)
     {
         ComPtr<ID3DBlob> errBlob;
@@ -1169,7 +1177,7 @@ public:
 
         D3D11ShaderPipeline* retval = new D3D11ShaderPipeline(m_ctx, vertBlobOut.Get(), fragBlobOut.Get(),
             static_cast<const D3D11VertexFormat*>(vtxFmt),
-            srcFac, dstFac, depthTest, depthWrite, backfaceCulling);
+            srcFac, dstFac, prim, depthTest, depthWrite, backfaceCulling);
         if (!m_deferredData)
             m_deferredData = new struct D3D11Data();
         static_cast<D3D11Data*>(m_deferredData)->m_SPs.emplace_back(retval);
@@ -1220,7 +1228,6 @@ void D3D11CommandQueue::execute()
     gfxF->procDeletes();
 
     ThrowIfFailed(m_deferredCtx->FinishCommandList(false, &m_cmdLists[m_fillBuf]));
-    m_deferredCtx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     m_workDoPresent[m_fillBuf] = m_doPresent;
     m_doPresent = nullptr;
 

@@ -601,6 +601,12 @@ struct D3D12VertexFormat : IVertexFormat
     }
 };
 
+static const D3D12_PRIMITIVE_TOPOLOGY PRIMITIVE_TABLE[] =
+{
+    D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST,
+    D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP
+};
+
 static const D3D12_BLEND BLEND_FACTOR_TABLE[] =
 {
     D3D12_BLEND_ZERO,
@@ -622,8 +628,9 @@ class D3D12ShaderPipeline : public IShaderPipeline
     friend class D3D12DataFactory;
     D3D12ShaderPipeline(D3D12Context* ctx, ID3DBlob* vert, ID3DBlob* pixel, ID3DBlob* pipeline,
                         const D3D12VertexFormat* vtxFmt,
-                        BlendFactor srcFac, BlendFactor dstFac,
+                        BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                         bool depthTest, bool depthWrite, bool backfaceCulling)
+    : m_topology(PRIMITIVE_TABLE[int(prim)])
     {
         D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
         desc.pRootSignature = ctx->m_rs.Get();
@@ -662,6 +669,7 @@ class D3D12ShaderPipeline : public IShaderPipeline
     }
 public:
     ComPtr<ID3D12PipelineState> m_state;
+    D3D12_PRIMITIVE_TOPOLOGY m_topology;
     ~D3D12ShaderPipeline() = default;
     D3D12ShaderPipeline& operator=(const D3D12ShaderPipeline&) = delete;
     D3D12ShaderPipeline(const D3D12ShaderPipeline&) = delete;
@@ -977,6 +985,7 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
         list->IASetVertexBuffers(0, 2, m_vboView[b]);
         if (m_ibuf)
             list->IASetIndexBuffer(&m_iboView[b]);
+        list->IASetPrimitiveTopology(m_pipeline->m_topology);
     }
 };
 
@@ -1020,7 +1029,6 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         ThrowIfFailed(m_ctx->m_qalloc[m_fillBuf]->Reset());
         ThrowIfFailed(m_cmdList->Reset(m_ctx->m_qalloc[m_fillBuf].Get(), nullptr));
         m_cmdList->SetGraphicsRootSignature(m_ctx->m_rs.Get());
-        m_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     }
 
     void resetDynamicCommandList()
@@ -1067,7 +1075,6 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
                                                     nullptr, __uuidof(ID3D12GraphicsCommandList), &m_cmdList));
         m_renderFenceHandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
         m_cmdList->SetGraphicsRootSignature(m_ctx->m_rs.Get());
-        m_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
         ThrowIfFailed(ctx->m_dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), &m_dynamicBufFence));
         m_dynamicBufFenceHandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
@@ -1606,7 +1613,7 @@ public:
         (const char* vertSource, const char* fragSource,
          ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,
          ComPtr<ID3DBlob>& pipelineBlob, IVertexFormat* vtxFmt,
-         BlendFactor srcFac, BlendFactor dstFac,
+         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
          bool depthTest, bool depthWrite, bool backfaceCulling)
     {
         ComPtr<ID3DBlob> errBlob;
@@ -1633,7 +1640,7 @@ public:
 
         D3D12ShaderPipeline* retval = new D3D12ShaderPipeline(m_ctx, vertBlobOut.Get(), fragBlobOut.Get(), pipelineBlob.Get(),
                                                               static_cast<const D3D12VertexFormat*>(vtxFmt),
-                                                              srcFac, dstFac, depthTest, depthWrite, backfaceCulling);
+                                                              srcFac, dstFac, prim, depthTest, depthWrite, backfaceCulling);
         if (!pipelineBlob)
             retval->m_state->GetCachedBlob(&pipelineBlob);
         if (!m_deferredData)
