@@ -9,6 +9,30 @@ namespace boo
 {
 static logvisor::Module Log("boo::ALSA");
 
+static const uint64_t StereoChans = (1 << SND_CHMAP_FL) |
+                                    (1 << SND_CHMAP_FR);
+
+static const uint64_t QuadChans = (1 << SND_CHMAP_FL) |
+                                  (1 << SND_CHMAP_FR) |
+                                  (1 << SND_CHMAP_RL) |
+                                  (1 << SND_CHMAP_RR);
+
+static const uint64_t S51Chans = (1 << SND_CHMAP_FL) |
+                                 (1 << SND_CHMAP_FR) |
+                                 (1 << SND_CHMAP_RL) |
+                                 (1 << SND_CHMAP_RR) |
+                                 (1 << SND_CHMAP_FC) |
+                                 (1 << SND_CHMAP_LFE);
+
+static const uint64_t S71Chans = (1 << SND_CHMAP_FL) |
+                                 (1 << SND_CHMAP_FR) |
+                                 (1 << SND_CHMAP_RL) |
+                                 (1 << SND_CHMAP_RR) |
+                                 (1 << SND_CHMAP_FC) |
+                                 (1 << SND_CHMAP_LFE) |
+                                 (1 << SND_CHMAP_SL) |
+                                 (1 << SND_CHMAP_SR);
+
 struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
 {
     snd_pcm_t* m_pcm;
@@ -46,49 +70,41 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
                 switch (set)
                 {
                 case AudioChannelSet::Stereo:
-                    if ((chBits & (1 << SND_CHMAP_FL)) != 0 &&
-                        (chBits & (1 << SND_CHMAP_FR)) != 0)
+                {
+                    if ((chBits & StereoChans) == StereoChans)
                     {
                         snd_pcm_free_chmaps(chmaps);
                         return AudioChannelSet::Stereo;
                     }
                     break;
+                }
                 case AudioChannelSet::Quad:
-                    if ((chBits & (1 << SND_CHMAP_FL)) != 0 &&
-                        (chBits & (1 << SND_CHMAP_FR)) != 0 &&
-                        (chBits & (1 << SND_CHMAP_RL)) != 0 &&
-                        (chBits & (1 << SND_CHMAP_RR)) != 0)
+                {
+                    if ((chBits & QuadChans) == QuadChans)
                     {
                         snd_pcm_free_chmaps(chmaps);
                         return AudioChannelSet::Quad;
                     }
                     break;
+                }
                 case AudioChannelSet::Surround51:
-                    if ((chBits & (1 << SND_CHMAP_FL)) != 0 &&
-                        (chBits & (1 << SND_CHMAP_FR)) != 0 &&
-                        (chBits & (1 << SND_CHMAP_RL)) != 0 &&
-                        (chBits & (1 << SND_CHMAP_RR)) != 0 &&
-                        (chBits & (1 << SND_CHMAP_FC)) != 0 &&
-                        (chBits & (1 << SND_CHMAP_LFE)) != 0)
+                {
+                    if ((chBits & S51Chans) == S51Chans)
                     {
                         snd_pcm_free_chmaps(chmaps);
                         return AudioChannelSet::Surround51;
                     }
                     break;
+                }
                 case AudioChannelSet::Surround71:
-                    if ((chBits & (1 << SND_CHMAP_FL)) != 0 &&
-                        (chBits & (1 << SND_CHMAP_FR)) != 0 &&
-                        (chBits & (1 << SND_CHMAP_RL)) != 0 &&
-                        (chBits & (1 << SND_CHMAP_RR)) != 0 &&
-                        (chBits & (1 << SND_CHMAP_FC)) != 0 &&
-                        (chBits & (1 << SND_CHMAP_LFE)) != 0 &&
-                        (chBits & (1 << SND_CHMAP_SL)) != 0 &&
-                        (chBits & (1 << SND_CHMAP_SR)) != 0)
+                {
+                    if ((chBits & S71Chans) == S71Chans)
                     {
                         snd_pcm_free_chmaps(chmaps);
                         return AudioChannelSet::Surround71;
                     }
                     break;
+                }
                 default: break;
                 }
             }
@@ -193,35 +209,19 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
                     switch (m_mixInfo.m_channels)
                     {
                     case AudioChannelSet::Stereo:
-                        if ((chBits & (1 << SND_CHMAP_FL)) != 0 &&
-                            (chBits & (1 << SND_CHMAP_FR)) != 0)
+                        if ((chBits & StereoChans) == StereoChans)
                             good = true;
                         break;
                     case AudioChannelSet::Quad:
-                        if ((chBits & (1 << SND_CHMAP_FL)) != 0 &&
-                            (chBits & (1 << SND_CHMAP_FR)) != 0 &&
-                            (chBits & (1 << SND_CHMAP_RL)) != 0 &&
-                            (chBits & (1 << SND_CHMAP_RR)) != 0)
+                        if ((chBits & QuadChans) == QuadChans)
                             good = true;
                         break;
                     case AudioChannelSet::Surround51:
-                        if ((chBits & (1 << SND_CHMAP_FL)) != 0 &&
-                            (chBits & (1 << SND_CHMAP_FR)) != 0 &&
-                            (chBits & (1 << SND_CHMAP_RL)) != 0 &&
-                            (chBits & (1 << SND_CHMAP_RR)) != 0 &&
-                            (chBits & (1 << SND_CHMAP_FC)) != 0 &&
-                            (chBits & (1 << SND_CHMAP_LFE)) != 0)
+                        if ((chBits & S51Chans) == S51Chans)
                             good = true;
                         break;
                     case AudioChannelSet::Surround71:
-                        if ((chBits & (1 << SND_CHMAP_FL)) != 0 &&
-                            (chBits & (1 << SND_CHMAP_FR)) != 0 &&
-                            (chBits & (1 << SND_CHMAP_RL)) != 0 &&
-                            (chBits & (1 << SND_CHMAP_RR)) != 0 &&
-                            (chBits & (1 << SND_CHMAP_FC)) != 0 &&
-                            (chBits & (1 << SND_CHMAP_LFE)) != 0 &&
-                            (chBits & (1 << SND_CHMAP_SL)) != 0 &&
-                            (chBits & (1 << SND_CHMAP_SR)) != 0)
+                        if ((chBits & S71Chans) == S71Chans)
                             good = true;
                         break;
                     default: break;
