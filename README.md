@@ -18,7 +18,7 @@ shaders' source. Drawing, resource-management and state-switching are
 performed using the unified API; these may be written once for all platforms.
 
 Boo also features a unified audio API for mixing voices and performing variable 
-sample-rate-conversion. All audio computation occurs on the CPU, 'pumped' 
+sample-rate-conversion. All audio computation occurs on the CPU, synchronously 'pumped' 
 by the client each frame-iteration.
 
 Client code is entered via the `appMain` method supplied in a callback object.
