@@ -2,16 +2,12 @@
 #include <math.h>
 #include <boo/boo.hpp>
 #include <boo/graphicsdev/GL.hpp>
+#include <boo/graphicsdev/D3D.hpp>
+#include <boo/graphicsdev/Metal.hpp>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include "logvisor/logvisor.hpp"
-
-#if _WIN32
-#include <boo/graphicsdev/D3D.hpp>
-#elif __APPLE__
-#include <boo/graphicsdev/Metal.hpp>
-#endif
 
 namespace boo
 {
@@ -516,4 +512,3 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int)
     return wmain(argc+1, booArgv);
 }
 #endif
-
