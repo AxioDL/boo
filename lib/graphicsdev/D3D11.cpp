@@ -544,18 +544,16 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
     IGraphicsBuffer* m_ibuf;
     size_t m_ubufCount;
     std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
+    std::vector<UINT> m_ubufFirstConsts;
+    std::vector<UINT> m_ubufNumConsts;
     size_t m_texCount;
     std::unique_ptr<ITexture*[]> m_texs;
-
-#ifndef NDEBUG
-    /* Debugging aids */
-    bool m_committed = false;
-#endif
 
     D3D11ShaderDataBinding(D3D11Context* ctx,
                            IShaderPipeline* pipeline,
                            IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbuf, IGraphicsBuffer* ibuf,
                            size_t ubufCount, IGraphicsBuffer** ubufs,
+                           const size_t* ubufOffs, const size_t* ubufSizes,
                            size_t texCount, ITexture** texs)
     : m_pipeline(static_cast<D3D11ShaderPipeline*>(pipeline)),
       m_vbuf(vbuf),
@@ -566,20 +564,40 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
       m_texCount(texCount),
       m_texs(new ITexture*[texCount])
     {
+        if (ubufOffs && ubufSizes)
+        {
+            m_ubufFirstConsts.reserve(ubufCount);
+            m_ubufNumConsts.reserve(ubufCount);
+            for (size_t i=0 ; i<ubufCount ; ++i)
+            {
+#ifndef NDEBUG
+                if (ubufOffs[i] % 256)
+                    Log.report(logvisor::Fatal, "non-256-byte-aligned uniform-offset %d provided to newShaderDataBinding", int(i));
+#endif
+                m_ubufFirstConsts.push_back(ubufOffs[i] / 16);
+                m_ubufNumConsts.push_back(((ubufSizes[i] + 255) & ~255) / 16);
+            }
+        }
         for (size_t i=0 ; i<ubufCount ; ++i)
+        {
+#ifndef NDEBUG
+            if (!ubufs[i])
+                Log.report(logvisor::Fatal, "null uniform-buffer %d provided to newShaderDataBinding", int(i));
+#endif
             m_ubufs[i] = ubufs[i];
+        }
         for (size_t i=0 ; i<texCount ; ++i)
+        {
+#ifndef NDEBUG
+            if (!texs[i])
+                Log.report(logvisor::Fatal, "null texture %d provided to newShaderDataBinding", int(i));
+#endif
             m_texs[i] = texs[i];
+        }
     }
 
-    void bind(ID3D11DeviceContext* ctx, int b)
+    void bind(ID3D11DeviceContext1* ctx, int b)
     {
-#ifndef NDEBUG
-        if (!m_committed)
-            Log.report(logvisor::Fatal,
-                       "attempted to use uncommitted D3D11ShaderDataBinding");
-#endif
-
         m_pipeline->bind(ctx);
 
         ID3D11Buffer* bufs[2] = {};
@@ -636,21 +654,42 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
 
         if (m_ubufCount)
         {
-            ID3D11Buffer* constBufs[8];
-            for (int i=0 ; i<8 && i<m_ubufCount ; ++i)
+            if (m_ubufFirstConsts.size())
             {
-                if (m_ubufs[i]->dynamic())
+                ID3D11Buffer* constBufs[8];
+                for (int i=0 ; i<8 && i<m_ubufCount ; ++i)
                 {
-                    D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_ubufs[i]);
-                    constBufs[i] = cbuf->m_bufs[b].Get();
+                    if (m_ubufs[i]->dynamic())
+                    {
+                        D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_ubufs[i]);
+                        constBufs[i] = cbuf->m_bufs[b].Get();
+                    }
+                    else
+                    {
+                        D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_ubufs[i]);
+                        constBufs[i] = cbuf->m_buf.Get();
+                    }
                 }
-                else
-                {
-                    D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_ubufs[i]);
-                    constBufs[i] = cbuf->m_buf.Get();
-                }
+                ctx->VSSetConstantBuffers1(0, m_ubufCount, constBufs, m_ubufFirstConsts.data(), m_ubufNumConsts.data());
             }
-            ctx->VSSetConstantBuffers(0, m_ubufCount, constBufs);
+            else
+            {
+                ID3D11Buffer* constBufs[8];
+                for (int i=0 ; i<8 && i<m_ubufCount ; ++i)
+                {
+                    if (m_ubufs[i]->dynamic())
+                    {
+                        D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_ubufs[i]);
+                        constBufs[i] = cbuf->m_bufs[b].Get();
+                    }
+                    else
+                    {
+                        D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_ubufs[i]);
+                        constBufs[i] = cbuf->m_buf.Get();
+                    }
+                }
+                ctx->VSSetConstantBuffers(0, m_ubufCount, constBufs);
+            }
         }
 
         if (m_texCount)
@@ -1055,90 +1094,71 @@ public:
     Platform platform() const {return Platform::D3D11;}
     const SystemChar* platformName() const {return _S("D3D11");}
 
-    IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
+    class Context : public ID3DDataFactory::Context
     {
-        D3D11GraphicsBufferS* retval = new D3D11GraphicsBufferS(use, m_ctx, data, stride, count);
-        if (!m_deferredData)
-            m_deferredData = new struct D3D11Data();
-        static_cast<D3D11Data*>(m_deferredData)->m_SBufs.emplace_back(retval);
-        return retval;
-    }
+        friend class D3D11DataFactory;
+        D3D11DataFactory& m_parent;
+        Context(D3D11DataFactory& parent) : m_parent(parent) {}
+    public:
+        Platform platform() const {return Platform::D3D11;}
+        const SystemChar* platformName() const {return _S("D3D11");}
 
-    IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count)
-    {
-        D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent->getCommandQueue());
-        D3D11GraphicsBufferD* retval = new D3D11GraphicsBufferD(q, use, m_ctx, stride, count);
-        if (!m_deferredData)
-            m_deferredData = new struct D3D11Data();
-        static_cast<D3D11Data*>(m_deferredData)->m_DBufs.emplace_back(retval);
-        return retval;
-    }
+        IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
+        {
+            D3D11GraphicsBufferS* retval = new D3D11GraphicsBufferS(use, m_parent.m_ctx, data, stride, count);
+            static_cast<D3D11Data*>(m_deferredData)->m_SBufs.emplace_back(retval);
+            return retval;
+        }
 
-    ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-        const void* data, size_t sz)
-    {
-        D3D11TextureS* retval = new D3D11TextureS(m_ctx, width, height, mips, fmt, data, sz);
-        if (!m_deferredData)
-            m_deferredData = new struct D3D11Data();
-        static_cast<D3D11Data*>(m_deferredData)->m_STexs.emplace_back(retval);
-        return retval;
-    }
+        IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count)
+        {
+            D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent.m_parent->getCommandQueue());
+            D3D11GraphicsBufferD* retval = new D3D11GraphicsBufferD(q, use, m_parent.m_ctx, stride, count);
+            static_cast<D3D11Data*>(m_deferredData)->m_DBufs.emplace_back(retval);
+            return retval;
+        }
 
-    GraphicsDataToken
-    newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                              const void* data, size_t sz, ITextureS*& texOut)
-    {
-        D3D11TextureS* retval = new D3D11TextureS(m_ctx, width, height, mips, fmt, data, sz);
-        D3D11Data* tokData = new struct D3D11Data();
-        tokData->m_STexs.emplace_back(retval);
-        texOut = retval;
+        ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
+            const void* data, size_t sz)
+        {
+            D3D11TextureS* retval = new D3D11TextureS(m_parent.m_ctx, width, height, mips, fmt, data, sz);
+            static_cast<D3D11Data*>(m_deferredData)->m_STexs.emplace_back(retval);
+            return retval;
+        }
 
-        std::unique_lock<std::mutex> lk(m_committedMutex);
-        m_committedData.insert(tokData);
-        return GraphicsDataToken(this, tokData);
-    }
+        ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
+                                          const void* data, size_t sz)
+        {
+            D3D11TextureSA* retval = new D3D11TextureSA(m_parent.m_ctx, width, height, layers, fmt, data, sz);
+            static_cast<D3D11Data*>(m_deferredData)->m_SATexs.emplace_back(retval);
+            return retval;
+        }
 
-    ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
-                                      const void* data, size_t sz)
-    {
-        D3D11TextureSA* retval = new D3D11TextureSA(m_ctx, width, height, layers, fmt, data, sz);
-        if (!m_deferredData)
-            m_deferredData = new struct D3D11Data();
-        static_cast<D3D11Data*>(m_deferredData)->m_SATexs.emplace_back(retval);
-        return retval;
-    }
+        ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
+        {
+            D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent.m_parent->getCommandQueue());
+            D3D11TextureD* retval = new D3D11TextureD(q, m_parent.m_ctx, width, height, fmt);
+            static_cast<D3D11Data*>(m_deferredData)->m_DTexs.emplace_back(retval);
+            return retval;
+        }
 
-    ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
-    {
-        D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent->getCommandQueue());
-        D3D11TextureD* retval = new D3D11TextureD(q, m_ctx, width, height, fmt);
-        if (!m_deferredData)
-            m_deferredData = new struct D3D11Data();
-        static_cast<D3D11Data*>(m_deferredData)->m_DTexs.emplace_back(retval);
-        return retval;
-    }
+        ITextureR* newRenderTexture(size_t width, size_t height,
+                                    bool enableShaderColorBind, bool enableShaderDepthBind)
+        {
+            D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent.m_parent->getCommandQueue());
+            D3D11TextureR* retval = new D3D11TextureR(m_parent.m_ctx, width, height, m_parent.m_sampleCount,
+                                                      enableShaderColorBind, enableShaderDepthBind);
+            static_cast<D3D11Data*>(m_deferredData)->m_RTexs.emplace_back(retval);
+            return retval;
+        }
 
-    ITextureR* newRenderTexture(size_t width, size_t height,
-                                bool enableShaderColorBind, bool enableShaderDepthBind)
-    {
-        D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent->getCommandQueue());
-        D3D11TextureR* retval = new D3D11TextureR(m_ctx, width, height, m_sampleCount,
-                                                  enableShaderColorBind, enableShaderDepthBind);
-        if (!m_deferredData)
-            m_deferredData = new struct D3D11Data();
-        static_cast<D3D11Data*>(m_deferredData)->m_RTexs.emplace_back(retval);
-        return retval;
-    }
-
-    IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)
-    {
-        D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent->getCommandQueue());
-        D3D11VertexFormat* retval = new struct D3D11VertexFormat(elementCount, elements);
-        if (!m_deferredData)
-            m_deferredData = new struct D3D11Data();
-        static_cast<D3D11Data*>(m_deferredData)->m_VFmts.emplace_back(retval);
-        return retval;
-    }
+        IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)
+        {
+            D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent.m_parent->getCommandQueue());
+            D3D11VertexFormat* retval = new struct D3D11VertexFormat(elementCount, elements);
+            static_cast<D3D11Data*>(m_deferredData)->m_VFmts.emplace_back(retval);
+            return retval;
+        }
 
 #if _DEBUG
 #define BOO_D3DCOMPILE_FLAG D3DCOMPILE_DEBUG | D3DCOMPILE_OPTIMIZATION_LEVEL0
@@ -1146,75 +1166,76 @@ public:
 #define BOO_D3DCOMPILE_FLAG D3DCOMPILE_OPTIMIZATION_LEVEL3
 #endif
 
-    IShaderPipeline* newShaderPipeline
-        (const char* vertSource, const char* fragSource,
-         ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,
-         ComPtr<ID3DBlob>& pipelineBlob, IVertexFormat* vtxFmt,
-         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-         bool depthTest, bool depthWrite, bool backfaceCulling)
-    {
-        ComPtr<ID3DBlob> errBlob;
-
-        if (!vertBlobOut)
+        IShaderPipeline* newShaderPipeline
+            (const char* vertSource, const char* fragSource,
+             ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,
+             ComPtr<ID3DBlob>& pipelineBlob, IVertexFormat* vtxFmt,
+             BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
+             bool depthTest, bool depthWrite, bool backfaceCulling)
         {
-            if (FAILED(D3DCompilePROC(vertSource, strlen(vertSource), "HECL Vert Source", nullptr, nullptr, "main",
-                "vs_5_0", BOO_D3DCOMPILE_FLAG, 0, &vertBlobOut, &errBlob)))
+            ComPtr<ID3DBlob> errBlob;
+
+            if (!vertBlobOut)
             {
-                Log.report(logvisor::Fatal, "error compiling vert shader: %s", errBlob->GetBufferPointer());
-                return nullptr;
+                if (FAILED(D3DCompilePROC(vertSource, strlen(vertSource), "HECL Vert Source", nullptr, nullptr, "main",
+                    "vs_5_0", BOO_D3DCOMPILE_FLAG, 0, &vertBlobOut, &errBlob)))
+                {
+                    Log.report(logvisor::Fatal, "error compiling vert shader: %s", errBlob->GetBufferPointer());
+                    return nullptr;
+                }
             }
+
+            if (!fragBlobOut)
+            {
+                if (FAILED(D3DCompilePROC(fragSource, strlen(fragSource), "HECL Pixel Source", nullptr, nullptr, "main",
+                    "ps_5_0", BOO_D3DCOMPILE_FLAG, 0, &fragBlobOut, &errBlob)))
+                {
+                    Log.report(logvisor::Fatal, "error compiling pixel shader: %s", errBlob->GetBufferPointer());
+                    return nullptr;
+                }
+            }
+
+            D3D11ShaderPipeline* retval = new D3D11ShaderPipeline(m_parent.m_ctx, vertBlobOut.Get(), fragBlobOut.Get(),
+                static_cast<const D3D11VertexFormat*>(vtxFmt),
+                srcFac, dstFac, prim, depthTest, depthWrite, backfaceCulling);
+            static_cast<D3D11Data*>(m_deferredData)->m_SPs.emplace_back(retval);
+            return retval;
         }
 
-        if (!fragBlobOut)
+        IShaderDataBinding* newShaderDataBinding(IShaderPipeline* pipeline,
+            IVertexFormat* vtxFormat,
+            IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibuf,
+            size_t ubufCount, IGraphicsBuffer** ubufs,
+            const size_t* ubufOffs, const size_t* ubufSizes,
+            size_t texCount, ITexture** texs)
         {
-            if (FAILED(D3DCompilePROC(fragSource, strlen(fragSource), "HECL Pixel Source", nullptr, nullptr, "main",
-                "ps_5_0", BOO_D3DCOMPILE_FLAG, 0, &fragBlobOut, &errBlob)))
-            {
-                Log.report(logvisor::Fatal, "error compiling pixel shader: %s", errBlob->GetBufferPointer());
-                return nullptr;
-            }
+            D3D11ShaderDataBinding* retval =
+                new D3D11ShaderDataBinding(m_parent.m_ctx, pipeline, vbuf, instVbo, ibuf,
+                                           ubufCount, ubufs, ubufOffs, ubufSizes, texCount, texs);
+            static_cast<D3D11Data*>(m_deferredData)->m_SBinds.emplace_back(retval);
+            return retval;
         }
+    };
 
-        D3D11ShaderPipeline* retval = new D3D11ShaderPipeline(m_ctx, vertBlobOut.Get(), fragBlobOut.Get(),
-            static_cast<const D3D11VertexFormat*>(vtxFmt),
-            srcFac, dstFac, prim, depthTest, depthWrite, backfaceCulling);
-        if (!m_deferredData)
-            m_deferredData = new struct D3D11Data();
-        static_cast<D3D11Data*>(m_deferredData)->m_SPs.emplace_back(retval);
-        return retval;
-    }
-
-    IShaderDataBinding* newShaderDataBinding(IShaderPipeline* pipeline,
-        IVertexFormat* vtxFormat,
-        IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibuf,
-        size_t ubufCount, IGraphicsBuffer** ubufs,
-        size_t texCount, ITexture** texs)
+    GraphicsDataToken commitTransaction(const FactoryCommitFunc& trans)
     {
-        D3D11ShaderDataBinding* retval =
-            new D3D11ShaderDataBinding(m_ctx, pipeline, vbuf, instVbo, ibuf, ubufCount, ubufs, texCount, texs);
-        if (!m_deferredData)
-            m_deferredData = new struct D3D11Data();
-        static_cast<D3D11Data*>(m_deferredData)->m_SBinds.emplace_back(retval);
-        return retval;
-    }
+        if (m_deferredData)
+            Log.report(logvisor::Fatal, "nested commitTransaction usage detected");
+        m_deferredData = new D3D11Data();
 
-    void reset()
-    {
-        delete static_cast<D3D11Data*>(m_deferredData);
-        m_deferredData = nullptr;
-    }
-
-    GraphicsDataToken commit()
-    {
-        if (!m_deferredData)
+        D3D11DataFactory::Context ctx(*this);
+        if (!trans(ctx))
+        {
+            delete m_deferredData;
+            m_deferredData = nullptr;
             return GraphicsDataToken(this, nullptr);
+        }
+
+        std::unique_lock<std::mutex> lk(m_committedMutex);
         D3D11Data* retval = m_deferredData;
-#ifndef NDEBUG
-        for (std::unique_ptr<D3D11ShaderDataBinding>& b : retval->m_SBinds)
-            b->m_committed = true;
-#endif
         m_deferredData = nullptr;
         m_committedData.insert(retval);
+        lk.unlock();
         return GraphicsDataToken(this, retval);
     }
 };

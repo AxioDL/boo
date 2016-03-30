@@ -310,7 +310,7 @@ struct TestApplicationCallback : IApplicationCallback
             else if (ctx.platform() == IGraphicsDataFactory::Platform::D3D12 ||
                      ctx.platform() == IGraphicsDataFactory::Platform::D3D11)
             {
-                ID3DDataFactory* d3dF = dynamic_cast<ID3DDataFactory*>(factory);
+                ID3DDataFactory::Context& d3dF = dynamic_cast<ID3DDataFactory::Context&>(ctx);
 
                 static const char* VS =
                     "struct VertData {float3 in_pos : POSITION; float2 in_uv : UV;};\n"
@@ -335,14 +335,14 @@ struct TestApplicationCallback : IApplicationCallback
                 ComPtr<ID3DBlob> vsCompile;
                 ComPtr<ID3DBlob> psCompile;
                 ComPtr<ID3DBlob> cachedPipeline;
-                pipeline = d3dF->newShaderPipeline(VS, PS, vsCompile, psCompile, cachedPipeline, vfmt,
-                                                   BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
-                                                   true, true, false);
+                pipeline = d3dF.newShaderPipeline(VS, PS, vsCompile, psCompile, cachedPipeline, vfmt,
+                                                  BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
+                                                  true, true, false);
             }
 #elif BOO_HAS_METAL
             else if (ctx.platform() == IGraphicsDataFactory::Platform::Metal)
             {
-                MetalDataFactory* metalF = dynamic_cast<MetalDataFactory*>(factory);
+                MetalDataFactory::Context& metalF = dynamic_cast<MetalDataFactory::Context&>(ctx);
 
                 static const char* VS =
                 "#include <metal_stdlib>\n"
@@ -367,15 +367,17 @@ struct TestApplicationCallback : IApplicationCallback
                 "    return tex.sample(samp, d.out_uv);\n"
                 "}\n";
 
-                pipeline = metalF->newShaderPipeline(VS, FS, vfmt, 1,
-                                                     BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
-                                                     true, true, false);
+                pipeline = metalF.newShaderPipeline(VS, FS, vfmt, 1,
+                                                    BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
+                                                    true, true, false);
             }
 #endif
 
             /* Make shader data binding */
             self->m_binding =
             ctx.newShaderDataBinding(pipeline, vfmt, vbo, nullptr, nullptr, 0, nullptr, 1, &texture);
+
+            return true;
         });
 
         /* Return control to client */

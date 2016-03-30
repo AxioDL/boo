@@ -2,6 +2,7 @@
 #define IGFXDATAFACTORY_HPP
 
 #include <memory>
+#include <functional>
 #include <stdint.h>
 #include "boo/System.hpp"
 
