@@ -38,37 +38,44 @@ public:
     Platform platform() const {return Platform::Metal;}
     const char* platformName() const {return "Metal";}
 
-    IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
-    IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count);
+    class Context : public IGraphicsDataFactory::Context
+    {
+        friend class MetalDataFactory;
+        MetalDataFactory& m_parent;
+        Context(MetalDataFactory& parent) : m_parent(parent) {}
+    public:
+        Platform platform() const {return Platform::Metal;}
+        const char* platformName() const {return "Metal";}
 
-    ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                const void* data, size_t sz);
-    GraphicsDataToken
-    newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                              const void* data, size_t sz, ITextureS*& texOut);
-    ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
-                                      const void* data, size_t sz);
-    ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
-    ITextureR* newRenderTexture(size_t width, size_t height,
-                                bool enableShaderColorBinding, bool enableShaderDepthBinding);
+        IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
+        IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count);
 
-    bool bindingNeedsVertexFormat() const {return false;}
-    IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
+        ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                                    const void* data, size_t sz);
+        ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
+                                          const void* data, size_t sz);
+        ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
+        ITextureR* newRenderTexture(size_t width, size_t height,
+                                    bool enableShaderColorBinding, bool enableShaderDepthBinding);
 
-    IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
-                                       IVertexFormat* vtxFmt, unsigned targetSamples,
-                                       BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                                       bool depthTest, bool depthWrite, bool backfaceCulling);
+        bool bindingNeedsVertexFormat() const {return false;}
+        IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
 
-    IShaderDataBinding*
-    newShaderDataBinding(IShaderPipeline* pipeline,
-                         IVertexFormat* vtxFormat,
-                         IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
-                         size_t ubufCount, IGraphicsBuffer** ubufs,
-                         size_t texCount, ITexture** texs);
+        IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
+                                           IVertexFormat* vtxFmt, unsigned targetSamples,
+                                           BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
+                                           bool depthTest, bool depthWrite, bool backfaceCulling);
 
-    void reset();
-    GraphicsDataToken commit();
+        IShaderDataBinding*
+        newShaderDataBinding(IShaderPipeline* pipeline,
+                             IVertexFormat* vtxFormat,
+                             IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
+                             size_t ubufCount, IGraphicsBuffer** ubufs,
+                             const size_t* ubufOffs, const size_t* ubufSizes,
+                             size_t texCount, ITexture** texs);
+    };
+
+    virtual GraphicsDataToken commitTransaction(const std::function<bool(IGraphicsDataFactory::Context& ctx)>&);
 };
 
 }
