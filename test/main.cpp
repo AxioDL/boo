@@ -228,92 +228,128 @@ struct TestApplicationCallback : IApplicationCallback
 
         IGraphicsDataFactory* factory = self->mainWindow->getLoadContextDataFactory();
 
-        /* Create render target */
-        int x, y, w, h;
-        self->mainWindow->getWindowFrame(x, y, w, h);
-        self->m_renderTarget = factory->newRenderTexture(w, h, false, false);
-
-        /* Make Tri-strip VBO */
-        struct Vert
+        GraphicsDataToken data = factory->commitTransaction([&](IGraphicsDataFactory::Context& ctx) -> bool
         {
-            float pos[3];
-            float uv[2];
-        };
-        static const Vert quad[4] =
-        {
-            {{0.5,0.5},{1.0,1.0}},
-            {{-0.5,0.5},{0.0,1.0}},
-            {{0.5,-0.5},{1.0,0.0}},
-            {{-0.5,-0.5},{0.0,0.0}}
-        };
-        IGraphicsBuffer* vbo =
-        factory->newStaticBuffer(BufferUse::Vertex, quad, sizeof(Vert), 4);
+            /* Create render target */
+            int x, y, w, h;
+            self->mainWindow->getWindowFrame(x, y, w, h);
+            self->m_renderTarget = ctx.newRenderTexture(w, h, false, false);
 
-        /* Make vertex format */
-        VertexElementDescriptor descs[2] =
-        {
-            {vbo, nullptr, VertexSemantic::Position3},
-            {vbo, nullptr, VertexSemantic::UV2}
-        };
-        IVertexFormat* vfmt = factory->newVertexFormat(2, descs);
-
-        /* Make ramp texture */
-        using Pixel = uint8_t[4];
-        static Pixel tex[256][256];
-        for (int i=0 ; i<256 ; ++i)
-            for (int j=0 ; j<256 ; ++j)
+            /* Make Tri-strip VBO */
+            struct Vert
             {
-                tex[i][j][0] = i;
-                tex[i][j][1] = j;
-                tex[i][j][2] = 0;
-                tex[i][j][3] = 0xff;
+                float pos[3];
+                float uv[2];
+            };
+            static const Vert quad[4] =
+            {
+                {{0.5,0.5},{1.0,1.0}},
+                {{-0.5,0.5},{0.0,1.0}},
+                {{0.5,-0.5},{1.0,0.0}},
+                {{-0.5,-0.5},{0.0,0.0}}
+            };
+            IGraphicsBuffer* vbo =
+            ctx.newStaticBuffer(BufferUse::Vertex, quad, sizeof(Vert), 4);
+
+            /* Make vertex format */
+            VertexElementDescriptor descs[2] =
+            {
+                {vbo, nullptr, VertexSemantic::Position3},
+                {vbo, nullptr, VertexSemantic::UV2}
+            };
+            IVertexFormat* vfmt = ctx.newVertexFormat(2, descs);
+
+            /* Make ramp texture */
+            using Pixel = uint8_t[4];
+            static Pixel tex[256][256];
+            for (int i=0 ; i<256 ; ++i)
+                for (int j=0 ; j<256 ; ++j)
+                {
+                    tex[i][j][0] = i;
+                    tex[i][j][1] = j;
+                    tex[i][j][2] = 0;
+                    tex[i][j][3] = 0xff;
+                }
+            ITexture* texture =
+            ctx.newStaticTexture(256, 256, 1, TextureFormat::RGBA8, tex, 256*256*4);
+
+            /* Make shader pipeline */
+            IShaderPipeline* pipeline = nullptr;
+            if (ctx.platform() == IGraphicsDataFactory::Platform::OGL)
+            {
+                GLDataFactory::Context& glF = dynamic_cast<GLDataFactory::Context&>(ctx);
+
+                static const char* VS =
+                "#version 330\n"
+                "layout(location=0) in vec3 in_pos;\n"
+                "layout(location=1) in vec2 in_uv;\n"
+                "out vec2 out_uv;\n"
+                "void main()\n"
+                "{\n"
+                "    gl_Position = vec4(in_pos, 1.0);\n"
+                "    out_uv = in_uv;\n"
+                "}\n";
+
+                static const char* FS =
+                "#version 330\n"
+                BOO_GLSL_BINDING_HEAD
+                "precision highp float;\n"
+                "TBINDING0 uniform sampler2D texs[1];\n"
+                "layout(location=0) out vec4 out_frag;\n"
+                "in vec2 out_uv;\n"
+                "void main()\n"
+                "{\n"
+                "    out_frag = texture(texs[0], out_uv);\n"
+                "}\n";
+
+                pipeline = glF.newShaderPipeline(VS, FS, 1, "texs", 0, nullptr,
+                                                 BlendFactor::One, BlendFactor::Zero,
+                                                 Primitive::TriStrips, true, true, false);
             }
-        ITexture* texture =
-        factory->newStaticTexture(256, 256, 1, TextureFormat::RGBA8, tex, 256*256*4);
-
-        /* Make shader pipeline */
-        IShaderPipeline* pipeline = nullptr;
-        if (factory->platform() == IGraphicsDataFactory::Platform::OGL)
-        {
-            GLDataFactory* glF = dynamic_cast<GLDataFactory*>(factory);
-
-            static const char* VS =
-            "#version 330\n"
-            "layout(location=0) in vec3 in_pos;\n"
-            "layout(location=1) in vec2 in_uv;\n"
-            "out vec2 out_uv;\n"
-            "void main()\n"
-            "{\n"
-            "    gl_Position = vec4(in_pos, 1.0);\n"
-            "    out_uv = in_uv;\n"
-            "}\n";
-
-            static const char* FS =
-            "#version 330\n"
-            BOO_GLSL_BINDING_HEAD
-            "precision highp float;\n"
-            "TBINDING0 uniform sampler2D texs[1];\n"
-            "layout(location=0) out vec4 out_frag;\n"
-            "in vec2 out_uv;\n"
-            "void main()\n"
-            "{\n"
-            "    out_frag = texture(texs[0], out_uv);\n"
-            "}\n";
-
-            pipeline = glF->newShaderPipeline(VS, FS, 1, "texs", 0, nullptr,
-                                              BlendFactor::One, BlendFactor::Zero,
-                                              Primitive::TriStrips, true, true, false);
-        }
 #if _WIN32
-        else if (factory->platform() == IGraphicsDataFactory::Platform::D3D12 ||
-                 factory->platform() == IGraphicsDataFactory::Platform::D3D11)
-        {
-            ID3DDataFactory* d3dF = dynamic_cast<ID3DDataFactory*>(factory);
+            else if (ctx.platform() == IGraphicsDataFactory::Platform::D3D12 ||
+                     ctx.platform() == IGraphicsDataFactory::Platform::D3D11)
+            {
+                ID3DDataFactory* d3dF = dynamic_cast<ID3DDataFactory*>(factory);
 
-            static const char* VS =
-                "struct VertData {float3 in_pos : POSITION; float2 in_uv : UV;};\n"
-                "struct VertToFrag {float4 out_pos : SV_Position; float2 out_uv : UV;};\n"
-                "VertToFrag main(in VertData v)\n"
+                static const char* VS =
+                    "struct VertData {float3 in_pos : POSITION; float2 in_uv : UV;};\n"
+                    "struct VertToFrag {float4 out_pos : SV_Position; float2 out_uv : UV;};\n"
+                    "VertToFrag main(in VertData v)\n"
+                    "{\n"
+                    "    VertToFrag retval;\n"
+                    "    retval.out_pos = float4(v.in_pos, 1.0);\n"
+                    "    retval.out_uv = v.in_uv;\n"
+                    "    return retval;\n"
+                    "}\n";
+
+                static const char* PS =
+                    "SamplerState samp : register(s0);\n"
+                    "Texture2D tex : register(t0);\n"
+                    "struct VertToFrag {float4 out_pos : SV_Position; float2 out_uv : UV;};\n"
+                    "float4 main(in VertToFrag d) : SV_Target0\n"
+                    "{\n"
+                    "    return tex.Sample(samp, d.out_uv);\n"
+                    "}\n";
+
+                ComPtr<ID3DBlob> vsCompile;
+                ComPtr<ID3DBlob> psCompile;
+                ComPtr<ID3DBlob> cachedPipeline;
+                pipeline = d3dF->newShaderPipeline(VS, PS, vsCompile, psCompile, cachedPipeline, vfmt,
+                                                   BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
+                                                   true, true, false);
+            }
+#elif BOO_HAS_METAL
+            else if (ctx.platform() == IGraphicsDataFactory::Platform::Metal)
+            {
+                MetalDataFactory* metalF = dynamic_cast<MetalDataFactory*>(factory);
+
+                static const char* VS =
+                "#include <metal_stdlib>\n"
+                "using namespace metal;\n"
+                "struct VertData {float3 in_pos [[ attribute(0) ]]; float2 in_uv [[ attribute(1) ]];};\n"
+                "struct VertToFrag {float4 out_pos [[ position ]]; float2 out_uv;};\n"
+                "vertex VertToFrag vmain(VertData v [[ stage_in ]])\n"
                 "{\n"
                 "    VertToFrag retval;\n"
                 "    retval.out_pos = float4(v.in_pos, 1.0);\n"
@@ -321,62 +357,26 @@ struct TestApplicationCallback : IApplicationCallback
                 "    return retval;\n"
                 "}\n";
 
-            static const char* PS =
-                "SamplerState samp : register(s0);\n"
-                "Texture2D tex : register(t0);\n"
-                "struct VertToFrag {float4 out_pos : SV_Position; float2 out_uv : UV;};\n"
-                "float4 main(in VertToFrag d) : SV_Target0\n"
+                static const char* FS =
+                "#include <metal_stdlib>\n"
+                "using namespace metal;\n"
+                "constexpr sampler samp(address::repeat);\n"
+                "struct VertToFrag {float4 out_pos [[ position ]]; float2 out_uv;};\n"
+                "fragment float4 fmain(VertToFrag d [[ stage_in ]], texture2d<float> tex [[ texture(0) ]])\n"
                 "{\n"
-                "    return tex.Sample(samp, d.out_uv);\n"
+                "    return tex.sample(samp, d.out_uv);\n"
                 "}\n";
 
-            ComPtr<ID3DBlob> vsCompile;
-            ComPtr<ID3DBlob> psCompile;
-            ComPtr<ID3DBlob> cachedPipeline;
-            pipeline = d3dF->newShaderPipeline(VS, PS, vsCompile, psCompile, cachedPipeline, vfmt,
-                                               BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
-                                               true, true, false);
-        }
-#elif BOO_HAS_METAL
-        else if (factory->platform() == IGraphicsDataFactory::Platform::Metal)
-        {
-            MetalDataFactory* metalF = dynamic_cast<MetalDataFactory*>(factory);
-
-            static const char* VS =
-            "#include <metal_stdlib>\n"
-            "using namespace metal;\n"
-            "struct VertData {float3 in_pos [[ attribute(0) ]]; float2 in_uv [[ attribute(1) ]];};\n"
-            "struct VertToFrag {float4 out_pos [[ position ]]; float2 out_uv;};\n"
-            "vertex VertToFrag vmain(VertData v [[ stage_in ]])\n"
-            "{\n"
-            "    VertToFrag retval;\n"
-            "    retval.out_pos = float4(v.in_pos, 1.0);\n"
-            "    retval.out_uv = v.in_uv;\n"
-            "    return retval;\n"
-            "}\n";
-
-            static const char* FS =
-            "#include <metal_stdlib>\n"
-            "using namespace metal;\n"
-            "constexpr sampler samp(address::repeat);\n"
-            "struct VertToFrag {float4 out_pos [[ position ]]; float2 out_uv;};\n"
-            "fragment float4 fmain(VertToFrag d [[ stage_in ]], texture2d<float> tex [[ texture(0) ]])\n"
-            "{\n"
-            "    return tex.sample(samp, d.out_uv);\n"
-            "}\n";
-
-            pipeline = metalF->newShaderPipeline(VS, FS, vfmt, 1,
-                                                 BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
-                                                 true, true, false);
-        }
+                pipeline = metalF->newShaderPipeline(VS, FS, vfmt, 1,
+                                                     BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
+                                                     true, true, false);
+            }
 #endif
 
-        /* Make shader data binding */
-        self->m_binding =
-        factory->newShaderDataBinding(pipeline, vfmt, vbo, nullptr, nullptr, 0, nullptr, 1, &texture);
-
-        /* Commit objects */
-        GraphicsDataToken data = factory->commit();
+            /* Make shader data binding */
+            self->m_binding =
+            ctx.newShaderDataBinding(pipeline, vfmt, vbo, nullptr, nullptr, 0, nullptr, 1, &texture);
+        });
 
         /* Return control to client */
         lk.unlock();

@@ -198,45 +198,61 @@ struct IGraphicsDataFactory
     virtual Platform platform() const=0;
     virtual const SystemChar* platformName() const=0;
 
-    virtual IGraphicsBufferS*
-    newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)=0;
-    virtual IGraphicsBufferD*
-    newDynamicBuffer(BufferUse use, size_t stride, size_t count)=0;
+    struct Context
+    {
+        virtual Platform platform() const=0;
+        virtual const SystemChar* platformName() const=0;
 
-    virtual ITextureS*
-    newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                     const void* data, size_t sz)=0;
-    virtual GraphicsDataToken
-    newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                              const void* data, size_t sz, ITextureS*& texOut)=0;
-    virtual ITextureSA*
-    newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
-                          const void* data, size_t sz)=0;
-    virtual ITextureD*
-    newDynamicTexture(size_t width, size_t height, TextureFormat fmt)=0;
-    virtual ITextureR*
-    newRenderTexture(size_t width, size_t height,
-                     bool enableShaderColorBinding, bool enableShaderDepthBinding)=0;
+        virtual IGraphicsBufferS*
+        newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)=0;
+        virtual IGraphicsBufferD*
+        newDynamicBuffer(BufferUse use, size_t stride, size_t count)=0;
 
-    virtual bool bindingNeedsVertexFormat() const=0;
-    virtual IVertexFormat*
-    newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)=0;
+        virtual ITextureS*
+        newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                         const void* data, size_t sz)=0;
+        virtual ITextureSA*
+        newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
+                              const void* data, size_t sz)=0;
+        virtual ITextureD*
+        newDynamicTexture(size_t width, size_t height, TextureFormat fmt)=0;
+        virtual ITextureR*
+        newRenderTexture(size_t width, size_t height,
+                         bool enableShaderColorBinding, bool enableShaderDepthBinding)=0;
 
-    virtual IShaderDataBinding*
-    newShaderDataBinding(IShaderPipeline* pipeline,
-                         IVertexFormat* vtxFormat,
-                         IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
-                         size_t ubufCount, IGraphicsBuffer** ubufs,
-                         size_t texCount, ITexture** texs)=0;
+        virtual bool bindingNeedsVertexFormat() const=0;
+        virtual IVertexFormat*
+        newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)=0;
 
-    virtual void reset()=0;
-    virtual GraphicsDataToken commit()=0;
+        virtual IShaderDataBinding*
+        newShaderDataBinding(IShaderPipeline* pipeline,
+                             IVertexFormat* vtxFormat,
+                             IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
+                             size_t ubufCount, IGraphicsBuffer** ubufs,
+                             const size_t* ubufOffs, const size_t* ubufSizes,
+                             size_t texCount, ITexture** texs)=0;
+
+        IShaderDataBinding*
+        newShaderDataBinding(IShaderPipeline* pipeline,
+                             IVertexFormat* vtxFormat,
+                             IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
+                             size_t ubufCount, IGraphicsBuffer** ubufs,
+                             size_t texCount, ITexture** texs)
+        {
+            return newShaderDataBinding(pipeline, vtxFormat, vbo, instVbo, ibo,
+                                        ubufCount, ubufs, nullptr, nullptr, texCount, texs);
+        }
+    };
+
+    virtual GraphicsDataToken commitTransaction(const std::function<bool(Context& ctx)>&)=0;
 
 private:
     friend class GraphicsDataToken;
     virtual void destroyData(IGraphicsData*)=0;
     virtual void destroyAllData()=0;
 };
+
+using FactoryCommitFunc = std::function<bool(IGraphicsDataFactory::Context& ctx)>;
 
 /** Multiplatform TLS-pointer wrapper (for compilers without proper thread_local support) */
 template <class T>

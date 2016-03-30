@@ -60,6 +60,8 @@ public:
     {glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_buf);}
     void bindUniform(size_t idx) const
     {glBindBufferBase(GL_UNIFORM_BUFFER, idx, m_buf);}
+    void bindUniformRange(size_t idx, GLintptr off, GLsizeiptr size) const
+    {glBindBufferRange(GL_UNIFORM_BUFFER, idx, m_buf, off, size);}
 };
 
 class GLGraphicsBufferD : public IGraphicsBufferD
@@ -92,14 +94,13 @@ public:
     void bindVertex(int b);
     void bindIndex(int b);
     void bindUniform(size_t idx, int b);
+    void bindUniformRange(size_t idx, GLintptr off, GLsizeiptr size, int b);
 };
 
 IGraphicsBufferS*
-GLDataFactory::newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
+GLDataFactory::Context::newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
 {
     GLGraphicsBufferS* retval = new GLGraphicsBufferS(use, data, stride * count);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct GLData());
     m_deferredData->m_SBufs.emplace_back(retval);
     return retval;
 }
@@ -295,42 +296,19 @@ public:
 };
 
 ITextureS*
-GLDataFactory::newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                   const void* data, size_t sz)
+GLDataFactory::Context::newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                                         const void* data, size_t sz)
 {
     GLTextureS* retval = new GLTextureS(width, height, mips, fmt, data, sz);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct GLData());
     m_deferredData->m_STexs.emplace_back(retval);
     return retval;
 }
 
-GraphicsDataToken
-GLDataFactory::newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                         const void* data, size_t sz, ITextureS*& texOut)
-{
-    GLTextureS* retval = new GLTextureS(width, height, mips, fmt, data, sz);
-    GLData* tokData = new struct GLData();
-    tokData->m_STexs.emplace_back(retval);
-    texOut = retval;
-
-    std::unique_lock<std::mutex> lk(m_committedMutex);
-    m_committedData.insert(tokData);
-    lk.unlock();
-    /* Let's go ahead and flush to ensure our data gets to the GPU
-       While this isn't strictly required, some drivers might behave
-       differently */
-    glFlush();
-    return GraphicsDataToken(this, tokData);
-}
-
 ITextureSA*
-GLDataFactory::newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
-                                     const void *data, size_t sz)
+GLDataFactory::Context::newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
+                                              const void *data, size_t sz)
 {
     GLTextureSA* retval = new GLTextureSA(width, height, layers, fmt, data, sz);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct GLData());
     m_deferredData->m_SATexs.emplace_back(retval);
     return retval;
 }
@@ -452,7 +430,7 @@ static const GLenum BLEND_FACTOR_TABLE[] =
     GL_ONE_MINUS_SRC1_COLOR
 };
 
-IShaderPipeline* GLDataFactory::newShaderPipeline
+IShaderPipeline* GLDataFactory::Context::newShaderPipeline
 (const char* vertSource, const char* fragSource,
  size_t texCount, const char* texArrayName,
  size_t uniformBlockCount, const char** uniformBlockNames,
@@ -535,16 +513,14 @@ IShaderPipeline* GLDataFactory::newShaderPipeline
             Log.report(logvisor::Error, "unable to find sampler variable '%s'", texArrayName);
         else
         {
-            if (texCount > m_texUnis.size())
-                for (size_t i=m_texUnis.size() ; i<texCount ; ++i)
-                    m_texUnis.push_back(i);
-            glUniform1iv(texLoc, m_texUnis.size(), m_texUnis.data());
+            if (texCount > m_parent.m_texUnis.size())
+                for (size_t i=m_parent.m_texUnis.size() ; i<texCount ; ++i)
+                    m_parent.m_texUnis.push_back(i);
+            glUniform1iv(texLoc, m_parent.m_texUnis.size(), m_parent.m_texUnis.data());
         }
     }
 
     GLShaderPipeline* retval = new GLShaderPipeline(std::move(shader));
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct GLData());
     m_deferredData->m_SPs.emplace_back(retval);
     return retval;
 }
@@ -567,17 +543,14 @@ struct GLShaderDataBinding : IShaderDataBinding
     const GLVertexFormat* m_vtxFormat;
     size_t m_ubufCount;
     std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
+    std::vector<std::pair<size_t,size_t>> m_ubufOffs;
     size_t m_texCount;
     std::unique_ptr<ITexture*[]> m_texs;
-
-#ifndef NDEBUG
-    /* Debugging aids */
-    bool m_committed = false;
-#endif
 
     GLShaderDataBinding(IShaderPipeline* pipeline,
                         IVertexFormat* vtxFormat,
                         size_t ubufCount, IGraphicsBuffer** ubufs,
+                        const size_t* ubufOffs, const size_t* ubufSizes,
                         size_t texCount, ITexture** texs)
     : m_pipeline(static_cast<GLShaderPipeline*>(pipeline)),
       m_vtxFormat(static_cast<GLVertexFormat*>(vtxFormat)),
@@ -586,29 +559,57 @@ struct GLShaderDataBinding : IShaderDataBinding
       m_texCount(texCount),
       m_texs(new ITexture*[texCount])
     {
+        if (ubufOffs && ubufSizes)
+        {
+            m_ubufOffs.reserve(ubufCount);
+            for (size_t i=0 ; i<ubufCount ; ++i)
+                m_ubufOffs.emplace_back(ubufOffs[i], ubufSizes[i]);
+        }
         for (size_t i=0 ; i<ubufCount ; ++i)
+        {
+#ifndef NDEBUG
+            if (!ubufs[i])
+                Log.report(logvisor::Fatal, "null uniform-buffer %d provided to newShaderDataBinding", int(i));
+#endif
             m_ubufs[i] = ubufs[i];
+        }
         for (size_t i=0 ; i<texCount ; ++i)
+        {
+#ifndef NDEBUG
+            if (!texs[i])
+                Log.report(logvisor::Fatal, "null texture %d provided to newShaderDataBinding", int(i));
+#endif
             m_texs[i] = texs[i];
+        }
     }
     void bind(int b) const
     {
-#ifndef NDEBUG
-        if (!m_committed)
-            Log.report(logvisor::Fatal,
-                       "attempted to use uncommitted GLShaderDataBinding");
-#endif
-
         GLuint prog = m_pipeline->bind();
         m_vtxFormat->bind(b);
-        for (size_t i=0 ; i<m_ubufCount ; ++i)
+        if (m_ubufOffs.size())
         {
-            IGraphicsBuffer* ubuf = m_ubufs[i];
-            if (ubuf->dynamic())
-                static_cast<GLGraphicsBufferD*>(ubuf)->bindUniform(i, b);
-            else
-                static_cast<GLGraphicsBufferS*>(ubuf)->bindUniform(i);
-            glUniformBlockBinding(prog, m_pipeline->m_uniLocs.at(i), i);
+            for (size_t i=0 ; i<m_ubufCount ; ++i)
+            {
+                IGraphicsBuffer* ubuf = m_ubufs[i];
+                const std::pair<size_t,size_t>& offset = m_ubufOffs[i];
+                if (ubuf->dynamic())
+                    static_cast<GLGraphicsBufferD*>(ubuf)->bindUniformRange(i, offset.first, offset.second, b);
+                else
+                    static_cast<GLGraphicsBufferS*>(ubuf)->bindUniformRange(i, offset.first, offset.second);
+                glUniformBlockBinding(prog, m_pipeline->m_uniLocs.at(i), i);
+            }
+        }
+        else
+        {
+            for (size_t i=0 ; i<m_ubufCount ; ++i)
+            {
+                IGraphicsBuffer* ubuf = m_ubufs[i];
+                if (ubuf->dynamic())
+                    static_cast<GLGraphicsBufferD*>(ubuf)->bindUniform(i, b);
+                else
+                    static_cast<GLGraphicsBufferS*>(ubuf)->bindUniform(i);
+                glUniformBlockBinding(prog, m_pipeline->m_uniLocs.at(i), i);
+            }
         }
         for (size_t i=0 ; i<m_texCount ; ++i)
         {
@@ -634,16 +635,15 @@ struct GLShaderDataBinding : IShaderDataBinding
 };
 
 IShaderDataBinding*
-GLDataFactory::newShaderDataBinding(IShaderPipeline* pipeline,
-                                    IVertexFormat* vtxFormat,
-                                    IGraphicsBuffer*, IGraphicsBuffer*, IGraphicsBuffer*,
-                                    size_t ubufCount, IGraphicsBuffer** ubufs,
-                                    size_t texCount, ITexture** texs)
+GLDataFactory::Context::newShaderDataBinding(IShaderPipeline* pipeline,
+                                             IVertexFormat* vtxFormat,
+                                             IGraphicsBuffer*, IGraphicsBuffer*, IGraphicsBuffer*,
+                                             size_t ubufCount, IGraphicsBuffer** ubufs,
+                                             const size_t* ubufOffs, const size_t* ubufSizes,
+                                             size_t texCount, ITexture** texs)
 {
     GLShaderDataBinding* retval =
-    new GLShaderDataBinding(pipeline, vtxFormat, ubufCount, ubufs, texCount, texs);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct GLData());
+    new GLShaderDataBinding(pipeline, vtxFormat, ubufCount, ubufs, ubufOffs, ubufSizes, texCount, texs);
     m_deferredData->m_SBinds.emplace_back(retval);
     return retval;
 }
@@ -651,22 +651,23 @@ GLDataFactory::newShaderDataBinding(IShaderPipeline* pipeline,
 GLDataFactory::GLDataFactory(IGraphicsContext* parent, uint32_t drawSamples)
 : m_parent(parent), m_drawSamples(drawSamples) {}
 
-void GLDataFactory::reset()
-{
-    delete m_deferredData.get();
-    m_deferredData.reset();
-}
 
-GraphicsDataToken GLDataFactory::commit()
+GraphicsDataToken GLDataFactory::commitTransaction(const FactoryCommitFunc& trans)
 {
-    if (!m_deferredData.get())
+    if (m_deferredData.get())
+        Log.report(logvisor::Fatal, "nested commitTransaction usage detected");
+    m_deferredData.reset(new GLData());
+
+    GLDataFactory::Context ctx(*this);
+    if (!trans(ctx))
+    {
+        delete m_deferredData.get();
+        m_deferredData.reset();
         return GraphicsDataToken(this, nullptr);
+    }
+
     std::unique_lock<std::mutex> lk(m_committedMutex);
     GLData* retval = m_deferredData.get();
-#ifndef NDEBUG
-    for (std::unique_ptr<GLShaderDataBinding>& b : retval->m_SBinds)
-        b->m_committed = true;
-#endif
     m_deferredData.reset();
     m_committedData.insert(retval);
     lk.unlock();
@@ -1057,10 +1058,6 @@ struct GLCommandQueue : IGraphicsCommandQueue
 
     void setShaderDataBinding(IShaderDataBinding* binding)
     {
-#ifndef NDEBUG
-        if (!binding)
-            Log.report(logvisor::Fatal, "binding may not be empty");
-#endif
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::Op::SetShaderDataBinding);
         cmds.back().binding = binding;
@@ -1281,13 +1278,13 @@ void GLGraphicsBufferD::bindIndex(int b)
 {glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_bufs[b]);}
 void GLGraphicsBufferD::bindUniform(size_t idx, int b)
 {glBindBufferBase(GL_UNIFORM_BUFFER, idx, m_bufs[b]);}
+void GLGraphicsBufferD::bindUniformRange(size_t idx, GLintptr off, GLsizeiptr size, int b)
+{glBindBufferRange(GL_UNIFORM_BUFFER, idx, m_bufs[b], off, size);}
 
 IGraphicsBufferD*
-GLDataFactory::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
+GLDataFactory::Context::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
 {
     GLGraphicsBufferD* retval = new GLGraphicsBufferD(use, stride * count);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct GLData());
     m_deferredData->m_DBufs.emplace_back(retval);
     return retval;
 }
@@ -1360,11 +1357,9 @@ void GLTextureD::bind(size_t idx, int b)
 }
 
 ITextureD*
-GLDataFactory::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
+GLDataFactory::Context::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
 {
     GLTextureD* retval = new GLTextureD(width, height, fmt);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct GLData());
     m_deferredData->m_DTexs.emplace_back(retval);
     return retval;
 }
@@ -1430,15 +1425,13 @@ GLTextureR::~GLTextureR()
 }
 
 ITextureR*
-GLDataFactory::newRenderTexture(size_t width, size_t height,
-                                bool enableShaderColorBinding, bool enableShaderDepthBinding)
+GLDataFactory::Context::newRenderTexture(size_t width, size_t height,
+                                         bool enableShaderColorBinding, bool enableShaderDepthBinding)
 {
-    GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
-    GLTextureR* retval = new GLTextureR(q, width, height, m_drawSamples,
+    GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent.m_parent->getCommandQueue());
+    GLTextureR* retval = new GLTextureR(q, width, height, m_parent.m_drawSamples,
                                         enableShaderColorBinding, enableShaderDepthBinding);
     q->resizeRenderTexture(retval, width, height);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct GLData());
     m_deferredData->m_RTexs.emplace_back(retval);
     return retval;
 }
@@ -1455,13 +1448,11 @@ GLVertexFormat::GLVertexFormat(GLCommandQueue* q, size_t elementCount,
 }
 GLVertexFormat::~GLVertexFormat() {m_q->delVertexFormat(this);}
 
-IVertexFormat* GLDataFactory::newVertexFormat
+IVertexFormat* GLDataFactory::Context::newVertexFormat
 (size_t elementCount, const VertexElementDescriptor* elements)
 {
-    GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent->getCommandQueue());
+    GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent.m_parent->getCommandQueue());
     GLVertexFormat* retval = new struct GLVertexFormat(q, elementCount, elements);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct GLData());
     m_deferredData->m_VFmts.emplace_back(retval);
     return retval;
 }

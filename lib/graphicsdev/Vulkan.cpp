@@ -773,6 +773,7 @@ class VulkanGraphicsBufferS : public IGraphicsBufferS
         ThrowIfFailed(vkCreateBuffer(ctx->m_dev, &bufInfo, nullptr, &m_bufferInfo.buffer));
     }
 public:
+    size_t size() const {return m_sz;}
     size_t m_stride;
     size_t m_count;
     VkDescriptorBufferInfo m_bufferInfo;
@@ -2047,6 +2048,7 @@ struct VulkanShaderDataBinding : IShaderDataBinding
     IGraphicsBuffer* m_ibuf;
     size_t m_ubufCount;
     std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
+    std::vector<VkDescriptorBufferInfo> m_ubufOffs;
     size_t m_texCount;
     std::unique_ptr<ITexture*[]> m_texs;
 
@@ -2067,6 +2069,7 @@ struct VulkanShaderDataBinding : IShaderDataBinding
                             IShaderPipeline* pipeline,
                             IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbuf, IGraphicsBuffer* ibuf,
                             size_t ubufCount, IGraphicsBuffer** ubufs,
+                            const size_t* ubufOffs, const size_t* ubufSizes,
                             size_t texCount, ITexture** texs)
     : m_ctx(ctx),
       m_pipeline(static_cast<VulkanShaderPipeline*>(pipeline)),
@@ -2078,10 +2081,28 @@ struct VulkanShaderDataBinding : IShaderDataBinding
       m_texCount(texCount),
       m_texs(new ITexture*[texCount])
     {
+        if (ubufOffs && ubufSizes)
+        {
+            m_ubufOffs.reserve(ubufCount);
+            for (size_t i=0 ; i<ubufCount ; ++i)
+                m_ubufOffs.push_back({VK_NULL_HANDLE, ubufOffs[i], ubufSizes[i]});
+        }
         for (size_t i=0 ; i<ubufCount ; ++i)
+        {
+#ifndef NDEBUG
+            if (!ubufs[i])
+                Log.report(logvisor::Fatal, "null uniform-buffer %d provided to newShaderDataBinding", int(i));
+#endif
             m_ubufs[i] = ubufs[i];
+        }
         for (size_t i=0 ; i<texCount ; ++i)
+        {
+#ifndef NDEBUG
+            if (!texs[i])
+                Log.report(logvisor::Fatal, "null texture %d provided to newShaderDataBinding", int(i));
+#endif
             m_texs[i] = texs[i];
+        }
 
         size_t totalDescs = ubufCount + texCount;
         if (totalDescs > 0)
@@ -2151,22 +2172,49 @@ struct VulkanShaderDataBinding : IShaderDataBinding
             }
 
             size_t binding = 0;
-            for (size_t i=0 ; i<BOO_GLSL_MAX_UNIFORM_COUNT ; ++i)
+            if (m_ubufOffs.size())
             {
-                if (i<m_ubufCount)
+                for (size_t i=0 ; i<BOO_GLSL_MAX_UNIFORM_COUNT ; ++i)
                 {
-                    writes[totalWrites].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                    writes[totalWrites].pNext = nullptr;
-                    writes[totalWrites].dstSet = m_descSets[b];
-                    writes[totalWrites].descriptorCount = 1;
-                    writes[totalWrites].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-                    writes[totalWrites].pBufferInfo = GetBufferGPUResource(m_ubufs[i], b);
-                    writes[totalWrites].dstArrayElement = 0;
-                    writes[totalWrites].dstBinding = binding;
-                    ++totalWrites;
+                    if (i<m_ubufCount)
+                    {
+                        writes[totalWrites].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                        writes[totalWrites].pNext = nullptr;
+                        writes[totalWrites].dstSet = m_descSets[b];
+                        writes[totalWrites].descriptorCount = 1;
+                        writes[totalWrites].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+                        const VkDescriptorBufferInfo* origInfo = GetBufferGPUResource(m_ubufs[i], b);
+                        VkDescriptorBufferInfo& modInfo = m_ubufOffs[i];
+                        modInfo.buffer = origInfo->buffer;
+                        modInfo.offset += origInfo->offset;
+                        writes[totalWrites].pBufferInfo = &modInfo;
+                        writes[totalWrites].dstArrayElement = 0;
+                        writes[totalWrites].dstBinding = binding;
+                        ++totalWrites;
+                    }
+                    ++binding;
                 }
-                ++binding;
             }
+            else
+            {
+                for (size_t i=0 ; i<BOO_GLSL_MAX_UNIFORM_COUNT ; ++i)
+                {
+                    if (i<m_ubufCount)
+                    {
+                        writes[totalWrites].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                        writes[totalWrites].pNext = nullptr;
+                        writes[totalWrites].dstSet = m_descSets[b];
+                        writes[totalWrites].descriptorCount = 1;
+                        writes[totalWrites].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+                        writes[totalWrites].pBufferInfo = GetBufferGPUResource(m_ubufs[i], b);
+                        writes[totalWrites].dstArrayElement = 0;
+                        writes[totalWrites].dstBinding = binding;
+                        ++totalWrites;
+                    }
+                    ++binding;
+                }
+            }
+
             for (size_t i=0 ; i<BOO_GLSL_MAX_TEXTURE_COUNT ; ++i)
             {
                 if (i<m_texCount)
@@ -2868,7 +2916,7 @@ VulkanDataFactory::VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ct
     ThrowIfFailed(vkCreateRenderPass(ctx->m_dev, &renderPass, nullptr, &ctx->m_pass));
 }
 
-IShaderPipeline* VulkanDataFactory::newShaderPipeline
+IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
 (const char* vertSource, const char* fragSource,
  std::vector<unsigned int>& vertBlobOut, std::vector<unsigned int>& fragBlobOut,
  std::vector<unsigned char>& pipelineBlob, IVertexFormat* vtxFmt,
@@ -2918,12 +2966,12 @@ IShaderPipeline* VulkanDataFactory::newShaderPipeline
     smCreateInfo.codeSize = vertBlobOut.size() * sizeof(unsigned int);
     smCreateInfo.pCode = vertBlobOut.data();
     VkShaderModule vertModule;
-    ThrowIfFailed(vkCreateShaderModule(m_ctx->m_dev, &smCreateInfo, nullptr, &vertModule));
+    ThrowIfFailed(vkCreateShaderModule(m_parent.m_ctx->m_dev, &smCreateInfo, nullptr, &vertModule));
 
     smCreateInfo.codeSize = fragBlobOut.size() * sizeof(unsigned int);
     smCreateInfo.pCode = fragBlobOut.data();
     VkShaderModule fragModule;
-    ThrowIfFailed(vkCreateShaderModule(m_ctx->m_dev, &smCreateInfo, nullptr, &fragModule));
+    ThrowIfFailed(vkCreateShaderModule(m_parent.m_ctx->m_dev, &smCreateInfo, nullptr, &fragModule));
 
     VkPipelineCacheCreateInfo cacheDataInfo = {};
     cacheDataInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
@@ -2933,180 +2981,116 @@ IShaderPipeline* VulkanDataFactory::newShaderPipeline
         cacheDataInfo.pInitialData = pipelineBlob.data();
 
     VkPipelineCache pipelineCache;
-    ThrowIfFailed(vkCreatePipelineCache(m_ctx->m_dev, &cacheDataInfo, nullptr, &pipelineCache));
+    ThrowIfFailed(vkCreatePipelineCache(m_parent.m_ctx->m_dev, &cacheDataInfo, nullptr, &pipelineCache));
 
-    VulkanShaderPipeline* retval = new VulkanShaderPipeline(m_ctx, vertModule, fragModule, pipelineCache,
+    VulkanShaderPipeline* retval = new VulkanShaderPipeline(m_parent.m_ctx, vertModule, fragModule, pipelineCache,
                                                             static_cast<const VulkanVertexFormat*>(vtxFmt),
                                                             srcFac, dstFac, prim, depthTest, depthWrite, backfaceCulling);
 
     if (pipelineBlob.empty())
     {
         size_t cacheSz = 0;
-        ThrowIfFailed(vkGetPipelineCacheData(m_ctx->m_dev, pipelineCache, &cacheSz, nullptr));
+        ThrowIfFailed(vkGetPipelineCacheData(m_parent.m_ctx->m_dev, pipelineCache, &cacheSz, nullptr));
         if (cacheSz)
         {
             pipelineBlob.resize(cacheSz);
-            ThrowIfFailed(vkGetPipelineCacheData(m_ctx->m_dev, pipelineCache, &cacheSz, pipelineBlob.data()));
+            ThrowIfFailed(vkGetPipelineCacheData(m_parent.m_ctx->m_dev, pipelineCache, &cacheSz, pipelineBlob.data()));
             pipelineBlob.resize(cacheSz);
         }
     }
 
-    vkDestroyPipelineCache(m_ctx->m_dev, pipelineCache, nullptr);
-    vkDestroyShaderModule(m_ctx->m_dev, fragModule, nullptr);
-    vkDestroyShaderModule(m_ctx->m_dev, vertModule, nullptr);
+    vkDestroyPipelineCache(m_parent.m_ctx->m_dev, pipelineCache, nullptr);
+    vkDestroyShaderModule(m_parent.m_ctx->m_dev, fragModule, nullptr);
+    vkDestroyShaderModule(m_parent.m_ctx->m_dev, vertModule, nullptr);
 
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct VulkanData(m_ctx));
     static_cast<VulkanData*>(m_deferredData.get())->m_SPs.emplace_back(retval);
     return retval;
 }
 
-IGraphicsBufferS* VulkanDataFactory::newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
+IGraphicsBufferS* VulkanDataFactory::Context::newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
 {
-    VulkanGraphicsBufferS* retval = new VulkanGraphicsBufferS(use, m_ctx, data, stride, count);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct VulkanData(m_ctx));
+    VulkanGraphicsBufferS* retval = new VulkanGraphicsBufferS(use, m_parent.m_ctx, data, stride, count);
     static_cast<VulkanData*>(m_deferredData.get())->m_SBufs.emplace_back(retval);
     return retval;
 }
 
-IGraphicsBufferD* VulkanDataFactory::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
+IGraphicsBufferD* VulkanDataFactory::Context::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
 {
-    VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(m_parent->getCommandQueue());
-    VulkanGraphicsBufferD* retval = new VulkanGraphicsBufferD(q, use, m_ctx, stride, count);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct VulkanData(m_ctx));
+    VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(m_parent.m_parent->getCommandQueue());
+    VulkanGraphicsBufferD* retval = new VulkanGraphicsBufferD(q, use, m_parent.m_ctx, stride, count);
     static_cast<VulkanData*>(m_deferredData.get())->m_DBufs.emplace_back(retval);
     return retval;
 }
 
-ITextureS* VulkanDataFactory::newStaticTexture(size_t width, size_t height, size_t mips,
-                                               TextureFormat fmt, const void* data, size_t sz)
+ITextureS* VulkanDataFactory::Context::newStaticTexture(size_t width, size_t height, size_t mips,
+                                                        TextureFormat fmt, const void* data, size_t sz)
 {
-    VulkanTextureS* retval = new VulkanTextureS(m_ctx, width, height, mips, fmt, data, sz);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct VulkanData(m_ctx));
+    VulkanTextureS* retval = new VulkanTextureS(m_parent.m_ctx, width, height, mips, fmt, data, sz);
     static_cast<VulkanData*>(m_deferredData.get())->m_STexs.emplace_back(retval);
     return retval;
 }
 
-GraphicsDataToken
-VulkanDataFactory::newStaticTextureNoContext(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                             const void* data, size_t sz, ITextureS*& texOut)
+ITextureSA* VulkanDataFactory::Context::newStaticArrayTexture(size_t width, size_t height, size_t layers,
+                                                              TextureFormat fmt, const void* data, size_t sz)
 {
-    VulkanTextureS* retval = new VulkanTextureS(m_ctx, width, height, mips, fmt, data, sz);
-    VulkanData* tokData = new struct VulkanData(m_ctx);
-    tokData->m_STexs.emplace_back(retval);
-    texOut = retval;
-
-    uint32_t memTypeBits = ~0;
-    VkDeviceSize memSize = SizeTextureForGPU(retval, m_ctx, memTypeBits, 0);
-
-    /* allocate memory */
-    VkMemoryAllocateInfo memAlloc = {};
-    memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memAlloc.pNext = nullptr;
-    memAlloc.memoryTypeIndex = 0;
-    memAlloc.allocationSize = memSize;
-    ThrowIfFalse(MemoryTypeFromProperties(m_ctx, memTypeBits, 0, &memAlloc.memoryTypeIndex));
-    ThrowIfFailed(vkAllocateMemory(m_ctx->m_dev, &memAlloc, nullptr, &tokData->m_texMem));
-
-    /* Place texture */
-    PlaceTextureForGPU(retval, m_ctx, tokData->m_texMem);
-
-    /* Execute static uploads */
-    ThrowIfFailed(vkEndCommandBuffer(m_ctx->m_loadCmdBuf));
-    VkSubmitInfo submitInfo = {};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &m_ctx->m_loadCmdBuf;
-    ThrowIfFailed(vkQueueSubmit(m_ctx->m_queue, 1, &submitInfo, m_ctx->m_loadFence));
-
-    /* Block handle return until data is ready on GPU */
-    ThrowIfFailed(vkWaitForFences(m_ctx->m_dev, 1, &m_ctx->m_loadFence, VK_TRUE, -1));
-
-    /* Reset fence and command buffer */
-    ThrowIfFailed(vkResetFences(m_ctx->m_dev, 1, &m_ctx->m_loadFence));
-    ThrowIfFailed(vkResetCommandBuffer(m_ctx->m_loadCmdBuf, 0));
-    VkCommandBufferBeginInfo cmdBufBeginInfo = {};
-    cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    cmdBufBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    ThrowIfFailed(vkBeginCommandBuffer(m_ctx->m_loadCmdBuf, &cmdBufBeginInfo));
-
-    /* Delete upload objects */
-    retval->deleteUploadObjects();
-
-    /* All set! */
-    std::unique_lock<std::mutex> lk(m_committedMutex);
-    m_committedData.insert(tokData);
-    return GraphicsDataToken(this, tokData);
-}
-
-ITextureSA* VulkanDataFactory::newStaticArrayTexture(size_t width, size_t height, size_t layers,
-                                                     TextureFormat fmt, const void* data, size_t sz)
-{
-    VulkanTextureSA* retval = new VulkanTextureSA(m_ctx, width, height, layers, fmt, data, sz);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct VulkanData(m_ctx));
+    VulkanTextureSA* retval = new VulkanTextureSA(m_parent.m_ctx, width, height, layers, fmt, data, sz);
     static_cast<VulkanData*>(m_deferredData.get())->m_SATexs.emplace_back(retval);
     return retval;
 }
 
-ITextureD* VulkanDataFactory::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
+ITextureD* VulkanDataFactory::Context::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
 {
-    VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(m_parent->getCommandQueue());
-    VulkanTextureD* retval = new VulkanTextureD(q, m_ctx, width, height, fmt);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct VulkanData(m_ctx));
+    VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(m_parent.m_parent->getCommandQueue());
+    VulkanTextureD* retval = new VulkanTextureD(q, m_parent.m_ctx, width, height, fmt);
     static_cast<VulkanData*>(m_deferredData.get())->m_DTexs.emplace_back(retval);
     return retval;
 }
 
-ITextureR* VulkanDataFactory::newRenderTexture(size_t width, size_t height,
-                                               bool enableShaderColorBinding, bool enableShaderDepthBinding)
+ITextureR* VulkanDataFactory::Context::newRenderTexture(size_t width, size_t height,
+                                                        bool enableShaderColorBinding, bool enableShaderDepthBinding)
 {
-    VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(m_parent->getCommandQueue());
-    VulkanTextureR* retval = new VulkanTextureR(m_ctx, q, width, height, m_drawSamples,
+    VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(m_parent.m_parent->getCommandQueue());
+    VulkanTextureR* retval = new VulkanTextureR(m_parent.m_ctx, q, width, height, m_parent.m_drawSamples,
                                                 enableShaderColorBinding, enableShaderDepthBinding);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct VulkanData(m_ctx));
     static_cast<VulkanData*>(m_deferredData.get())->m_RTexs.emplace_back(retval);
     return retval;
 }
 
-IVertexFormat* VulkanDataFactory::newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)
+IVertexFormat* VulkanDataFactory::Context::newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)
 {
     VulkanVertexFormat* retval = new struct VulkanVertexFormat(elementCount, elements);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct VulkanData(m_ctx));
     static_cast<VulkanData*>(m_deferredData.get())->m_VFmts.emplace_back(retval);
     return retval;
 }
 
-IShaderDataBinding* VulkanDataFactory::newShaderDataBinding(IShaderPipeline* pipeline,
+IShaderDataBinding* VulkanDataFactory::Context::newShaderDataBinding(IShaderPipeline* pipeline,
         IVertexFormat* /*vtxFormat*/,
         IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbuf, IGraphicsBuffer* ibuf,
         size_t ubufCount, IGraphicsBuffer** ubufs,
+        const size_t* ubufOffs, const size_t* ubufSizes,
         size_t texCount, ITexture** texs)
 {
     VulkanShaderDataBinding* retval =
-        new VulkanShaderDataBinding(m_ctx, pipeline, vbuf, instVbuf, ibuf, ubufCount, ubufs, texCount, texs);
-    if (!m_deferredData.get())
-        m_deferredData.reset(new struct VulkanData(m_ctx));
+        new VulkanShaderDataBinding(m_parent.m_ctx, pipeline, vbuf, instVbuf, ibuf,
+                                    ubufCount, ubufs, ubufOffs, ubufSizes, texCount, texs);
     static_cast<VulkanData*>(m_deferredData.get())->m_SBinds.emplace_back(retval);
     return retval;
 }
 
-void VulkanDataFactory::reset()
+GraphicsDataToken VulkanDataFactory::commitTransaction
+    (const std::function<bool(IGraphicsDataFactory::Context&)>& trans)
 {
-    delete static_cast<VulkanData*>(m_deferredData.get());
-    m_deferredData.reset();
-}
+    if (m_deferredData.get())
+        Log.report(logvisor::Fatal, "nested commitTransaction usage detected");
+    m_deferredData.reset(new VulkanData(m_ctx));
 
-GraphicsDataToken VulkanDataFactory::commit()
-{
-    if (!m_deferredData.get())
+    Context ctx(*this);
+    if (!trans(ctx))
+    {
+        delete m_deferredData.get();
+        m_deferredData.reset();
         return GraphicsDataToken(this, nullptr);
+    }
 
     VulkanData* retval = static_cast<VulkanData*>(m_deferredData.get());
 
