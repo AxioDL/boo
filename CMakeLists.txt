@@ -193,6 +193,7 @@ add_library(boo
             include/boo/audiodev/IAudioVoiceEngine.hpp
             include/boo/IWindow.hpp
             include/boo/IApplication.hpp
+            include/boo/ThreadLocalPtr.hpp
             include/boo/System.hpp
             include/boo/boo.hpp
             InputDeviceClasses.cpp
