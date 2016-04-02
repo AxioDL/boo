@@ -228,8 +228,6 @@ public:
     void bind(size_t idx, int b);
 };
 
-static std::vector<GLuint> DepthInitializer;
-
 class GLTextureR : public ITextureR
 {
     friend class GLDataFactory;
@@ -281,10 +279,11 @@ public:
             glBindTexture(GL_TEXTURE_2D, m_texs[0]);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
             glBindTexture(GL_TEXTURE_2D, m_texs[1]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
 
-            if (DepthInitializer.size() < width * height)
-                DepthInitializer.resize(width * height, ~0);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, DepthInitializer.data());
+            glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
+            glDepthMask(GL_TRUE);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
             if (m_bindTexs[0])
             {
@@ -955,7 +954,6 @@ struct GLCommandQueue : IGraphicsCommandQueue
             }
             std::vector<Command>& cmds = self->m_cmdBufs[self->m_drawBuf];
             GLenum currentPrim = GL_TRIANGLES;
-            const GLTextureR* currentTarget = nullptr;
             for (const Command& cmd : cmds)
             {
                 switch (cmd.m_op)
@@ -974,7 +972,6 @@ struct GLCommandQueue : IGraphicsCommandQueue
                         glBindFramebuffer(GL_FRAMEBUFFER, 0);
                     else
                         glBindFramebuffer(GL_FRAMEBUFFER, tex->m_fbo);
-                    currentTarget = tex;
                     break;
                 }
                 case Command::Op::SetViewport:
@@ -996,24 +993,9 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     break;
                 case Command::Op::ClearTarget:
                 {
-                    if (!currentTarget)
-                        break;
-                    GLbitfield glFlags = cmd.flags & ~GL_DEPTH_BUFFER_BIT;
-                    if (glFlags)
-                        glClear(glFlags);
                     if (cmd.flags & GL_DEPTH_BUFFER_BIT)
-                    {
-                        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-                        size_t texels = currentTarget->m_width * currentTarget->m_height;
-                        if (DepthInitializer.size() < texels)
-                            DepthInitializer.resize(texels, ~0);
-                        glBindTexture(GL_TEXTURE_2D, currentTarget->m_texs[1]);
-                        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24,
-                                     currentTarget->m_width, currentTarget->m_height,
-                                     0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT,
-                                     DepthInitializer.data());
-                        glBindFramebuffer(GL_FRAMEBUFFER, currentTarget->m_fbo);
-                    }
+                        glDepthMask(GL_TRUE);
+                    glClear(cmd.flags);
                     break;
                 }
                 case Command::Op::Draw:
