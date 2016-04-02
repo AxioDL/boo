@@ -228,7 +228,7 @@ public:
     void bind(size_t idx, int b);
 };
 
-static std::vector<int32_t> DepthInitializer;
+static std::vector<GLuint> DepthInitializer;
 
 class GLTextureR : public ITextureR
 {
@@ -997,13 +997,15 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     glDrawArrays(currentPrim, cmd.start, cmd.count);
                     break;
                 case Command::Op::DrawIndexed:
-                    glDrawElements(currentPrim, cmd.count, GL_UNSIGNED_INT, (void*)cmd.start);
+                    glDrawElements(currentPrim, cmd.count, GL_UNSIGNED_INT,
+                                   reinterpret_cast<void*>(cmd.start * 4));
                     break;
                 case Command::Op::DrawInstances:
                     glDrawArraysInstanced(currentPrim, cmd.start, cmd.count, cmd.instCount);
                     break;
                 case Command::Op::DrawInstancesIndexed:
-                    glDrawElementsInstanced(currentPrim, cmd.count, GL_UNSIGNED_INT, (void*)cmd.start, cmd.instCount);
+                    glDrawElementsInstanced(currentPrim, cmd.count, GL_UNSIGNED_INT,
+                                            reinterpret_cast<void*>(cmd.start * 4), cmd.instCount);
                     break;
                 case Command::Op::ResolveBindTexture:
                 {
