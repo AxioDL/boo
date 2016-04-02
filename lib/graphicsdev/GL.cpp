@@ -228,12 +228,14 @@ public:
     void bind(size_t idx, int b);
 };
 
+static std::vector<int32_t> DepthInitializer;
+
 class GLTextureR : public ITextureR
 {
     friend class GLDataFactory;
     friend struct GLCommandQueue;
     struct GLCommandQueue* m_q;
-    GLuint m_texs[2];
+    GLuint m_texs[2] = {};
     GLuint m_bindTexs[2] = {};
     GLuint m_fbo = 0;
     size_t m_width = 0;
@@ -279,7 +281,10 @@ public:
             glBindTexture(GL_TEXTURE_2D, m_texs[0]);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
             glBindTexture(GL_TEXTURE_2D, m_texs[1]);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+
+            if (DepthInitializer.size() < width * height)
+                DepthInitializer.resize(width * height, ~0);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, DepthInitializer.data());
 
             if (m_bindTexs[0])
             {
@@ -398,6 +403,7 @@ public:
         else
             glDisable(GL_DEPTH_TEST);
         glDepthMask(m_depthWrite);
+        glDepthFunc(GL_LEQUAL);
 
         if (m_backfaceCulling)
             glEnable(GL_CULL_FACE);
@@ -907,6 +913,13 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     break;
                 self->m_drawBuf = self->m_completeBuf;
 
+                if (self->m_pendingFboAdds.size())
+                {
+                    for (GLTextureR* tex : self->m_pendingFboAdds)
+                        ConfigureFBO(tex);
+                    self->m_pendingFboAdds.clear();
+                }
+
                 if (self->m_pendingResizes.size())
                 {
                     for (const RenderTextureResize& resize : self->m_pendingResizes)
@@ -926,13 +939,6 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     for (const auto& fmt : self->m_pendingFmtDels)
                         glDeleteVertexArrays(3, fmt.data());
                     self->m_pendingFmtDels.clear();
-                }
-
-                if (self->m_pendingFboAdds.size())
-                {
-                    for (GLTextureR* tex : self->m_pendingFboAdds)
-                        ConfigureFBO(tex);
-                    self->m_pendingFboAdds.clear();
                 }
 
                 if (self->m_pendingFboDels.size())
