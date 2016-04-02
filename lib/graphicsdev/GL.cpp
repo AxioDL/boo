@@ -886,9 +886,9 @@ struct GLCommandQueue : IGraphicsCommandQueue
     static void ConfigureFBO(GLTextureR* tex)
     {
         glGenFramebuffers(1, &tex->m_fbo);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex->m_fbo);
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex->m_texs[0], 0);
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex->m_texs[1], 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, tex->m_fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex->m_texs[0], 0);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex->m_texs[1], 0);
     }
 
     static void RenderingWorker(GLCommandQueue* self)
@@ -953,6 +953,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
             }
             std::vector<Command>& cmds = self->m_cmdBufs[self->m_drawBuf];
             GLenum currentPrim = GL_TRIANGLES;
+            const GLTextureR* currentTarget = nullptr;
             for (const Command& cmd : cmds)
             {
                 switch (cmd.m_op)
@@ -968,9 +969,10 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 {
                     const GLTextureR* tex = static_cast<const GLTextureR*>(cmd.target);
                     if (!tex)
-                        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+                        glBindFramebuffer(GL_FRAMEBUFFER, 0);
                     else
-                        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex->m_fbo);
+                        glBindFramebuffer(GL_FRAMEBUFFER, tex->m_fbo);
+                    currentTarget = tex;
                     break;
                 }
                 case Command::Op::SetViewport:
@@ -991,8 +993,25 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     glClearColor(cmd.rgba[0], cmd.rgba[1], cmd.rgba[2], cmd.rgba[3]);
                     break;
                 case Command::Op::ClearTarget:
-                    glClear(cmd.flags);
+                {
+                    if (!currentTarget)
+                        break;
+                    GLbitfield glFlags = cmd.flags & ~GL_DEPTH_BUFFER_BIT;
+                    if (glFlags)
+                        glClear(glFlags);
+                    if (cmd.flags & GL_DEPTH_BUFFER_BIT)
+                    {
+                        size_t texels = currentTarget->m_width * currentTarget->m_height;
+                        if (DepthInitializer.size() < texels)
+                            DepthInitializer.resize(texels, ~0);
+                        glBindTexture(GL_TEXTURE_2D, currentTarget->m_texs[1]);
+                        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24,
+                                     currentTarget->m_width, currentTarget->m_height,
+                                     0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT,
+                                     DepthInitializer.data());
+                    }
                     break;
+                }
                 case Command::Op::Draw:
                     glDrawArrays(currentPrim, cmd.start, cmd.count);
                     break;
