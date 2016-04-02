@@ -913,6 +913,8 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     break;
                 self->m_drawBuf = self->m_completeBuf;
 
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
                 if (self->m_pendingFboAdds.size())
                 {
                     for (GLTextureR* tex : self->m_pendingFboAdds)
@@ -1001,6 +1003,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
                         glClear(glFlags);
                     if (cmd.flags & GL_DEPTH_BUFFER_BIT)
                     {
+                        glBindFramebuffer(GL_FRAMEBUFFER, 0);
                         size_t texels = currentTarget->m_width * currentTarget->m_height;
                         if (DepthInitializer.size() < texels)
                             DepthInitializer.resize(texels, ~0);
@@ -1009,6 +1012,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
                                      currentTarget->m_width, currentTarget->m_height,
                                      0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT,
                                      DepthInitializer.data());
+                        glBindFramebuffer(GL_FRAMEBUFFER, currentTarget->m_fbo);
                     }
                     break;
                 }
