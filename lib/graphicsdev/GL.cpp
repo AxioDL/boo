@@ -320,7 +320,7 @@ GLDataFactory::Context::newStaticArrayTexture(size_t width, size_t height, size_
 class GLShaderPipeline : public IShaderPipeline
 {
     friend class GLDataFactory;
-    friend class GLCommandQueue;
+    friend struct GLCommandQueue;
     friend struct GLShaderDataBinding;
     GLuint m_vert = 0;
     GLuint m_frag = 0;
@@ -992,12 +992,10 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     glClearColor(cmd.rgba[0], cmd.rgba[1], cmd.rgba[2], cmd.rgba[3]);
                     break;
                 case Command::Op::ClearTarget:
-                {
                     if (cmd.flags & GL_DEPTH_BUFFER_BIT)
                         glDepthMask(GL_TRUE);
                     glClear(cmd.flags);
                     break;
-                }
                 case Command::Op::Draw:
                     glDrawArrays(currentPrim, cmd.start, cmd.count);
                     break;

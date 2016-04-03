@@ -15,8 +15,8 @@ class ThreadLocalPtr
 public:
     ThreadLocalPtr() {m_key = TlsAlloc();}
     ~ThreadLocalPtr() {TlsFree(m_key);}
-    T* get() {return static_cast<T*>(TlsGetValue(m_key));}
-    void reset(T* v=nullptr) {TlsSetValue(m_key, v);}
+    T* get() const {return static_cast<T*>(TlsGetValue(m_key));}
+    void reset(T* v=nullptr) {TlsSetValue(m_key, LPVOID(v));}
 #else
     pthread_key_t m_key;
 public:
