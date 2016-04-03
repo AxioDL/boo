@@ -290,7 +290,7 @@ class MetalTextureR : public ITextureR
                 m_passDesc.depthAttachment.texture = m_depthTex;
                 m_passDesc.depthAttachment.loadAction = MTLLoadActionLoad;
                 m_passDesc.depthAttachment.storeAction = MTLStoreActionStore;
-                m_clearDepthPassDesc.depthAttachment.clearDepth = 0.f;
+                m_passDesc.depthAttachment.clearDepth = 0.f;
             }
 
             {
@@ -316,7 +316,7 @@ class MetalTextureR : public ITextureR
                 m_clearColorPassDesc.depthAttachment.texture = m_depthTex;
                 m_clearColorPassDesc.depthAttachment.loadAction = MTLLoadActionLoad;
                 m_clearColorPassDesc.depthAttachment.storeAction = MTLStoreActionStore;
-                m_clearDepthPassDesc.depthAttachment.clearDepth = 0.f;
+                m_clearColorPassDesc.depthAttachment.clearDepth = 0.f;
             }
 
             {
@@ -329,7 +329,7 @@ class MetalTextureR : public ITextureR
                 m_clearBothPassDesc.depthAttachment.texture = m_depthTex;
                 m_clearBothPassDesc.depthAttachment.loadAction = MTLLoadActionClear;
                 m_clearBothPassDesc.depthAttachment.storeAction = MTLStoreActionStore;
-                m_clearDepthPassDesc.depthAttachment.clearDepth = 0.f;
+                m_clearBothPassDesc.depthAttachment.clearDepth = 0.f;
             }
         }
     }
