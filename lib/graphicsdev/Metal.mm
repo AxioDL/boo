@@ -280,15 +280,57 @@ class MetalTextureR : public ITextureR
                 m_depthTex = [ctx->m_dev newTextureWithDescriptor:desc];
             }
 
-            m_passDesc = [MTLRenderPassDescriptor renderPassDescriptor];
+            {
+                m_passDesc = [MTLRenderPassDescriptor renderPassDescriptor];
 
-            m_passDesc.colorAttachments[0].texture = m_colorTex;
-            m_passDesc.colorAttachments[0].loadAction = MTLLoadActionLoad;
-            m_passDesc.colorAttachments[0].storeAction = MTLStoreActionStore;
+                m_passDesc.colorAttachments[0].texture = m_colorTex;
+                m_passDesc.colorAttachments[0].loadAction = MTLLoadActionLoad;
+                m_passDesc.colorAttachments[0].storeAction = MTLStoreActionStore;
 
-            m_passDesc.depthAttachment.texture = m_depthTex;
-            m_passDesc.depthAttachment.loadAction = MTLLoadActionLoad;
-            m_passDesc.depthAttachment.storeAction = MTLStoreActionStore;
+                m_passDesc.depthAttachment.texture = m_depthTex;
+                m_passDesc.depthAttachment.loadAction = MTLLoadActionLoad;
+                m_passDesc.depthAttachment.storeAction = MTLStoreActionStore;
+                m_clearDepthPassDesc.depthAttachment.clearDepth = 0.f;
+            }
+
+            {
+                m_clearDepthPassDesc = [MTLRenderPassDescriptor renderPassDescriptor];
+
+                m_clearDepthPassDesc.colorAttachments[0].texture = m_colorTex;
+                m_clearDepthPassDesc.colorAttachments[0].loadAction = MTLLoadActionLoad;
+                m_clearDepthPassDesc.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+                m_clearDepthPassDesc.depthAttachment.texture = m_depthTex;
+                m_clearDepthPassDesc.depthAttachment.loadAction = MTLLoadActionClear;
+                m_clearDepthPassDesc.depthAttachment.storeAction = MTLStoreActionStore;
+                m_clearDepthPassDesc.depthAttachment.clearDepth = 0.f;
+            }
+
+            {
+                m_clearColorPassDesc = [MTLRenderPassDescriptor renderPassDescriptor];
+
+                m_clearColorPassDesc.colorAttachments[0].texture = m_colorTex;
+                m_clearColorPassDesc.colorAttachments[0].loadAction = MTLLoadActionClear;
+                m_clearColorPassDesc.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+                m_clearColorPassDesc.depthAttachment.texture = m_depthTex;
+                m_clearColorPassDesc.depthAttachment.loadAction = MTLLoadActionLoad;
+                m_clearColorPassDesc.depthAttachment.storeAction = MTLStoreActionStore;
+                m_clearDepthPassDesc.depthAttachment.clearDepth = 0.f;
+            }
+
+            {
+                m_clearBothPassDesc = [MTLRenderPassDescriptor renderPassDescriptor];
+
+                m_clearBothPassDesc.colorAttachments[0].texture = m_colorTex;
+                m_clearBothPassDesc.colorAttachments[0].loadAction = MTLLoadActionClear;
+                m_clearBothPassDesc.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+                m_clearBothPassDesc.depthAttachment.texture = m_depthTex;
+                m_clearBothPassDesc.depthAttachment.loadAction = MTLLoadActionClear;
+                m_clearBothPassDesc.depthAttachment.storeAction = MTLStoreActionStore;
+                m_clearDepthPassDesc.depthAttachment.clearDepth = 0.f;
+            }
         }
     }
 
@@ -305,6 +347,9 @@ public:
     id<MTLTexture> m_depthTex;
     id<MTLTexture> m_colorBindTex;
     MTLRenderPassDescriptor* m_passDesc;
+    MTLRenderPassDescriptor* m_clearDepthPassDesc;
+    MTLRenderPassDescriptor* m_clearColorPassDesc;
+    MTLRenderPassDescriptor* m_clearBothPassDesc;
     ~MetalTextureR() = default;
 
     void resize(MetalContext* ctx, size_t width, size_t height)
@@ -458,7 +503,7 @@ class MetalShaderPipeline : public IShaderPipeline
 
         MTLDepthStencilDescriptor* dsDesc = [MTLDepthStencilDescriptor new];
         if (depthTest)
-            dsDesc.depthCompareFunction = MTLCompareFunctionLessEqual;
+            dsDesc.depthCompareFunction = MTLCompareFunctionGreater;
         dsDesc.depthWriteEnabled = depthWrite;
         m_dsState = [ctx->m_dev newDepthStencilStateWithDescriptor:dsDesc];
     }
@@ -640,15 +685,28 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     }
 
     MetalTextureR* m_boundTarget = nullptr;
-    void setRenderTarget(ITextureR* target)
+    void _setRenderTarget(ITextureR* target, bool clearColor, bool clearDepth)
     {
         MetalTextureR* ctarget = static_cast<MetalTextureR*>(target);
         [m_enc endEncoding];
         @autoreleasepool
         {
-            m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:ctarget->m_passDesc];
+            if (clearColor && clearDepth)
+                m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:ctarget->m_clearBothPassDesc];
+            else if (clearColor)
+                m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:ctarget->m_clearColorPassDesc];
+            else if (clearDepth)
+                m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:ctarget->m_clearDepthPassDesc];
+            else
+                m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:ctarget->m_passDesc];
+            [m_enc setFrontFacingWinding:MTLWindingCounterClockwise];
         }
         m_boundTarget = ctarget;
+    }
+
+    void setRenderTarget(ITextureR* target)
+    {
+        _setRenderTarget(target, false, false);
     }
 
     void setViewport(const SWindowRect& rect)
@@ -697,7 +755,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     {
         if (!m_boundTarget)
             return;
-        setRenderTarget(m_boundTarget);
+        _setRenderTarget(m_boundTarget, render, depth);
     }
 
     void draw(size_t start, size_t count)
@@ -753,6 +811,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                        destinationOrigin:origin];
                 [blitEnc endEncoding];
                 m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:tex->m_passDesc];
+                [m_enc setFrontFacingWinding:MTLWindingCounterClockwise];
             }
         }
     }
