@@ -644,10 +644,11 @@ class D3D12ShaderPipeline : public IShaderPipeline
             desc.BlendState.RenderTarget[0].DestBlend = BLEND_FACTOR_TABLE[int(dstFac)];
         }
         desc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+        desc.RasterizerState.FrontCounterClockwise = TRUE;
         if (!backfaceCulling)
             desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
         desc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-        desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+        desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_GREATER;
         if (!depthTest)
             desc.DepthStencilState.DepthEnable = false;
         if (!depthWrite)
@@ -1198,7 +1199,7 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         if (depth)
         {
             CD3DX12_CPU_DESCRIPTOR_HANDLE handle(m_boundTarget->m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
-            m_cmdList->ClearDepthStencilView(handle, D3D12_CLEAR_FLAG_DEPTH, 1.0, 0, 0, nullptr);
+            m_cmdList->ClearDepthStencilView(handle, D3D12_CLEAR_FLAG_DEPTH, 0.0f, 0, 0, nullptr);
         }
     }
 

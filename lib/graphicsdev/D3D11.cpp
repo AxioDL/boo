@@ -500,7 +500,7 @@ class D3D11ShaderPipeline : public IShaderPipeline
         CD3D11_DEPTH_STENCIL_DESC dsDesc(D3D11_DEFAULT);
         dsDesc.DepthEnable = depthTest;
         dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK(depthWrite);
-        dsDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+        dsDesc.DepthFunc = D3D11_COMPARISON_GREATER;
         ThrowIfFailed(ctx->m_dev->CreateDepthStencilState(&dsDesc, &m_dsState));
 
         CD3D11_BLEND_DESC blDesc(D3D11_DEFAULT);
@@ -915,7 +915,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         if (render)
             m_deferredCtx->ClearRenderTargetView(m_boundTarget->m_rtv.Get(), m_clearColor);
         if (depth)
-            m_deferredCtx->ClearDepthStencilView(m_boundTarget->m_dsv.Get(), D3D11_CLEAR_DEPTH, 1.0, 0);
+            m_deferredCtx->ClearDepthStencilView(m_boundTarget->m_dsv.Get(), D3D11_CLEAR_DEPTH, 0.0f, 0);
     }
 
     void draw(size_t start, size_t count)
