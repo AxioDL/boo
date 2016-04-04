@@ -506,7 +506,7 @@ IShaderPipeline* GLDataFactory::Context::newShaderPipeline
         {
             GLint uniLoc = glGetUniformBlockIndex(shader.m_prog, uniformBlockNames[i]);
             if (uniLoc < 0)
-                Log.report(logvisor::Error, "unable to find uniform block '%s'", uniformBlockNames[i]);
+                Log.report(logvisor::Warning, "unable to find uniform block '%s'", uniformBlockNames[i]);
             shader.m_uniLocs.push_back(uniLoc);
         }
     }
