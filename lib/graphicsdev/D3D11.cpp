@@ -544,15 +544,16 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
     IGraphicsBuffer* m_ibuf;
     size_t m_ubufCount;
     std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
-    std::vector<UINT> m_ubufFirstConsts;
-    std::vector<UINT> m_ubufNumConsts;
+    std::unique_ptr<UINT[]> m_ubufFirstConsts;
+    std::unique_ptr<UINT[]> m_ubufNumConsts;
+    std::unique_ptr<bool[]> m_pubufs;
     size_t m_texCount;
     std::unique_ptr<ITexture*[]> m_texs;
 
     D3D11ShaderDataBinding(D3D11Context* ctx,
                            IShaderPipeline* pipeline,
                            IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbuf, IGraphicsBuffer* ibuf,
-                           size_t ubufCount, IGraphicsBuffer** ubufs,
+                           size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                            const size_t* ubufOffs, const size_t* ubufSizes,
                            size_t texCount, ITexture** texs)
     : m_pipeline(static_cast<D3D11ShaderPipeline*>(pipeline)),
@@ -564,18 +565,24 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
       m_texCount(texCount),
       m_texs(new ITexture*[texCount])
     {
+        if (ubufStages)
+        {
+            m_pubufs.reset(new bool[ubufCount]);
+            for (size_t i=0 ; i<ubufCount ; ++i)
+                 m_pubufs[i] = ubufStages[i] == PipelineStage::Fragment;
+        }
         if (ubufOffs && ubufSizes)
         {
-            m_ubufFirstConsts.reserve(ubufCount);
-            m_ubufNumConsts.reserve(ubufCount);
+            m_ubufFirstConsts.reset(new UINT[ubufCount]);
+            m_ubufNumConsts.reset(new UINT[ubufCount]);
             for (size_t i=0 ; i<ubufCount ; ++i)
             {
 #ifndef NDEBUG
                 if (ubufOffs[i] % 256)
                     Log.report(logvisor::Fatal, "non-256-byte-aligned uniform-offset %d provided to newShaderDataBinding", int(i));
 #endif
-                m_ubufFirstConsts.push_back(ubufOffs[i] / 16);
-                m_ubufNumConsts.push_back(((ubufSizes[i] + 255) & ~255) / 16);
+                m_ubufFirstConsts[i] = ubufOffs[i] / 16;
+                m_ubufNumConsts[i] = ((ubufSizes[i] + 255) & ~255) / 16;
             }
         }
         for (size_t i=0 ; i<ubufCount ; ++i)
@@ -654,11 +661,13 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
 
         if (m_ubufCount)
         {
-            if (m_ubufFirstConsts.size())
+            if (m_ubufFirstConsts)
             {
-                ID3D11Buffer* constBufs[8];
+                ID3D11Buffer* constBufs[8] = {};
                 for (int i=0 ; i<8 && i<m_ubufCount ; ++i)
                 {
+                    if (m_pubufs && m_pubufs[i])
+                        continue;
                     if (m_ubufs[i]->dynamic())
                     {
                         D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_ubufs[i]);
@@ -670,13 +679,36 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
                         constBufs[i] = cbuf->m_buf.Get();
                     }
                 }
-                ctx->VSSetConstantBuffers1(0, m_ubufCount, constBufs, m_ubufFirstConsts.data(), m_ubufNumConsts.data());
+                ctx->VSSetConstantBuffers1(0, m_ubufCount, constBufs, m_ubufFirstConsts.get(), m_ubufNumConsts.get());
+
+                if (m_pubufs)
+                {
+                    ID3D11Buffer* constBufs[8] = {};
+                    for (int i=0 ; i<8 && i<m_ubufCount ; ++i)
+                    {
+                        if (!m_pubufs[i])
+                            continue;
+                        if (m_ubufs[i]->dynamic())
+                        {
+                            D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_ubufs[i]);
+                            constBufs[i] = cbuf->m_bufs[b].Get();
+                        }
+                        else
+                        {
+                            D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_ubufs[i]);
+                            constBufs[i] = cbuf->m_buf.Get();
+                        }
+                    }
+                    ctx->PSSetConstantBuffers1(0, m_ubufCount, constBufs, m_ubufFirstConsts.get(), m_ubufNumConsts.get());
+                }
             }
             else
             {
-                ID3D11Buffer* constBufs[8];
+                ID3D11Buffer* constBufs[8] = {};
                 for (int i=0 ; i<8 && i<m_ubufCount ; ++i)
                 {
+                    if (m_pubufs && m_pubufs[i])
+                        continue;
                     if (m_ubufs[i]->dynamic())
                     {
                         D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_ubufs[i]);
@@ -689,6 +721,27 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
                     }
                 }
                 ctx->VSSetConstantBuffers(0, m_ubufCount, constBufs);
+
+                if (m_pubufs)
+                {
+                    ID3D11Buffer* constBufs[8] = {};
+                    for (int i=0 ; i<8 && i<m_ubufCount ; ++i)
+                    {
+                        if (!m_pubufs[i])
+                            continue;
+                        if (m_ubufs[i]->dynamic())
+                        {
+                            D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_ubufs[i]);
+                            constBufs[i] = cbuf->m_bufs[b].Get();
+                        }
+                        else
+                        {
+                            D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_ubufs[i]);
+                            constBufs[i] = cbuf->m_buf.Get();
+                        }
+                    }
+                    ctx->PSSetConstantBuffers(0, m_ubufCount, constBufs);
+                }
             }
         }
 
@@ -1205,13 +1258,13 @@ public:
         IShaderDataBinding* newShaderDataBinding(IShaderPipeline* pipeline,
             IVertexFormat* vtxFormat,
             IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibuf,
-            size_t ubufCount, IGraphicsBuffer** ubufs,
+            size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
             const size_t* ubufOffs, const size_t* ubufSizes,
             size_t texCount, ITexture** texs)
         {
             D3D11ShaderDataBinding* retval =
                 new D3D11ShaderDataBinding(m_parent.m_ctx, pipeline, vbuf, instVbo, ibuf,
-                                           ubufCount, ubufs, ubufOffs, ubufSizes, texCount, texs);
+                                           ubufCount, ubufs, ubufStages, ubufOffs, ubufSizes, texCount, texs);
             static_cast<D3D11Data*>(m_deferredData)->m_SBinds.emplace_back(retval);
             return retval;
         }
