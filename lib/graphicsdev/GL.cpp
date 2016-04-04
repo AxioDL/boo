@@ -599,27 +599,33 @@ struct GLShaderDataBinding : IShaderDataBinding
         m_vtxFormat->bind(b);
         if (m_ubufOffs.size())
         {
-            for (size_t i=0 ; i<m_ubufCount ; ++i)
+            for (size_t i=0 ; i<m_ubufCount && i<m_pipeline->m_uniLocs.size() ; ++i)
             {
+                GLint loc = m_pipeline->m_uniLocs[i];
+                if (loc < 0)
+                    continue;
                 IGraphicsBuffer* ubuf = m_ubufs[i];
                 const std::pair<size_t,size_t>& offset = m_ubufOffs[i];
                 if (ubuf->dynamic())
                     static_cast<GLGraphicsBufferD*>(ubuf)->bindUniformRange(i, offset.first, offset.second, b);
                 else
                     static_cast<GLGraphicsBufferS*>(ubuf)->bindUniformRange(i, offset.first, offset.second);
-                glUniformBlockBinding(prog, m_pipeline->m_uniLocs.at(i), i);
+                glUniformBlockBinding(prog, loc, i);
             }
         }
         else
         {
-            for (size_t i=0 ; i<m_ubufCount ; ++i)
+            for (size_t i=0 ; i<m_ubufCount && i<m_pipeline->m_uniLocs.size() ; ++i)
             {
+                GLint loc = m_pipeline->m_uniLocs[i];
+                if (loc < 0)
+                    continue;
                 IGraphicsBuffer* ubuf = m_ubufs[i];
                 if (ubuf->dynamic())
                     static_cast<GLGraphicsBufferD*>(ubuf)->bindUniform(i, b);
                 else
                     static_cast<GLGraphicsBufferS*>(ubuf)->bindUniform(i);
-                glUniformBlockBinding(prog, m_pipeline->m_uniLocs.at(i), i);
+                glUniformBlockBinding(prog, loc, i);
             }
         }
         for (size_t i=0 ; i<m_texCount ; ++i)
