@@ -375,7 +375,7 @@ struct TestApplicationCallback : IApplicationCallback
 
             /* Make shader data binding */
             self->m_binding =
-            ctx.newShaderDataBinding(pipeline, vfmt, vbo, nullptr, nullptr, 0, nullptr, 1, &texture);
+            ctx.newShaderDataBinding(pipeline, vfmt, vbo, nullptr, nullptr, 0, nullptr, nullptr, 1, &texture);
 
             return true;
         });

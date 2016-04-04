@@ -152,6 +152,13 @@ struct IShaderDataBinding {};
 struct IGraphicsData {};
 class GraphicsDataToken;
 
+/** Used wherever distinction of pipeline stages is needed */
+enum class PipelineStage
+{
+    Vertex,
+    Fragment
+};
+
 /** Used by platform shader pipeline constructors */
 enum class Primitive
 {
@@ -225,7 +232,7 @@ struct IGraphicsDataFactory
         newShaderDataBinding(IShaderPipeline* pipeline,
                              IVertexFormat* vtxFormat,
                              IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
-                             size_t ubufCount, IGraphicsBuffer** ubufs,
+                             size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                              const size_t* ubufOffs, const size_t* ubufSizes,
                              size_t texCount, ITexture** texs)=0;
 
@@ -233,11 +240,11 @@ struct IGraphicsDataFactory
         newShaderDataBinding(IShaderPipeline* pipeline,
                              IVertexFormat* vtxFormat,
                              IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
-                             size_t ubufCount, IGraphicsBuffer** ubufs,
+                             size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                              size_t texCount, ITexture** texs)
         {
             return newShaderDataBinding(pipeline, vtxFormat, vbo, instVbo, ibo,
-                                        ubufCount, ubufs, nullptr, nullptr, texCount, texs);
+                                        ubufCount, ubufs, ubufStages, nullptr, nullptr, texCount, texs);
         }
     };
 

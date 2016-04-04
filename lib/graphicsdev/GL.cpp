@@ -655,7 +655,7 @@ IShaderDataBinding*
 GLDataFactory::Context::newShaderDataBinding(IShaderPipeline* pipeline,
                                              IVertexFormat* vtxFormat,
                                              IGraphicsBuffer*, IGraphicsBuffer*, IGraphicsBuffer*,
-                                             size_t ubufCount, IGraphicsBuffer** ubufs,
+                                             size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                                              const size_t* ubufOffs, const size_t* ubufSizes,
                                              size_t texCount, ITexture** texs)
 {

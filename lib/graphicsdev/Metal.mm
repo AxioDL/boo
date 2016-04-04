@@ -573,13 +573,13 @@ struct MetalShaderDataBinding : IShaderDataBinding
     IGraphicsBuffer* m_ibuf;
     size_t m_ubufCount;
     std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
-    std::vector<size_t> m_ubufOffs;
+    std::vector<std::pair<size_t, bool>> m_ubufOffs;
     size_t m_texCount;
     std::unique_ptr<ITexture*[]> m_texs;
     MetalShaderDataBinding(MetalContext* ctx,
                            IShaderPipeline* pipeline,
                            IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibuf,
-                           size_t ubufCount, IGraphicsBuffer** ubufs,
+                           size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                            const size_t* ubufOffs, const size_t* ubufSizes,
                            size_t texCount, ITexture** texs)
     : m_pipeline(static_cast<MetalShaderPipeline*>(pipeline)),
@@ -600,7 +600,7 @@ struct MetalShaderDataBinding : IShaderDataBinding
                 if (ubufOffs[i] % 256)
                     Log.report(logvisor::Fatal, "non-256-byte-aligned uniform-offset %d provided to newShaderDataBinding", int(i));
 #endif
-                m_ubufOffs.push_back(ubufOffs[i]);
+                m_ubufOffs.push_back({ubufOffs[i], ubufStages && ubufStages[i] == PipelineStage::Fragment});
             }
         }
         for (size_t i=0 ; i<ubufCount ; ++i)
@@ -630,7 +630,10 @@ struct MetalShaderDataBinding : IShaderDataBinding
             [enc setVertexBuffer:GetBufferGPUResource(m_instVbo, b) offset:0 atIndex:1];
         if (m_ubufOffs.size())
             for (size_t i=0 ; i<m_ubufCount ; ++i)
-                [enc setVertexBuffer:GetBufferGPUResource(m_ubufs[i], b) offset:m_ubufOffs[i] atIndex:i+2];
+                if (m_ubufOffs[i].second)
+                    [enc setFragmentBuffer:GetBufferGPUResource(m_ubufs[i], b) offset:m_ubufOffs[i].first atIndex:i+2];
+                else
+                    [enc setVertexBuffer:GetBufferGPUResource(m_ubufs[i], b) offset:m_ubufOffs[i].first atIndex:i+2];
         else
             for (size_t i=0 ; i<m_ubufCount ; ++i)
                 [enc setVertexBuffer:GetBufferGPUResource(m_ubufs[i], b) offset:0 atIndex:i+2];
@@ -1056,13 +1059,13 @@ IShaderDataBinding*
 MetalDataFactory::Context::newShaderDataBinding(IShaderPipeline* pipeline,
                                                 IVertexFormat* vtxFormat,
                                                 IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibuf,
-                                                size_t ubufCount, IGraphicsBuffer** ubufs,
+                                                size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                                                 const size_t* ubufOffs, const size_t* ubufSizes,
                                                 size_t texCount, ITexture** texs)
 {
     MetalShaderDataBinding* retval =
     new MetalShaderDataBinding(m_parent.m_ctx, pipeline, vbuf, instVbo, ibuf,
-                               ubufCount, ubufs, ubufOffs, ubufSizes, texCount, texs);
+                               ubufCount, ubufs, ubufStages, ubufOffs, ubufSizes, texCount, texs);
     m_deferredData->m_SBinds.emplace_back(retval);
     return retval;
 }
