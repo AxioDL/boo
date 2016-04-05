@@ -1149,10 +1149,10 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         m_boundTarget = ctarget;
     }
 
-    void setViewport(const SWindowRect& rect)
+    void setViewport(const SWindowRect& rect, float znear, float zfar)
     {
-        D3D12_VIEWPORT vp = {FLOAT(rect.location[0]), FLOAT(rect.location[1]),
-                             FLOAT(rect.size[0]), FLOAT(rect.size[1]), 0.0f, 1.0f};
+        D3D12_VIEWPORT vp = {FLOAT(rect.location[0]), FLOAT(m_boundTarget->m_height - rect.location[1] - rect.size[1]),
+                             FLOAT(rect.size[0]), FLOAT(rect.size[1]), znear, zfar};
         m_cmdList->RSSetViewports(1, &vp);
     }
 
