@@ -573,7 +573,8 @@ struct MetalShaderDataBinding : IShaderDataBinding
     IGraphicsBuffer* m_ibuf;
     size_t m_ubufCount;
     std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
-    std::vector<std::pair<size_t, bool>> m_ubufOffs;
+    std::unique_ptr<size_t[]> m_ubufOffs;
+    std::unique_ptr<bool[]> m_fubufs;
     size_t m_texCount;
     std::unique_ptr<ITexture*[]> m_texs;
     MetalShaderDataBinding(MetalContext* ctx,
@@ -591,16 +592,23 @@ struct MetalShaderDataBinding : IShaderDataBinding
     m_texCount(texCount),
     m_texs(new ITexture*[texCount])
     {
-        if (ubufOffs && ubufSizes)
+        if (ubufCount && ubufStages)
         {
-            m_ubufOffs.reserve(ubufCount);
+            m_fubufs.reset(new bool[ubufCount]);
+            for (size_t i=0 ; i<ubufCount ; ++i)
+                m_fubufs[i] = ubufStages[i] == PipelineStage::Fragment;
+        }
+
+        if (ubufCount && ubufOffs && ubufSizes)
+        {
+            m_ubufOffs.reset(new size_t[ubufCount]);
             for (size_t i=0 ; i<ubufCount ; ++i)
             {
 #ifndef NDEBUG
                 if (ubufOffs[i] % 256)
                     Log.report(logvisor::Fatal, "non-256-byte-aligned uniform-offset %d provided to newShaderDataBinding", int(i));
 #endif
-                m_ubufOffs.push_back({ubufOffs[i], ubufStages && ubufStages[i] == PipelineStage::Fragment});
+                m_ubufOffs[i] = ubufOffs[i];
             }
         }
         for (size_t i=0 ; i<ubufCount ; ++i)
@@ -628,15 +636,22 @@ struct MetalShaderDataBinding : IShaderDataBinding
             [enc setVertexBuffer:GetBufferGPUResource(m_vbuf, b) offset:0 atIndex:0];
         if (m_instVbo)
             [enc setVertexBuffer:GetBufferGPUResource(m_instVbo, b) offset:0 atIndex:1];
-        if (m_ubufOffs.size())
+        if (m_ubufOffs)
             for (size_t i=0 ; i<m_ubufCount ; ++i)
-                if (m_ubufOffs[i].second)
-                    [enc setFragmentBuffer:GetBufferGPUResource(m_ubufs[i], b) offset:m_ubufOffs[i].first atIndex:i+2];
+            {
+                if (m_fubufs && m_fubufs[i])
+                    [enc setFragmentBuffer:GetBufferGPUResource(m_ubufs[i], b) offset:m_ubufOffs[i] atIndex:i+2];
                 else
-                    [enc setVertexBuffer:GetBufferGPUResource(m_ubufs[i], b) offset:m_ubufOffs[i].first atIndex:i+2];
+                    [enc setVertexBuffer:GetBufferGPUResource(m_ubufs[i], b) offset:m_ubufOffs[i] atIndex:i+2];
+            }
         else
             for (size_t i=0 ; i<m_ubufCount ; ++i)
-                [enc setVertexBuffer:GetBufferGPUResource(m_ubufs[i], b) offset:0 atIndex:i+2];
+            {
+                if (m_fubufs && m_fubufs[i])
+                    [enc setFragmentBuffer:GetBufferGPUResource(m_ubufs[i], b) offset:0 atIndex:i+2];
+                else
+                    [enc setVertexBuffer:GetBufferGPUResource(m_ubufs[i], b) offset:0 atIndex:i+2];
+            }
         for (size_t i=0 ; i<m_texCount ; ++i)
             [enc setFragmentTexture:GetTextureGPUResource(m_texs[i], b) atIndex:i];
     }
@@ -712,10 +727,10 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         _setRenderTarget(target, false, false);
     }
 
-    void setViewport(const SWindowRect& rect)
+    void setViewport(const SWindowRect& rect, float znear, float zfar)
     {
         MTLViewport vp = {double(rect.location[0]), double(rect.location[1]),
-                          double(rect.size[0]), double(rect.size[1]), 0.0, 1.0};
+                          double(rect.size[0]), double(rect.size[1]), znear, zfar};
         [m_enc setViewport:vp];
     }
 
