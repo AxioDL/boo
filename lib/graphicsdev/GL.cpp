@@ -784,7 +784,11 @@ struct GLCommandQueue : IGraphicsCommandQueue
             const IShaderDataBinding* binding;
             const ITextureR* target;
             const ITextureR* source;
-            SWindowRect rect;
+            struct
+            {
+                SWindowRect rect;
+                float znear, zfar;
+            };
             float rgba[4];
             GLbitfield flags;
             struct
@@ -983,6 +987,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 case Command::Op::SetViewport:
                     glViewport(cmd.rect.location[0], cmd.rect.location[1],
                                cmd.rect.size[0], cmd.rect.size[1]);
+                    glDepthRange(cmd.znear, cmd.zfar);
                     break;
                 case Command::Op::SetScissor:
                     if (cmd.rect.size[0] == 0 && cmd.rect.size[1] == 0)
@@ -1093,11 +1098,13 @@ struct GLCommandQueue : IGraphicsCommandQueue
         cmds.back().target = target;
     }
 
-    void setViewport(const SWindowRect& rect)
+    void setViewport(const SWindowRect& rect, float znear, float zfar)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::Op::SetViewport);
         cmds.back().rect = rect;
+        cmds.back().znear = znear;
+        cmds.back().zfar = zfar;
     }
 
     void setScissor(const SWindowRect& rect)

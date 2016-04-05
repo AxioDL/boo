@@ -2393,12 +2393,12 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         m_boundTarget = ctarget;
     }
 
-    void setViewport(const SWindowRect& rect)
+    void setViewport(const SWindowRect& rect, float znear, float zfar)
     {
         if (m_boundTarget)
         {
-            VkViewport vp = {float(rect.location[0]), float(m_boundTarget->m_height - rect.location[1]),
-                             float(rect.size[0]), float(rect.size[1]), 0.0f, 1.0f};
+            VkViewport vp = {float(rect.location[0]), float(m_boundTarget->m_height - rect.location[1] - rect.size[1]),
+                             float(rect.size[0]), float(rect.size[1]), znear, zfar};
             vkCmdSetViewport(m_cmdBufs[m_fillBuf], 0, 1, &vp);
         }
     }
@@ -2409,7 +2409,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         {
             VkRect2D vkrect =
             {
-                {int32_t(rect.location[0]), int32_t(m_boundTarget->m_height) - int32_t(rect.location[1])},
+                {int32_t(rect.location[0]), int32_t(m_boundTarget->m_height - rect.location[1] - rect.size[1])},
                 {uint32_t(rect.size[0]), uint32_t(rect.size[1])}
             };
             vkCmdSetScissor(m_cmdBufs[m_fillBuf], 0, 1, &vkrect);

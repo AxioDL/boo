@@ -18,7 +18,7 @@ struct IGraphicsCommandQueue
 
     virtual void setShaderDataBinding(IShaderDataBinding* binding)=0;
     virtual void setRenderTarget(ITextureR* target)=0;
-    virtual void setViewport(const SWindowRect& rect)=0;
+    virtual void setViewport(const SWindowRect& rect, float znear=0.f, float zfar=1.f)=0;
     virtual void setScissor(const SWindowRect& rect)=0;
 
     virtual void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)=0;
