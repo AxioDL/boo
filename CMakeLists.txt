@@ -11,6 +11,7 @@ endif()
 
 set(WITH_LSR_BINDINGS OFF)
 set(BUILD_TESTS OFF)
+set(WITH_OPENMP OFF)
 set(BUILD_SHARED_LIBS OFF)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/soxr/cmake/Modules")
 add_subdirectory(soxr)

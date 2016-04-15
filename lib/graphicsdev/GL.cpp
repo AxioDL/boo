@@ -788,7 +788,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
             {
                 SWindowRect rect;
                 float znear, zfar;
-            };
+            } viewport;
             float rgba[4];
             GLbitfield flags;
             struct
@@ -985,18 +985,18 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     break;
                 }
                 case Command::Op::SetViewport:
-                    glViewport(cmd.rect.location[0], cmd.rect.location[1],
-                               cmd.rect.size[0], cmd.rect.size[1]);
-                    glDepthRange(cmd.znear, cmd.zfar);
+                    glViewport(cmd.viewport.rect.location[0], cmd.viewport.rect.location[1],
+                               cmd.viewport.rect.size[0], cmd.viewport.rect.size[1]);
+                    glDepthRange(cmd.viewport.znear, cmd.viewport.zfar);
                     break;
                 case Command::Op::SetScissor:
-                    if (cmd.rect.size[0] == 0 && cmd.rect.size[1] == 0)
+                    if (cmd.viewport.rect.size[0] == 0 && cmd.viewport.rect.size[1] == 0)
                         glDisable(GL_SCISSOR_TEST);
                     else
                     {
                         glEnable(GL_SCISSOR_TEST);
-                        glScissor(cmd.rect.location[0], cmd.rect.location[1],
-                                  cmd.rect.size[0], cmd.rect.size[1]);
+                        glScissor(cmd.viewport.rect.location[0], cmd.viewport.rect.location[1],
+                                  cmd.viewport.rect.size[0], cmd.viewport.rect.size[1]);
                     }
                     break;
                 case Command::Op::SetClearColor:
@@ -1030,14 +1030,16 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     if (cmd.resolveColor && tex->m_bindTexs[0])
                     {
                         glBindTexture(target, tex->m_bindTexs[0]);
-                        glCopyTexSubImage2D(target, 0, cmd.rect.location[0], cmd.rect.location[1],
-                                            cmd.rect.location[0], cmd.rect.location[1], cmd.rect.size[0], cmd.rect.size[1]);
+                        glCopyTexSubImage2D(target, 0, cmd.viewport.rect.location[0], cmd.viewport.rect.location[1],
+                                            cmd.viewport.rect.location[0], cmd.viewport.rect.location[1],
+                                            cmd.viewport.rect.size[0], cmd.viewport.rect.size[1]);
                     }
                     if (cmd.resolveDepth && tex->m_bindTexs[1])
                     {
                         glBindTexture(target, tex->m_bindTexs[1]);
-                        glCopyTexSubImage2D(target, 0, cmd.rect.location[0], cmd.rect.location[1],
-                                            cmd.rect.location[0], cmd.rect.location[1], cmd.rect.size[0], cmd.rect.size[1]);
+                        glCopyTexSubImage2D(target, 0, cmd.viewport.rect.location[0], cmd.viewport.rect.location[1],
+                                            cmd.viewport.rect.location[0], cmd.viewport.rect.location[1],
+                                            cmd.viewport.rect.size[0], cmd.viewport.rect.size[1]);
                     }
                     break;
                 }
@@ -1102,16 +1104,16 @@ struct GLCommandQueue : IGraphicsCommandQueue
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::Op::SetViewport);
-        cmds.back().rect = rect;
-        cmds.back().znear = znear;
-        cmds.back().zfar = zfar;
+        cmds.back().viewport.rect = rect;
+        cmds.back().viewport.znear = znear;
+        cmds.back().viewport.zfar = zfar;
     }
 
     void setScissor(const SWindowRect& rect)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::Op::SetScissor);
-        cmds.back().rect = rect;
+        cmds.back().viewport.rect = rect;
     }
 
     void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)
@@ -1190,7 +1192,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
         cmds.back().resolveColor = color;
         cmds.back().resolveDepth = depth;
         SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, tex->m_width, tex->m_height));
-        SWindowRect& targetRect = cmds.back().rect;
+        SWindowRect& targetRect = cmds.back().viewport.rect;
         targetRect.location[0] = intersectRect.location[0];
         if (tlOrigin)
             targetRect.location[1] = tex->m_height - intersectRect.location[1] - intersectRect.size[1];

@@ -106,8 +106,8 @@ extern "C" const uint8_t MAINICON_NETWM[];
 extern "C" const size_t MAINICON_NETWM_SZ;
 
 /* No icon by default */
-const uint8_t MAINICON_NETWM[] __attribute__ ((weak)) = {};
-const size_t MAINICON_NETWM_SZ __attribute__ ((weak)) = 0;
+extern const uint8_t MAINICON_NETWM[] __attribute__ ((weak)) = {};
+extern const size_t MAINICON_NETWM_SZ __attribute__ ((weak)) = 0;
 
 namespace boo
 {
