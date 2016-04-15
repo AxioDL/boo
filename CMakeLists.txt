@@ -161,9 +161,10 @@ if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "AppleCl
 endif()
 
 add_subdirectory(glslang/glslang)
+add_subdirectory(glslang/hlsl)
 add_subdirectory(glslang/OGLCompilersDLL)
 add_subdirectory(glslang/SPIRV)
-list(APPEND _BOO_SYS_LIBS glslang soxr OSDependent OGLCompiler SPIRV)
+list(APPEND _BOO_SYS_LIBS glslang HLSL soxr OSDependent OGLCompiler SPIRV)
 
 set(BOO_SYS_LIBS ${_BOO_SYS_LIBS} CACHE PATH "boo system libraries" FORCE)
 set(BOO_SYS_DEFINES ${_BOO_SYS_DEFINES} CACHE PATH "boo system defines" FORCE)
