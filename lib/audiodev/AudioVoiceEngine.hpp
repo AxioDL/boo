@@ -4,7 +4,7 @@
 #include "boo/audiodev/IAudioVoiceEngine.hpp"
 #include "AudioVoice.hpp"
 #include "AudioSubmix.hpp"
-#include "IAudioHost.hpp"
+#include "IAudioMix.hpp"
 
 namespace boo
 {
@@ -21,14 +21,22 @@ struct AudioVoiceEngineMixInfo
 };
 
 /** Base class for managing mixing and sample-rate-conversion amongst active voices */
-class BaseAudioVoiceEngine : public IAudioVoiceEngine, public IAudioHost
+class BaseAudioVoiceEngine : public IAudioVoiceEngine, public IAudioMix
 {
 protected:
     friend class AudioVoice;
     friend class AudioSubmix;
+    friend class AudioVoiceMono;
+    friend class AudioVoiceStereo;
     AudioVoiceEngineMixInfo m_mixInfo;
     std::list<AudioVoice*> m_activeVoices;
     std::list<AudioSubmix*> m_activeSubmixes;
+
+    /* Shared scratch buffers for accumulating audio data for resampling */
+    std::vector<int16_t> m_scratchIn;
+    std::vector<int16_t> m_scratch16;
+    std::vector<int32_t> m_scratch32;
+    std::vector<float> m_scratchFlt;
 
     void _pumpAndMixVoices(size_t frames, int16_t* dataOut);
     void _pumpAndMixVoices(size_t frames, int32_t* dataOut);

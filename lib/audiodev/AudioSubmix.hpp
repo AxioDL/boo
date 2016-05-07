@@ -2,20 +2,22 @@
 #define BOO_AUDIOSUBMIX_HPP
 
 #include "boo/audiodev/IAudioSubmix.hpp"
-#include "IAudioHost.hpp"
+#include "IAudioMix.hpp"
 #include <list>
+#include <vector>
 
 namespace boo
 {
 class BaseAudioVoiceEngine;
 class AudioVoice;
 
-class AudioSubmix : public IAudioSubmix, public IAudioHost
+class AudioSubmix : public IAudioSubmix, public IAudioMix
 {
     friend class BaseAudioVoiceEngine;
 
     /* Mixer-engine relationships */
-    IAudioHost& m_parent;
+    BaseAudioVoiceEngine& m_root;
+    IAudioMix& m_parent;
     std::list<AudioSubmix*>::iterator m_parentIt;
     bool m_bound = false;
     void bindSubmix(std::list<AudioSubmix*>::iterator pIt)
@@ -34,6 +36,11 @@ class AudioSubmix : public IAudioSubmix, public IAudioHost
     /* Output gains for each channel */
     float m_gains[8];
 
+    /* Temporary scratch buffers for accumulating submix audio */
+    std::vector<int16_t> m_scratch16;
+    std::vector<int32_t> m_scratch32;
+    std::vector<float> m_scratchFlt;
+
     void _pumpAndMixVoices(size_t frames, int16_t* dataOut);
     void _pumpAndMixVoices(size_t frames, int32_t* dataOut);
     void _pumpAndMixVoices(size_t frames, float* dataOut);
@@ -43,7 +50,7 @@ class AudioSubmix : public IAudioSubmix, public IAudioHost
 
 public:
     ~AudioSubmix();
-    AudioSubmix(IAudioHost& parent, IAudioSubmixCallback* cb);
+    AudioSubmix(BaseAudioVoiceEngine& root, IAudioMix& parent, IAudioSubmixCallback* cb);
 
     std::unique_ptr<IAudioVoice> allocateNewMonoVoice(double sampleRate,
                                                       IAudioVoiceCallback* cb,
@@ -53,7 +60,9 @@ public:
                                                         IAudioVoiceCallback* cb,
                                                         bool dynamicPitch=false);
 
-    virtual std::unique_ptr<IAudioSubmix> allocateNewSubmix(IAudioSubmixCallback* cb=nullptr);
+    std::unique_ptr<IAudioSubmix> allocateNewSubmix(IAudioSubmixCallback* cb=nullptr);
+
+    void setChannelGains(const float gains[8]);
 
     void unbindSubmix();
 

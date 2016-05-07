@@ -10,7 +10,7 @@ namespace boo
 {
 class BaseAudioVoiceEngine;
 struct AudioVoiceEngineMixInfo;
-class IAudioHost;
+class IAudioMix;
 
 class AudioVoice : public IAudioVoice
 {
@@ -19,7 +19,8 @@ class AudioVoice : public IAudioVoice
 
 protected:
     /* Mixer-engine relationships */
-    IAudioHost& m_parent;
+    BaseAudioVoiceEngine& m_root;
+    IAudioMix& m_parent;
     std::list<AudioVoice*>::iterator m_parentIt;
     bool m_bound = false;
     void bindVoice(std::list<AudioVoice*>::iterator pIt)
@@ -41,7 +42,7 @@ protected:
     virtual size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, int16_t* buf)=0;
     virtual size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, int32_t* buf)=0;
     virtual size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, float* buf)=0;
-    AudioVoice(IAudioHost& parent, IAudioVoiceCallback* cb, bool dynamicRate);
+    AudioVoice(BaseAudioVoiceEngine& root, IAudioMix& parent, IAudioVoiceCallback* cb, bool dynamicRate);
 
 public:
     ~AudioVoice();
@@ -64,7 +65,7 @@ class AudioVoiceMono : public AudioVoice
     size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, float* buf);
 
 public:
-    AudioVoiceMono(IAudioHost& parent, IAudioVoiceCallback* cb,
+    AudioVoiceMono(BaseAudioVoiceEngine& root, IAudioMix& parent, IAudioVoiceCallback* cb,
                    double sampleRate, bool dynamicRate);
     void setDefaultMatrixCoefficients();
     void setMonoMatrixCoefficients(const float coefs[8]);
@@ -83,7 +84,7 @@ class AudioVoiceStereo : public AudioVoice
     size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, float* buf);
 
 public:
-    AudioVoiceStereo(IAudioHost& parent, IAudioVoiceCallback* cb,
+    AudioVoiceStereo(BaseAudioVoiceEngine& root, IAudioMix& parent, IAudioVoiceCallback* cb,
                      double sampleRate, bool dynamicRate);
     void setDefaultMatrixCoefficients();
     void setMonoMatrixCoefficients(const float coefs[8]);

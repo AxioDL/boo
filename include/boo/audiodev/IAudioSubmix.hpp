@@ -28,6 +28,9 @@ struct IAudioSubmix
 
     /** Same as the IAudioVoice allocator, but produces audio recursively within the submix */
     virtual std::unique_ptr<IAudioSubmix> allocateNewSubmix(IAudioSubmixCallback* cb=nullptr)=0;
+
+    /** Sets gain factors for each channel once accumulated by the submix */
+    virtual void setChannelGains(const float gains[8])=0;
 };
 
 struct IAudioSubmixCallback

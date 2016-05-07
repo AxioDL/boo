@@ -6,13 +6,9 @@ namespace boo
 {
 static logvisor::Module Log("boo::AudioVoice");
 
-static std::vector<int16_t> scratchIn;
-static std::vector<int16_t> scratch16;
-static std::vector<int32_t> scratch32;
-static std::vector<float> scratchFlt;
-
-AudioVoice::AudioVoice(IAudioHost& parent, IAudioVoiceCallback* cb, bool dynamicRate)
-: m_parent(parent), m_cb(cb), m_dynamicRate(dynamicRate) {}
+AudioVoice::AudioVoice(BaseAudioVoiceEngine& root, IAudioMix& parent,
+                       IAudioVoiceCallback* cb, bool dynamicRate)
+: m_root(root), m_parent(parent), m_cb(cb), m_dynamicRate(dynamicRate) {}
 
 AudioVoice::~AudioVoice()
 {
@@ -52,9 +48,9 @@ void AudioVoice::unbindVoice()
     }
 }
 
-AudioVoiceMono::AudioVoiceMono(IAudioHost& parent, IAudioVoiceCallback* cb,
+AudioVoiceMono::AudioVoiceMono(BaseAudioVoiceEngine& root, IAudioMix& parent, IAudioVoiceCallback* cb,
                                double sampleRate, bool dynamicRate)
-: AudioVoice(parent, cb, dynamicRate)
+: AudioVoice(root, parent, cb, dynamicRate)
 {
     soxr_io_spec_t ioSpec = soxr_io_spec(SOXR_INT16_I, parent.mixInfo().m_sampleFormat);
     soxr_quality_spec_t qSpec = soxr_quality_spec(SOXR_20_BITQ, dynamicRate ? SOXR_VR : 0);
@@ -74,6 +70,7 @@ AudioVoiceMono::AudioVoiceMono(IAudioHost& parent, IAudioVoiceCallback* cb,
 
 size_t AudioVoiceMono::SRCCallback(AudioVoiceMono* ctx, int16_t** data, size_t frames)
 {
+    std::vector<int16_t>& scratchIn = ctx->m_root.m_scratchIn;
     if (scratchIn.size() < frames)
         scratchIn.resize(frames);
     *data = scratchIn.data();
@@ -83,6 +80,7 @@ size_t AudioVoiceMono::SRCCallback(AudioVoiceMono* ctx, int16_t** data, size_t f
 size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
                                   size_t frames, int16_t* buf)
 {
+    std::vector<int16_t>& scratch16 = m_root.m_scratch16;
     if (scratch16.size() < frames)
         scratch16.resize(frames);
 
@@ -95,6 +93,7 @@ size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
 size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
                                   size_t frames, int32_t* buf)
 {
+    std::vector<int32_t>& scratch32 = m_root.m_scratch32;
     if (scratch32.size() < frames)
         scratch32.resize(frames);
 
@@ -107,6 +106,7 @@ size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
 size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
                                   size_t frames, float* buf)
 {
+    std::vector<float>& scratchFlt = m_root.m_scratchFlt;
     if (scratchFlt.size() < frames)
         scratchFlt.resize(frames);
 
@@ -142,9 +142,9 @@ void AudioVoiceMono::setStereoMatrixCoefficients(const float coefs[8][2])
     m_matrix.setMatrixCoefficients(newCoefs);
 }
 
-AudioVoiceStereo::AudioVoiceStereo(IAudioHost& parent, IAudioVoiceCallback* cb,
+AudioVoiceStereo::AudioVoiceStereo(BaseAudioVoiceEngine& root, IAudioMix& parent, IAudioVoiceCallback* cb,
                                    double sampleRate, bool dynamicRate)
-: AudioVoice(parent, cb, dynamicRate)
+: AudioVoice(root, parent, cb, dynamicRate)
 {
     soxr_io_spec_t ioSpec = soxr_io_spec(SOXR_INT16_I, parent.mixInfo().m_sampleFormat);
     soxr_quality_spec_t qSpec = soxr_quality_spec(SOXR_20_BITQ, dynamicRate ? SOXR_VR : 0);
@@ -164,6 +164,7 @@ AudioVoiceStereo::AudioVoiceStereo(IAudioHost& parent, IAudioVoiceCallback* cb,
 
 size_t AudioVoiceStereo::SRCCallback(AudioVoiceStereo* ctx, int16_t** data, size_t frames)
 {
+    std::vector<int16_t>& scratchIn = ctx->m_root.m_scratchIn;
     size_t samples = frames * 2;
     if (scratchIn.size() < samples)
         scratchIn.resize(samples);
@@ -174,6 +175,7 @@ size_t AudioVoiceStereo::SRCCallback(AudioVoiceStereo* ctx, int16_t** data, size
 size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
                                     size_t frames, int16_t* buf)
 {
+    std::vector<int16_t>& scratch16 = m_root.m_scratch16;
     size_t samples = frames * 2;
     if (scratch16.size() < samples)
         scratch16.resize(samples);
@@ -187,6 +189,7 @@ size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
 size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
                                     size_t frames, int32_t* buf)
 {
+    std::vector<int32_t>& scratch32 = m_root.m_scratch32;
     size_t samples = frames * 2;
     if (scratch32.size() < samples)
         scratch32.resize(samples);
@@ -200,6 +203,7 @@ size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
 size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
                                     size_t frames, float* buf)
 {
+    std::vector<float>& scratchFlt = m_root.m_scratchFlt;
     size_t samples = frames * 2;
     if (scratchFlt.size() < samples)
         scratchFlt.resize(samples);

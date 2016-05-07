@@ -189,7 +189,7 @@ add_library(boo
             lib/audiodev/AudioVoice.cpp
             lib/audiodev/AudioSubmix.hpp
             lib/audiodev/AudioSubmix.cpp
-            lib/audiodev/IAudioHost.hpp
+            lib/audiodev/IAudioMix.hpp
             include/boo/inputdev/IHIDListener.hpp
             include/boo/IGraphicsContext.hpp
             include/boo/graphicsdev/IGraphicsDataFactory.hpp

@@ -50,7 +50,7 @@ BaseAudioVoiceEngine::allocateNewMonoVoice(double sampleRate,
                                            bool dynamicPitch)
 {
     std::unique_ptr<IAudioVoice> ret =
-        std::make_unique<AudioVoiceMono>(*this, cb, sampleRate, dynamicPitch);
+        std::make_unique<AudioVoiceMono>(*this, *this, cb, sampleRate, dynamicPitch);
     AudioVoiceMono* retMono = static_cast<AudioVoiceMono*>(ret.get());
     retMono->bindVoice(m_activeVoices.insert(m_activeVoices.end(), retMono));
     return ret;
@@ -62,7 +62,7 @@ BaseAudioVoiceEngine::allocateNewStereoVoice(double sampleRate,
                                              bool dynamicPitch)
 {
     std::unique_ptr<IAudioVoice> ret =
-        std::make_unique<AudioVoiceStereo>(*this, cb, sampleRate, dynamicPitch);
+        std::make_unique<AudioVoiceStereo>(*this, *this, cb, sampleRate, dynamicPitch);
     AudioVoiceStereo* retStereo = static_cast<AudioVoiceStereo*>(ret.get());
     retStereo->bindVoice(m_activeVoices.insert(m_activeVoices.end(), retStereo));
     return ret;
@@ -72,7 +72,7 @@ std::unique_ptr<IAudioSubmix>
 BaseAudioVoiceEngine::allocateNewSubmix(IAudioSubmixCallback* cb)
 {
     std::unique_ptr<IAudioSubmix> ret =
-        std::make_unique<AudioSubmix>(*this, cb);
+        std::make_unique<AudioSubmix>(*this, *this, cb);
     AudioSubmix* retIntern = static_cast<AudioSubmix*>(ret.get());
     retIntern->bindSubmix(m_activeSubmixes.insert(m_activeSubmixes.end(), retIntern));
     return ret;

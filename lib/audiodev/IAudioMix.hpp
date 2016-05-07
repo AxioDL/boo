@@ -1,5 +1,5 @@
-#ifndef BOO_IAUDIOHOST_HPP
-#define BOO_IAUDIOHOST_HPP
+#ifndef BOO_IAUDIOMIX_HPP
+#define BOO_IAUDIOMIX_HPP
 
 #include <list>
 
@@ -10,7 +10,7 @@ class AudioVoice;
 class AudioSubmix;
 
 /** Entity that mixes audio from several child sources (engine root or submix) */
-class IAudioHost
+class IAudioMix
 {
     friend class AudioVoice;
     friend class AudioSubmix;
@@ -22,4 +22,4 @@ public:
 
 }
 
-#endif // BOO_IAUDIOHOST_HPP
+#endif // BOO_IAUDIOMIX_HPP
