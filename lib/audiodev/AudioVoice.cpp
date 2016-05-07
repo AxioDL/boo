@@ -11,7 +11,7 @@ static std::vector<int16_t> scratch16;
 static std::vector<int32_t> scratch32;
 static std::vector<float> scratchFlt;
 
-AudioVoice::AudioVoice(BaseAudioVoiceEngine& parent, IAudioVoiceCallback* cb, bool dynamicRate)
+AudioVoice::AudioVoice(IAudioHost& parent, IAudioVoiceCallback* cb, bool dynamicRate)
 : m_parent(parent), m_cb(cb), m_dynamicRate(dynamicRate) {}
 
 AudioVoice::~AudioVoice()
@@ -47,12 +47,12 @@ void AudioVoice::unbindVoice()
 {
     if (m_bound)
     {
-        m_parent.m_activeVoices.erase(m_parentIt);
+        m_parent._unbindFrom(m_parentIt);
         m_bound = false;
     }
 }
 
-AudioVoiceMono::AudioVoiceMono(BaseAudioVoiceEngine& parent, IAudioVoiceCallback* cb,
+AudioVoiceMono::AudioVoiceMono(IAudioHost& parent, IAudioVoiceCallback* cb,
                                double sampleRate, bool dynamicRate)
 : AudioVoice(parent, cb, dynamicRate)
 {
@@ -142,7 +142,7 @@ void AudioVoiceMono::setStereoMatrixCoefficients(const float coefs[8][2])
     m_matrix.setMatrixCoefficients(newCoefs);
 }
 
-AudioVoiceStereo::AudioVoiceStereo(BaseAudioVoiceEngine& parent, IAudioVoiceCallback* cb,
+AudioVoiceStereo::AudioVoiceStereo(IAudioHost& parent, IAudioVoiceCallback* cb,
                                    double sampleRate, bool dynamicRate)
 : AudioVoice(parent, cb, dynamicRate)
 {

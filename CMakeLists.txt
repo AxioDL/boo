@@ -187,10 +187,14 @@ add_library(boo
             lib/audiodev/AudioVoiceEngine.cpp
             lib/audiodev/AudioVoice.hpp
             lib/audiodev/AudioVoice.cpp
+            lib/audiodev/AudioSubmix.hpp
+            lib/audiodev/AudioSubmix.cpp
+            lib/audiodev/IAudioHost.hpp
             include/boo/inputdev/IHIDListener.hpp
             include/boo/IGraphicsContext.hpp
             include/boo/graphicsdev/IGraphicsDataFactory.hpp
             include/boo/graphicsdev/IGraphicsCommandQueue.hpp
+            include/boo/audiodev/IAudioSubmix.hpp
             include/boo/audiodev/IAudioVoice.hpp
             include/boo/audiodev/IAudioVoiceEngine.hpp
             include/boo/IWindow.hpp

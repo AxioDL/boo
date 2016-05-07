@@ -1,37 +1,9 @@
 #include "AudioMatrix.hpp"
 #include "AudioVoiceEngine.hpp"
 #include <string.h>
-#include <limits.h>
 
 namespace boo
 {
-
-static inline int16_t Clamp16(float in)
-{
-    if (in < SHRT_MIN)
-        return SHRT_MIN;
-    else if (in > SHRT_MAX)
-        return SHRT_MAX;
-    return in;
-}
-
-static inline int32_t Clamp32(float in)
-{
-    if (in < INT_MIN)
-        return INT_MIN;
-    else if (in > INT_MAX)
-        return INT_MAX;
-    return in;
-}
-
-static inline float ClampFlt(float in)
-{
-    if (in < -1.f)
-        return -1.f;
-    else if (in > 1.f)
-        return 1.f;
-    return in;
-}
 
 void AudioMatrixMono::setDefaultMatrixCoefficients(AudioChannelSet acSet)
 {
