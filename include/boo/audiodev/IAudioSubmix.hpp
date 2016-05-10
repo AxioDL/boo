@@ -39,9 +39,12 @@ struct IAudioSubmixCallback
     virtual bool canApplyEffect() const=0;
 
     /** Client-provided effect solution for interleaved, master sample-rate audio */
-    virtual void applyEffect(int16_t* audio, const ChannelMap& chanMap, double sampleRate) const=0;
-    virtual void applyEffect(int32_t* audio, const ChannelMap& chanMap, double sampleRate) const=0;
-    virtual void applyEffect(float* audio, const ChannelMap& chanMap, double sampleRate) const=0;
+    virtual void applyEffect(int16_t* audio, size_t frameCount,
+                             const ChannelMap& chanMap, double sampleRate) const=0;
+    virtual void applyEffect(int32_t* audio, size_t frameCount,
+                             const ChannelMap& chanMap, double sampleRate) const=0;
+    virtual void applyEffect(float* audio, size_t frameCount,
+                             const ChannelMap& chanMap, double sampleRate) const=0;
 };
 
 }

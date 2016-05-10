@@ -39,7 +39,7 @@ void AudioSubmix::_pumpAndMixVoices(size_t frames, int16_t* dataOut)
 
     /* Apply submix effect (if available) */
     if (m_cb && m_cb->canApplyEffect())
-        m_cb->applyEffect(m_scratch16.data(), info.m_channelMap, info.m_sampleRate);
+        m_cb->applyEffect(m_scratch16.data(), frames, info.m_channelMap, info.m_sampleRate);
 
     /* Merge into output mix */
     auto it = m_scratch16.begin();
@@ -72,7 +72,7 @@ void AudioSubmix::_pumpAndMixVoices(size_t frames, int32_t* dataOut)
 
     /* Apply submix effect (if available) */
     if (m_cb && m_cb->canApplyEffect())
-        m_cb->applyEffect(m_scratch32.data(), info.m_channelMap, info.m_sampleRate);
+        m_cb->applyEffect(m_scratch32.data(), frames, info.m_channelMap, info.m_sampleRate);
 
     /* Merge into output mix */
     auto it = m_scratch32.begin();
@@ -105,7 +105,7 @@ void AudioSubmix::_pumpAndMixVoices(size_t frames, float* dataOut)
 
     /* Apply submix effect (if available) */
     if (m_cb && m_cb->canApplyEffect())
-        m_cb->applyEffect(m_scratchFlt.data(), info.m_channelMap, info.m_sampleRate);
+        m_cb->applyEffect(m_scratchFlt.data(), frames, info.m_channelMap, info.m_sampleRate);
 
     /* Merge into output mix */
     auto it = m_scratchFlt.begin();
