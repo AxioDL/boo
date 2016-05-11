@@ -18,6 +18,7 @@ AudioVoice::~AudioVoice()
 
 void AudioVoice::setPitchRatio(double ratio)
 {
+    m_pitchRatio = ratio;
     if (m_dynamicRate)
     {
         soxr_error_t err = soxr_set_io_ratio(m_src, ratio, m_parent.mixInfo().m_periodFrames);
@@ -52,11 +53,18 @@ AudioVoiceMono::AudioVoiceMono(BaseAudioVoiceEngine& root, IAudioMix& parent, IA
                                double sampleRate, bool dynamicRate)
 : AudioVoice(root, parent, cb, dynamicRate)
 {
-    soxr_io_spec_t ioSpec = soxr_io_spec(SOXR_INT16_I, parent.mixInfo().m_sampleFormat);
-    soxr_quality_spec_t qSpec = soxr_quality_spec(SOXR_20_BITQ, dynamicRate ? SOXR_VR : 0);
+    resetSampleRate(sampleRate);
+}
+
+void AudioVoiceMono::resetSampleRate(double sampleRate)
+{
+    soxr_delete(m_src);
+
+    soxr_io_spec_t ioSpec = soxr_io_spec(SOXR_INT16_I, m_parent.mixInfo().m_sampleFormat);
+    soxr_quality_spec_t qSpec = soxr_quality_spec(SOXR_20_BITQ, m_dynamicRate ? SOXR_VR : 0);
 
     soxr_error_t err;
-    m_src = soxr_create(sampleRate, parent.mixInfo().m_sampleRate, 1,
+    m_src = soxr_create(sampleRate, m_parent.mixInfo().m_sampleRate, 1,
                         &err, &ioSpec, &qSpec, nullptr);
 
     if (err)
@@ -66,6 +74,7 @@ AudioVoiceMono::AudioVoiceMono(BaseAudioVoiceEngine& root, IAudioMix& parent, IA
     }
 
     soxr_set_input_fn(m_src, soxr_input_fn_t(SRCCallback), this, 0);
+    setPitchRatio(m_pitchRatio);
 }
 
 size_t AudioVoiceMono::SRCCallback(AudioVoiceMono* ctx, int16_t** data, size_t frames)
@@ -146,11 +155,18 @@ AudioVoiceStereo::AudioVoiceStereo(BaseAudioVoiceEngine& root, IAudioMix& parent
                                    double sampleRate, bool dynamicRate)
 : AudioVoice(root, parent, cb, dynamicRate)
 {
-    soxr_io_spec_t ioSpec = soxr_io_spec(SOXR_INT16_I, parent.mixInfo().m_sampleFormat);
-    soxr_quality_spec_t qSpec = soxr_quality_spec(SOXR_20_BITQ, dynamicRate ? SOXR_VR : 0);
+    resetSampleRate(sampleRate);
+}
+
+void AudioVoiceStereo::resetSampleRate(double sampleRate)
+{
+    soxr_delete(m_src);
+
+    soxr_io_spec_t ioSpec = soxr_io_spec(SOXR_INT16_I, m_parent.mixInfo().m_sampleFormat);
+    soxr_quality_spec_t qSpec = soxr_quality_spec(SOXR_20_BITQ, m_dynamicRate ? SOXR_VR : 0);
 
     soxr_error_t err;
-    m_src = soxr_create(sampleRate, parent.mixInfo().m_sampleRate, 2,
+    m_src = soxr_create(sampleRate, m_parent.mixInfo().m_sampleRate, 2,
                         &err, &ioSpec, &qSpec, nullptr);
 
     if (!m_src)
@@ -160,6 +176,7 @@ AudioVoiceStereo::AudioVoiceStereo(BaseAudioVoiceEngine& root, IAudioMix& parent
     }
 
     soxr_set_input_fn(m_src, soxr_input_fn_t(SRCCallback), this, 0);
+    setPitchRatio(m_pitchRatio);
 }
 
 size_t AudioVoiceStereo::SRCCallback(AudioVoiceStereo* ctx, int16_t** data, size_t frames)

@@ -33,7 +33,8 @@ protected:
     IAudioVoiceCallback* m_cb;
 
     /* Sample-rate converter */
-    soxr_t m_src;
+    soxr_t m_src = nullptr;
+    double m_pitchRatio = 1.0;
     bool m_dynamicRate;
 
     /* Running bool */
@@ -56,6 +57,7 @@ public:
 class AudioVoiceMono : public AudioVoice
 {
     AudioMatrixMono m_matrix;
+    void resetSampleRate(double sampleRate);
 
     static size_t SRCCallback(AudioVoiceMono* ctx,
                               int16_t** data, size_t requestedLen);
@@ -75,6 +77,7 @@ public:
 class AudioVoiceStereo : public AudioVoice
 {
     AudioMatrixStereo m_matrix;
+    void resetSampleRate(double sampleRate);
 
     static size_t SRCCallback(AudioVoiceStereo* ctx,
                               int16_t** data, size_t requestedLen);

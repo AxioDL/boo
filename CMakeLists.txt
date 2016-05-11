@@ -200,6 +200,7 @@ add_library(boo
             include/boo/IWindow.hpp
             include/boo/IApplication.hpp
             include/boo/ThreadLocalPtr.hpp
+            include/boo/DeferredWindowEvents.hpp
             include/boo/System.hpp
             include/boo/boo.hpp
             InputDeviceClasses.cpp

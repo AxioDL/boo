@@ -56,6 +56,9 @@ struct IAudioVoice
 {
     virtual ~IAudioVoice() = default;
 
+    /** Set sample rate into voice (may result in audio discontinuities) */
+    virtual void resetSampleRate(double sampleRate)=0;
+
     /** Reset channel-gains to voice defaults */
     virtual void setDefaultMatrixCoefficients()=0;
 

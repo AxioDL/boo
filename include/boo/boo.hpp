@@ -8,5 +8,6 @@
 #include "inputdev/DualshockPad.hpp"
 #include "graphicsdev/IGraphicsCommandQueue.hpp"
 #include "graphicsdev/IGraphicsDataFactory.hpp"
+#include "DeferredWindowEvents.hpp"
 
 #endif // BOO_HPP
