@@ -16,18 +16,39 @@ AudioVoice::~AudioVoice()
     soxr_delete(m_src);
 }
 
-void AudioVoice::setPitchRatio(double ratio)
+void AudioVoice::_setPitchRatio(double ratio)
 {
-    m_pitchRatio = ratio;
     if (m_dynamicRate)
     {
         soxr_error_t err = soxr_set_io_ratio(m_src, ratio, m_parent.mixInfo().m_periodFrames);
         if (err)
         {
             Log.report(logvisor::Fatal, "unable to set resampler rate: %s", soxr_strerror(err));
+            m_setPitchRatio = false;
             return;
         }
     }
+    m_setPitchRatio = false;
+}
+
+void AudioVoice::_midUpdate()
+{
+    if (m_resetSampleRate)
+        _resetSampleRate(m_deferredSampleRate);
+    if (m_setPitchRatio)
+        _setPitchRatio(m_pitchRatio);
+}
+
+void AudioVoice::setPitchRatio(double ratio)
+{
+    m_setPitchRatio = true;
+    m_pitchRatio = ratio;
+}
+
+void AudioVoice::resetSampleRate(double sampleRate)
+{
+    m_resetSampleRate = true;
+    m_deferredSampleRate = sampleRate;
 }
 
 void AudioVoice::start()
@@ -53,10 +74,10 @@ AudioVoiceMono::AudioVoiceMono(BaseAudioVoiceEngine& root, IAudioMix& parent, IA
                                double sampleRate, bool dynamicRate)
 : AudioVoice(root, parent, cb, dynamicRate)
 {
-    resetSampleRate(sampleRate);
+    _resetSampleRate(sampleRate);
 }
 
-void AudioVoiceMono::resetSampleRate(double sampleRate)
+void AudioVoiceMono::_resetSampleRate(double sampleRate)
 {
     soxr_delete(m_src);
 
@@ -70,11 +91,13 @@ void AudioVoiceMono::resetSampleRate(double sampleRate)
     if (err)
     {
         Log.report(logvisor::Fatal, "unable to create soxr resampler: %s", soxr_strerror(err));
+        m_resetSampleRate = false;
         return;
     }
 
     soxr_set_input_fn(m_src, soxr_input_fn_t(SRCCallback), this, 0);
-    setPitchRatio(m_pitchRatio);
+    _setPitchRatio(m_pitchRatio);
+    m_resetSampleRate = false;
 }
 
 size_t AudioVoiceMono::SRCCallback(AudioVoiceMono* ctx, int16_t** data, size_t frames)
@@ -93,10 +116,22 @@ size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
     if (scratch16.size() < frames)
         scratch16.resize(frames);
 
-    size_t oDone = soxr_output(m_src, scratch16.data(), frames);
+    size_t oDone;
+    size_t totalDone = 0;
+    while (frames)
+    {
+        oDone = soxr_output(m_src, scratch16.data(), frames);
+        _midUpdate();
+        if (oDone)
+        {
+            m_matrix.mixMonoSampleData(mixInfo, scratch16.data(), buf, oDone);
+            totalDone += oDone;
+            frames -= oDone;
+            buf += oDone;
+        }
+    }
 
-    m_matrix.mixMonoSampleData(mixInfo, scratch16.data(), buf, oDone);
-    return oDone;
+    return totalDone;
 }
 
 size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
@@ -106,10 +141,22 @@ size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
     if (scratch32.size() < frames)
         scratch32.resize(frames);
 
-    size_t oDone = soxr_output(m_src, scratch32.data(), frames);
+    size_t oDone;
+    size_t totalDone = 0;
+    while (frames)
+    {
+        oDone = soxr_output(m_src, scratch32.data(), frames);
+        _midUpdate();
+        if (oDone)
+        {
+            m_matrix.mixMonoSampleData(mixInfo, scratch32.data(), buf, oDone);
+            totalDone += oDone;
+            frames -= oDone;
+            buf += oDone;
+        }
+    }
 
-    m_matrix.mixMonoSampleData(mixInfo, scratch32.data(), buf, oDone);
-    return oDone;
+    return totalDone;
 }
 
 size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
@@ -119,10 +166,22 @@ size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
     if (scratchFlt.size() < frames)
         scratchFlt.resize(frames);
 
-    size_t oDone = soxr_output(m_src, scratchFlt.data(), frames);
+    size_t oDone;
+    size_t totalDone = 0;
+    while (frames)
+    {
+        oDone = soxr_output(m_src, scratchFlt.data(), frames);
+        _midUpdate();
+        if (oDone)
+        {
+            m_matrix.mixMonoSampleData(mixInfo, scratchFlt.data(), buf, oDone);
+            totalDone += oDone;
+            frames -= oDone;
+            buf += oDone;
+        }
+    }
 
-    m_matrix.mixMonoSampleData(mixInfo, scratchFlt.data(), buf, oDone);
-    return oDone;
+    return totalDone;
 }
 
 void AudioVoiceMono::setDefaultMatrixCoefficients()
@@ -155,10 +214,10 @@ AudioVoiceStereo::AudioVoiceStereo(BaseAudioVoiceEngine& root, IAudioMix& parent
                                    double sampleRate, bool dynamicRate)
 : AudioVoice(root, parent, cb, dynamicRate)
 {
-    resetSampleRate(sampleRate);
+    _resetSampleRate(sampleRate);
 }
 
-void AudioVoiceStereo::resetSampleRate(double sampleRate)
+void AudioVoiceStereo::_resetSampleRate(double sampleRate)
 {
     soxr_delete(m_src);
 
@@ -172,11 +231,13 @@ void AudioVoiceStereo::resetSampleRate(double sampleRate)
     if (!m_src)
     {
         Log.report(logvisor::Fatal, "unable to create soxr resampler: %s", soxr_strerror(err));
+        m_resetSampleRate = false;
         return;
     }
 
     soxr_set_input_fn(m_src, soxr_input_fn_t(SRCCallback), this, 0);
-    setPitchRatio(m_pitchRatio);
+    _setPitchRatio(m_pitchRatio);
+    m_resetSampleRate = false;
 }
 
 size_t AudioVoiceStereo::SRCCallback(AudioVoiceStereo* ctx, int16_t** data, size_t frames)
@@ -197,10 +258,22 @@ size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
     if (scratch16.size() < samples)
         scratch16.resize(samples);
 
-    size_t oDone = soxr_output(m_src, scratch16.data(), frames);
+    size_t oDone;
+    size_t totalDone = 0;
+    while (frames)
+    {
+        oDone = soxr_output(m_src, scratch16.data(), frames);
+        _midUpdate();
+        if (oDone)
+        {
+            m_matrix.mixStereoSampleData(mixInfo, scratch16.data(), buf, oDone);
+            totalDone += oDone;
+            frames -= oDone;
+            buf += oDone;
+        }
+    }
 
-    m_matrix.mixStereoSampleData(mixInfo, scratch16.data(), buf, oDone);
-    return oDone;
+    return totalDone;
 }
 
 size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
@@ -211,10 +284,22 @@ size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
     if (scratch32.size() < samples)
         scratch32.resize(samples);
 
-    size_t oDone = soxr_output(m_src, scratch32.data(), frames);
+    size_t oDone;
+    size_t totalDone = 0;
+    while (frames)
+    {
+        oDone = soxr_output(m_src, scratch32.data(), frames);
+        _midUpdate();
+        if (oDone)
+        {
+            m_matrix.mixStereoSampleData(mixInfo, scratch32.data(), buf, oDone);
+            totalDone += oDone;
+            frames -= oDone;
+            buf += oDone;
+        }
+    }
 
-    m_matrix.mixStereoSampleData(mixInfo, scratch32.data(), buf, oDone);
-    return oDone;
+    return totalDone;
 }
 
 size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
@@ -225,10 +310,22 @@ size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
     if (scratchFlt.size() < samples)
         scratchFlt.resize(samples);
 
-    size_t oDone = soxr_output(m_src, scratchFlt.data(), frames);
+    size_t oDone;
+    size_t totalDone = 0;
+    while (frames)
+    {
+        oDone = soxr_output(m_src, scratchFlt.data(), frames);
+        _midUpdate();
+        if (oDone)
+        {
+            m_matrix.mixStereoSampleData(mixInfo, scratchFlt.data(), buf, oDone);
+            totalDone += oDone;
+            frames -= oDone;
+            buf += oDone;
+        }
+    }
 
-    m_matrix.mixStereoSampleData(mixInfo, scratchFlt.data(), buf, oDone);
-    return oDone;
+    return totalDone;
 }
 
 void AudioVoiceStereo::setDefaultMatrixCoefficients()

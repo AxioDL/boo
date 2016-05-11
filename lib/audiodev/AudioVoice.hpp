@@ -34,11 +34,23 @@ protected:
 
     /* Sample-rate converter */
     soxr_t m_src = nullptr;
-    double m_pitchRatio = 1.0;
     bool m_dynamicRate;
 
     /* Running bool */
     bool m_running = false;
+
+    /* Deferred sample-rate reset */
+    bool m_resetSampleRate = false;
+    double m_deferredSampleRate;
+    virtual void _resetSampleRate(double sampleRate)=0;
+
+    /* Deferred pitch ratio set */
+    bool m_setPitchRatio = false;
+    double m_pitchRatio = 1.0;
+    void _setPitchRatio(double ratio);
+
+    /* Mid-pump update */
+    void _midUpdate();
 
     virtual size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, int16_t* buf)=0;
     virtual size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, int32_t* buf)=0;
@@ -47,7 +59,7 @@ protected:
 
 public:
     ~AudioVoice();
-
+    void resetSampleRate(double sampleRate);
     void setPitchRatio(double ratio);
     void start();
     void stop();
@@ -57,7 +69,7 @@ public:
 class AudioVoiceMono : public AudioVoice
 {
     AudioMatrixMono m_matrix;
-    void resetSampleRate(double sampleRate);
+    void _resetSampleRate(double sampleRate);
 
     static size_t SRCCallback(AudioVoiceMono* ctx,
                               int16_t** data, size_t requestedLen);
@@ -77,7 +89,7 @@ public:
 class AudioVoiceStereo : public AudioVoice
 {
     AudioMatrixStereo m_matrix;
-    void resetSampleRate(double sampleRate);
+    void _resetSampleRate(double sampleRate);
 
     static size_t SRCCallback(AudioVoiceStereo* ctx,
                               int16_t** data, size_t requestedLen);
