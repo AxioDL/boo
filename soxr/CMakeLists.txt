@@ -49,6 +49,7 @@ cmake_dependent_option (WITH_AVFFT "Use libavcodec (LGPL) for SIMD DFT." OFF
   "WITH_SIMD;NOT WITH_PFFFT" OFF)
 cmake_dependent_option (WITH_PFFFT "Use PFFFT (BSD-like licence) for SIMD DFT." ON
   "WITH_SIMD;NOT WITH_AVFFT" OFF)
+option (SOXR_SILENT "Disable debug messages, even in debug mode" OFF)
 if (UNIX)
   if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/lsr-tests)
     cmake_dependent_option (BUILD_LSR_TESTS "Build LSR tests." OFF
@@ -104,6 +105,10 @@ if (WITH_AVFFT)
     link_libraries (${AVCODEC_LIBRARIES})
     set (HAVE_AVFFT 1)
   endif ()
+endif ()
+
+if (SOXR_SILENT)
+  add_definitions (-DSOXR_SILENT=1)
 endif ()
 
 check_function_exists (lrint HAVE_LRINT)
