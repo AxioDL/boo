@@ -178,4 +178,23 @@ const AudioVoiceEngineMixInfo& AudioSubmix::mixInfo() const
     return m_parent.mixInfo();
 }
 
+double AudioSubmix::getSampleRate() const
+{
+    return mixInfo().m_sampleRate;
+}
+
+SubmixFormat AudioSubmix::getSampleFormat() const
+{
+    switch (mixInfo().m_sampleFormat)
+    {
+    case SOXR_INT16_I:
+    default:
+        return SubmixFormat::Int16;
+    case SOXR_INT32_I:
+        return SubmixFormat::Int32;
+    case SOXR_FLOAT32_I:
+        return SubmixFormat::Float;
+    }
+}
+
 }

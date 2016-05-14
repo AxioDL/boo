@@ -61,12 +61,11 @@ public:
                                                         bool dynamicPitch=false);
 
     std::unique_ptr<IAudioSubmix> allocateNewSubmix(IAudioSubmixCallback* cb=nullptr);
-
     void setChannelGains(const float gains[8]);
-
     void unbindSubmix();
-
     const AudioVoiceEngineMixInfo& mixInfo() const;
+    double getSampleRate() const;
+    SubmixFormat getSampleFormat() const;
 };
 
 }

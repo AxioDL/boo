@@ -12,6 +12,13 @@ class IAudioVoiceCallback;
 struct ChannelMap;
 struct IAudioSubmixCallback;
 
+enum class SubmixFormat
+{
+    Int16,
+    Int32,
+    Float
+};
+
 struct IAudioSubmix
 {
     virtual ~IAudioSubmix() = default;
@@ -31,6 +38,12 @@ struct IAudioSubmix
 
     /** Sets gain factors for each channel once accumulated by the submix */
     virtual void setChannelGains(const float gains[8])=0;
+
+    /** Gets fixed sample rate of submix this way */
+    virtual double getSampleRate() const=0;
+
+    /** Gets fixed sample format of submix this way */
+    virtual SubmixFormat getSampleFormat() const=0;
 };
 
 struct IAudioSubmixCallback
