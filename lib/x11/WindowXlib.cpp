@@ -902,6 +902,12 @@ class WindowXlib : public IWindow
     std::unique_ptr<GraphicsContextXlib> m_gfxCtx;
     uint32_t m_visualId;
 
+    /* Key state trackers (for auto-repeat detection) */
+    std::unordered_set<unsigned long> m_charKeys;
+    std::unordered_set<unsigned long> m_specialKeys;
+    std::unordered_set<unsigned long> m_modKeys;
+
+
     /* Last known input device id (0xffff if not yet set) */
     int m_lastInputID = 0xffff;
     ETouchType m_touchType = ETouchType::None;
@@ -1661,12 +1667,26 @@ public:
                     if (inputCb &&
                         (modifierMask & (EModifierKey::Ctrl|EModifierKey::Command)) == EModifierKey::None)
                         inputCb->insertText(std::string(1, charCode));
-                    m_callback->charKeyDown(charCode, modifierMask, false);
+
+                    bool isRepeat = m_charKeys.find(charCode) != m_charKeys.cend();
+                    m_callback->charKeyDown(charCode, modifierMask, isRepeat);
+                    if (!isRepeat)
+                        m_charKeys.insert(charCode);
                 }
                 else if (specialKey != ESpecialKey::None)
-                    m_callback->specialKeyDown(specialKey, modifierMask, false);
+                {
+                    bool isRepeat = m_specialKeys.find((unsigned long)specialKey) != m_specialKeys.cend();
+                    m_callback->specialKeyDown(specialKey, modifierMask, isRepeat);
+                    if (!isRepeat)
+                        m_specialKeys.insert((unsigned long)specialKey);
+                }
                 else if (modifierKey != EModifierKey::None)
-                    m_callback->modKeyDown(modifierKey, false);
+                {
+                    bool isRepeat = m_modKeys.find((unsigned long)modifierKey) != m_modKeys.cend();
+                    m_callback->modKeyDown(modifierKey, isRepeat);
+                    if (!isRepeat)
+                        m_modKeys.insert((unsigned long)modifierKey);
+                }
             }
             return;
         }
@@ -1681,11 +1701,20 @@ public:
                 char charCode = translateKeysym(&event->xkey, specialKey, modifierKey);
                 EModifierKey modifierMask = translateModifiers(state);
                 if (charCode)
+                {
+                    m_charKeys.erase(charCode);
                     m_callback->charKeyUp(charCode, modifierMask);
+                }
                 else if (specialKey != ESpecialKey::None)
+                {
+                    m_specialKeys.erase((unsigned long)specialKey);
                     m_callback->specialKeyUp(specialKey, modifierMask);
+                }
                 else if (modifierKey != EModifierKey::None)
+                {
+                    m_modKeys.erase((unsigned long)modifierKey);
                     m_callback->modKeyUp(modifierKey);
+                }
             }
             return;
         }
