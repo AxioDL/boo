@@ -20,7 +20,7 @@ void AudioVoice::_setPitchRatio(double ratio)
 {
     if (m_dynamicRate)
     {
-        soxr_error_t err = soxr_set_io_ratio(m_src, ratio, m_parent.mixInfo().m_periodFrames);
+        soxr_error_t err = soxr_set_io_ratio(m_src, ratio * m_sampleRateIn / m_sampleRateOut, 0 /*m_parent.mixInfo().m_periodFrames*/);
         if (err)
         {
             Log.report(logvisor::Fatal, "unable to set resampler rate: %s", soxr_strerror(err));
@@ -81,11 +81,12 @@ void AudioVoiceMono::_resetSampleRate(double sampleRate)
 {
     soxr_delete(m_src);
 
+    double rateOut = m_parent.mixInfo().m_sampleRate;
     soxr_io_spec_t ioSpec = soxr_io_spec(SOXR_INT16_I, m_parent.mixInfo().m_sampleFormat);
     soxr_quality_spec_t qSpec = soxr_quality_spec(SOXR_20_BITQ, m_dynamicRate ? SOXR_VR : 0);
 
     soxr_error_t err;
-    m_src = soxr_create(sampleRate, m_parent.mixInfo().m_sampleRate, 1,
+    m_src = soxr_create(sampleRate, rateOut, 1,
                         &err, &ioSpec, &qSpec, nullptr);
 
     if (err)
@@ -95,6 +96,8 @@ void AudioVoiceMono::_resetSampleRate(double sampleRate)
         return;
     }
 
+    m_sampleRateIn = sampleRate;
+    m_sampleRateOut = rateOut;
     soxr_set_input_fn(m_src, soxr_input_fn_t(SRCCallback), this, 0);
     _setPitchRatio(m_pitchRatio);
     m_resetSampleRate = false;
@@ -221,11 +224,12 @@ void AudioVoiceStereo::_resetSampleRate(double sampleRate)
 {
     soxr_delete(m_src);
 
+    double rateOut = m_parent.mixInfo().m_sampleRate;
     soxr_io_spec_t ioSpec = soxr_io_spec(SOXR_INT16_I, m_parent.mixInfo().m_sampleFormat);
     soxr_quality_spec_t qSpec = soxr_quality_spec(SOXR_20_BITQ, m_dynamicRate ? SOXR_VR : 0);
 
     soxr_error_t err;
-    m_src = soxr_create(sampleRate, m_parent.mixInfo().m_sampleRate, 2,
+    m_src = soxr_create(sampleRate, rateOut, 2,
                         &err, &ioSpec, &qSpec, nullptr);
 
     if (!m_src)
@@ -235,6 +239,8 @@ void AudioVoiceStereo::_resetSampleRate(double sampleRate)
         return;
     }
 
+    m_sampleRateIn = sampleRate;
+    m_sampleRateOut = rateOut;
     soxr_set_input_fn(m_src, soxr_input_fn_t(SRCCallback), this, 0);
     _setPitchRatio(m_pitchRatio);
     m_resetSampleRate = false;
