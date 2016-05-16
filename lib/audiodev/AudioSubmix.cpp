@@ -15,6 +15,10 @@ AudioSubmix::AudioSubmix(BaseAudioVoiceEngine& root, IAudioMix& parent, IAudioSu
 
 AudioSubmix::~AudioSubmix()
 {
+    while (m_activeVoices.size())
+        m_activeVoices.front()->unbindVoice();
+    while (m_activeSubmixes.size())
+        m_activeSubmixes.front()->unbindSubmix();
     unbindSubmix();
 }
 

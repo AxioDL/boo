@@ -4,6 +4,14 @@
 namespace boo
 {
 
+BaseAudioVoiceEngine::~BaseAudioVoiceEngine()
+{
+    while (m_activeVoices.size())
+        m_activeVoices.front()->unbindVoice();
+    while (m_activeSubmixes.size())
+        m_activeSubmixes.front()->unbindSubmix();
+}
+
 void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int16_t* dataOut)
 {
     memset(dataOut, 0, sizeof(int16_t) * frames * m_mixInfo.m_channelMap.m_channelCount);

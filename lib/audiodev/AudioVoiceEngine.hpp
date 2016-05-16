@@ -46,6 +46,7 @@ protected:
     void _unbindFrom(std::list<AudioSubmix*>::iterator it);
 
 public:
+    ~BaseAudioVoiceEngine();
     std::unique_ptr<IAudioVoice> allocateNewMonoVoice(double sampleRate,
                                                       IAudioVoiceCallback* cb,
                                                       bool dynamicPitch=false);
