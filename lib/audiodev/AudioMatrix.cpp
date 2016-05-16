@@ -23,8 +23,8 @@ void AudioMatrixMono::setDefaultMatrixCoefficients(AudioChannelSet acSet)
     }
 }
 
-void AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
-                                        const int16_t* dataIn, int16_t* dataOut, size_t samples) const
+int16_t* AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
+                                            const int16_t* dataIn, int16_t* dataOut, size_t samples) const
 {
     const ChannelMap& chmap = info.m_channelMap;
     for (size_t s=0 ; s<samples ; ++s, ++dataIn)
@@ -37,10 +37,11 @@ void AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
                 ++dataOut;
             }
         }
+    return dataOut;
 }
 
-void AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
-                                        const int32_t* dataIn, int32_t* dataOut, size_t samples) const
+int32_t* AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
+                                            const int32_t* dataIn, int32_t* dataOut, size_t samples) const
 {
     const ChannelMap& chmap = info.m_channelMap;
     for (size_t s=0 ; s<samples ; ++s, ++dataIn)
@@ -53,10 +54,11 @@ void AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
                 ++dataOut;
             }
         }
+    return dataOut;
 }
 
-void AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
-                                        const float* dataIn, float* dataOut, size_t samples) const
+float* AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
+                                          const float* dataIn, float* dataOut, size_t samples) const
 {
     const ChannelMap& chmap = info.m_channelMap;
     for (size_t s=0 ; s<samples ; ++s, ++dataIn)
@@ -69,6 +71,7 @@ void AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
                 ++dataOut;
             }
         }
+    return dataOut;
 }
 
 void AudioMatrixStereo::setDefaultMatrixCoefficients(AudioChannelSet acSet)
@@ -90,8 +93,8 @@ void AudioMatrixStereo::setDefaultMatrixCoefficients(AudioChannelSet acSet)
     }
 }
 
-void AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
-                                            const int16_t* dataIn, int16_t* dataOut, size_t frames) const
+int16_t* AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
+                                                const int16_t* dataIn, int16_t* dataOut, size_t frames) const
 {
     const ChannelMap& chmap = info.m_channelMap;
     for (size_t f=0 ; f<frames ; ++f, dataIn += 2)
@@ -106,10 +109,11 @@ void AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
                 ++dataOut;
             }
         }
+    return dataOut;
 }
 
-void AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
-                                            const int32_t* dataIn, int32_t* dataOut, size_t frames) const
+int32_t* AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
+                                                const int32_t* dataIn, int32_t* dataOut, size_t frames) const
 {
     const ChannelMap& chmap = info.m_channelMap;
     for (size_t f=0 ; f<frames ; ++f, dataIn += 2)
@@ -124,10 +128,11 @@ void AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
                 ++dataOut;
             }
         }
+    return dataOut;
 }
 
-void AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
-                                            const float* dataIn, float* dataOut, size_t frames) const
+float* AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
+                                              const float* dataIn, float* dataOut, size_t frames) const
 {
     const ChannelMap& chmap = info.m_channelMap;
     for (size_t f=0 ; f<frames ; ++f, dataIn += 2)
@@ -142,6 +147,7 @@ void AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
                 ++dataOut;
             }
         }
+    return dataOut;
 }
 
 }

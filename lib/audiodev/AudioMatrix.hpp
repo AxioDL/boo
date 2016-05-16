@@ -50,12 +50,12 @@ public:
             m_coefs[i] = coefs[i];
     }
 
-    void mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
-                           const int16_t* dataIn, int16_t* dataOut, size_t samples) const;
-    void mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
-                           const int32_t* dataIn, int32_t* dataOut, size_t samples) const;
-    void mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
-                           const float* dataIn, float* dataOut, size_t samples) const;
+    int16_t* mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
+                               const int16_t* dataIn, int16_t* dataOut, size_t samples) const;
+    int32_t* mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
+                               const int32_t* dataIn, int32_t* dataOut, size_t samples) const;
+    float* mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
+                             const float* dataIn, float* dataOut, size_t samples) const;
 };
 
 class AudioMatrixStereo
@@ -74,12 +74,12 @@ public:
         }
     }
 
-    void mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
-                             const int16_t* dataIn, int16_t* dataOut, size_t frames) const;
-    void mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
-                             const int32_t* dataIn, int32_t* dataOut, size_t frames) const;
-    void mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
-                             const float* dataIn, float* dataOut, size_t frames) const;
+    int16_t* mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
+                                 const int16_t* dataIn, int16_t* dataOut, size_t frames) const;
+    int32_t* mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
+                                 const int32_t* dataIn, int32_t* dataOut, size_t frames) const;
+    float* mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
+                               const float* dataIn, float* dataOut, size_t frames) const;
 };
 
 }
