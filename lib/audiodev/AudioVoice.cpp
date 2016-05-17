@@ -16,11 +16,11 @@ AudioVoice::~AudioVoice()
     soxr_delete(m_src);
 }
 
-void AudioVoice::_setPitchRatio(double ratio)
+void AudioVoice::_setPitchRatio(double ratio, bool slew)
 {
     if (m_dynamicRate)
     {
-        soxr_error_t err = soxr_set_io_ratio(m_src, ratio * m_sampleRateIn / m_sampleRateOut, 0);
+        soxr_error_t err = soxr_set_io_ratio(m_src, ratio * m_sampleRateIn / m_sampleRateOut, slew ? m_5msFrames : 0);
         if (err)
         {
             Log.report(logvisor::Fatal, "unable to set resampler rate: %s", soxr_strerror(err));
@@ -36,13 +36,14 @@ void AudioVoice::_midUpdate()
     if (m_resetSampleRate)
         _resetSampleRate(m_deferredSampleRate);
     if (m_setPitchRatio)
-        _setPitchRatio(m_pitchRatio);
+        _setPitchRatio(m_pitchRatio, m_slew);
 }
 
-void AudioVoice::setPitchRatio(double ratio)
+void AudioVoice::setPitchRatio(double ratio, bool slew)
 {
     m_setPitchRatio = true;
     m_pitchRatio = ratio;
+    m_slew = slew;
 }
 
 void AudioVoice::resetSampleRate(double sampleRate)
@@ -100,7 +101,7 @@ void AudioVoiceMono::_resetSampleRate(double sampleRate)
     m_sampleRateOut = rateOut;
     m_5msFrames = rateOut * 5 / 1000;
     soxr_set_input_fn(m_src, soxr_input_fn_t(SRCCallback), this, 0);
-    _setPitchRatio(m_pitchRatio);
+    _setPitchRatio(m_pitchRatio, false);
     m_resetSampleRate = false;
 }
 
@@ -240,7 +241,7 @@ void AudioVoiceStereo::_resetSampleRate(double sampleRate)
     m_sampleRateIn = sampleRate;
     m_sampleRateOut = rateOut;
     soxr_set_input_fn(m_src, soxr_input_fn_t(SRCCallback), this, 0);
-    _setPitchRatio(m_pitchRatio);
+    _setPitchRatio(m_pitchRatio, false);
     m_resetSampleRate = false;
 }
 

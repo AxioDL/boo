@@ -50,7 +50,8 @@ protected:
     /* Deferred pitch ratio set */
     bool m_setPitchRatio = false;
     double m_pitchRatio = 1.0;
-    void _setPitchRatio(double ratio);
+    bool m_slew = false;
+    void _setPitchRatio(double ratio, bool slew);
 
     /* Mid-pump update */
     void _midUpdate();
@@ -63,7 +64,7 @@ protected:
 public:
     ~AudioVoice();
     void resetSampleRate(double sampleRate);
-    void setPitchRatio(double ratio);
+    void setPitchRatio(double ratio, bool slew);
     void start();
     void stop();
     void unbindVoice();
