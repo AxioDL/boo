@@ -304,6 +304,7 @@ struct GraphicsContextXlibGLX : GraphicsContextXlib
 
     GLXFBConfig m_fbconfig = 0;
     int m_visualid = 0;
+    int m_attribIdx = 0;
     GLXWindow m_glxWindow = 0;
     GLXContext m_glxCtx = 0;
 
@@ -451,10 +452,10 @@ public:
         }
 
         s_glxError = false;
-        XErrorHandler oldHandler = XSetErrorHandler(&ctxErrorHandler);
-        for (int i=0 ; i<std::extent<decltype(ContextAttribList)>::value ; ++i)
+        XErrorHandler oldHandler = XSetErrorHandler(ctxErrorHandler);
+        for (m_attribIdx=0 ; m_attribIdx<std::extent<decltype(ContextAttribList)>::value ; ++m_attribIdx)
         {
-            m_glxCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_lastCtx, True, ContextAttribList[i]);
+            m_glxCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_lastCtx, True, ContextAttribList[m_attribIdx]);
             if (m_glxCtx)
                 break;
         }
@@ -497,10 +498,12 @@ public:
 
             while (m_vsyncRunning)
             {
-                unsigned int sync;
-                int err = glXWaitVideoSyncSGI(1, 0, &sync);
-                if (err)
-                    Log.report(logvisor::Fatal, "wait err");
+                {
+                    unsigned int sync;
+                    int err = glXWaitVideoSyncSGI(1, 0, &sync);
+                    if (err)
+                        Log.report(logvisor::Fatal, "wait err");
+                }
                 m_vsynccv.notify_one();
             }
 
@@ -548,13 +551,8 @@ public:
         if (!m_mainCtx)
         {
             s_glxError = false;
-            XErrorHandler oldHandler = XSetErrorHandler(&ctxErrorHandler);
-            for (int i=0 ; i<std::extent<decltype(ContextAttribList)>::value ; ++i)
-            {
-                m_mainCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribList[i]);
-                if (m_mainCtx)
-                    break;
-            }
+            XErrorHandler oldHandler = XSetErrorHandler(ctxErrorHandler);
+            m_mainCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribList[m_attribIdx]);
             XSetErrorHandler(oldHandler);
             if (!m_mainCtx)
                 Log.report(logvisor::Fatal, "unable to make main GLX context");
@@ -571,13 +569,8 @@ public:
         if (!m_loadCtx)
         {
             s_glxError = false;
-            XErrorHandler oldHandler = XSetErrorHandler(&ctxErrorHandler);
-            for (int i=0 ; i<std::extent<decltype(ContextAttribList)>::value ; ++i)
-            {
-                m_loadCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribList[i]);
-                if (m_loadCtx)
-                    break;
-            }
+            XErrorHandler oldHandler = XSetErrorHandler(ctxErrorHandler);
+            m_loadCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribList[m_attribIdx]);
             XSetErrorHandler(oldHandler);
             if (!m_loadCtx)
                 Log.report(logvisor::Fatal, "unable to make load GLX context");

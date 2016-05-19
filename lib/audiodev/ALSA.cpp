@@ -317,6 +317,102 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             }
         }
     }
+
+    std::vector<std::string> enumerateMIDIDevices() const
+    {
+        std::vector<std::string> ret;
+        int status;
+        int card = -1;  /* use -1 to prime the pump of iterating through card list */
+
+        if ((status = snd_card_next(&card)) < 0)
+            return {};
+        if (card < 0)
+            return {};
+
+        while (card >= 0)
+        {
+            snd_ctl_t *ctl;
+            char name[32];
+            int device = -1;
+            int status;
+            sprintf(name, "hw:%d", card);
+            if ((status = snd_ctl_open(&ctl, name, 0)) < 0)
+                continue;
+
+            do {
+                status = snd_ctl_rawmidi_next_device(ctl, &device);
+                if (status < 0)
+                    break;
+                if (device >= 0)
+                {
+                    snd_rawmidi_info_t *info;
+                    snd_rawmidi_info_alloca(&info);
+                    snd_rawmidi_info_set_device(info, device);
+                    ret.push_back(snd_rawmidi_info_get_name(info));
+                }
+            } while (device >= 0);
+
+            snd_ctl_close(ctl);
+
+            if ((status = snd_card_next(&card)) < 0)
+                break;
+        }
+
+        return ret;
+    }
+
+    struct MIDIIn : public IMIDIIn
+    {
+        snd_rawmidi_t* m_midi;
+        bool m_virtual;
+        MIDIIn(snd_rawmidi_t* midi, bool virt)
+        : m_midi(midi), m_virtual(virt) {}
+
+        bool isVirtual() const {return m_virtual;}
+        std::string description() const
+        {
+            snd_rawmidi_info_t* info;
+            snd_rawmidi_info_alloca(&info);
+            snd_rawmidi_info(m_midi, info);
+            std::string ret = snd_rawmidi_info_get_name(info);
+            return ret;
+        }
+        size_t receive(void* buf, size_t len) const
+        {
+            return std::max(0l, snd_rawmidi_read(m_midi, buf, len));
+        }
+    };
+
+    std::unique_ptr<IMIDIIn> newVirtualMIDIIn()
+    {
+        int status;
+        snd_rawmidi_t* midi;
+        status = snd_rawmidi_open(&midi, nullptr, "virtual", 0);
+        if (status)
+            return {};
+
+        return std::make_unique<MIDIIn>(midi, true);
+    }
+
+    std::unique_ptr<IMIDIOut> newVirtualMIDIOut()
+    {
+    }
+
+    std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut()
+    {
+    }
+
+    std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name)
+    {
+    }
+
+    std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name)
+    {
+    }
+
+    std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name)
+    {
+    }
 };
 
 std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine()

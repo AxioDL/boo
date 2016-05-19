@@ -197,6 +197,7 @@ add_library(boo
             include/boo/graphicsdev/IGraphicsCommandQueue.hpp
             include/boo/audiodev/IAudioSubmix.hpp
             include/boo/audiodev/IAudioVoice.hpp
+            include/boo/audiodev/IMIDIPort.hpp
             include/boo/audiodev/IAudioVoiceEngine.hpp
             include/boo/IWindow.hpp
             include/boo/IApplication.hpp

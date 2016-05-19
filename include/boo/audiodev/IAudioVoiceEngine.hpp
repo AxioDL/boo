@@ -3,7 +3,9 @@
 
 #include "IAudioVoice.hpp"
 #include "IAudioSubmix.hpp"
+#include "IMIDIPort.hpp"
 #include <memory>
+#include <vector>
 
 namespace boo
 {
@@ -38,6 +40,27 @@ struct IAudioVoiceEngine
 
     /** Ensure backing platform buffer is filled as much as possible with mixed samples */
     virtual void pumpAndMixVoices()=0;
+
+    /** Get list of MIDI devices found on system */
+    virtual std::vector<std::string> enumerateMIDIDevices() const=0;
+
+    /** Create ad-hoc MIDI in port and register with system */
+    virtual std::unique_ptr<IMIDIIn> newVirtualMIDIIn()=0;
+
+    /** Create ad-hoc MIDI out port and register with system */
+    virtual std::unique_ptr<IMIDIOut> newVirtualMIDIOut()=0;
+
+    /** Create ad-hoc MIDI in/out port and register with system */
+    virtual std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut()=0;
+
+    /** Open named MIDI in port, name format depends on OS */
+    virtual std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name)=0;
+
+    /** Open named MIDI out port, name format depends on OS */
+    virtual std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name)=0;
+
+    /** Open named MIDI in/out port, name format depends on OS */
+    virtual std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name)=0;
 };
 
 /** Construct host platform's voice engine */
