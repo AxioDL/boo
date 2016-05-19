@@ -5,6 +5,7 @@
 #include "AudioVoice.hpp"
 #include "AudioSubmix.hpp"
 #include "IAudioMix.hpp"
+#include <functional>
 
 namespace boo
 {
@@ -31,6 +32,8 @@ protected:
     AudioVoiceEngineMixInfo m_mixInfo;
     std::list<AudioVoice*> m_activeVoices;
     std::list<AudioSubmix*> m_activeSubmixes;
+    size_t m_5msFrames = 0;
+    std::function<void(double dt)> m_5msCallback;
 
     /* Shared scratch buffers for accumulating audio data for resampling */
     std::vector<int16_t> m_scratchIn;
@@ -56,6 +59,8 @@ public:
                                                         bool dynamicPitch=false);
 
     std::unique_ptr<IAudioSubmix> allocateNewSubmix(IAudioSubmixCallback* cb);
+
+    void register5MsCallback(std::function<void(double dt)>&& callback);
 
     const AudioVoiceEngineMixInfo& mixInfo() const;
     AudioChannelSet getAvailableSet() {return m_mixInfo.m_channels;}

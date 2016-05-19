@@ -153,11 +153,13 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
         {
             bestRate = 96000;
             m_mixInfo.m_sampleRate = 96000.0;
+            m_5msFrames = 96000 * 5 / 1000;
         }
         else if (!snd_pcm_hw_params_test_rate(m_pcm, hwParams, 48000, 0))
         {
             bestRate = 48000;
             m_mixInfo.m_sampleRate = 48000.0;
+            m_5msFrames = 48000 * 5 / 1000;
         }
         else
         {

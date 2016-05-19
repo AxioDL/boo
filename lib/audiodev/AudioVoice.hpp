@@ -36,7 +36,6 @@ protected:
     soxr_t m_src = nullptr;
     double m_sampleRateIn;
     double m_sampleRateOut;
-    size_t m_5msFrames;
     bool m_dynamicRate;
 
     /* Running bool */
