@@ -7,112 +7,118 @@ namespace boo
 
 static inline uint8_t clamp7(uint8_t val) {return std::max(0, std::min(127, int(val)));}
 
-bool MIDIDecoder::ReadController::readByte(uint8_t& a)
+bool MIDIDecoder::_readContinuedValue(std::vector<uint8_t>::const_iterator& it,
+                                      std::vector<uint8_t>::const_iterator end,
+                                      uint32_t& valOut)
 {
-    return m_in.receive(&a, 1) != 0;
-}
-
-bool MIDIDecoder::ReadController::read2Bytes(uint8_t& a, uint8_t& b)
-{
-    uint8_t buf[2];
-    int len = m_in.receive(buf, 2);
-    a = buf[0];
-    b = buf[1];
-    return len > 1;
-}
-
-bool MIDIDecoder::ReadController::readBuffer(void* buf, size_t len)
-{
-    return m_in.receive(buf, len) == len;
-}
-
-uint32_t MIDIDecoder::_readContinuedValue(uint8_t a)
-{
-    uint32_t ret = a & 0x7f;
+    uint8_t a = *it++;
+    valOut = a & 0x7f;
 
     if (a & 0x80)
     {
-        ret <<= 7;
-        bool good = m_readControl.readByte(a);
-        if (!good)
-            return ret;
-        ret |= a & 0x7f;
+        if (it == end)
+            return false;
+        valOut <<= 7;
+        a = *it++;
+        valOut |= a & 0x7f;
 
         if (a & 0x80)
         {
-            ret <<= 7;
-            good = m_readControl.readByte(a);
-            if (!good)
-                return ret;
-            ret |= a & 0x7f;
+            if (it == end)
+                return false;
+            valOut <<= 7;
+            a = *it++;
+            valOut |= a & 0x7f;
         }
     }
 
-    return ret;
+    return true;
 }
 
-bool MIDIDecoder::receiveBytes()
+std::vector<uint8_t>::const_iterator
+MIDIDecoder::receiveBytes(std::vector<uint8_t>::const_iterator begin,
+                          std::vector<uint8_t>::const_iterator end)
 {
-    uint8_t a, b;
-    bool good = m_readControl.read2Bytes(a, b);
-    if (!good)
-        return false;
+    std::vector<uint8_t>::const_iterator it = begin;
+    if (it == end)
+        return begin;
 
+    uint8_t a = *it++;
+    uint8_t b;
     if (a & 0x80)
         m_status = a;
-    else
-        b = a;
 
     uint8_t chan = m_status & 0xf;
     switch (Status(m_status & 0xf0))
     {
     case Status::NoteOff:
     {
-        good = m_readControl.read2Bytes(a, b);
-        if (!good)
-            return false;
+        if (it == end)
+            return begin;
+        a = *it++;
+        if (it == end)
+            return begin;
+        b = *it++;
         m_out.noteOff(chan, clamp7(a), clamp7(b));
         break;
     }
     case Status::NoteOn:
     {
-        good = m_readControl.read2Bytes(a, b);
-        if (!good)
-            return false;
+        if (it == end)
+            return begin;
+        a = *it++;
+        if (it == end)
+            return begin;
+        b = *it++;
         m_out.noteOn(chan, clamp7(a), clamp7(b));
         break;
     }
     case Status::NotePressure:
     {
-        good = m_readControl.read2Bytes(a, b);
-        if (!good)
-            return false;
+        if (it == end)
+            return begin;
+        a = *it++;
+        if (it == end)
+            return begin;
+        b = *it++;
         m_out.notePressure(chan, clamp7(a), clamp7(b));
         break;
     }
     case Status::ControlChange:
     {
-        good = m_readControl.read2Bytes(a, b);
-        if (!good)
-            return false;
+        if (it == end)
+            return begin;
+        a = *it++;
+        if (it == end)
+            return begin;
+        b = *it++;
         m_out.controlChange(chan, clamp7(a), clamp7(b));
         break;
     }
     case Status::ProgramChange:
     {
-        m_out.programChange(chan, clamp7(b));
+        if (it == end)
+            return begin;
+        a = *it++;
+        m_out.programChange(chan, clamp7(a));
         break;
     }
     case Status::ChannelPressure:
     {
-        m_out.channelPressure(chan, clamp7(b));
+        if (it == end)
+            return begin;
+        a = *it++;
+        m_out.channelPressure(chan, clamp7(a));
         break;
     }
     case Status::PitchBend:
     {
-        good = m_readControl.read2Bytes(a, b);
-        if (!good)
-            return false;
+        if (it == end)
+            return begin;
+        a = *it++;
+        if (it == end)
+            return begin;
+        b = *it++;
         m_out.pitchBend(chan, clamp7(b) * 128 + clamp7(a));
         break;
     }
@@ -122,32 +128,37 @@ bool MIDIDecoder::receiveBytes()
         {
         case Status::SysEx:
         {
-            uint32_t len = _readContinuedValue(a);
-            std::unique_ptr<uint8_t[]> buf(new uint8_t[len]);
-            if (!m_readControl.readBuffer(buf.get(), len))
-                return false;
-            m_out.sysex(buf.get(), len);
+            uint32_t len;
+            if (!_readContinuedValue(it, end, len) || end - it < len)
+                return begin;
+            m_out.sysex(&*it, len);
             break;
         }
         case Status::TimecodeQuarterFrame:
         {
-            good = m_readControl.read2Bytes(a, b);
-            if (!good)
-                return false;
+            if (it == end)
+                return begin;
+            a = *it++;
             m_out.timeCodeQuarterFrame(a >> 4 & 0x7, a & 0xf);
             break;
         }
         case Status::SongPositionPointer:
         {
-            good = m_readControl.read2Bytes(a, b);
-            if (!good)
-                return false;
+            if (it == end)
+                return begin;
+            a = *it++;
+            if (it == end)
+                return begin;
+            b = *it++;
             m_out.songPositionPointer(clamp7(b) * 128 + clamp7(a));
             break;
         }
         case Status::SongSelect:
         {
-            m_out.songSelect(clamp7(b));
+            if (it == end)
+                return begin;
+            a = *it++;
+            m_out.songSelect(clamp7(a));
             break;
         }
         case Status::TuneRequest:
@@ -175,7 +186,7 @@ bool MIDIDecoder::receiveBytes()
     default: break;
     }
 
-    return true;
+    return it;
 }
 
 }

@@ -48,22 +48,22 @@ struct IAudioVoiceEngine
     virtual std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const=0;
 
     /** Create ad-hoc MIDI in port and register with system */
-    virtual std::unique_ptr<IMIDIIn> newVirtualMIDIIn()=0;
+    virtual std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver)=0;
 
     /** Create ad-hoc MIDI out port and register with system */
     virtual std::unique_ptr<IMIDIOut> newVirtualMIDIOut()=0;
 
     /** Create ad-hoc MIDI in/out port and register with system */
-    virtual std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut()=0;
+    virtual std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver)=0;
 
     /** Open named MIDI in port, name format depends on OS */
-    virtual std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name)=0;
+    virtual std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver)=0;
 
     /** Open named MIDI out port, name format depends on OS */
     virtual std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name)=0;
 
     /** Open named MIDI in/out port, name format depends on OS */
-    virtual std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name)=0;
+    virtual std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver)=0;
 };
 
 /** Construct host platform's voice engine */

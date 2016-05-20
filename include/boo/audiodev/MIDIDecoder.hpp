@@ -4,6 +4,7 @@
 #include "boo/audiodev/IMIDIReader.hpp"
 #include "boo/audiodev/IMIDIPort.hpp"
 #include <functional>
+#include <vector>
 
 namespace boo
 {
@@ -12,19 +13,14 @@ class MIDIDecoder
 {
     IMIDIReader& m_out;
     uint8_t m_status = 0;
-
-    struct ReadController
-    {
-        IMIDIIn& m_in;
-        bool readByte(uint8_t& a);
-        bool read2Bytes(uint8_t& a, uint8_t& b);
-        bool readBuffer(void* buf, size_t len);
-        ReadController(IMIDIIn& in) : m_in(in) {}
-    } m_readControl;
-    uint32_t _readContinuedValue(uint8_t a);
+    bool _readContinuedValue(std::vector<uint8_t>::const_iterator& it,
+                             std::vector<uint8_t>::const_iterator end,
+                             uint32_t& valOut);
 public:
-    MIDIDecoder(IMIDIIn& in, IMIDIReader& out) : m_readControl(in), m_out(out) {}
-    bool receiveBytes();
+    MIDIDecoder(IMIDIReader& out) : m_out(out) {}
+    std::vector<uint8_t>::const_iterator
+    receiveBytes(std::vector<uint8_t>::const_iterator begin,
+                 std::vector<uint8_t>::const_iterator end);
 };
 
 }

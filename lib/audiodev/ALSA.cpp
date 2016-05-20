@@ -1,5 +1,6 @@
 #include <memory>
 #include <list>
+#include <thread>
 #include "AudioVoiceEngine.hpp"
 #include "logvisor/logvisor.hpp"
 
@@ -56,15 +57,15 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             return AudioChannelSet::Stereo;
 
         static const std::array<AudioChannelSet, 4> testSets =
-            {AudioChannelSet::Surround71, AudioChannelSet::Surround51,
-             AudioChannelSet::Quad, AudioChannelSet::Stereo};
+            {{AudioChannelSet::Surround71, AudioChannelSet::Surround51,
+              AudioChannelSet::Quad, AudioChannelSet::Stereo}};
         for (AudioChannelSet set : testSets)
         {
             for (snd_pcm_chmap_query_t** chmap = chmaps ; *chmap != nullptr ; ++chmap)
             {
                 snd_pcm_chmap_t* chm = &(*chmap)->map;
                 uint64_t chBits = 0;
-                for (int c=0 ; c<chm->channels ; ++c)
+                for (unsigned c=0 ; c<chm->channels ; ++c)
                     chBits |= 1 << chm->pos[c];
 
                 switch (set)
@@ -204,7 +205,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
                 {
                     snd_pcm_chmap_t* chm = &(*chmap)->map;
                     uint64_t chBits = 0;
-                    for (int c=0 ; c<chm->channels ; ++c)
+                    for (unsigned c=0 ; c<chm->channels ; ++c)
                         chBits |= 1 << chm->pos[c];
 
                     bool good = false;
@@ -246,7 +247,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
                 return;
             }
             chmapOut.m_channelCount = chCount;
-            for (int c=0 ; c<foundChmap->channels ; ++c)
+            for (unsigned c=0 ; c<foundChmap->channels ; ++c)
                 chmapOut.m_channels[c] = AudioChannel(foundChmap->pos[c] - 3);
             snd_pcm_set_chmap(m_pcm, foundChmap);
             snd_pcm_free_chmaps(chmaps);
@@ -364,15 +365,41 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
         return ret;
     }
 
+    static void MIDIReceiveProc(snd_rawmidi_t* midi, const ReceiveFunctor& receiver, bool& running)
+    {
+        uint8_t buf[512];
+        while (running)
+        {
+            int rdBytes = snd_rawmidi_read(midi, buf, 512);
+            if (rdBytes < 0)
+            {
+                Log.report(logvisor::Error, "MIDI connection lost");
+                running = false;
+                break;
+            }
+
+            receiver(std::vector<uint8_t>(std::cbegin(buf), std::cbegin(buf) + rdBytes));
+        }
+    }
+
     struct MIDIIn : public IMIDIIn
     {
+        bool m_midiRunning = true;
         snd_rawmidi_t* m_midi;
-        bool m_virtual;
-        MIDIIn(snd_rawmidi_t* midi, bool virt)
-        : m_midi(midi), m_virtual(virt) {}
+        std::thread m_midiThread;
 
-        ~MIDIIn() {snd_rawmidi_close(m_midi);}
-        bool isVirtual() const {return m_virtual;}
+        MIDIIn(snd_rawmidi_t* midi, bool virt, ReceiveFunctor&& receiver)
+        : IMIDIIn(virt, std::move(receiver)), m_midi(midi),
+          m_midiThread(std::bind(MIDIReceiveProc, m_midi, m_receiver, m_midiRunning)) {}
+
+        ~MIDIIn()
+        {
+            m_midiRunning = false;
+            if (m_midiThread.joinable())
+                m_midiThread.join();
+            snd_rawmidi_close(m_midi);
+        }
+
         std::string description() const
         {
             snd_rawmidi_info_t* info;
@@ -380,22 +407,17 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             snd_rawmidi_info(m_midi, info);
             std::string ret = snd_rawmidi_info_get_name(info);
             return ret;
-        }
-        size_t receive(void* buf, size_t len) const
-        {
-            return std::max(0l, snd_rawmidi_read(m_midi, buf, len));
         }
     };
 
     struct MIDIOut : public IMIDIOut
     {
         snd_rawmidi_t* m_midi;
-        bool m_virtual;
         MIDIOut(snd_rawmidi_t* midi, bool virt)
-        : m_midi(midi), m_virtual(virt) {}
+        : IMIDIOut(virt), m_midi(midi) {}
 
         ~MIDIOut() {snd_rawmidi_close(m_midi);}
-        bool isVirtual() const {return m_virtual;}
+
         std::string description() const
         {
             snd_rawmidi_info_t* info;
@@ -404,26 +426,33 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             std::string ret = snd_rawmidi_info_get_name(info);
             return ret;
         }
+
         size_t send(const void* buf, size_t len) const
         {
-            return std::max(0l, snd_rawmidi_write(m_midi, buf, len));
+            return size_t(std::max(0l, snd_rawmidi_write(m_midi, buf, len)));
         }
     };
 
     struct MIDIInOut : public IMIDIInOut
     {
+        bool m_midiRunning = true;
         snd_rawmidi_t* m_midiIn;
         snd_rawmidi_t* m_midiOut;
-        bool m_virtual;
-        MIDIInOut(snd_rawmidi_t* midiIn, snd_rawmidi_t* midiOut, bool virt)
-        : m_midiIn(midiIn), m_midiOut(midiOut), m_virtual(virt) {}
+        std::thread m_midiThread;
+
+        MIDIInOut(snd_rawmidi_t* midiIn, snd_rawmidi_t* midiOut, bool virt, ReceiveFunctor&& receiver)
+        : IMIDIInOut(virt, std::move(receiver)), m_midiIn(midiIn), m_midiOut(midiOut),
+          m_midiThread(std::bind(MIDIReceiveProc, m_midiIn, m_receiver, m_midiRunning)) {}
 
         ~MIDIInOut()
         {
+            m_midiRunning = false;
+            if (m_midiThread.joinable())
+                m_midiThread.join();
             snd_rawmidi_close(m_midiIn);
             snd_rawmidi_close(m_midiOut);
         }
-        bool isVirtual() const {return m_virtual;}
+
         std::string description() const
         {
             snd_rawmidi_info_t* info;
@@ -432,58 +461,55 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             std::string ret = snd_rawmidi_info_get_name(info);
             return ret;
         }
-        size_t receive(void* buf, size_t len) const
-        {
-            return std::max(0l, snd_rawmidi_read(m_midiOut, buf, len));
-        }
+
         size_t send(const void* buf, size_t len) const
         {
-            return std::max(0l, snd_rawmidi_write(m_midiOut, buf, len));
+            return size_t(std::max(0l, snd_rawmidi_write(m_midiOut, buf, len)));
         }
     };
 
-    std::unique_ptr<IMIDIIn> newVirtualMIDIIn()
+    std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver)
     {
         int status;
         snd_rawmidi_t* midi;
-        status = snd_rawmidi_open(&midi, nullptr, "virtual", SND_RAWMIDI_NONBLOCK);
+        status = snd_rawmidi_open(&midi, nullptr, "virtual", 0);
         if (status)
             return {};
-        return std::make_unique<MIDIIn>(midi, true);
+        return std::make_unique<MIDIIn>(midi, true, std::move(receiver));
     }
 
     std::unique_ptr<IMIDIOut> newVirtualMIDIOut()
     {
         int status;
         snd_rawmidi_t* midi;
-        status = snd_rawmidi_open(nullptr, &midi, "virtual", SND_RAWMIDI_NONBLOCK);
+        status = snd_rawmidi_open(nullptr, &midi, "virtual", 0);
         if (status)
             return {};
         return std::make_unique<MIDIOut>(midi, true);
     }
 
-    std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut()
+    std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver)
     {
         int status;
         snd_rawmidi_t* midiIn;
         snd_rawmidi_t* midiOut;
-        status = snd_rawmidi_open(&midiIn, &midiOut, "virtual", SND_RAWMIDI_NONBLOCK);
+        status = snd_rawmidi_open(&midiIn, &midiOut, "virtual", 0);
         if (status)
             return {};
-        return std::make_unique<MIDIInOut>(midiIn, midiOut, true);
+        return std::make_unique<MIDIInOut>(midiIn, midiOut, true, std::move(receiver));
     }
 
-    std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name)
+    std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver)
     {
         int status;
         char path[128];
         snprintf(path, 128, "hw:%s", name);
 
         snd_rawmidi_t* midi;
-        status = snd_rawmidi_open(&midi, nullptr, path, SND_RAWMIDI_NONBLOCK);
+        status = snd_rawmidi_open(&midi, nullptr, path, 0);
         if (status)
             return {};
-        return std::make_unique<MIDIIn>(midi, true);
+        return std::make_unique<MIDIIn>(midi, true, std::move(receiver));
     }
 
     std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name)
@@ -493,13 +519,13 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
         snprintf(path, 128, "hw:%s", name);
 
         snd_rawmidi_t* midi;
-        status = snd_rawmidi_open(nullptr, &midi, path, SND_RAWMIDI_NONBLOCK);
+        status = snd_rawmidi_open(nullptr, &midi, path, 0);
         if (status)
             return {};
         return std::make_unique<MIDIOut>(midi, true);
     }
 
-    std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name)
+    std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver)
     {
         int status;
         char path[128];
@@ -507,10 +533,10 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
 
         snd_rawmidi_t* midiIn;
         snd_rawmidi_t* midiOut;
-        status = snd_rawmidi_open(&midiIn, &midiOut, path, SND_RAWMIDI_NONBLOCK);
+        status = snd_rawmidi_open(&midiIn, &midiOut, path, 0);
         if (status)
             return {};
-        return std::make_unique<MIDIInOut>(midiIn, midiOut, true);
+        return std::make_unique<MIDIInOut>(midiIn, midiOut, true, std::move(receiver));
     }
 };
 
