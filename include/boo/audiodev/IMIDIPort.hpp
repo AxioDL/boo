@@ -2,6 +2,7 @@
 #define BOO_IMIDIPORT_HPP
 
 #include <string>
+#include <functional>
 
 namespace boo
 {

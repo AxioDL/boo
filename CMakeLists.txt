@@ -191,6 +191,9 @@ add_library(boo
             lib/audiodev/AudioSubmix.hpp
             lib/audiodev/AudioSubmix.cpp
             lib/audiodev/IAudioMix.hpp
+            lib/audiodev/MIDIEncoder.cpp
+            lib/audiodev/MIDIDecoder.cpp
+            lib/audiodev/MIDICommon.hpp
             include/boo/inputdev/IHIDListener.hpp
             include/boo/IGraphicsContext.hpp
             include/boo/graphicsdev/IGraphicsDataFactory.hpp
@@ -198,6 +201,9 @@ add_library(boo
             include/boo/audiodev/IAudioSubmix.hpp
             include/boo/audiodev/IAudioVoice.hpp
             include/boo/audiodev/IMIDIPort.hpp
+            include/boo/audiodev/IMIDIReader.hpp
+            include/boo/audiodev/MIDIEncoder.hpp
+            include/boo/audiodev/MIDIDecoder.hpp
             include/boo/audiodev/IAudioVoiceEngine.hpp
             include/boo/IWindow.hpp
             include/boo/IApplication.hpp

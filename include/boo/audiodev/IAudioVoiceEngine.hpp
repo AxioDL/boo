@@ -45,7 +45,7 @@ struct IAudioVoiceEngine
     virtual void pumpAndMixVoices()=0;
 
     /** Get list of MIDI devices found on system */
-    virtual std::vector<std::string> enumerateMIDIDevices() const=0;
+    virtual std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const=0;
 
     /** Create ad-hoc MIDI in port and register with system */
     virtual std::unique_ptr<IMIDIIn> newVirtualMIDIIn()=0;
