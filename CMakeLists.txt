@@ -174,12 +174,12 @@ add_definitions(${_BOO_SYS_DEFINES})
 include_directories(include glslang soxr/src)
 
 add_library(boo
+            lib/inputdev/DeviceBase.cpp include/boo/inputdev/DeviceBase.hpp
             lib/inputdev/CafeProPad.cpp include/boo/inputdev/CafeProPad.hpp
             lib/inputdev/RevolutionPad.cpp include/boo/inputdev/RevolutionPad.hpp
             lib/inputdev/DolphinSmashAdapter.cpp include/boo/inputdev/DolphinSmashAdapter.hpp
             lib/inputdev/DualshockPad.cpp include/boo/inputdev/DualshockPad.hpp
             lib/inputdev/GenericPad.cpp include/boo/inputdev/GenericPad.hpp
-            lib/inputdev/DeviceBase.cpp include/boo/inputdev/DeviceBase.hpp
             lib/inputdev/DeviceSignature.cpp include/boo/inputdev/DeviceSignature.hpp
             lib/inputdev/IHIDDevice.hpp
             lib/audiodev/AudioMatrix.hpp

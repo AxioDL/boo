@@ -47,6 +47,8 @@ MIDIDecoder::receiveBytes(std::vector<uint8_t>::const_iterator begin,
     uint8_t b;
     if (a & 0x80)
         m_status = a;
+    else
+        it--;
 
     uint8_t chan = m_status & 0xf;
     switch (Status(m_status & 0xf0))

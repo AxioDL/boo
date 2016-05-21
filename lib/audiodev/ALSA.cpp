@@ -351,8 +351,8 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
                     snd_rawmidi_info_t *info;
                     snd_rawmidi_info_alloca(&info);
                     snd_rawmidi_info_set_device(info, device);
-                    ret.push_back(std::make_pair(snd_rawmidi_info_get_id(info),
-                                                 snd_rawmidi_info_get_name(info)));
+                    sprintf(name + strlen(name), ",%d", device);
+                    ret.push_back(std::make_pair(name, snd_rawmidi_info_get_name(info)));
                 }
             } while (device >= 0);
 
@@ -501,12 +501,8 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
 
     std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver)
     {
-        int status;
-        char path[128];
-        snprintf(path, 128, "hw:%s", name);
-
         snd_rawmidi_t* midi;
-        status = snd_rawmidi_open(&midi, nullptr, path, 0);
+        int status = snd_rawmidi_open(&midi, nullptr, name, 0);
         if (status)
             return {};
         return std::make_unique<MIDIIn>(midi, true, std::move(receiver));
@@ -514,12 +510,8 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
 
     std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name)
     {
-        int status;
-        char path[128];
-        snprintf(path, 128, "hw:%s", name);
-
         snd_rawmidi_t* midi;
-        status = snd_rawmidi_open(nullptr, &midi, path, 0);
+        int status = snd_rawmidi_open(nullptr, &midi, name, 0);
         if (status)
             return {};
         return std::make_unique<MIDIOut>(midi, true);
@@ -527,13 +519,9 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
 
     std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver)
     {
-        int status;
-        char path[128];
-        snprintf(path, 128, "hw:%s", name);
-
         snd_rawmidi_t* midiIn;
         snd_rawmidi_t* midiOut;
-        status = snd_rawmidi_open(&midiIn, &midiOut, path, 0);
+        int status = snd_rawmidi_open(&midiIn, &midiOut, name, 0);
         if (status)
             return {};
         return std::make_unique<MIDIInOut>(midiIn, midiOut, true, std::move(receiver));
