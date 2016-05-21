@@ -250,6 +250,20 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
             m_started = true;
         }
     }
+
+    std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const { return {}; }
+
+    std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver) { return {}; }
+
+    std::unique_ptr<IMIDIOut> newVirtualMIDIOut() { return {}; }
+
+    std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver) { return {}; }
+
+    std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver) { return {}; }
+
+    std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name) { return {}; }
+
+    std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver) { return {}; }
 };
 
 std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine()
