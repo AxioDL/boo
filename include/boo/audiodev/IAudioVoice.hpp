@@ -63,10 +63,10 @@ struct IAudioVoice
     virtual void setDefaultMatrixCoefficients()=0;
 
     /** Set channel-gains for mono audio source (AudioChannel enum for array index) */
-    virtual void setMonoMatrixCoefficients(const float coefs[8])=0;
+    virtual void setMonoMatrixCoefficients(const float coefs[8], bool slew)=0;
 
     /** Set channel-gains for stereo audio source (AudioChannel enum for array index) */
-    virtual void setStereoMatrixCoefficients(const float coefs[8][2])=0;
+    virtual void setStereoMatrixCoefficients(const float coefs[8][2], bool slew)=0;
 
     /** Called by client to dynamically adjust the pitch of voices with dynamic pitch enabled */
     virtual void setPitchRatio(double ratio, bool slew)=0;

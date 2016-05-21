@@ -85,8 +85,8 @@ public:
     AudioVoiceMono(BaseAudioVoiceEngine& root, IAudioMix& parent, IAudioVoiceCallback* cb,
                    double sampleRate, bool dynamicRate);
     void setDefaultMatrixCoefficients();
-    void setMonoMatrixCoefficients(const float coefs[8]);
-    void setStereoMatrixCoefficients(const float coefs[8][2]);
+    void setMonoMatrixCoefficients(const float coefs[8], bool slew);
+    void setStereoMatrixCoefficients(const float coefs[8][2], bool slew);
 };
 
 class AudioVoiceStereo : public AudioVoice
@@ -105,8 +105,8 @@ public:
     AudioVoiceStereo(BaseAudioVoiceEngine& root, IAudioMix& parent, IAudioVoiceCallback* cb,
                      double sampleRate, bool dynamicRate);
     void setDefaultMatrixCoefficients();
-    void setMonoMatrixCoefficients(const float coefs[8]);
-    void setStereoMatrixCoefficients(const float coefs[8][2]);
+    void setMonoMatrixCoefficients(const float coefs[8], bool slew);
+    void setStereoMatrixCoefficients(const float coefs[8][2], bool slew);
 };
 
 }

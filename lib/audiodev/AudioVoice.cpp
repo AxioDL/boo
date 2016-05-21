@@ -166,12 +166,12 @@ void AudioVoiceMono::setDefaultMatrixCoefficients()
     m_matrix.setDefaultMatrixCoefficients(m_parent.mixInfo().m_channels);
 }
 
-void AudioVoiceMono::setMonoMatrixCoefficients(const float coefs[8])
+void AudioVoiceMono::setMonoMatrixCoefficients(const float coefs[8], bool slew)
 {
-    m_matrix.setMatrixCoefficients(coefs);
+    m_matrix.setMatrixCoefficients(coefs, slew ? m_root.m_5msFrames : 0);
 }
 
-void AudioVoiceMono::setStereoMatrixCoefficients(const float coefs[8][2])
+void AudioVoiceMono::setStereoMatrixCoefficients(const float coefs[8][2], bool slew)
 {
     float newCoefs[8] =
     {
@@ -184,7 +184,7 @@ void AudioVoiceMono::setStereoMatrixCoefficients(const float coefs[8][2])
         coefs[6][0],
         coefs[7][0]
     };
-    m_matrix.setMatrixCoefficients(newCoefs);
+    m_matrix.setMatrixCoefficients(newCoefs, slew ? m_root.m_5msFrames : 0);
 }
 
 AudioVoiceStereo::AudioVoiceStereo(BaseAudioVoiceEngine& root, IAudioMix& parent, IAudioVoiceCallback* cb,
@@ -286,7 +286,7 @@ void AudioVoiceStereo::setDefaultMatrixCoefficients()
     m_matrix.setDefaultMatrixCoefficients(m_parent.mixInfo().m_channels);
 }
 
-void AudioVoiceStereo::setMonoMatrixCoefficients(const float coefs[8])
+void AudioVoiceStereo::setMonoMatrixCoefficients(const float coefs[8], bool slew)
 {
     float newCoefs[8][2] =
     {
@@ -299,12 +299,12 @@ void AudioVoiceStereo::setMonoMatrixCoefficients(const float coefs[8])
         {coefs[6], coefs[6]},
         {coefs[7], coefs[7]}
     };
-    m_matrix.setMatrixCoefficients(newCoefs);
+    m_matrix.setMatrixCoefficients(newCoefs, slew ? m_root.m_5msFrames : 0);
 }
 
-void AudioVoiceStereo::setStereoMatrixCoefficients(const float coefs[8][2])
+void AudioVoiceStereo::setStereoMatrixCoefficients(const float coefs[8][2], bool slew)
 {
-    m_matrix.setMatrixCoefficients(coefs);
+    m_matrix.setMatrixCoefficients(coefs, slew ? m_root.m_5msFrames : 0);
 }
 
 }
