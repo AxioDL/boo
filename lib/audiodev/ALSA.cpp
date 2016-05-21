@@ -5,6 +5,7 @@
 #include "logvisor/logvisor.hpp"
 
 #include <alsa/asoundlib.h>
+#include <signal.h>
 
 namespace boo
 {
@@ -395,6 +396,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
         ~MIDIIn()
         {
             m_midiRunning = false;
+            pthread_kill(m_midiThread.native_handle(), SIGTERM);
             if (m_midiThread.joinable())
                 m_midiThread.join();
             snd_rawmidi_close(m_midi);
@@ -447,6 +449,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
         ~MIDIInOut()
         {
             m_midiRunning = false;
+            pthread_kill(m_midiThread.native_handle(), SIGTERM);
             if (m_midiThread.joinable())
                 m_midiThread.join();
             snd_rawmidi_close(m_midiIn);
