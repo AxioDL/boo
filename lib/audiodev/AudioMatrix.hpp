@@ -53,8 +53,7 @@ public:
         m_curSlewFrame = 0;
         for (int i=0 ; i<8 ; ++i)
         {
-            if (m_curSlewFrame == m_slewFrames)
-                m_oldCoefs[i] = m_coefs[i];
+            m_oldCoefs[i] = m_coefs[i];
             m_coefs[i] = coefs[i];
         }
     }
@@ -83,11 +82,8 @@ public:
         m_curSlewFrame = 0;
         for (int i=0 ; i<8 ; ++i)
         {
-            if (m_curSlewFrame == m_slewFrames)
-            {
-                m_oldCoefs[i][0] = m_coefs[i][0];
-                m_oldCoefs[i][1] = m_coefs[i][1];
-            }
+            m_oldCoefs[i][0] = m_coefs[i][0];
+            m_oldCoefs[i][1] = m_coefs[i][1];
             m_coefs[i][0] = coefs[i][0];
             m_coefs[i][1] = coefs[i][1];
         }
