@@ -6,6 +6,10 @@
 #include <stdint.h>
 #include <limits.h>
 
+#if __SSE__
+#include <xmmintrin.h>
+#endif
+
 namespace boo
 {
 struct AudioVoiceEngineMixInfo;
@@ -39,8 +43,16 @@ static inline float ClampFlt(float in)
 
 class AudioMatrixMono
 {
-    float m_coefs[8] = {};
-    float m_oldCoefs[8] = {};
+    union Coefs
+    {
+        float v[8];
+#if __SSE__
+        __m128 q[2];
+        __m64 d[4];
+#endif
+    };
+    Coefs m_coefs = {};
+    Coefs m_oldCoefs = {};
     size_t m_slewFrames = 0;
     size_t m_curSlewFrame = 0;
 public:
@@ -51,11 +63,18 @@ public:
     {
         m_slewFrames = slewFrames;
         m_curSlewFrame = 0;
+#if __SSE__
+        m_oldCoefs.q[0] = m_coefs.q[0];
+        m_oldCoefs.q[1] = m_coefs.q[1];
+        m_coefs.q[0] = _mm_loadu_ps(coefs);
+        m_coefs.q[1] = _mm_loadu_ps(&coefs[4]);
+#else
         for (int i=0 ; i<8 ; ++i)
         {
-            m_oldCoefs[i] = m_coefs[i];
-            m_coefs[i] = coefs[i];
+            m_oldCoefs.v[i] = m_coefs.v[i];
+            m_coefs.v[i] = coefs[i];
         }
+#endif
     }
 
     int16_t* mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
@@ -68,8 +87,16 @@ public:
 
 class AudioMatrixStereo
 {
-    float m_coefs[8][2] = {};
-    float m_oldCoefs[8][2] = {};
+    union Coefs
+    {
+        float v[8][2];
+#if __SSE__
+        __m128 q[4];
+        __m64 d[8];
+#endif
+    };
+    Coefs m_coefs = {};
+    Coefs m_oldCoefs = {};
     size_t m_slewFrames = 0;
     size_t m_curSlewFrame = 0;
 public:
@@ -80,13 +107,24 @@ public:
     {
         m_slewFrames = slewFrames;
         m_curSlewFrame = 0;
+#if __SSE__
+        m_oldCoefs.q[0] = m_coefs.q[0];
+        m_oldCoefs.q[1] = m_coefs.q[1];
+        m_oldCoefs.q[2] = m_coefs.q[2];
+        m_oldCoefs.q[3] = m_coefs.q[3];
+        m_coefs.q[0] = _mm_loadu_ps(coefs[0]);
+        m_coefs.q[1] = _mm_loadu_ps(coefs[2]);
+        m_coefs.q[2] = _mm_loadu_ps(coefs[4]);
+        m_coefs.q[3] = _mm_loadu_ps(coefs[6]);
+#else
         for (int i=0 ; i<8 ; ++i)
         {
-            m_oldCoefs[i][0] = m_coefs[i][0];
-            m_oldCoefs[i][1] = m_coefs[i][1];
-            m_coefs[i][0] = coefs[i][0];
-            m_coefs[i][1] = coefs[i][1];
+            m_oldCoefs.v[i][0] = m_coefs.v[i][0];
+            m_oldCoefs.v[i][1] = m_coefs.v[i][1];
+            m_coefs.v[i][0] = coefs.v[i][0];
+            m_coefs.v[i][1] = coefs.v[i][1];
         }
+#endif
     }
 
     int16_t* mixStereoSampleData(const AudioVoiceEngineMixInfo& info,

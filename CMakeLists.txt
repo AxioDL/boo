@@ -183,7 +183,8 @@ add_library(boo
             lib/inputdev/DeviceSignature.cpp include/boo/inputdev/DeviceSignature.hpp
             lib/inputdev/IHIDDevice.hpp
             lib/audiodev/AudioMatrix.hpp
-            lib/audiodev/AudioMatrix.cpp
+            #lib/audiodev/AudioMatrix.cpp
+            lib/audiodev/AudioMatrixSSE.cpp
             lib/audiodev/AudioVoiceEngine.hpp
             lib/audiodev/AudioVoiceEngine.cpp
             lib/audiodev/AudioVoice.hpp

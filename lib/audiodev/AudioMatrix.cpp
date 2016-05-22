@@ -9,17 +9,17 @@ void AudioMatrixMono::setDefaultMatrixCoefficients(AudioChannelSet acSet)
 {
     m_curSlewFrame = 0;
     m_slewFrames = 0;
-    memset(m_coefs, 0, sizeof(m_coefs));
+    memset(&m_coefs, 0, sizeof(m_coefs));
     switch (acSet)
     {
     case AudioChannelSet::Stereo:
     case AudioChannelSet::Quad:
-        m_coefs[int(AudioChannel::FrontLeft)] = 1.0;
-        m_coefs[int(AudioChannel::FrontRight)] = 1.0;
+        m_coefs.v[int(AudioChannel::FrontLeft)] = 1.0;
+        m_coefs.v[int(AudioChannel::FrontRight)] = 1.0;
         break;
     case AudioChannelSet::Surround51:
     case AudioChannelSet::Surround71:
-        m_coefs[int(AudioChannel::FrontCenter)] = 1.0;
+        m_coefs.v[int(AudioChannel::FrontCenter)] = 1.0;
         break;
     default: break;
     }
@@ -41,7 +41,7 @@ int16_t* AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
                 AudioChannel ch = chmap.m_channels[c];
                 if (ch != AudioChannel::Unknown)
                 {
-                    *dataOut = Clamp16(*dataOut + *dataIn * (m_coefs[int(ch)] * t + m_oldCoefs[int(ch)] * omt));
+                    *dataOut = Clamp16(*dataOut + *dataIn * (m_coefs.v[int(ch)] * t + m_oldCoefs.v[int(ch)] * omt));
                     ++dataOut;
                 }
             }
@@ -55,7 +55,7 @@ int16_t* AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
                 AudioChannel ch = chmap.m_channels[c];
                 if (ch != AudioChannel::Unknown)
                 {
-                    *dataOut = Clamp16(*dataOut + *dataIn * m_coefs[int(ch)]);
+                    *dataOut = Clamp16(*dataOut + *dataIn * m_coefs.v[int(ch)]);
                     ++dataOut;
                 }
             }
@@ -80,7 +80,7 @@ int32_t* AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
                 AudioChannel ch = chmap.m_channels[c];
                 if (ch != AudioChannel::Unknown)
                 {
-                    *dataOut = Clamp32(*dataOut + *dataIn * (m_coefs[int(ch)] * t + m_oldCoefs[int(ch)] * omt));
+                    *dataOut = Clamp32(*dataOut + *dataIn * (m_coefs.v[int(ch)] * t + m_oldCoefs.v[int(ch)] * omt));
                     ++dataOut;
                 }
             }
@@ -94,7 +94,7 @@ int32_t* AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
                 AudioChannel ch = chmap.m_channels[c];
                 if (ch != AudioChannel::Unknown)
                 {
-                    *dataOut = Clamp32(*dataOut + *dataIn * m_coefs[int(ch)]);
+                    *dataOut = Clamp32(*dataOut + *dataIn * m_coefs.v[int(ch)]);
                     ++dataOut;
                 }
             }
@@ -119,7 +119,7 @@ float* AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
                 AudioChannel ch = chmap.m_channels[c];
                 if (ch != AudioChannel::Unknown)
                 {
-                    *dataOut = ClampFlt(*dataOut + *dataIn * (m_coefs[int(ch)] * t + m_oldCoefs[int(ch)] * omt));
+                    *dataOut = ClampFlt(*dataOut + *dataIn * (m_coefs.v[int(ch)] * t + m_oldCoefs.v[int(ch)] * omt));
                     ++dataOut;
                 }
             }
@@ -133,7 +133,7 @@ float* AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
                 AudioChannel ch = chmap.m_channels[c];
                 if (ch != AudioChannel::Unknown)
                 {
-                    *dataOut = ClampFlt(*dataOut + *dataIn * m_coefs[int(ch)]);
+                    *dataOut = ClampFlt(*dataOut + *dataIn * m_coefs.v[int(ch)]);
                     ++dataOut;
                 }
             }
@@ -146,18 +146,18 @@ void AudioMatrixStereo::setDefaultMatrixCoefficients(AudioChannelSet acSet)
 {
     m_curSlewFrame = 0;
     m_slewFrames = 0;
-    memset(m_coefs, 0, sizeof(m_coefs));
+    memset(&m_coefs, 0, sizeof(m_coefs));
     switch (acSet)
     {
     case AudioChannelSet::Stereo:
     case AudioChannelSet::Quad:
-        m_coefs[int(AudioChannel::FrontLeft)][0] = 1.0;
-        m_coefs[int(AudioChannel::FrontRight)][1] = 1.0;
+        m_coefs.v[int(AudioChannel::FrontLeft)][0] = 1.0;
+        m_coefs.v[int(AudioChannel::FrontRight)][1] = 1.0;
         break;
     case AudioChannelSet::Surround51:
     case AudioChannelSet::Surround71:
-        m_coefs[int(AudioChannel::FrontLeft)][0] = 1.0;
-        m_coefs[int(AudioChannel::FrontRight)][1] = 1.0;
+        m_coefs.v[int(AudioChannel::FrontLeft)][0] = 1.0;
+        m_coefs.v[int(AudioChannel::FrontRight)][1] = 1.0;
         break;
     default: break;
     }
@@ -180,8 +180,8 @@ int16_t* AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& i
                 if (ch != AudioChannel::Unknown)
                 {
                     *dataOut = Clamp16(*dataOut +
-                                       *dataIn * (m_coefs[int(ch)][0] * t + m_oldCoefs[int(ch)][0] * omt) +
-                                       *dataIn * (m_coefs[int(ch)][1] * t + m_oldCoefs[int(ch)][1] * omt));
+                                       *dataIn * (m_coefs.v[int(ch)][0] * t + m_oldCoefs.v[int(ch)][0] * omt) +
+                                       *dataIn * (m_coefs.v[int(ch)][1] * t + m_oldCoefs.v[int(ch)][1] * omt));
                     ++dataOut;
                 }
             }
@@ -196,8 +196,8 @@ int16_t* AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& i
                 if (ch != AudioChannel::Unknown)
                 {
                     *dataOut = Clamp16(*dataOut +
-                                       dataIn[0] * m_coefs[int(ch)][0] +
-                                       dataIn[1] * m_coefs[int(ch)][1]);
+                                       dataIn[0] * m_coefs.v[int(ch)][0] +
+                                       dataIn[1] * m_coefs.v[int(ch)][1]);
                     ++dataOut;
                 }
             }
@@ -223,8 +223,8 @@ int32_t* AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& i
                 if (ch != AudioChannel::Unknown)
                 {
                     *dataOut = Clamp32(*dataOut +
-                                       *dataIn * (m_coefs[int(ch)][0] * t + m_oldCoefs[int(ch)][0] * omt) +
-                                       *dataIn * (m_coefs[int(ch)][1] * t + m_oldCoefs[int(ch)][1] * omt));
+                                       *dataIn * (m_coefs.v[int(ch)][0] * t + m_oldCoefs.v[int(ch)][0] * omt) +
+                                       *dataIn * (m_coefs.v[int(ch)][1] * t + m_oldCoefs.v[int(ch)][1] * omt));
                     ++dataOut;
                 }
             }
@@ -239,8 +239,8 @@ int32_t* AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& i
                 if (ch != AudioChannel::Unknown)
                 {
                     *dataOut = Clamp32(*dataOut +
-                                       dataIn[0] * m_coefs[int(ch)][0] +
-                                       dataIn[1] * m_coefs[int(ch)][1]);
+                                       dataIn[0] * m_coefs.v[int(ch)][0] +
+                                       dataIn[1] * m_coefs.v[int(ch)][1]);
                     ++dataOut;
                 }
             }
@@ -266,8 +266,8 @@ float* AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& inf
                 if (ch != AudioChannel::Unknown)
                 {
                     *dataOut = ClampFlt(*dataOut +
-                                        *dataIn * (m_coefs[int(ch)][0] * t + m_oldCoefs[int(ch)][0] * omt) +
-                                        *dataIn * (m_coefs[int(ch)][1] * t + m_oldCoefs[int(ch)][1] * omt));
+                                        *dataIn * (m_coefs.v[int(ch)][0] * t + m_oldCoefs.v[int(ch)][0] * omt) +
+                                        *dataIn * (m_coefs.v[int(ch)][1] * t + m_oldCoefs.v[int(ch)][1] * omt));
                     ++dataOut;
                 }
             }
@@ -282,8 +282,8 @@ float* AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& inf
                 if (ch != AudioChannel::Unknown)
                 {
                     *dataOut = ClampFlt(*dataOut +
-                                        dataIn[0] * m_coefs[int(ch)][0] +
-                                        dataIn[1] * m_coefs[int(ch)][1]);
+                                        dataIn[0] * m_coefs.v[int(ch)][0] +
+                                        dataIn[1] * m_coefs.v[int(ch)][1]);
                     ++dataOut;
                 }
             }
