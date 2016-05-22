@@ -2,6 +2,8 @@
 #include "logvisor/logvisor.hpp"
 
 #include <AudioToolbox/AudioToolbox.h>
+#include <CoreMIDI/CoreMIDI.h>
+#include <CoreAudio/HostTime.h>
 
 #include <mutex>
 #include <condition_variable>
@@ -40,17 +42,25 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
     AudioQueueBufferRef m_buffers[3];
     size_t m_frameBytes;
 
+    MIDIClientRef m_midiClient;
+
     std::mutex m_engineMutex;
-    std::condition_variable m_engineCv;
+    std::condition_variable m_engineEnterCv;
+    std::condition_variable m_engineLeaveCv;
+    bool m_cbWaiting = false;
 
     static void Callback(AQSAudioVoiceEngine* engine, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer)
     {
         std::unique_lock<std::mutex> lk(engine->m_engineMutex);
-        engine->m_engineCv.wait(lk);
+        engine->m_cbWaiting = true;
+        engine->m_engineEnterCv.wait(lk);
+        engine->m_cbWaiting = false;
 
         engine->_pumpAndMixVoices(engine->m_mixInfo.m_periodFrames, reinterpret_cast<int32_t*>(inBuffer->mAudioData));
         inBuffer->mAudioDataByteSize = engine->m_frameBytes;
         AudioQueueEnqueueBuffer(inAQ, inBuffer, 0, nullptr);
+        
+        engine->m_engineLeaveCv.notify_one();
     }
 
     static void DummyCallback(AQSAudioVoiceEngine* engine, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer) {}
@@ -103,6 +113,406 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         return AudioChannelSet::Unknown;
     }
 
+    std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const
+    {
+        std::vector<std::pair<std::string, std::string>> ret;
+
+        ItemCount numDevices = MIDIGetNumberOfDevices();
+        ret.reserve(numDevices);
+        for (ItemCount i=0 ; i<numDevices ; ++i)
+        {
+            MIDIDeviceRef dev = MIDIGetDevice(i);
+            if (!dev)
+                continue;
+
+            CFStringRef idstr;
+            if (MIDIObjectGetStringProperty(dev, kMIDIPropertyDeviceID, &idstr))
+                continue;
+
+            CFStringRef namestr;
+            if (MIDIObjectGetStringProperty(dev, kMIDIPropertyDisplayName, &namestr))
+            {
+                CFRelease(idstr);
+                continue;
+            }
+
+            ret.push_back(std::make_pair(std::string(CFStringGetCStringPtr(idstr, kCFStringEncodingUTF8)),
+                                         std::string(CFStringGetCStringPtr(namestr, kCFStringEncodingUTF8))));
+
+            CFRelease(idstr);
+            CFRelease(namestr);
+        }
+
+        return ret;
+    }
+
+    static MIDIDeviceRef LookupMIDIDevice(const char* name)
+    {
+        ItemCount numDevices = MIDIGetNumberOfDevices();
+        for (ItemCount i=0 ; i<numDevices ; ++i)
+        {
+            MIDIDeviceRef dev = MIDIGetDevice(i);
+            if (!dev)
+                continue;
+
+            CFStringRef idstr;
+            if (MIDIObjectGetStringProperty(dev, kMIDIPropertyDeviceID, &idstr))
+                continue;
+
+            if (!strcmp(CFStringGetCStringPtr(idstr, kCFStringEncodingUTF8), name))
+            {
+                CFRelease(idstr);
+                return dev;
+            }
+            CFRelease(idstr);
+        }
+
+        return {};
+    }
+
+    static MIDIEndpointRef LookupMIDISource(const char* name)
+    {
+        MIDIDeviceRef dev = LookupMIDIDevice(name);
+        if (!dev)
+            return {};
+
+        ItemCount numEnt = MIDIDeviceGetNumberOfEntities(dev);
+        for (ItemCount i=0 ; i<numEnt ; ++i)
+        {
+            MIDIEntityRef ent = MIDIDeviceGetEntity(dev, i);
+            if (ent)
+            {
+                ItemCount numSrc = MIDIEntityGetNumberOfSources(ent);
+                for (ItemCount s=0 ; s<numSrc ; ++s)
+                {
+                    MIDIEndpointRef src = MIDIEntityGetSource(ent, s);
+                    if (src)
+                        return src;
+                }
+            }
+        }
+
+        return {};
+    }
+
+    static MIDIEndpointRef LookupMIDIDest(const char* name)
+    {
+        MIDIDeviceRef dev = LookupMIDIDevice(name);
+        if (!dev)
+            return {};
+
+        ItemCount numEnt = MIDIDeviceGetNumberOfEntities(dev);
+        for (ItemCount i=0 ; i<numEnt ; ++i)
+        {
+            MIDIEntityRef ent = MIDIDeviceGetEntity(dev, i);
+            if (ent)
+            {
+                ItemCount numDest = MIDIEntityGetNumberOfDestinations(ent);
+                for (ItemCount d=0 ; d<numDest ; ++d)
+                {
+                    MIDIEndpointRef dst = MIDIEntityGetDestination(ent, d);
+                    if (dst)
+                        return dst;
+                }
+            }
+        }
+
+        return {};
+    }
+
+    static void MIDIReceiveProc(const MIDIPacketList* pktlist,
+                                IMIDIReceiver* readProcRefCon,
+                                void*)
+    {
+        const MIDIPacket* packet = &pktlist->packet[0];
+        for (int i=0 ; i<pktlist->numPackets ; ++i)
+        {
+            std::vector<uint8_t> bytes(std::cbegin(packet->data), std::cbegin(packet->data) + packet->length);
+            readProcRefCon->m_receiver(std::move(bytes));
+            packet = MIDIPacketNext(packet);
+        }
+    }
+
+    struct MIDIIn : public IMIDIIn
+    {
+        MIDIEndpointRef m_midi = 0;
+        MIDIPortRef m_midiPort = 0;
+
+        MIDIIn(bool virt, ReceiveFunctor&& receiver)
+        : IMIDIIn(virt, std::move(receiver)) {}
+
+        ~MIDIIn()
+        {
+            if (m_midi)
+                MIDIEndpointDispose(m_midi);
+            if (m_midiPort)
+                MIDIPortDispose(m_midiPort);
+        }
+
+        std::string description() const
+        {
+            CFStringRef namestr;
+            if (MIDIObjectGetStringProperty(m_midi, kMIDIPropertyDisplayName, &namestr))
+                return {};
+
+            std::string ret(CFStringGetCStringPtr(namestr, kCFStringEncodingUTF8));
+            CFRelease(namestr);
+            return ret;
+        }
+    };
+
+    struct MIDIOut : public IMIDIOut
+    {
+        MIDIEndpointRef m_midi = 0;
+        MIDIPortRef m_midiPort = 0;
+
+        MIDIOut(bool virt)
+        : IMIDIOut(virt) {}
+
+        ~MIDIOut()
+        {
+            if (m_midi)
+                MIDIEndpointDispose(m_midi);
+            if (m_midiPort)
+                MIDIPortDispose(m_midiPort);
+        }
+
+        std::string description() const
+        {
+            CFStringRef namestr;
+            if (MIDIObjectGetStringProperty(m_midi, kMIDIPropertyDisplayName, &namestr))
+                return {};
+
+            std::string ret(CFStringGetCStringPtr(namestr, kCFStringEncodingUTF8));
+            CFRelease(namestr);
+            return ret;
+        }
+
+        size_t send(const void* buf, size_t len) const
+        {
+            union
+            {
+                MIDIPacketList head;
+                Byte storage[512];
+            } list;
+            MIDIPacket* curPacket = MIDIPacketListInit(&list.head);
+            if (MIDIPacketListAdd(&list.head, sizeof(list), curPacket, AudioGetCurrentHostTime(),
+                                  len, reinterpret_cast<const Byte*>(buf)))
+            {
+                if (m_midiPort)
+                    MIDISend(m_midiPort, m_midi, &list.head);
+                else
+                    MIDIReceived(m_midi, &list.head);
+                return len;
+            }
+            return 0;
+        }
+    };
+
+    struct MIDIInOut : public IMIDIInOut
+    {
+        MIDIEndpointRef m_midiIn = 0;
+        MIDIPortRef m_midiPortIn = 0;
+        MIDIEndpointRef m_midiOut = 0;
+        MIDIPortRef m_midiPortOut = 0;
+
+        MIDIInOut(bool virt, ReceiveFunctor&& receiver)
+        : IMIDIInOut(virt, std::move(receiver)) {}
+
+        ~MIDIInOut()
+        {
+            if (m_midiIn)
+                MIDIEndpointDispose(m_midiIn);
+            if (m_midiPortIn)
+                MIDIPortDispose(m_midiPortIn);
+            if (m_midiOut)
+                MIDIEndpointDispose(m_midiOut);
+            if (m_midiPortOut)
+                MIDIPortDispose(m_midiPortOut);
+        }
+
+        std::string description() const
+        {
+            CFStringRef namestr;
+            if (MIDIObjectGetStringProperty(m_midiIn, kMIDIPropertyDisplayName, &namestr))
+                return {};
+
+            std::string ret(CFStringGetCStringPtr(namestr, kCFStringEncodingUTF8));
+            CFRelease(namestr);
+            return ret;
+        }
+
+        size_t send(const void* buf, size_t len) const
+        {
+            union
+            {
+                MIDIPacketList head;
+                Byte storage[512];
+            } list;
+            MIDIPacket* curPacket = MIDIPacketListInit(&list.head);
+            if (MIDIPacketListAdd(&list.head, sizeof(list), curPacket, AudioGetCurrentHostTime(),
+                                  len, reinterpret_cast<const Byte*>(buf)))
+            {
+                if (m_midiPortOut)
+                    MIDISend(m_midiPortOut, m_midiOut, &list.head);
+                else
+                    MIDIReceived(m_midiOut, &list.head);
+                return len;
+            }
+            return 0;
+        }
+    };
+
+    unsigned m_midiInCounter = 0;
+    unsigned m_midiOutCounter = 0;
+
+    std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver)
+    {
+        std::unique_ptr<IMIDIIn> ret = std::make_unique<MIDIIn>(true, std::move(receiver));
+        if (!ret)
+            return {};
+
+        char name[256];
+        snprintf(name, 256, "Boo MIDI Virtual In %u\n", m_midiInCounter++);
+        CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, name, kCFStringEncodingUTF8, kCFAllocatorNull);
+        OSStatus stat;
+        if ((stat = MIDIDestinationCreate(m_midiClient, midiName, MIDIReadProc(MIDIReceiveProc),
+                                  static_cast<IMIDIReceiver*>(ret.get()),
+                                  &static_cast<MIDIIn&>(*ret).m_midi)))
+            ret.reset();
+        CFRelease(midiName);
+
+        return ret;
+    }
+
+    std::unique_ptr<IMIDIOut> newVirtualMIDIOut()
+    {
+        std::unique_ptr<IMIDIOut> ret = std::make_unique<MIDIOut>(true);
+        if (!ret)
+            return {};
+
+        char name[256];
+        snprintf(name, 256, "Boo MIDI Virtual Out %u\n", m_midiOutCounter++);
+        CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, name, kCFStringEncodingUTF8, kCFAllocatorNull);
+        if (MIDISourceCreate(m_midiClient, midiName, &static_cast<MIDIOut&>(*ret).m_midi))
+            ret.reset();
+        CFRelease(midiName);
+
+        return ret;
+    }
+
+    std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver)
+    {
+        std::unique_ptr<IMIDIInOut> ret = std::make_unique<MIDIInOut>(true, std::move(receiver));
+        if (!ret)
+            return {};
+
+        char name[256];
+        snprintf(name, 256, "Boo MIDI Virtual In %u\n", m_midiInCounter++);
+        CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, name, kCFStringEncodingUTF8, kCFAllocatorNull);
+        if (MIDIDestinationCreate(m_midiClient, midiName, MIDIReadProc(MIDIReceiveProc),
+                                  static_cast<IMIDIReceiver*>(ret.get()),
+                                  &static_cast<MIDIInOut&>(*ret).m_midiIn))
+            ret.reset();
+        CFRelease(midiName);
+
+        if (!ret)
+            return {};
+
+        snprintf(name, 256, "Boo MIDI Virtual Out %u\n", m_midiOutCounter++);
+        midiName = CFStringCreateWithCStringNoCopy(nullptr, name, kCFStringEncodingUTF8, kCFAllocatorNull);
+        if (MIDISourceCreate(m_midiClient, midiName, &static_cast<MIDIInOut&>(*ret).m_midiOut))
+            ret.reset();
+        CFRelease(midiName);
+
+        return ret;
+    }
+
+    std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver)
+    {
+        MIDIEndpointRef src = LookupMIDISource(name);
+        if (!src)
+            return {};
+
+        std::unique_ptr<IMIDIIn> ret = std::make_unique<MIDIIn>(false, std::move(receiver));
+        if (!ret)
+            return {};
+
+        char mname[256];
+        snprintf(mname, 256, "Boo MIDI Real In %u\n", m_midiInCounter++);
+        CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, mname, kCFStringEncodingUTF8, kCFAllocatorNull);
+        if (MIDIInputPortCreate(m_midiClient, midiName, MIDIReadProc(MIDIReceiveProc),
+                                static_cast<IMIDIReceiver*>(ret.get()),
+                                &static_cast<MIDIIn&>(*ret).m_midiPort))
+            ret.reset();
+        else
+            MIDIPortConnectSource(static_cast<MIDIIn&>(*ret).m_midiPort, src, nullptr);
+        CFRelease(midiName);
+
+        return ret;
+    }
+
+    std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name)
+    {
+        MIDIEndpointRef dst = LookupMIDIDest(name);
+        if (!dst)
+            return {};
+
+        std::unique_ptr<IMIDIOut> ret = std::make_unique<MIDIOut>(false);
+        if (!ret)
+            return {};
+
+        char mname[256];
+        snprintf(mname, 256, "Boo MIDI Real Out %u\n", m_midiOutCounter++);
+        CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, mname, kCFStringEncodingUTF8, kCFAllocatorNull);
+        if (MIDIOutputPortCreate(m_midiClient, midiName, &static_cast<MIDIOut&>(*ret).m_midiPort))
+            ret.reset();
+        else
+            static_cast<MIDIOut&>(*ret).m_midi = dst;
+        CFRelease(midiName);
+
+        return ret;
+    }
+
+    std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver)
+    {
+        MIDIEndpointRef src = LookupMIDISource(name);
+        if (!src)
+            return {};
+
+        MIDIEndpointRef dst = LookupMIDIDest(name);
+        if (!dst)
+            return {};
+
+        std::unique_ptr<IMIDIInOut> ret = std::make_unique<MIDIInOut>(false, std::move(receiver));
+        if (!ret)
+            return {};
+
+        char mname[256];
+        snprintf(mname, 256, "Boo MIDI Real In %u\n", m_midiInCounter++);
+        CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, mname, kCFStringEncodingUTF8, kCFAllocatorNull);
+        if (MIDIInputPortCreate(m_midiClient, midiName, MIDIReadProc(MIDIReceiveProc),
+                                static_cast<IMIDIReceiver*>(ret.get()),
+                                &static_cast<MIDIInOut&>(*ret).m_midiPortIn))
+            ret.reset();
+        else
+            MIDIPortConnectSource(static_cast<MIDIInOut&>(*ret).m_midiPortIn, src, nullptr);
+        CFRelease(midiName);
+
+        if (!ret)
+            return {};
+
+        snprintf(mname, 256, "Boo MIDI Real Out %u\n", m_midiOutCounter++);
+        midiName = CFStringCreateWithCStringNoCopy(nullptr, mname, kCFStringEncodingUTF8, kCFAllocatorNull);
+        if (MIDIOutputPortCreate(m_midiClient, midiName, &static_cast<MIDIInOut&>(*ret).m_midiPortOut))
+            ret.reset();
+        else
+            static_cast<MIDIInOut&>(*ret).m_midiOut = dst;
+        CFRelease(midiName);
+
+        return ret;
+    }
+
     AQSAudioVoiceEngine()
     {
         m_mixInfo.m_channels = _getAvailableSet();
@@ -129,6 +539,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         m_mixInfo.m_sampleRate = 96000.0;
         m_mixInfo.m_sampleFormat = SOXR_INT32_I;
         m_mixInfo.m_bitsPerSample = 32;
+        m_5msFrames = 96000 * 5 / 1000;
 
         ChannelMap& chMapOut = m_mixInfo.m_channelMap;
         if (chCount > 2)
@@ -229,19 +640,25 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         }
         AudioQueuePrime(m_queue, 0, nullptr);
         AudioQueueStart(m_queue, nullptr);
+
+        /* Also create shared MIDI client */
+        MIDIClientCreate(CFSTR("Boo MIDI"), nullptr, nullptr, &m_midiClient);
     }
 
     ~AQSAudioVoiceEngine()
     {
         AudioQueueDispose(m_queue, false);
+        MIDIClientDispose(m_midiClient);
     }
 
     void pumpAndMixVoices()
     {
         std::unique_lock<std::mutex> lk(m_engineMutex);
-        m_engineCv.notify_one();
-        lk.unlock();
-        lk.lock();
+        if (m_cbWaiting)
+        {
+            m_engineEnterCv.notify_one();
+            m_engineLeaveCv.wait(lk);
+        }
     }
 };
 

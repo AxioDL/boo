@@ -22,12 +22,18 @@ public:
     virtual std::string description() const=0;
 };
 
-class IMIDIIn : public IMIDIPort
+class IMIDIReceiver
+{
+public:
+    ReceiveFunctor m_receiver;
+    IMIDIReceiver(ReceiveFunctor&& receiver) : m_receiver(std::move(receiver)) {}
+};
+
+class IMIDIIn : public IMIDIPort, public IMIDIReceiver
 {
 protected:
-    ReceiveFunctor m_receiver;
     IMIDIIn(bool virt, ReceiveFunctor&& receiver)
-    : IMIDIPort(virt), m_receiver(std::move(receiver)) {}
+    : IMIDIPort(virt), IMIDIReceiver(std::move(receiver)) {}
 public:
     virtual ~IMIDIIn();
 };
@@ -41,12 +47,11 @@ public:
     virtual size_t send(const void* buf, size_t len) const=0;
 };
 
-class IMIDIInOut : public IMIDIPort
+class IMIDIInOut : public IMIDIPort, public IMIDIReceiver
 {
 protected:
-    ReceiveFunctor m_receiver;
     IMIDIInOut(bool virt, ReceiveFunctor&& receiver)
-    : IMIDIPort(virt), m_receiver(std::move(receiver)) {}
+    : IMIDIPort(virt), IMIDIReceiver(std::move(receiver)) {}
 public:
     virtual ~IMIDIInOut();
     virtual size_t send(const void* buf, size_t len) const=0;
