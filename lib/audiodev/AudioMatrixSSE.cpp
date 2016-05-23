@@ -302,31 +302,82 @@ float* AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
     {
         if (m_slewFrames && m_curSlewFrame < m_slewFrames)
         {
-            double t = m_curSlewFrame / double(m_slewFrames);
-            double omt = 1.0 - t;
+            float t = m_curSlewFrame / float(m_slewFrames);
+            float omt = 1.f - t;
 
-            for (unsigned c=0 ; c<chmap.m_channelCount ; ++c)
+            switch (chmap.m_channelCount)
             {
-                AudioChannel ch = chmap.m_channels[c];
-                if (ch != AudioChannel::Unknown)
+            case 2:
+            {
+                ++m_curSlewFrame;
+                float t2 = m_curSlewFrame / float(m_slewFrames);
+                float omt2 = 1.f - t2;
+
+                TVectorUnion coefs, samps;
+                coefs.q = _mm_add_ps(_mm_mul_ps(_mm_shuffle_ps(m_coefs.q[0], m_coefs.q[0], _MM_SHUFFLE(1, 0, 1, 0)),
+                                                _mm_set_ps(t, t, t2, t2)),
+                                     _mm_mul_ps(_mm_shuffle_ps(m_oldCoefs.q[0], m_oldCoefs.q[0], _MM_SHUFFLE(1, 0, 1, 0)),
+                                                _mm_set_ps(omt, omt, omt2, omt2)));
+                samps.q = _mm_loadu_ps(dataIn);
+                samps.q = _mm_shuffle_ps(samps.q, samps.q, _MM_SHUFFLE(1, 0, 1, 0));
+
+                __m128 pre = _mm_add_ps(_mm_loadu_ps(dataOut), _mm_mul_ps(coefs.q, samps.q));
+                _mm_storeu_ps(dataOut, _mm_min_ps(_mm_max_ps(pre, Min32Vec.q), Max32Vec.q));
+
+                dataOut += 4;
+                ++s;
+                ++dataIn;
+                break;
+            }
+            default:
+            {
+                for (unsigned c=0 ; c<chmap.m_channelCount ; ++c)
                 {
-                    *dataOut = ClampFlt(*dataOut + *dataIn * (m_coefs.v[int(ch)] * t + m_oldCoefs.v[int(ch)] * omt));
-                    ++dataOut;
+                    AudioChannel ch = chmap.m_channels[c];
+                    if (ch != AudioChannel::Unknown)
+                    {
+                        *dataOut = Clamp32(*dataOut + *dataIn * (m_coefs.v[int(ch)] * t + m_oldCoefs.v[int(ch)] * omt));
+                        ++dataOut;
+                    }
                 }
+                break;
+            }
             }
 
             ++m_curSlewFrame;
         }
         else
         {
-            for (unsigned c=0 ; c<chmap.m_channelCount ; ++c)
+            switch (chmap.m_channelCount)
             {
-                AudioChannel ch = chmap.m_channels[c];
-                if (ch != AudioChannel::Unknown)
+            case 2:
+            {
+                TVectorUnion coefs, samps;
+                coefs.q = _mm_shuffle_ps(m_coefs.q[0], m_coefs.q[0], _MM_SHUFFLE(1, 0, 1, 0));
+                samps.q = _mm_loadu_ps(dataIn);
+                samps.q = _mm_shuffle_ps(samps.q, samps.q, _MM_SHUFFLE(1, 0, 1, 0));
+
+                __m128 pre = _mm_add_ps(_mm_loadu_ps(dataOut), _mm_mul_ps(coefs.q, samps.q));
+                _mm_storeu_ps(dataOut, _mm_min_ps(_mm_max_ps(pre, Min32Vec.q), Max32Vec.q));
+
+                dataOut += 4;
+                ++s;
+                ++dataIn;
+                break;
+            }
+            default:
+            {
+                for (unsigned c=0 ; c<chmap.m_channelCount ; ++c)
                 {
-                    *dataOut = ClampFlt(*dataOut + *dataIn * m_coefs.v[int(ch)]);
-                    ++dataOut;
+                    AudioChannel ch = chmap.m_channels[c];
+                    if (ch != AudioChannel::Unknown)
+                    {
+                        *dataOut = Clamp32(*dataOut + *dataIn * m_coefs.v[int(ch)]);
+                        ++dataOut;
+                    }
                 }
+                break;
+            }
             }
         }
     }
