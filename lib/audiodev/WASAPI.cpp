@@ -462,9 +462,6 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         }
     };
 
-    unsigned m_midiInCounter = 0;
-    unsigned m_midiOutCounter = 0;
-
     std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver)
     {
         return {};
