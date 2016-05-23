@@ -7,8 +7,8 @@
 
 namespace boo
 {
-class IAudioVoice;
-class IAudioVoiceCallback;
+struct IAudioVoice;
+struct IAudioVoiceCallback;
 struct ChannelMap;
 struct IAudioSubmixCallback;
 

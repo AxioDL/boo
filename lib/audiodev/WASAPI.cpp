@@ -4,6 +4,9 @@
 
 #include <Mmdeviceapi.h>
 #include <Audioclient.h>
+#include <mmsystem.h>
+
+#include <iterator>
 
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
@@ -138,6 +141,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
             return;
         }
         m_mixInfo.m_sampleRate = pwfx->Format.nSamplesPerSec;
+        m_5msFrames = (m_mixInfo.m_sampleRate * 5 / 500 + 1) / 2;
 
         if (pwfx->Format.wFormatTag == WAVE_FORMAT_PCM ||
             (pwfx->Format.wFormatTag == WAVE_FORMAT_EXTENSIBLE && pwfx->SubFormat == KSDATAFORMAT_SUBTYPE_PCM))
@@ -251,19 +255,292 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         }
     }
 
-    std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const { return {}; }
+    std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const
+    {
+        std::vector<std::pair<std::string, std::string>> ret;
 
-    std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver) { return {}; }
+        UINT numInDevices = midiInGetNumDevs();
+        UINT numOutDevices = midiOutGetNumDevs();
+        ret.reserve(numInDevices + numOutDevices);
 
-    std::unique_ptr<IMIDIOut> newVirtualMIDIOut() { return {}; }
+        for (UINT i=0 ; i<numInDevices ; ++i)
+        {
+            char name[256];
+            snprintf(name, 256, "in%u", i);
 
-    std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver) { return {}; }
+            MIDIINCAPS caps;
+            if (FAILED(midiInGetDevCaps(i, &caps, sizeof(caps))))
+                continue;
 
-    std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver) { return {}; }
+#ifdef UNICODE
+            int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, nullptr, 0, nullptr, nullptr);
+            std::string strTo(sizeNeeded, 0);
+            WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, &strTo[0], sizeNeeded, nullptr, nullptr);
+            ret.push_back(std::make_pair(std::string(name), std::move(strTo)));
+#else
+            ret.push_back(std::make_pair(std::string(name), std::string(caps.szPname)));
+#endif
+        }
 
-    std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name) { return {}; }
+        for (UINT i=0 ; i<numOutDevices ; ++i)
+        {
+            char name[256];
+            snprintf(name, 256, "out%u", i);
 
-    std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver) { return {}; }
+            MIDIOUTCAPS caps;
+            if (FAILED(midiOutGetDevCaps(i, &caps, sizeof(caps))))
+                continue;
+
+#ifdef UNICODE
+            int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, nullptr, 0, nullptr, nullptr);
+            std::string strTo(sizeNeeded, 0);
+            WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, &strTo[0], sizeNeeded, nullptr, nullptr);
+            ret.push_back(std::make_pair(std::string(name), std::move(strTo)));
+#else
+            ret.push_back(std::make_pair(std::string(name), std::string(caps.szPname)));
+#endif
+        }
+
+        return ret;
+    }
+
+    static void MIDIReceiveProc(HMIDIIN   hMidiIn,
+                                UINT      wMsg,
+                                IMIDIReceiver* dwInstance,
+                                DWORD_PTR dwParam1,
+                                DWORD_PTR dwParam2)
+    {
+        if (wMsg == MIM_DATA)
+        {
+            uint8_t (&ptr)[3] = reinterpret_cast<uint8_t(&)[3]>(dwParam1);
+            std::vector<uint8_t> bytes(std::cbegin(ptr), std::cend(ptr));
+            dwInstance->m_receiver(std::move(bytes));
+        }
+    }
+
+    struct MIDIIn : public IMIDIIn
+    {
+        HMIDIIN m_midi = 0;
+
+        MIDIIn(bool virt, ReceiveFunctor&& receiver)
+        : IMIDIIn(virt, std::move(receiver)) {}
+
+        ~MIDIIn()
+        {
+            midiInClose(m_midi);
+        }
+
+        std::string description() const
+        {
+            UINT id = 0;
+            midiInGetID(m_midi, &id);
+            MIDIINCAPS caps;
+            if (FAILED(midiInGetDevCaps(id, &caps, sizeof(caps))))
+                return {};
+
+#ifdef UNICODE
+            int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, nullptr, 0, nullptr, nullptr);
+            std::string strTo(sizeNeeded, 0);
+            WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, &strTo[0], sizeNeeded, nullptr, nullptr);
+            return strTo;
+#else
+            return caps.szPname;
+#endif
+        }
+    };
+
+    struct MIDIOut : public IMIDIOut
+    {
+        HMIDIOUT m_midi = 0;
+        HMIDISTRM m_strm = 0;
+        uint8_t m_buf[512];
+        MIDIHDR m_hdr = {};
+
+        MIDIOut(bool virt) : IMIDIOut(virt) {}
+
+        void prepare()
+        {
+            UINT id = 0;
+            midiOutGetID(m_midi, &id);
+
+            m_hdr.lpData = reinterpret_cast<LPSTR>(m_buf);
+            m_hdr.dwBufferLength = 512;
+            m_hdr.dwFlags = MHDR_ISSTRM;
+            midiOutPrepareHeader(m_midi, &m_hdr, sizeof(m_hdr));
+            midiStreamOpen(&m_strm, &id, 1, NULL, NULL, CALLBACK_NULL);
+        }
+
+        ~MIDIOut()
+        {
+            midiStreamClose(m_strm);
+            midiOutUnprepareHeader(m_midi, &m_hdr, sizeof(m_hdr));
+            midiOutClose(m_midi);
+        }
+
+        std::string description() const
+        {
+            UINT id = 0;
+            midiOutGetID(m_midi, &id);
+            MIDIOUTCAPS caps;
+            if (FAILED(midiOutGetDevCaps(id, &caps, sizeof(caps))))
+                return {};
+
+#ifdef UNICODE
+            int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, nullptr, 0, nullptr, nullptr);
+            std::string strTo(sizeNeeded, 0);
+            WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, &strTo[0], sizeNeeded, nullptr, nullptr);
+            return strTo;
+#else
+            return caps.szPname;
+#endif
+        }
+
+        size_t send(const void* buf, size_t len) const
+        {
+            memcpy(((MIDIOut*)this)->m_buf, buf, std::min(len, size_t(512)));
+            ((MIDIOut*)this)->m_hdr.dwBytesRecorded = len;
+            midiStreamOut(m_strm, LPMIDIHDR(&m_hdr), sizeof(m_hdr));
+            return len;
+        }
+    };
+
+    struct MIDIInOut : public IMIDIInOut
+    {
+        HMIDIIN m_midiIn = 0;
+        HMIDIOUT m_midiOut = 0;
+        HMIDISTRM m_strm = 0;
+        uint8_t m_buf[512];
+        MIDIHDR m_hdr = {};
+
+        MIDIInOut(bool virt, ReceiveFunctor&& receiver)
+        : IMIDIInOut(virt, std::move(receiver)) {}
+
+        void prepare()
+        {
+            UINT id = 0;
+            midiOutGetID(m_midiOut, &id);
+
+            m_hdr.lpData = reinterpret_cast<LPSTR>(m_buf);
+            m_hdr.dwBufferLength = 512;
+            m_hdr.dwFlags = MHDR_ISSTRM;
+            midiOutPrepareHeader(m_midiOut, &m_hdr, sizeof(m_hdr));
+            midiStreamOpen(&m_strm, &id, 1, NULL, NULL, CALLBACK_NULL);
+        }
+
+        ~MIDIInOut()
+        {
+            midiInClose(m_midiIn);
+            midiStreamClose(m_strm);
+            midiOutUnprepareHeader(m_midiOut, &m_hdr, sizeof(m_hdr));
+            midiOutClose(m_midiOut);
+        }
+
+        std::string description() const
+        {
+            UINT id = 0;
+            midiOutGetID(m_midiOut, &id);
+            MIDIOUTCAPS caps;
+            if (FAILED(midiOutGetDevCaps(id, &caps, sizeof(caps))))
+                return {};
+
+#ifdef UNICODE
+            int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, nullptr, 0, nullptr, nullptr);
+            std::string strTo(sizeNeeded, 0);
+            WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, &strTo[0], sizeNeeded, nullptr, nullptr);
+            return strTo;
+#else
+            return caps.szPname;
+#endif
+        }
+
+        size_t send(const void* buf, size_t len) const
+        {
+            memcpy(((MIDIOut*)this)->m_buf, buf, std::min(len, size_t(512)));
+            ((MIDIOut*)this)->m_hdr.dwBytesRecorded = len;
+            midiStreamOut(m_strm, LPMIDIHDR(&m_hdr), sizeof(m_hdr));
+            return len;
+        }
+    };
+
+    unsigned m_midiInCounter = 0;
+    unsigned m_midiOutCounter = 0;
+
+    std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver)
+    {
+        return {};
+    }
+
+    std::unique_ptr<IMIDIOut> newVirtualMIDIOut()
+    {
+        return {};
+    }
+
+    std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver)
+    {
+        return {};
+    }
+
+    std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver)
+    {
+        if (strcmp(name, "in"))
+            return {};
+        long id = strtol(name + 2, nullptr, 10);
+
+        std::unique_ptr<IMIDIIn> ret = std::make_unique<MIDIIn>(false, std::move(receiver));
+        if (!ret)
+            return {};
+
+        if (FAILED(midiInOpen(&static_cast<MIDIIn&>(*ret).m_midi, id, DWORD_PTR(MIDIReceiveProc),
+                              DWORD_PTR(static_cast<IMIDIReceiver*>(ret.get())), CALLBACK_FUNCTION)))
+            return {};
+
+        return ret;
+    }
+
+    std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name)
+    {
+        if (strcmp(name, "out"))
+            return {};
+        long id = strtol(name + 3, nullptr, 10);
+
+        std::unique_ptr<IMIDIOut> ret = std::make_unique<MIDIOut>(false);
+        if (!ret)
+            return {};
+
+        if (FAILED(midiOutOpen(&static_cast<MIDIOut&>(*ret).m_midi, id, NULL,
+                               NULL, CALLBACK_NULL)))
+            return {};
+
+        static_cast<MIDIOut&>(*ret).prepare();
+        return ret;
+    }
+
+    std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver)
+    {
+        const char* in = strstr(name, "in");
+        const char* out = strstr(name, "out");
+
+        if (!in || !out)
+            return {};
+
+        long inId = strtol(in + 2, nullptr, 10);
+        long outId = strtol(out + 3, nullptr, 10);
+
+        std::unique_ptr<IMIDIInOut> ret = std::make_unique<MIDIInOut>(false, std::move(receiver));
+        if (!ret)
+            return {};
+
+        if (FAILED(midiInOpen(&static_cast<MIDIInOut&>(*ret).m_midiIn, inId, DWORD_PTR(MIDIReceiveProc),
+                              DWORD_PTR(static_cast<IMIDIReceiver*>(ret.get())), CALLBACK_FUNCTION)))
+            return {};
+
+        if (FAILED(midiOutOpen(&static_cast<MIDIInOut&>(*ret).m_midiOut, outId, NULL,
+                               NULL, CALLBACK_NULL)))
+            return {};
+
+        static_cast<MIDIInOut&>(*ret).prepare();
+        return ret;
+    }
 };
 
 std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine()

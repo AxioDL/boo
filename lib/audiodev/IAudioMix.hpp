@@ -5,7 +5,7 @@
 
 namespace boo
 {
-class AudioVoiceEngineMixInfo;
+struct AudioVoiceEngineMixInfo;
 class AudioVoice;
 class AudioSubmix;
 
