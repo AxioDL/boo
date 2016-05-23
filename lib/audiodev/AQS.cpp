@@ -59,7 +59,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         engine->_pumpAndMixVoices(engine->m_mixInfo.m_periodFrames, reinterpret_cast<int32_t*>(inBuffer->mAudioData));
         inBuffer->mAudioDataByteSize = engine->m_frameBytes;
         AudioQueueEnqueueBuffer(inAQ, inBuffer, 0, nullptr);
-        
+
         engine->m_engineLeaveCv.notify_one();
     }
 
@@ -373,7 +373,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
             return {};
 
         char name[256];
-        snprintf(name, 256, "Boo MIDI Virtual In %u\n", m_midiInCounter++);
+        snprintf(name, 256, "Boo MIDI Virtual In %u", m_midiInCounter++);
         CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, name, kCFStringEncodingUTF8, kCFAllocatorNull);
         OSStatus stat;
         if ((stat = MIDIDestinationCreate(m_midiClient, midiName, MIDIReadProc(MIDIReceiveProc),
@@ -392,7 +392,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
             return {};
 
         char name[256];
-        snprintf(name, 256, "Boo MIDI Virtual Out %u\n", m_midiOutCounter++);
+        snprintf(name, 256, "Boo MIDI Virtual Out %u", m_midiOutCounter++);
         CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, name, kCFStringEncodingUTF8, kCFAllocatorNull);
         if (MIDISourceCreate(m_midiClient, midiName, &static_cast<MIDIOut&>(*ret).m_midi))
             ret.reset();
@@ -408,7 +408,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
             return {};
 
         char name[256];
-        snprintf(name, 256, "Boo MIDI Virtual In %u\n", m_midiInCounter++);
+        snprintf(name, 256, "Boo MIDI Virtual In %u", m_midiInCounter++);
         CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, name, kCFStringEncodingUTF8, kCFAllocatorNull);
         if (MIDIDestinationCreate(m_midiClient, midiName, MIDIReadProc(MIDIReceiveProc),
                                   static_cast<IMIDIReceiver*>(ret.get()),
@@ -419,7 +419,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         if (!ret)
             return {};
 
-        snprintf(name, 256, "Boo MIDI Virtual Out %u\n", m_midiOutCounter++);
+        snprintf(name, 256, "Boo MIDI Virtual Out %u", m_midiOutCounter++);
         midiName = CFStringCreateWithCStringNoCopy(nullptr, name, kCFStringEncodingUTF8, kCFAllocatorNull);
         if (MIDISourceCreate(m_midiClient, midiName, &static_cast<MIDIInOut&>(*ret).m_midiOut))
             ret.reset();
@@ -439,7 +439,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
             return {};
 
         char mname[256];
-        snprintf(mname, 256, "Boo MIDI Real In %u\n", m_midiInCounter++);
+        snprintf(mname, 256, "Boo MIDI Real In %u", m_midiInCounter++);
         CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, mname, kCFStringEncodingUTF8, kCFAllocatorNull);
         if (MIDIInputPortCreate(m_midiClient, midiName, MIDIReadProc(MIDIReceiveProc),
                                 static_cast<IMIDIReceiver*>(ret.get()),
@@ -463,7 +463,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
             return {};
 
         char mname[256];
-        snprintf(mname, 256, "Boo MIDI Real Out %u\n", m_midiOutCounter++);
+        snprintf(mname, 256, "Boo MIDI Real Out %u", m_midiOutCounter++);
         CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, mname, kCFStringEncodingUTF8, kCFAllocatorNull);
         if (MIDIOutputPortCreate(m_midiClient, midiName, &static_cast<MIDIOut&>(*ret).m_midiPort))
             ret.reset();
@@ -489,7 +489,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
             return {};
 
         char mname[256];
-        snprintf(mname, 256, "Boo MIDI Real In %u\n", m_midiInCounter++);
+        snprintf(mname, 256, "Boo MIDI Real In %u", m_midiInCounter++);
         CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, mname, kCFStringEncodingUTF8, kCFAllocatorNull);
         if (MIDIInputPortCreate(m_midiClient, midiName, MIDIReadProc(MIDIReceiveProc),
                                 static_cast<IMIDIReceiver*>(ret.get()),
@@ -502,7 +502,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         if (!ret)
             return {};
 
-        snprintf(mname, 256, "Boo MIDI Real Out %u\n", m_midiOutCounter++);
+        snprintf(mname, 256, "Boo MIDI Real Out %u", m_midiOutCounter++);
         midiName = CFStringCreateWithCStringNoCopy(nullptr, mname, kCFStringEncodingUTF8, kCFAllocatorNull);
         if (MIDIOutputPortCreate(m_midiClient, midiName, &static_cast<MIDIInOut&>(*ret).m_midiPortOut))
             ret.reset();
