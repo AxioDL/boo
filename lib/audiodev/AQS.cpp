@@ -42,7 +42,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
     AudioQueueBufferRef m_buffers[3];
     size_t m_frameBytes;
 
-    MIDIClientRef m_midiClient;
+    MIDIClientRef m_midiClient = 0;
 
     std::mutex m_engineMutex;
     std::condition_variable m_engineEnterCv;
@@ -115,6 +115,9 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
     std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const
     {
+        if (!m_midiClient)
+            return {};
+
         std::vector<std::pair<std::string, std::string>> ret;
 
         ItemCount numDevices = MIDIGetNumberOfDevices();
@@ -368,6 +371,9 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
     std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver)
     {
+        if (!m_midiClient)
+            return {};
+
         std::unique_ptr<IMIDIIn> ret = std::make_unique<MIDIIn>(true, std::move(receiver));
         if (!ret)
             return {};
@@ -387,6 +393,9 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
     std::unique_ptr<IMIDIOut> newVirtualMIDIOut()
     {
+        if (!m_midiClient)
+            return {};
+
         std::unique_ptr<IMIDIOut> ret = std::make_unique<MIDIOut>(true);
         if (!ret)
             return {};
@@ -403,6 +412,9 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
     std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver)
     {
+        if (!m_midiClient)
+            return {};
+
         std::unique_ptr<IMIDIInOut> ret = std::make_unique<MIDIInOut>(true, std::move(receiver));
         if (!ret)
             return {};
@@ -430,6 +442,9 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
     std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver)
     {
+        if (!m_midiClient)
+            return {};
+
         MIDIEndpointRef src = LookupMIDISource(name);
         if (!src)
             return {};
@@ -454,6 +469,9 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
     std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name)
     {
+        if (!m_midiClient)
+            return {};
+
         MIDIEndpointRef dst = LookupMIDIDest(name);
         if (!dst)
             return {};
@@ -476,6 +494,9 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
     std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver)
     {
+        if (!m_midiClient)
+            return {};
+
         MIDIEndpointRef src = LookupMIDISource(name);
         if (!src)
             return {};
@@ -648,7 +669,8 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
     ~AQSAudioVoiceEngine()
     {
         AudioQueueDispose(m_queue, false);
-        MIDIClientDispose(m_midiClient);
+        if (m_midiClient)
+            MIDIClientDispose(m_midiClient);
     }
 
     void pumpAndMixVoices()
