@@ -43,12 +43,13 @@ endif ()
 
 if (HAVE_SIMD)
   set (SIMD_SOURCES rate32s vr32s ${RDFT32S} simd)
+  foreach (source ${SIMD_SOURCES})
+    set_property (SOURCE ${source} PROPERTY COMPILE_FLAGS ${SIMD_C_FLAGS})
+  endforeach ()
 else ()
   set (SIMD_SOURCES vr32)
 endif ()
-foreach (source ${SIMD_SOURCES})
-  set_property (SOURCE ${source} PROPERTY COMPILE_FLAGS ${SIMD_C_FLAGS})
-endforeach ()
+
 
 
 # Libsoxr:
