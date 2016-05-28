@@ -42,18 +42,19 @@ if (WITH_SINGLE_PRECISION)
 endif ()
 
 if (HAVE_SIMD)
-  set (SIMD_SOURCES rate32s ${RDFT32S} simd)
-  foreach (source ${SIMD_SOURCES})
-    set_property (SOURCE ${source} PROPERTY COMPILE_FLAGS ${SIMD_C_FLAGS})
-  endforeach ()
+  set (SIMD_SOURCES rate32s vr32s ${RDFT32S} simd)
+else ()
+  set (SIMD_SOURCES vr32)
 endif ()
-
+foreach (source ${SIMD_SOURCES})
+  set_property (SOURCE ${source} PROPERTY COMPILE_FLAGS ${SIMD_C_FLAGS})
+endforeach ()
 
 
 # Libsoxr:
 
 add_library (soxr ${LIB_TYPE} soxr.c data-io dbesi0 filter fft4g64
-  ${SP_SOURCES} vr32 ${DP_SOURCES} ${SIMD_SOURCES})
+  ${SP_SOURCES} ${DP_SOURCES} ${SIMD_SOURCES})
 set_target_properties (soxr PROPERTIES
   VERSION "${SO_VERSION}"
   SOVERSION ${SO_VERSION_MAJOR}
