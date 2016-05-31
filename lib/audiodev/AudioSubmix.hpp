@@ -41,9 +41,9 @@ class AudioSubmix : public IAudioSubmix, public IAudioMix
     std::vector<int32_t> m_scratch32;
     std::vector<float> m_scratchFlt;
 
-    void _pumpAndMixVoices(size_t frames, int16_t* dataOut);
-    void _pumpAndMixVoices(size_t frames, int32_t* dataOut);
-    void _pumpAndMixVoices(size_t frames, float* dataOut);
+    void _pumpAndMixVoices(size_t frames, int16_t* dataOut, int16_t* mainOut);
+    void _pumpAndMixVoices(size_t frames, int32_t* dataOut, int32_t* mainOut);
+    void _pumpAndMixVoices(size_t frames, float* dataOut, float* mainOut);
 
     void _unbindFrom(std::list<AudioVoice*>::iterator it);
     void _unbindFrom(std::list<AudioSubmix*>::iterator it);

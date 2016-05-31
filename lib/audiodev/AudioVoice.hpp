@@ -55,9 +55,9 @@ protected:
     /* Mid-pump update */
     void _midUpdate();
 
-    virtual size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, int16_t* buf)=0;
-    virtual size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, int32_t* buf)=0;
-    virtual size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, float* buf)=0;
+    virtual size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, int16_t* buf, int16_t* rbuf)=0;
+    virtual size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, int32_t* buf, int32_t* rbuf)=0;
+    virtual size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, float* buf, float* rbuf)=0;
     AudioVoice(BaseAudioVoiceEngine& root, IAudioMix& parent, IAudioVoiceCallback* cb, bool dynamicRate);
 
 public:
@@ -72,14 +72,15 @@ public:
 class AudioVoiceMono : public AudioVoice
 {
     AudioMatrixMono m_matrix;
+    AudioMatrixMono m_subMatrix;
     void _resetSampleRate(double sampleRate);
 
     static size_t SRCCallback(AudioVoiceMono* ctx,
                               int16_t** data, size_t requestedLen);
 
-    size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, int16_t* buf);
-    size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, int32_t* buf);
-    size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, float* buf);
+    size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, int16_t* buf, int16_t* rbuf);
+    size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, int32_t* buf, int32_t* rbuf);
+    size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, float* buf, float* rbuf);
 
 public:
     AudioVoiceMono(BaseAudioVoiceEngine& root, IAudioMix& parent, IAudioVoiceCallback* cb,
@@ -87,19 +88,22 @@ public:
     void setDefaultMatrixCoefficients();
     void setMonoMatrixCoefficients(const float coefs[8], bool slew);
     void setStereoMatrixCoefficients(const float coefs[8][2], bool slew);
+    void setMonoSubmixMatrixCoefficients(const float coefs[8], bool slew);
+    void setStereoSubmixMatrixCoefficients(const float coefs[8][2], bool slew);
 };
 
 class AudioVoiceStereo : public AudioVoice
 {
     AudioMatrixStereo m_matrix;
+    AudioMatrixStereo m_subMatrix;
     void _resetSampleRate(double sampleRate);
 
     static size_t SRCCallback(AudioVoiceStereo* ctx,
                               int16_t** data, size_t requestedLen);
 
-    size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, int16_t* buf);
-    size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, int32_t* buf);
-    size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, float* buf);
+    size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, int16_t* buf, int16_t* rbuf);
+    size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, int32_t* buf, int32_t* rbuf);
+    size_t pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo, size_t frames, float* buf, float* rbuf);
 
 public:
     AudioVoiceStereo(BaseAudioVoiceEngine& root, IAudioMix& parent, IAudioVoiceCallback* cb,
@@ -107,6 +111,8 @@ public:
     void setDefaultMatrixCoefficients();
     void setMonoMatrixCoefficients(const float coefs[8], bool slew);
     void setStereoMatrixCoefficients(const float coefs[8][2], bool slew);
+    void setMonoSubmixMatrixCoefficients(const float coefs[8], bool slew);
+    void setStereoSubmixMatrixCoefficients(const float coefs[8][2], bool slew);
 };
 
 }

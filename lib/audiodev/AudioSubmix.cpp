@@ -22,7 +22,7 @@ AudioSubmix::~AudioSubmix()
     unbindSubmix();
 }
 
-void AudioSubmix::_pumpAndMixVoices(size_t frames, int16_t* dataOut)
+void AudioSubmix::_pumpAndMixVoices(size_t frames, int16_t* dataOut, int16_t* mainOut)
 {
     const AudioVoiceEngineMixInfo& info = mixInfo();
     size_t sampleCount = frames * info.m_channelMap.m_channelCount;
@@ -35,11 +35,11 @@ void AudioSubmix::_pumpAndMixVoices(size_t frames, int16_t* dataOut)
     /* Pump child voices */
     for (AudioVoice* vox : m_activeVoices)
         if (vox->m_running)
-            vox->pumpAndMix(m_parent.mixInfo(), frames, m_scratch16.data());
+            vox->pumpAndMix(m_parent.mixInfo(), frames, mainOut, m_scratch16.data());
 
     /* Pump child submixes */
     for (AudioSubmix* smx : m_activeSubmixes)
-        smx->_pumpAndMixVoices(frames, m_scratch16.data());
+        smx->_pumpAndMixVoices(frames, m_scratch16.data(), mainOut);
 
     /* Apply submix effect (if available) */
     if (m_cb && m_cb->canApplyEffect())
@@ -55,7 +55,7 @@ void AudioSubmix::_pumpAndMixVoices(size_t frames, int16_t* dataOut)
         }
 }
 
-void AudioSubmix::_pumpAndMixVoices(size_t frames, int32_t* dataOut)
+void AudioSubmix::_pumpAndMixVoices(size_t frames, int32_t* dataOut, int32_t* mainOut)
 {
     const AudioVoiceEngineMixInfo& info = mixInfo();
     size_t sampleCount = frames * info.m_channelMap.m_channelCount;
@@ -68,11 +68,11 @@ void AudioSubmix::_pumpAndMixVoices(size_t frames, int32_t* dataOut)
     /* Pump child voices */
     for (AudioVoice* vox : m_activeVoices)
         if (vox->m_running)
-            vox->pumpAndMix(m_parent.mixInfo(), frames, m_scratch32.data());
+            vox->pumpAndMix(m_parent.mixInfo(), frames, mainOut, m_scratch32.data());
 
     /* Pump child submixes */
     for (AudioSubmix* smx : m_activeSubmixes)
-        smx->_pumpAndMixVoices(frames, m_scratch32.data());
+        smx->_pumpAndMixVoices(frames, m_scratch32.data(), mainOut);
 
     /* Apply submix effect (if available) */
     if (m_cb && m_cb->canApplyEffect())
@@ -88,7 +88,7 @@ void AudioSubmix::_pumpAndMixVoices(size_t frames, int32_t* dataOut)
         }
 }
 
-void AudioSubmix::_pumpAndMixVoices(size_t frames, float* dataOut)
+void AudioSubmix::_pumpAndMixVoices(size_t frames, float* dataOut, float* mainOut)
 {
     const AudioVoiceEngineMixInfo& info = mixInfo();
     size_t sampleCount = frames * info.m_channelMap.m_channelCount;
@@ -101,11 +101,11 @@ void AudioSubmix::_pumpAndMixVoices(size_t frames, float* dataOut)
     /* Pump child voices */
     for (AudioVoice* vox : m_activeVoices)
         if (vox->m_running)
-            vox->pumpAndMix(m_parent.mixInfo(), frames, m_scratchFlt.data());
+            vox->pumpAndMix(m_parent.mixInfo(), frames, mainOut, m_scratchFlt.data());
 
     /* Pump child submixes */
     for (AudioSubmix* smx : m_activeSubmixes)
-        smx->_pumpAndMixVoices(frames, m_scratchFlt.data());
+        smx->_pumpAndMixVoices(frames, m_scratchFlt.data(), mainOut);
 
     /* Apply submix effect (if available) */
     if (m_cb && m_cb->canApplyEffect())

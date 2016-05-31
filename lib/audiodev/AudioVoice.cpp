@@ -114,7 +114,7 @@ size_t AudioVoiceMono::SRCCallback(AudioVoiceMono* ctx, int16_t** data, size_t f
 }
 
 size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
-                                  size_t frames, int16_t* buf)
+                                  size_t frames, int16_t* buf, int16_t* rbuf)
 {
     std::vector<int16_t>& scratch16 = m_root.m_scratch16;
     if (scratch16.size() < frames)
@@ -124,13 +124,17 @@ size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
     _midUpdate();
 
     if (oDone)
+    {
         m_matrix.mixMonoSampleData(mixInfo, scratch16.data(), buf, oDone);
+        if (rbuf)
+            m_subMatrix.mixMonoSampleData(mixInfo, scratch16.data(), rbuf, oDone);
+    }
 
     return oDone;
 }
 
 size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
-                                  size_t frames, int32_t* buf)
+                                  size_t frames, int32_t* buf, int32_t* rbuf)
 {
     std::vector<int32_t>& scratch32 = m_root.m_scratch32;
     if (scratch32.size() < frames)
@@ -140,13 +144,17 @@ size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
     _midUpdate();
 
     if (oDone)
+    {
         m_matrix.mixMonoSampleData(mixInfo, scratch32.data(), buf, oDone);
+        if (rbuf)
+            m_subMatrix.mixMonoSampleData(mixInfo, scratch32.data(), rbuf, oDone);
+    }
 
     return oDone;
 }
 
 size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
-                                  size_t frames, float* buf)
+                                  size_t frames, float* buf, float* rbuf)
 {
     std::vector<float>& scratchFlt = m_root.m_scratchFlt;
     if (scratchFlt.size() < frames)
@@ -156,7 +164,11 @@ size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
     _midUpdate();
 
     if (oDone)
+    {
         m_matrix.mixMonoSampleData(mixInfo, scratchFlt.data(), buf, oDone);
+        if (rbuf)
+            m_subMatrix.mixMonoSampleData(mixInfo, scratchFlt.data(), rbuf, oDone);
+    }
 
     return oDone;
 }
@@ -164,6 +176,8 @@ size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
 void AudioVoiceMono::setDefaultMatrixCoefficients()
 {
     m_matrix.setDefaultMatrixCoefficients(m_parent.mixInfo().m_channels);
+    float zero[8] = {};
+    m_subMatrix.setMatrixCoefficients(zero);
 }
 
 void AudioVoiceMono::setMonoMatrixCoefficients(const float coefs[8], bool slew)
@@ -185,6 +199,27 @@ void AudioVoiceMono::setStereoMatrixCoefficients(const float coefs[8][2], bool s
         coefs[7][0]
     };
     m_matrix.setMatrixCoefficients(newCoefs, slew ? m_root.m_5msFrames : 0);
+}
+
+void AudioVoiceMono::setMonoSubmixMatrixCoefficients(const float coefs[8], bool slew)
+{
+    m_subMatrix.setMatrixCoefficients(coefs, slew ? m_root.m_5msFrames : 0);
+}
+
+void AudioVoiceMono::setStereoSubmixMatrixCoefficients(const float coefs[8][2], bool slew)
+{
+    float newCoefs[8] =
+    {
+        coefs[0][0],
+        coefs[1][0],
+        coefs[2][0],
+        coefs[3][0],
+        coefs[4][0],
+        coefs[5][0],
+        coefs[6][0],
+        coefs[7][0]
+    };
+    m_subMatrix.setMatrixCoefficients(newCoefs, slew ? m_root.m_5msFrames : 0);
 }
 
 AudioVoiceStereo::AudioVoiceStereo(BaseAudioVoiceEngine& root, IAudioMix& parent, IAudioVoiceCallback* cb,
@@ -231,7 +266,7 @@ size_t AudioVoiceStereo::SRCCallback(AudioVoiceStereo* ctx, int16_t** data, size
 }
 
 size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
-                                    size_t frames, int16_t* buf)
+                                    size_t frames, int16_t* buf, int16_t* rbuf)
 {
     std::vector<int16_t>& scratch16 = m_root.m_scratch16;
     size_t samples = frames * 2;
@@ -242,13 +277,17 @@ size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
     _midUpdate();
 
     if (oDone)
+    {
         m_matrix.mixStereoSampleData(mixInfo, scratch16.data(), buf, oDone);
+        if (rbuf)
+            m_subMatrix.mixStereoSampleData(mixInfo, scratch16.data(), rbuf, oDone);
+    }
 
     return oDone;
 }
 
 size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
-                                    size_t frames, int32_t* buf)
+                                    size_t frames, int32_t* buf, int32_t* rbuf)
 {
     std::vector<int32_t>& scratch32 = m_root.m_scratch32;
     size_t samples = frames * 2;
@@ -259,13 +298,17 @@ size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
     _midUpdate();
 
     if (oDone)
+    {
         m_matrix.mixStereoSampleData(mixInfo, scratch32.data(), buf, oDone);
+        if (rbuf)
+            m_subMatrix.mixStereoSampleData(mixInfo, scratch32.data(), rbuf, oDone);
+    }
 
     return oDone;
 }
 
 size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
-                                    size_t frames, float* buf)
+                                    size_t frames, float* buf, float* rbuf)
 {
     std::vector<float>& scratchFlt = m_root.m_scratchFlt;
     size_t samples = frames * 2;
@@ -276,7 +319,11 @@ size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
     _midUpdate();
 
     if (oDone)
+    {
         m_matrix.mixStereoSampleData(mixInfo, scratchFlt.data(), buf, oDone);
+        if (rbuf)
+            m_subMatrix.mixStereoSampleData(mixInfo, scratchFlt.data(), rbuf, oDone);
+    }
 
     return oDone;
 }
@@ -284,6 +331,8 @@ size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
 void AudioVoiceStereo::setDefaultMatrixCoefficients()
 {
     m_matrix.setDefaultMatrixCoefficients(m_parent.mixInfo().m_channels);
+    float zero[8][2] = {{}};
+    m_subMatrix.setMatrixCoefficients(zero);
 }
 
 void AudioVoiceStereo::setMonoMatrixCoefficients(const float coefs[8], bool slew)
@@ -305,6 +354,27 @@ void AudioVoiceStereo::setMonoMatrixCoefficients(const float coefs[8], bool slew
 void AudioVoiceStereo::setStereoMatrixCoefficients(const float coefs[8][2], bool slew)
 {
     m_matrix.setMatrixCoefficients(coefs, slew ? m_root.m_5msFrames : 0);
+}
+
+void AudioVoiceStereo::setMonoSubmixMatrixCoefficients(const float coefs[8], bool slew)
+{
+    float newCoefs[8][2] =
+    {
+        {coefs[0], coefs[0]},
+        {coefs[1], coefs[1]},
+        {coefs[2], coefs[2]},
+        {coefs[3], coefs[3]},
+        {coefs[4], coefs[4]},
+        {coefs[5], coefs[5]},
+        {coefs[6], coefs[6]},
+        {coefs[7], coefs[7]}
+    };
+    m_subMatrix.setMatrixCoefficients(newCoefs, slew ? m_root.m_5msFrames : 0);
+}
+
+void AudioVoiceStereo::setStereoSubmixMatrixCoefficients(const float coefs[8][2], bool slew)
+{
+    m_subMatrix.setMatrixCoefficients(coefs, slew ? m_root.m_5msFrames : 0);
 }
 
 }

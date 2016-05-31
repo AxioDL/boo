@@ -35,9 +35,9 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int16_t* dataOut)
 
         for (AudioVoice* vox : m_activeVoices)
             if (vox->m_running)
-                vox->pumpAndMix(m_mixInfo, thisFrames, dataOut);
+                vox->pumpAndMix(m_mixInfo, thisFrames, dataOut, nullptr);
         for (AudioSubmix* smx : m_activeSubmixes)
-            smx->_pumpAndMixVoices(thisFrames, dataOut);
+            smx->_pumpAndMixVoices(thisFrames, dataOut, dataOut);
         remFrames -= thisFrames;
         dataOut += thisFrames * m_mixInfo.m_channelMap.m_channelCount;
     }
@@ -66,9 +66,9 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int32_t* dataOut)
 
         for (AudioVoice* vox : m_activeVoices)
             if (vox->m_running)
-                vox->pumpAndMix(m_mixInfo, thisFrames, dataOut);
+                vox->pumpAndMix(m_mixInfo, thisFrames, dataOut, nullptr);
         for (AudioSubmix* smx : m_activeSubmixes)
-            smx->_pumpAndMixVoices(thisFrames, dataOut);
+            smx->_pumpAndMixVoices(thisFrames, dataOut, dataOut);
         remFrames -= thisFrames;
         dataOut += thisFrames * m_mixInfo.m_channelMap.m_channelCount;
     }
@@ -97,9 +97,9 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, float* dataOut)
 
         for (AudioVoice* vox : m_activeVoices)
             if (vox->m_running)
-                vox->pumpAndMix(m_mixInfo, thisFrames, dataOut);
+                vox->pumpAndMix(m_mixInfo, thisFrames, dataOut, nullptr);
         for (AudioSubmix* smx : m_activeSubmixes)
-            smx->_pumpAndMixVoices(thisFrames, dataOut);
+            smx->_pumpAndMixVoices(thisFrames, dataOut, dataOut);
         remFrames -= thisFrames;
         dataOut += thisFrames * m_mixInfo.m_channelMap.m_channelCount;
     }
