@@ -481,8 +481,13 @@ static size_t soxr_output_no_callback(soxr_t p, soxr_buf_t out, size_t len)
       done = done1;
   } else
 #endif
-  for (u = 0; u < p->num_channels; ++u)
-    done = soxr_output_1ch(p, u, ((soxr_bufs_t)out)[u], len, separated);
+  {
+    if (p->num_channels > 1) {
+      for (u = 0; u < p->num_channels; ++u)
+        done = soxr_output_1ch(p, u, ((soxr_bufs_t)out)[u], len, separated);
+    } else
+        done = soxr_output_1ch(p, 0, out, len, separated);
+  }
 
   if (!separated)
     p->clips += (p->interleave)(p->io_spec.otype, &out, (sample_t const * const *)p->channel_ptrs,

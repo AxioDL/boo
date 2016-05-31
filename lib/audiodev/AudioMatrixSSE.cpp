@@ -108,8 +108,7 @@ int32_t* AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
                                                 _mm_set_ps(t, t, t2, t2)),
                                      _mm_mul_ps(_mm_shuffle_ps(m_oldCoefs.q[0], m_oldCoefs.q[0], _MM_SHUFFLE(1, 0, 1, 0)),
                                                 _mm_set_ps(omt, omt, omt2, omt2)));
-                samps.q = _mm_cvtepi32_ps(_mm_loadu_si128(reinterpret_cast<const __m128i*>(dataIn)));
-                samps.q = _mm_shuffle_ps(samps.q, samps.q, _MM_SHUFFLE(1, 0, 1, 0));
+                samps.q = _mm_cvtepi32_ps(_mm_set_epi32(dataIn[1], dataIn[0], dataIn[1], dataIn[0]));
 
                 __m128i* out = reinterpret_cast<__m128i*>(dataOut);
                 __m128 pre = _mm_add_ps(_mm_cvtepi32_ps(_mm_loadu_si128(out)), _mm_mul_ps(coefs.q, samps.q));
@@ -208,8 +207,7 @@ int32_t* AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
             {
                 TVectorUnion coefs, samps;
                 coefs.q = _mm_shuffle_ps(m_coefs.q[0], m_coefs.q[0], _MM_SHUFFLE(1, 0, 1, 0));
-                samps.q = _mm_cvtepi32_ps(_mm_loadu_si128(reinterpret_cast<const __m128i*>(dataIn)));
-                samps.q = _mm_shuffle_ps(samps.q, samps.q, _MM_SHUFFLE(1, 0, 1, 0));
+                samps.q = _mm_cvtepi32_ps(_mm_set_epi32(dataIn[1], dataIn[0], dataIn[1], dataIn[0]));
 
                 __m128i* out = reinterpret_cast<__m128i*>(dataOut);
                 __m128i huh2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(out));
