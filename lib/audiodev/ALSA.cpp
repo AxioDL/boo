@@ -366,15 +366,25 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
         return ret;
     }
 
+    /* Empty handler for SIGQUIT */
+    static void _sigquit(int) {}
+
     static void MIDIReceiveProc(snd_rawmidi_t* midi, const ReceiveFunctor& receiver, bool& running)
     {
+        struct sigaction s;
+        s.sa_handler = _sigquit;
+        sigemptyset(&s.sa_mask);
+        s.sa_flags = 0;
+        sigaction(SIGQUIT, &s, nullptr);
+
         uint8_t buf[512];
         while (running)
         {
             int rdBytes = snd_rawmidi_read(midi, buf, 512);
             if (rdBytes < 0)
             {
-                Log.report(logvisor::Error, "MIDI connection lost");
+                if (rdBytes != -EINTR)
+                    Log.report(logvisor::Error, "MIDI connection lost");
                 running = false;
                 break;
             }
@@ -396,7 +406,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
         ~MIDIIn()
         {
             m_midiRunning = false;
-            pthread_kill(m_midiThread.native_handle(), SIGTERM);
+            pthread_kill(m_midiThread.native_handle(), SIGQUIT);
             if (m_midiThread.joinable())
                 m_midiThread.join();
             snd_rawmidi_close(m_midi);
@@ -449,7 +459,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
         ~MIDIInOut()
         {
             m_midiRunning = false;
-            pthread_kill(m_midiThread.native_handle(), SIGTERM);
+            pthread_kill(m_midiThread.native_handle(), SIGQUIT);
             if (m_midiThread.joinable())
                 m_midiThread.join();
             snd_rawmidi_close(m_midiIn);
