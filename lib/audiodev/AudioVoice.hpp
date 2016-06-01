@@ -16,6 +16,7 @@ class AudioVoice : public IAudioVoice
 {
     friend class BaseAudioVoiceEngine;
     friend class AudioSubmix;
+    friend struct WASAPIAudioVoiceEngine;
 
 protected:
     /* Mixer-engine relationships */

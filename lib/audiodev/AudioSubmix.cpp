@@ -131,6 +131,16 @@ void AudioSubmix::_unbindFrom(std::list<AudioSubmix*>::iterator it)
     m_activeSubmixes.erase(it);
 }
 
+void AudioSubmix::_resetOutputSampleRate()
+{
+    for (AudioVoice* vox : m_activeVoices)
+        vox->_resetSampleRate(vox->m_sampleRateIn);
+    for (AudioSubmix* smx : m_activeSubmixes)
+        smx->_resetOutputSampleRate();
+    if (m_cb)
+        m_cb->resetOutputSampleRate(m_parent.mixInfo().m_sampleRate);
+}
+
 std::unique_ptr<IAudioVoice> AudioSubmix::allocateNewMonoVoice(double sampleRate,
                                                                IAudioVoiceCallback* cb,
                                                                bool dynamicPitch)

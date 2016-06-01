@@ -58,6 +58,9 @@ struct IAudioSubmixCallback
                              const ChannelMap& chanMap, double sampleRate) const=0;
     virtual void applyEffect(float* audio, size_t frameCount,
                              const ChannelMap& chanMap, double sampleRate) const=0;
+
+    /** Notify of output sample rate changes (for instance, changing the default audio device on Windows) */
+    virtual void resetOutputSampleRate(double sampleRate)=0;
 };
 
 }

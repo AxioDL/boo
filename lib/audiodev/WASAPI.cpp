@@ -17,25 +17,112 @@ namespace boo
 {
 static logvisor::Module Log("boo::WASAPI");
 
+#define SAFE_RELEASE(punk)  \
+              if ((punk) != NULL)  \
+                { (punk)->Release(); (punk) = NULL; }
+
 struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
 {
+    ComPtr<IMMDeviceEnumerator> m_enumerator;
     ComPtr<IMMDevice> m_device;
     ComPtr<IAudioClient> m_audClient;
     ComPtr<IAudioRenderClient> m_renderClient;
 
-    WASAPIAudioVoiceEngine()
+    struct NotificationClient : public IMMNotificationClient
     {
-        /* Enumerate default audio device */
-        ComPtr<IMMDeviceEnumerator> pEnumerator;
-        if (FAILED(CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr,
-                                    CLSCTX_ALL, IID_IMMDeviceEnumerator,
-                                    &pEnumerator)))
+        WASAPIAudioVoiceEngine& m_parent;
+
+        LONG _cRef;
+        IMMDeviceEnumerator *_pEnumerator;
+
+        NotificationClient(WASAPIAudioVoiceEngine& parent)
+        : m_parent(parent),
+          _cRef(1),
+          _pEnumerator(nullptr)
+        {}
+
+        ~NotificationClient()
         {
-            Log.report(logvisor::Fatal, L"unable to create MMDeviceEnumerator instance");
-            return;
+            SAFE_RELEASE(_pEnumerator)
         }
 
-        if (FAILED(pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &m_device)))
+
+        // IUnknown methods -- AddRef, Release, and QueryInterface
+
+        ULONG STDMETHODCALLTYPE AddRef()
+        {
+            return InterlockedIncrement(&_cRef);
+        }
+
+        ULONG STDMETHODCALLTYPE Release()
+        {
+            ULONG ulRef = InterlockedDecrement(&_cRef);
+            if (0 == ulRef)
+            {
+                delete this;
+            }
+            return ulRef;
+        }
+
+        HRESULT STDMETHODCALLTYPE QueryInterface(
+                                    REFIID riid, VOID **ppvInterface)
+        {
+            if (IID_IUnknown == riid)
+            {
+                AddRef();
+                *ppvInterface = (IUnknown*)this;
+            }
+            else if (__uuidof(IMMNotificationClient) == riid)
+            {
+                AddRef();
+                *ppvInterface = (IMMNotificationClient*)this;
+            }
+            else
+            {
+                *ppvInterface = NULL;
+                return E_NOINTERFACE;
+            }
+            return S_OK;
+        }
+
+        // Callback methods for device-event notifications.
+
+        HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(
+                                    EDataFlow flow, ERole role,
+                                    LPCWSTR pwstrDeviceId)
+        {
+            m_parent.m_rebuild = true;
+            return S_OK;
+        }
+
+        HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR pwstrDeviceId)
+        {
+            return S_OK;
+        }
+
+        HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR pwstrDeviceId)
+        {
+            return S_OK;
+        }
+
+        HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(
+                                    LPCWSTR pwstrDeviceId,
+                                    DWORD dwNewState)
+        {
+            return S_OK;
+        }
+
+        HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(
+                                    LPCWSTR pwstrDeviceId,
+                                    const PROPERTYKEY key)
+        {
+            return S_OK;
+        }
+    } m_notificationClient;
+
+    void _buildAudioRenderClient()
+    {
+        if (FAILED(m_enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &m_device)))
         {
             Log.report(logvisor::Fatal, L"unable to obtain default audio device");
             m_device.Reset();
@@ -198,60 +285,120 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         }
     }
 
+    WASAPIAudioVoiceEngine()
+    : m_notificationClient(*this)
+    {
+        /* Enumerate default audio device */
+        if (FAILED(CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr,
+                                    CLSCTX_ALL, IID_IMMDeviceEnumerator,
+                                    &m_enumerator)))
+        {
+            Log.report(logvisor::Fatal, L"unable to create MMDeviceEnumerator instance");
+            return;
+        }
+
+        if (FAILED(m_enumerator->RegisterEndpointNotificationCallback(&m_notificationClient)))
+        {
+            Log.report(logvisor::Fatal, L"unable to register multimedia event callback");
+            m_device.Reset();
+            return;
+        }
+
+        _buildAudioRenderClient();
+    }
+
     bool m_started = false;
+    bool m_rebuild = false;
+
+    void _rebuildAudioRenderClient()
+    {
+         soxr_datatype_t oldFmt = m_mixInfo.m_sampleFormat;
+
+         _buildAudioRenderClient();
+         m_rebuild = false;
+         m_started = false;
+
+         if (m_mixInfo.m_sampleFormat != oldFmt)
+             Log.report(logvisor::Fatal, L"audio device sample format changed, boo doesn't support this!!");
+
+         for (AudioVoice* vox : m_activeVoices)
+             vox->_resetSampleRate(vox->m_sampleRateIn);
+         for (AudioSubmix* smx : m_activeSubmixes)
+             smx->_resetOutputSampleRate();
+    }
 
     void pumpAndMixVoices()
     {
-        UINT32 numFramesPadding;
-        if (FAILED(m_audClient->GetCurrentPadding(&numFramesPadding)))
+        int attempt = 0;
+        while (true)
         {
-            Log.report(logvisor::Fatal, L"unable to get available buffer frames");
-            return;
-        }
+            if (attempt >= 10)
+                Log.report(logvisor::Fatal, L"unable to setup AudioRenderClient");
 
-        size_t frames = m_mixInfo.m_periodFrames - numFramesPadding;
-        if (frames <= 0)
-            return;
+            if (m_rebuild)
+                _rebuildAudioRenderClient();
 
-        BYTE* bufOut;
-        if (FAILED(m_renderClient->GetBuffer(frames, &bufOut)))
-        {
-            Log.report(logvisor::Fatal, L"unable to map audio buffer");
-            return;
-        }
-
-        DWORD flags = 0;
-        switch (m_mixInfo.m_sampleFormat)
-        {
-        case SOXR_INT16_I:
-            _pumpAndMixVoices(frames, reinterpret_cast<int16_t*>(bufOut));
-            break;
-        case SOXR_INT32_I:
-            _pumpAndMixVoices(frames, reinterpret_cast<int32_t*>(bufOut));
-            break;
-        case SOXR_FLOAT32_I:
-            _pumpAndMixVoices(frames, reinterpret_cast<float*>(bufOut));
-            break;
-        default:
-            flags = AUDCLNT_BUFFERFLAGS_SILENT;
-            break;
-        }
-
-        if (FAILED(m_renderClient->ReleaseBuffer(frames, flags)))
-        {
-            Log.report(logvisor::Fatal, L"unable to unmap audio buffer");
-            return;
-        }
-
-        if (!m_started)
-        {
-            if (FAILED(m_audClient->Start()))
+            HRESULT res;
+            if (!m_started)
             {
-                Log.report(logvisor::Fatal, L"unable to start audio client");
-                m_device.Reset();
-                return;
+                res = m_audClient->Start();
+                if (FAILED(res))
+                {
+                    m_rebuild = true;
+                    ++attempt;
+                    continue;
+                }
+                m_started = true;
             }
-            m_started = true;
+
+            UINT32 numFramesPadding;
+            res = m_audClient->GetCurrentPadding(&numFramesPadding);
+            if (FAILED(res))
+            {
+                m_rebuild = true;
+                ++attempt;
+                continue;
+            }
+
+            size_t frames = m_mixInfo.m_periodFrames - numFramesPadding;
+            if (frames <= 0)
+                return;
+
+            BYTE* bufOut;
+            res = m_renderClient->GetBuffer(frames, &bufOut);
+            if (FAILED(res))
+            {
+                m_rebuild = true;
+                ++attempt;
+                continue;
+            }
+
+            DWORD flags = 0;
+            switch (m_mixInfo.m_sampleFormat)
+            {
+            case SOXR_INT16_I:
+                _pumpAndMixVoices(frames, reinterpret_cast<int16_t*>(bufOut));
+                break;
+            case SOXR_INT32_I:
+                _pumpAndMixVoices(frames, reinterpret_cast<int32_t*>(bufOut));
+                break;
+            case SOXR_FLOAT32_I:
+                _pumpAndMixVoices(frames, reinterpret_cast<float*>(bufOut));
+                break;
+            default:
+                flags = AUDCLNT_BUFFERFLAGS_SILENT;
+                break;
+            }
+
+            res = m_renderClient->ReleaseBuffer(frames, flags);
+            if (FAILED(res))
+            {
+                m_rebuild = true;
+                ++attempt;
+                continue;
+            }
+
+            break;
         }
     }
 

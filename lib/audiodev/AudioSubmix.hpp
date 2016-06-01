@@ -14,6 +14,7 @@ class AudioVoice;
 class AudioSubmix : public IAudioSubmix, public IAudioMix
 {
     friend class BaseAudioVoiceEngine;
+    friend struct WASAPIAudioVoiceEngine;
 
     /* Mixer-engine relationships */
     BaseAudioVoiceEngine& m_root;
@@ -47,6 +48,8 @@ class AudioSubmix : public IAudioSubmix, public IAudioMix
 
     void _unbindFrom(std::list<AudioVoice*>::iterator it);
     void _unbindFrom(std::list<AudioSubmix*>::iterator it);
+
+    void _resetOutputSampleRate();
 
 public:
     ~AudioSubmix();
