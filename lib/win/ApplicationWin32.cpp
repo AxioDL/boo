@@ -194,13 +194,20 @@ public:
             if (FAILED(MyD3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_FLAGS, &level,
                                            1, D3D11_SDK_VERSION, &tempDev, nullptr, &tempCtx)))
                 Log.report(logvisor::Fatal, "unable to create D3D11 device");
-            tempDev.As<ID3D11Device1>(&m_3dCtx.m_ctx11.m_dev);
-            tempCtx.As<ID3D11DeviceContext1>(&m_3dCtx.m_ctx11.m_devCtx);
+
+            ComPtr<IDXGIDevice2> device;
+            if (FAILED(tempDev.As<ID3D11Device1>(&m_3dCtx.m_ctx11.m_dev)) || !m_3dCtx.m_ctx11.m_dev ||
+                FAILED(tempCtx.As<ID3D11DeviceContext1>(&m_3dCtx.m_ctx11.m_devCtx)) || !m_3dCtx.m_ctx11.m_devCtx ||
+                FAILED(m_3dCtx.m_ctx11.m_dev.As<IDXGIDevice2>(&device)) || !device)
+            {
+                MessageBoxW(nullptr, L"Windows 7 users should install 'Platform Update for Windows 7':\n"
+                                     L"https://www.microsoft.com/en-us/download/details.aspx?id=36805",
+                                     L"IDXGIDevice2 interface error", MB_OK | MB_ICONERROR);
+                exit(1);
+            }
 
             /* Obtain DXGI Factory */
-            ComPtr<IDXGIDevice2> device;
             ComPtr<IDXGIAdapter> adapter;
-            m_3dCtx.m_ctx11.m_dev.As<IDXGIDevice2>(&device);
             device->GetParent(__uuidof(IDXGIAdapter), &adapter);
             adapter->GetParent(__uuidof(IDXGIFactory2), &m_3dCtx.m_ctx11.m_dxFactory);
 
