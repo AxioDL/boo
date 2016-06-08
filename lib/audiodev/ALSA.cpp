@@ -7,6 +7,11 @@
 #include <alsa/asoundlib.h>
 #include <signal.h>
 
+static inline double TimespecToDouble(struct timespec& ts)
+{
+    return ts.tv_sec + ts.tv_nsec / 1.0e9;
+}
+
 namespace boo
 {
 static logvisor::Module Log("boo::ALSA");
@@ -377,9 +382,15 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
         s.sa_flags = 0;
         sigaction(SIGQUIT, &s, nullptr);
 
+        snd_rawmidi_status_t* midiStatus;
+        snd_rawmidi_status_malloc(&midiStatus);
+
         uint8_t buf[512];
         while (running)
         {
+            snd_htimestamp_t ts;
+            snd_rawmidi_status(midi, midiStatus);
+            snd_rawmidi_status_get_tstamp(midiStatus, &ts);
             int rdBytes = snd_rawmidi_read(midi, buf, 512);
             if (rdBytes < 0)
             {
@@ -389,8 +400,10 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
                 break;
             }
 
-            receiver(std::vector<uint8_t>(std::cbegin(buf), std::cbegin(buf) + rdBytes));
+            receiver(std::vector<uint8_t>(std::cbegin(buf), std::cbegin(buf) + rdBytes), TimespecToDouble(ts));
         }
+
+        snd_rawmidi_status_free(midiStatus);
     }
 
     struct MIDIIn : public IMIDIIn
@@ -539,6 +552,8 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             return {};
         return std::make_unique<MIDIInOut>(midiIn, midiOut, true, std::move(receiver));
     }
+
+    bool useMIDILock() const {return true;}
 };
 
 std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine()
