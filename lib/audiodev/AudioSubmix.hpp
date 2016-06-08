@@ -6,6 +6,8 @@
 #include <list>
 #include <vector>
 
+struct AudioUnitVoiceEngine;
+
 namespace boo
 {
 class BaseAudioVoiceEngine;
@@ -15,6 +17,7 @@ class AudioSubmix : public IAudioSubmix, public IAudioMix
 {
     friend class BaseAudioVoiceEngine;
     friend struct WASAPIAudioVoiceEngine;
+    friend struct ::AudioUnitVoiceEngine;
 
     /* Mixer-engine relationships */
     BaseAudioVoiceEngine& m_root;

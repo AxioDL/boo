@@ -64,6 +64,9 @@ struct IAudioVoiceEngine
 
     /** Open named MIDI in/out port, name format depends on OS */
     virtual std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver)=0;
+    
+    /** If this returns true, MIDI callbacks are assumed to be *not* thread-safe; need protection via mutex */
+    virtual bool useMIDILock() const=0;
 };
 
 /** Construct host platform's voice engine */

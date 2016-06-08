@@ -9,7 +9,7 @@
 namespace boo
 {
 
-using ReceiveFunctor = std::function<void(std::vector<uint8_t>&&)>;
+using ReceiveFunctor = std::function<void(std::vector<uint8_t>&&, double time)>;
 
 class IMIDIPort
 {

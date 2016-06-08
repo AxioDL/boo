@@ -6,6 +6,8 @@
 #include "boo/audiodev/IAudioVoice.hpp"
 #include "AudioMatrix.hpp"
 
+struct AudioUnitVoiceEngine;
+
 namespace boo
 {
 class BaseAudioVoiceEngine;
@@ -17,6 +19,7 @@ class AudioVoice : public IAudioVoice
     friend class BaseAudioVoiceEngine;
     friend class AudioSubmix;
     friend struct WASAPIAudioVoiceEngine;
+    friend struct ::AudioUnitVoiceEngine;
 
 protected:
     /* Mixer-engine relationships */
@@ -68,6 +71,8 @@ public:
     void start();
     void stop();
     void unbindVoice();
+    double getSampleRateIn() const {return m_sampleRateIn;}
+    double getSampleRateOut() const {return m_sampleRateOut;}
 };
 
 class AudioVoiceMono : public AudioVoice

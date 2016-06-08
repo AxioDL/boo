@@ -231,7 +231,8 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         for (int i=0 ; i<pktlist->numPackets ; ++i)
         {
             std::vector<uint8_t> bytes(std::cbegin(packet->data), std::cbegin(packet->data) + packet->length);
-            readProcRefCon->m_receiver(std::move(bytes));
+            ;
+            readProcRefCon->m_receiver(std::move(bytes), AudioConvertHostTimeToNanos(packet->timeStamp) / 1.0e9);
             packet = MIDIPacketNext(packet);
         }
     }
@@ -533,6 +534,8 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
         return ret;
     }
+    
+    bool useMIDILock() const {return true;}
 
     AQSAudioVoiceEngine()
     {
