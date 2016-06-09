@@ -559,11 +559,29 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
             Log.report(logvisor::Fatal, "unable to create output audio queue");
             return;
         }
+        
+        Float64 actualSampleRate;
+        UInt32 argSize = 8;
+        err = AudioQueueGetProperty(m_queue, kAudioQueueDeviceProperty_SampleRate, &actualSampleRate, &argSize);
+        AudioQueueDispose(m_queue, true);
+        if (err)
+        {
+            Log.report(logvisor::Fatal, "unable to get native sample rate from audio queue");
+            return;
+        }
+        
+        desc.mSampleRate = actualSampleRate;
+        if ((err = AudioQueueNewOutput(&desc, AudioQueueOutputCallback(Callback),
+                                       this, nullptr, nullptr, 0, &m_queue)))
+        {
+            Log.report(logvisor::Fatal, "unable to create output audio queue");
+            return;
+        }
 
-        m_mixInfo.m_sampleRate = 96000.0;
+        m_mixInfo.m_sampleRate = actualSampleRate;
         m_mixInfo.m_sampleFormat = SOXR_INT32_I;
         m_mixInfo.m_bitsPerSample = 32;
-        m_5msFrames = 96000 * 5 / 1000;
+        m_5msFrames = actualSampleRate * 5 / 1000;
 
         ChannelMap& chMapOut = m_mixInfo.m_channelMap;
         if (chCount > 2)
