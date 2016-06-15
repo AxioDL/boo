@@ -119,7 +119,7 @@ float* AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
                 AudioChannel ch = chmap.m_channels[c];
                 if (ch != AudioChannel::Unknown)
                 {
-                    *dataOut = ClampFlt(*dataOut + *dataIn * (m_coefs.v[int(ch)] * t + m_oldCoefs.v[int(ch)] * omt));
+                    *dataOut = *dataOut + *dataIn * (m_coefs.v[int(ch)] * t + m_oldCoefs.v[int(ch)] * omt);
                     ++dataOut;
                 }
             }
@@ -133,7 +133,7 @@ float* AudioMatrixMono::mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
                 AudioChannel ch = chmap.m_channels[c];
                 if (ch != AudioChannel::Unknown)
                 {
-                    *dataOut = ClampFlt(*dataOut + *dataIn * m_coefs.v[int(ch)]);
+                    *dataOut = *dataOut + *dataIn * m_coefs.v[int(ch)];
                     ++dataOut;
                 }
             }
@@ -265,9 +265,9 @@ float* AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& inf
                 AudioChannel ch = chmap.m_channels[c];
                 if (ch != AudioChannel::Unknown)
                 {
-                    *dataOut = ClampFlt(*dataOut +
-                                        *dataIn * (m_coefs.v[int(ch)][0] * t + m_oldCoefs.v[int(ch)][0] * omt) +
-                                        *dataIn * (m_coefs.v[int(ch)][1] * t + m_oldCoefs.v[int(ch)][1] * omt));
+                    *dataOut = *dataOut +
+                               *dataIn * (m_coefs.v[int(ch)][0] * t + m_oldCoefs.v[int(ch)][0] * omt) +
+                               *dataIn * (m_coefs.v[int(ch)][1] * t + m_oldCoefs.v[int(ch)][1] * omt);
                     ++dataOut;
                 }
             }
@@ -281,9 +281,9 @@ float* AudioMatrixStereo::mixStereoSampleData(const AudioVoiceEngineMixInfo& inf
                 AudioChannel ch = chmap.m_channels[c];
                 if (ch != AudioChannel::Unknown)
                 {
-                    *dataOut = ClampFlt(*dataOut +
-                                        dataIn[0] * m_coefs.v[int(ch)][0] +
-                                        dataIn[1] * m_coefs.v[int(ch)][1]);
+                    *dataOut = *dataOut +
+                               dataIn[0] * m_coefs.v[int(ch)][0] +
+                               dataIn[1] * m_coefs.v[int(ch)][1];
                     ++dataOut;
                 }
             }

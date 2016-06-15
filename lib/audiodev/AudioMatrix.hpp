@@ -32,15 +32,6 @@ static inline int32_t Clamp32(float in)
     return in;
 }
 
-static inline float ClampFlt(float in)
-{
-    if (in < -1.f)
-        return -1.f;
-    else if (in > 1.f)
-        return 1.f;
-    return in;
-}
-
 class AudioMatrixMono
 {
     union Coefs

@@ -451,17 +451,17 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         return ret;
     }
 
-    static void MIDIReceiveProc(HMIDIIN   hMidiIn,
-                                UINT      wMsg,
-                                IMIDIReceiver* dwInstance,
-                                DWORD_PTR dwParam1,
-                                DWORD_PTR dwParam2)
+    static void CALLBACK MIDIReceiveProc(HMIDIIN   hMidiIn,
+                                         UINT      wMsg,
+                                         IMIDIReceiver* dwInstance,
+                                         DWORD_PTR dwParam1,
+                                         DWORD_PTR dwParam2)
     {
         if (wMsg == MIM_DATA)
         {
             uint8_t (&ptr)[3] = reinterpret_cast<uint8_t(&)[3]>(dwParam1);
             std::vector<uint8_t> bytes(std::cbegin(ptr), std::cend(ptr));
-            dwInstance->m_receiver(std::move(bytes));
+            dwInstance->m_receiver(std::move(bytes), dwParam2 / 1000.0);
         }
     }
 
@@ -685,6 +685,8 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         static_cast<MIDIInOut&>(*ret).prepare();
         return ret;
     }
+
+    bool useMIDILock() const {return true;}
 };
 
 std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine()

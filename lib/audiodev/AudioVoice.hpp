@@ -7,6 +7,7 @@
 #include "AudioMatrix.hpp"
 
 struct AudioUnitVoiceEngine;
+struct VSTVoiceEngine;
 
 namespace boo
 {
@@ -20,6 +21,7 @@ class AudioVoice : public IAudioVoice
     friend class AudioSubmix;
     friend struct WASAPIAudioVoiceEngine;
     friend struct ::AudioUnitVoiceEngine;
+    friend struct ::VSTVoiceEngine;
 
 protected:
     /* Mixer-engine relationships */

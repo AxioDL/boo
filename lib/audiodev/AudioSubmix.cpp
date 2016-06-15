@@ -116,7 +116,7 @@ void AudioSubmix::_pumpAndMixVoices(size_t frames, float* dataOut, float* mainOu
     for (size_t f=0 ; f<frames ; ++f)
         for (size_t c=0 ; c<info.m_channelMap.m_channelCount ; ++c)
         {
-            *dataOut = ClampFlt(*dataOut + *it++ * m_gains[c]);
+            *dataOut = *dataOut + *it++ * m_gains[c];
             ++dataOut;
         }
 }
