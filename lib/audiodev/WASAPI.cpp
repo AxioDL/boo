@@ -28,6 +28,9 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
     ComPtr<IAudioClient> m_audClient;
     ComPtr<IAudioRenderClient> m_renderClient;
 
+    size_t m_curBufFrame = 0;
+    std::vector<float> m_5msBuffer;
+
     struct NotificationClient : public IMMNotificationClient
     {
         WASAPIAudioVoiceEngine& m_parent;
@@ -229,6 +232,8 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         }
         m_mixInfo.m_sampleRate = pwfx->Format.nSamplesPerSec;
         m_5msFrames = (m_mixInfo.m_sampleRate * 5 / 500 + 1) / 2;
+        m_curBufFrame = m_5msFrames;
+        m_5msBuffer.resize(m_5msFrames * chMapOut.m_channelCount);
 
         if (pwfx->Format.wFormatTag == WAVE_FORMAT_PCM ||
             (pwfx->Format.wFormatTag == WAVE_FORMAT_EXTENSIBLE && pwfx->SubFormat == KSDATAFORMAT_SUBTYPE_PCM))
@@ -373,24 +378,26 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
                 continue;
             }
 
-            DWORD flags = 0;
-            switch (m_mixInfo.m_sampleFormat)
+            for (size_t f=0 ; f<frames ;)
             {
-            case SOXR_INT16_I:
-                _pumpAndMixVoices(frames, reinterpret_cast<int16_t*>(bufOut));
-                break;
-            case SOXR_INT32_I:
-                _pumpAndMixVoices(frames, reinterpret_cast<int32_t*>(bufOut));
-                break;
-            case SOXR_FLOAT32_I:
-                _pumpAndMixVoices(frames, reinterpret_cast<float*>(bufOut));
-                break;
-            default:
-                flags = AUDCLNT_BUFFERFLAGS_SILENT;
-                break;
+                if (m_curBufFrame == m_5msFrames)
+                {
+                    _pumpAndMixVoices(m_5msFrames, m_5msBuffer.data());
+                    m_curBufFrame = 0;
+                }
+
+                size_t remRenderFrames = std::min(frames - f, m_5msFrames - m_curBufFrame);
+                if (remRenderFrames)
+                {
+                    memmove(reinterpret_cast<float*>(bufOut) + m_mixInfo.m_channelMap.m_channelCount * f,
+                            &m_5msBuffer[m_curBufFrame * m_mixInfo.m_channelMap.m_channelCount],
+                            remRenderFrames * m_mixInfo.m_channelMap.m_channelCount * sizeof(float));
+                    m_curBufFrame += remRenderFrames;
+                    f += remRenderFrames;
+                }
             }
 
-            res = m_renderClient->ReleaseBuffer(frames, flags);
+            res = m_renderClient->ReleaseBuffer(frames, 0);
             if (FAILED(res))
             {
                 m_rebuild = true;

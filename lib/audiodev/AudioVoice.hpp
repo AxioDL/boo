@@ -81,6 +81,7 @@ class AudioVoiceMono : public AudioVoice
 {
     AudioMatrixMono m_matrix;
     AudioMatrixMono m_subMatrix;
+    bool m_silentOut = false;
     void _resetSampleRate(double sampleRate);
 
     static size_t SRCCallback(AudioVoiceMono* ctx,
@@ -104,6 +105,7 @@ class AudioVoiceStereo : public AudioVoice
 {
     AudioMatrixStereo m_matrix;
     AudioMatrixStereo m_subMatrix;
+    bool m_silentOut = false;
     void _resetSampleRate(double sampleRate);
 
     static size_t SRCCallback(AudioVoiceStereo* ctx,
