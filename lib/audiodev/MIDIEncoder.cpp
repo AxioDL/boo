@@ -25,7 +25,8 @@ void MIDIEncoder<Sender>::_sendContinuedValue(uint32_t val)
     if (val >= 0x4000)
     {
         ptr = &send[0];
-        send[0] = (val / 0x4000) & 0x7f;
+        send[0] = 0x80 | ((val / 0x4000) & 0x7f);
+        send[1] = 0x80;
         val &= 0x3fff;
     }
 
@@ -33,7 +34,7 @@ void MIDIEncoder<Sender>::_sendContinuedValue(uint32_t val)
     {
         if (!ptr)
             ptr = &send[1];
-        send[1] = (val / 0x80) & 0x7f;
+        send[1] = 0x80 | ((val / 0x80) & 0x7f);
     }
 
     if (!ptr)
