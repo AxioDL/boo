@@ -116,6 +116,7 @@ else(NOT GEKKO)
     # TODO use CMAKE_SYSTEM_PROCESSOR or similar?
     /usr/lib/dbus-1.0/include
     /usr/local/lib/dbus-1.0/include
+    /usr/lib/x86_64-linux-gnu/dbus-1.0/include/
     PATH_SUFFIXES
     dbus-1.0/include/)
 
