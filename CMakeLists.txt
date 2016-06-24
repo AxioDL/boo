@@ -164,11 +164,21 @@ if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "AppleCl
   set_source_files_properties(lib/graphicsdev/glew.c PROPERTIES COMPILE_FLAGS -Os)
 endif()
 
+# Empty link args for boo's use
+function(glslang_set_link_args TARGET)
+endfunction(glslang_set_link_args)
+
 add_subdirectory(glslang/glslang)
 add_subdirectory(glslang/hlsl)
 add_subdirectory(glslang/OGLCompilersDLL)
 add_subdirectory(glslang/SPIRV)
-list(APPEND _BOO_SYS_LIBS glslang HLSL soxr OSDependent OGLCompiler SPIRV)
+add_subdirectory(glslang/StandAlone)
+
+target_include_directories(glslang-default-resource-limits
+    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/glslang
+)
+
+list(APPEND _BOO_SYS_LIBS glslang HLSL soxr OSDependent OGLCompiler SPIRV glslang-default-resource-limits)
 
 set(BOO_SYS_LIBS ${_BOO_SYS_LIBS} CACHE PATH "boo system libraries" FORCE)
 set(BOO_SYS_DEFINES ${_BOO_SYS_DEFINES} CACHE PATH "boo system defines" FORCE)

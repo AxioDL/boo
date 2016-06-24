@@ -5,6 +5,9 @@
 #define BOO_GLSL_MAX_TEXTURE_COUNT 8
 
 #define BOO_GLSL_BINDING_HEAD \
+"#ifdef VULKAN\n" \
+"#define gl_VertexID gl_VertexIndex\n" \
+"#endif\n" \
 "#extension GL_ARB_shading_language_420pack: enable\n" \
 "#ifdef GL_ARB_shading_language_420pack\n" \
 "#define UBINDING0 layout(binding=0)\n" \

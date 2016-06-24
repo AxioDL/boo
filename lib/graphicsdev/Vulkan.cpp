@@ -8,6 +8,7 @@
 #include "boo/IGraphicsContext.hpp"
 #include <vector>
 #include <glslang/Public/ShaderLang.h>
+#include <StandAlone/ResourceLimits.h>
 #include <SPIRV/GlslangToSpv.h>
 #include <SPIRV/disassemble.h>
 #include "boo/graphicsdev/GLSLMacros.hpp"
@@ -17,200 +18,6 @@
 #undef min
 #undef max
 #undef None
-
-static TBuiltInResource DefaultBuiltInResource =
-{
-    32,
-    6,
-    32,
-    32,
-    64,
-    4096,
-    64,
-    32,
-    80,
-    32,
-    4096,
-    32,
-    128,
-    8,
-    16,
-    16,
-    15,
-    -8,
-    7,
-    8,
-    65535,
-    65535,
-    65535,
-    1024,
-    1024,
-    64,
-    1024,
-    16,
-    8,
-    8,
-    1,
-    60,
-    64,
-    64,
-    128,
-    128,
-    8,
-    8,
-    8,
-    0,
-    0,
-    0,
-    0,
-    0,
-    8,
-    8,
-    16,
-    256,
-    1024,
-    1024,
-    64,
-    128,
-    128,
-    16,
-    1024,
-    4096,
-    128,
-    128,
-    16,
-    1024,
-    120,
-    32,
-    64,
-    16,
-    0,
-    0,
-    0,
-    0,
-    8,
-    8,
-    1,
-    0,
-    0,
-    0,
-    0,
-    1,
-    1,
-    16384,
-    4,
-    64,
-    8,
-    8,
-    4,
-
-    {
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1
-    }
-};
-
-static void init_resources(TBuiltInResource &Resources) {
-    Resources.maxLights = 32;
-    Resources.maxClipPlanes = 6;
-    Resources.maxTextureUnits = 32;
-    Resources.maxTextureCoords = 32;
-    Resources.maxVertexAttribs = 64;
-    Resources.maxVertexUniformComponents = 4096;
-    Resources.maxVaryingFloats = 64;
-    Resources.maxVertexTextureImageUnits = 32;
-    Resources.maxCombinedTextureImageUnits = 80;
-    Resources.maxTextureImageUnits = 32;
-    Resources.maxFragmentUniformComponents = 4096;
-    Resources.maxDrawBuffers = 32;
-    Resources.maxVertexUniformVectors = 128;
-    Resources.maxVaryingVectors = 8;
-    Resources.maxFragmentUniformVectors = 16;
-    Resources.maxVertexOutputVectors = 16;
-    Resources.maxFragmentInputVectors = 15;
-    Resources.minProgramTexelOffset = -8;
-    Resources.maxProgramTexelOffset = 7;
-    Resources.maxClipDistances = 8;
-    Resources.maxComputeWorkGroupCountX = 65535;
-    Resources.maxComputeWorkGroupCountY = 65535;
-    Resources.maxComputeWorkGroupCountZ = 65535;
-    Resources.maxComputeWorkGroupSizeX = 1024;
-    Resources.maxComputeWorkGroupSizeY = 1024;
-    Resources.maxComputeWorkGroupSizeZ = 64;
-    Resources.maxComputeUniformComponents = 1024;
-    Resources.maxComputeTextureImageUnits = 16;
-    Resources.maxComputeImageUniforms = 8;
-    Resources.maxComputeAtomicCounters = 8;
-    Resources.maxComputeAtomicCounterBuffers = 1;
-    Resources.maxVaryingComponents = 60;
-    Resources.maxVertexOutputComponents = 64;
-    Resources.maxGeometryInputComponents = 64;
-    Resources.maxGeometryOutputComponents = 128;
-    Resources.maxFragmentInputComponents = 128;
-    Resources.maxImageUnits = 8;
-    Resources.maxCombinedImageUnitsAndFragmentOutputs = 8;
-    Resources.maxCombinedShaderOutputResources = 8;
-    Resources.maxImageSamples = 0;
-    Resources.maxVertexImageUniforms = 0;
-    Resources.maxTessControlImageUniforms = 0;
-    Resources.maxTessEvaluationImageUniforms = 0;
-    Resources.maxGeometryImageUniforms = 0;
-    Resources.maxFragmentImageUniforms = 8;
-    Resources.maxCombinedImageUniforms = 8;
-    Resources.maxGeometryTextureImageUnits = 16;
-    Resources.maxGeometryOutputVertices = 256;
-    Resources.maxGeometryTotalOutputComponents = 1024;
-    Resources.maxGeometryUniformComponents = 1024;
-    Resources.maxGeometryVaryingComponents = 64;
-    Resources.maxTessControlInputComponents = 128;
-    Resources.maxTessControlOutputComponents = 128;
-    Resources.maxTessControlTextureImageUnits = 16;
-    Resources.maxTessControlUniformComponents = 1024;
-    Resources.maxTessControlTotalOutputComponents = 4096;
-    Resources.maxTessEvaluationInputComponents = 128;
-    Resources.maxTessEvaluationOutputComponents = 128;
-    Resources.maxTessEvaluationTextureImageUnits = 16;
-    Resources.maxTessEvaluationUniformComponents = 1024;
-    Resources.maxTessPatchComponents = 120;
-    Resources.maxPatchVertices = 32;
-    Resources.maxTessGenLevel = 64;
-    Resources.maxViewports = 16;
-    Resources.maxVertexAtomicCounters = 0;
-    Resources.maxTessControlAtomicCounters = 0;
-    Resources.maxTessEvaluationAtomicCounters = 0;
-    Resources.maxGeometryAtomicCounters = 0;
-    Resources.maxFragmentAtomicCounters = 8;
-    Resources.maxCombinedAtomicCounters = 8;
-    Resources.maxAtomicCounterBindings = 1;
-    Resources.maxVertexAtomicCounterBuffers = 0;
-    Resources.maxTessControlAtomicCounterBuffers = 0;
-    Resources.maxTessEvaluationAtomicCounterBuffers = 0;
-    Resources.maxGeometryAtomicCounterBuffers = 0;
-    Resources.maxFragmentAtomicCounterBuffers = 1;
-    Resources.maxCombinedAtomicCounterBuffers = 1;
-    Resources.maxAtomicCounterBufferSize = 16384;
-    Resources.maxTransformFeedbackBuffers = 4;
-    Resources.maxTransformFeedbackInterleavedComponents = 64;
-    Resources.maxCullDistances = 8;
-    Resources.maxCombinedClipAndCullDistances = 8;
-    Resources.maxSamples = 4;
-    Resources.limits.nonInductiveForLoops = 1;
-    Resources.limits.whileLoops = 1;
-    Resources.limits.doWhileLoops = 1;
-    Resources.limits.generalUniformIndexing = 1;
-    Resources.limits.generalAttributeMatrixVectorIndexing = 1;
-    Resources.limits.generalVaryingIndexing = 1;
-    Resources.limits.generalSamplerIndexing = 1;
-    Resources.limits.generalVariableIndexing = 1;
-    Resources.limits.generalConstantMatrixVectorIndexing = 1;
-}
 
 namespace boo
 {
@@ -281,7 +88,8 @@ static bool MemoryTypeFromProperties(VulkanContext* ctx, uint32_t typeBits,
 static void SetImageLayout(VkCommandBuffer cmd, VkImage image,
                            VkImageAspectFlags aspectMask,
                            VkImageLayout old_image_layout,
-                           VkImageLayout new_image_layout)
+                           VkImageLayout new_image_layout,
+                           uint32_t mipCount, uint32_t layerCount)
 {
     VkImageMemoryBarrier imageMemoryBarrier = {};
     imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -293,17 +101,27 @@ static void SetImageLayout(VkCommandBuffer cmd, VkImage image,
     imageMemoryBarrier.image = image;
     imageMemoryBarrier.subresourceRange.aspectMask = aspectMask;
     imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
-    imageMemoryBarrier.subresourceRange.levelCount = 1;
-    imageMemoryBarrier.subresourceRange.layerCount = 1;
+    imageMemoryBarrier.subresourceRange.levelCount = mipCount;
+    imageMemoryBarrier.subresourceRange.layerCount = layerCount;
 
     if (old_image_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
         imageMemoryBarrier.srcAccessMask =
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     }
 
+    if (old_image_layout == VK_IMAGE_LAYOUT_PREINITIALIZED) {
+        imageMemoryBarrier.srcAccessMask =
+            VK_ACCESS_HOST_WRITE_BIT;
+    }
+
     if (new_image_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
         /* Make sure anything that was copying from this image has completed */
-        imageMemoryBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+        imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    }
+
+    if (new_image_layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+        /* Make sure anything that was copying from this image has completed */
+        imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     }
 
     if (new_image_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
@@ -315,7 +133,7 @@ static void SetImageLayout(VkCommandBuffer cmd, VkImage image,
 
     if (new_image_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
         imageMemoryBarrier.dstAccessMask =
-            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     }
 
     if (new_image_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
@@ -435,14 +253,13 @@ void VulkanContext::initVulkan(const char* appName)
     m_deviceExtensionNames.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
 #ifndef NDEBUG
+    m_layerNames.push_back("VK_LAYER_LUNARG_core_validation");
     m_layerNames.push_back("VK_LAYER_LUNARG_object_tracker");
-    m_layerNames.push_back("VK_LAYER_LUNARG_draw_state");
-    m_layerNames.push_back("VK_LAYER_LUNARG_mem_tracker");
-    m_layerNames.push_back("VK_LAYER_LUNARG_param_checker");
-    m_layerNames.push_back("VK_LAYER_LUNARG_image");
-    m_layerNames.push_back("VK_LAYER_LUNARG_threading");
-    m_layerNames.push_back("VK_LAYER_LUNARG_swapchain");
     m_layerNames.push_back("VK_LAYER_LUNARG_device_limits");
+    m_layerNames.push_back("VK_LAYER_LUNARG_image");
+    m_layerNames.push_back("VK_LAYER_LUNARG_parameter_validation");
+    m_layerNames.push_back("VK_LAYER_LUNARG_swapchain");
+    m_layerNames.push_back("VK_LAYER_GOOGLE_threading");
 #endif
 
     demo_check_layers(m_instanceLayerProperties, m_layerNames);
@@ -685,7 +502,7 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
 
         SetImageLayout(m_loadCmdBuf, windowCtx.m_bufs[i].m_image, VK_IMAGE_ASPECT_COLOR_BIT,
                        VK_IMAGE_LAYOUT_UNDEFINED,
-                       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
 
         colorImageView.image = windowCtx.m_bufs[i].m_image;
 
@@ -1068,13 +885,13 @@ public:
          * SOURCE_OPTIMAL */
         SetImageLayout(ctx->m_loadCmdBuf, m_cpuTex, VK_IMAGE_ASPECT_COLOR_BIT,
                        VK_IMAGE_LAYOUT_PREINITIALIZED,
-                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_mips, 1);
 
         /* Since we're going to blit to the texture image, set its layout to
          * DESTINATION_OPTIMAL */
         SetImageLayout(ctx->m_loadCmdBuf, m_gpuTex, VK_IMAGE_ASPECT_COLOR_BIT,
                        VK_IMAGE_LAYOUT_UNDEFINED,
-                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, m_mips, 1);
 
         VkImageCopy copyRegions[16];
         size_t width = m_width;
@@ -1115,7 +932,7 @@ public:
          * SHADER_READ_ONLY */
         SetImageLayout(ctx->m_loadCmdBuf, m_gpuTex, VK_IMAGE_ASPECT_COLOR_BIT,
                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, m_mips, 1);
     }
 
     TextureFormat format() const {return m_fmt;}
@@ -1299,13 +1116,13 @@ public:
          * SOURCE_OPTIMAL */
         SetImageLayout(ctx->m_loadCmdBuf, m_cpuTex, VK_IMAGE_ASPECT_COLOR_BIT,
                        VK_IMAGE_LAYOUT_PREINITIALIZED,
-                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, m_layers);
 
         /* Since we're going to blit to the texture image, set its layout to
          * DESTINATION_OPTIMAL */
         SetImageLayout(ctx->m_loadCmdBuf, m_gpuTex, VK_IMAGE_ASPECT_COLOR_BIT,
                        VK_IMAGE_LAYOUT_UNDEFINED,
-                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, m_layers);
 
         VkImageCopy copyRegion;
         copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -1335,7 +1152,7 @@ public:
          * SHADER_READ_ONLY */
         SetImageLayout(ctx->m_loadCmdBuf, m_gpuTex, VK_IMAGE_ASPECT_COLOR_BIT,
                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, m_layers);
     }
 
     TextureFormat format() const {return m_fmt;}
@@ -1754,7 +1571,7 @@ struct VulkanVertexFormat : IVertexFormat
         m_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         m_info.pNext = nullptr;
         m_info.flags = 0;
-        m_info.vertexBindingDescriptionCount = 1;
+        m_info.vertexBindingDescriptionCount = 0;
         m_info.pVertexBindingDescriptions = m_bindings;
         m_info.vertexAttributeDescriptionCount = elementCount;
         m_info.pVertexAttributeDescriptions = m_attributes.get();
@@ -1782,15 +1599,19 @@ struct VulkanVertexFormat : IVertexFormat
             }
         }
 
-        m_bindings[0].binding = 1;
-        m_bindings[0].stride = offset;
-        m_bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        if (offset)
+        {
+            m_bindings[0].binding = 0;
+            m_bindings[0].stride = offset;
+            m_bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+            ++m_info.vertexBindingDescriptionCount;
+        }
         if (instOffset)
         {
-            m_info.vertexBindingDescriptionCount = 2;
-            m_bindings[1].binding = 1;
-            m_bindings[1].stride = instOffset;
-            m_bindings[1].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+            m_bindings[m_info.vertexBindingDescriptionCount].binding = 1;
+            m_bindings[m_info.vertexBindingDescriptionCount].stride = instOffset;
+            m_bindings[m_info.vertexBindingDescriptionCount].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+            ++m_info.vertexBindingDescriptionCount;
         }
     }
 };
@@ -1884,6 +1705,7 @@ class VulkanShaderPipeline : public IShaderPipeline
         rasterizationInfo.cullMode = backfaceCulling ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE;
         rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rasterizationInfo.depthBiasEnable = VK_FALSE;
+        rasterizationInfo.lineWidth = 1.f;
 
         VkPipelineMultisampleStateCreateInfo multisampleInfo = {};
         multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -2378,15 +2200,15 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         if (m_boundTarget)
         {
             SetImageLayout(cmdBuf, m_boundTarget->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
-                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
             SetImageLayout(cmdBuf, m_boundTarget->m_depthTex, VK_IMAGE_ASPECT_DEPTH_BIT,
-                           VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+                           VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
         }
 
         SetImageLayout(cmdBuf, ctarget->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
-                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
         SetImageLayout(cmdBuf, ctarget->m_depthTex, VK_IMAGE_ASPECT_DEPTH_BIT,
-                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, 1);
 
         vkCmdBeginRenderPass(cmdBuf, &ctarget->m_passBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -2476,7 +2298,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
 
         if (source == m_boundTarget)
             SetImageLayout(cmdBuf, csource->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
-                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
 
         if (csource->m_samples > 1)
         {
@@ -2519,7 +2341,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
 
         if (source == m_boundTarget)
             SetImageLayout(cmdBuf, csource->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
-                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
 
         m_doPresent = true;
     }
@@ -2533,10 +2355,10 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         {
             if (ctexture == m_boundTarget)
                 SetImageLayout(cmdBuf, ctexture->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
-                               VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+                               VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
 
             SetImageLayout(cmdBuf, ctexture->m_colorBindTex, VK_IMAGE_ASPECT_COLOR_BIT,
-                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
 
             VkImageCopy copyInfo = {};
             copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -2563,20 +2385,20 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
 
             if (ctexture == m_boundTarget)
                 SetImageLayout(cmdBuf, ctexture->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
-                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
 
             SetImageLayout(cmdBuf, ctexture->m_colorBindTex, VK_IMAGE_ASPECT_COLOR_BIT,
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, 1);
         }
 
         if (depth && ctexture->m_enableShaderDepthBinding)
         {
             if (ctexture == m_boundTarget)
                 SetImageLayout(cmdBuf, ctexture->m_depthTex, VK_IMAGE_ASPECT_DEPTH_BIT,
-                               VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+                               VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
 
             SetImageLayout(cmdBuf, ctexture->m_depthBindTex, VK_IMAGE_ASPECT_DEPTH_BIT,
-                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
 
             VkImageCopy copyInfo = {};
             copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
@@ -2603,10 +2425,10 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
 
             if (ctexture == m_boundTarget)
                 SetImageLayout(cmdBuf, ctexture->m_depthTex, VK_IMAGE_ASPECT_DEPTH_BIT,
-                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, 1);
 
             SetImageLayout(cmdBuf, ctexture->m_depthBindTex, VK_IMAGE_ASPECT_DEPTH_BIT,
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, 1);
         }
     }
 
@@ -2724,17 +2546,17 @@ void VulkanTextureD::update(int b)
         {
             SetImageLayout(cmdBuf, m_cpuTex[b], VK_IMAGE_ASPECT_COLOR_BIT,
                            VK_IMAGE_LAYOUT_UNDEFINED,
-                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
             SetImageLayout(cmdBuf, m_gpuTex[b], VK_IMAGE_ASPECT_COLOR_BIT,
                            VK_IMAGE_LAYOUT_UNDEFINED,
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
             m_cpuTexLayout[b] = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         }
         else
         {
             SetImageLayout(cmdBuf, m_gpuTex[b], VK_IMAGE_ASPECT_COLOR_BIT,
                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
         }
 
         /* map memory */
@@ -2795,7 +2617,7 @@ void VulkanTextureD::update(int b)
          * SHADER_READ_ONLY */
         SetImageLayout(cmdBuf, m_gpuTex[b], VK_IMAGE_ASPECT_COLOR_BIT,
                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, 1);
 
         m_validSlots |= slot;
     }
@@ -2936,7 +2758,7 @@ IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
 
         glslang::TShader vs(EShLangVertex);
         vs.setStrings(&vertSource, 1);
-        if (!vs.parse(&DefaultBuiltInResource, 110, false, messages))
+        if (!vs.parse(&glslang::DefaultTBuiltInResource, 110, false, messages))
         {
             Log.report(logvisor::Fatal, "unable to compile vertex shader\n%s", vs.getInfoLog());
             return nullptr;
@@ -2944,7 +2766,7 @@ IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
 
         glslang::TShader fs(EShLangFragment);
         fs.setStrings(&fragSource, 1);
-        if (!fs.parse(&DefaultBuiltInResource, 110, false, messages))
+        if (!fs.parse(&glslang::DefaultTBuiltInResource, 110, false, messages))
         {
             Log.report(logvisor::Fatal, "unable to compile fragment shader\n%s", fs.getInfoLog());
             return nullptr;
@@ -2959,9 +2781,9 @@ IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
             return nullptr;
         }
         glslang::GlslangToSpv(*prog.getIntermediate(EShLangVertex), vertBlobOut);
-        spv::Disassemble(std::cerr, vertBlobOut);
+        //spv::Disassemble(std::cerr, vertBlobOut);
         glslang::GlslangToSpv(*prog.getIntermediate(EShLangFragment), fragBlobOut);
-        spv::Disassemble(std::cerr, fragBlobOut);
+        //spv::Disassemble(std::cerr, fragBlobOut);
     }
 
     VkShaderModuleCreateInfo smCreateInfo = {};
