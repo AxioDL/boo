@@ -49,10 +49,8 @@ struct VulkanContext
         struct Buffer
         {
             VkImage m_image;
-            VkImageView m_view;
             void destroy(VkDevice dev)
             {
-                vkDestroyImageView(dev, m_view, nullptr);
                 vkDestroyImage(dev, m_image, nullptr);
             }
         };

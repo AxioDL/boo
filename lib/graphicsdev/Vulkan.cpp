@@ -448,7 +448,7 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
     swapChainInfo.oldSwapchain = nullptr;
     swapChainInfo.clipped = true;
     swapChainInfo.imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-    swapChainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swapChainInfo.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     swapChainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     swapChainInfo.queueFamilyIndexCount = 0;
     swapChainInfo.pQueueFamilyIndices = nullptr;
@@ -492,31 +492,13 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
 
     for (uint32_t i=0 ; i<swapchainImageCount ; ++i)
     {
-        VkImageViewCreateInfo colorImageView = {};
-        colorImageView.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        colorImageView.pNext = nullptr;
-        colorImageView.format = format;
-        colorImageView.components.r = VK_COMPONENT_SWIZZLE_R;
-        colorImageView.components.g = VK_COMPONENT_SWIZZLE_G;
-        colorImageView.components.b = VK_COMPONENT_SWIZZLE_B;
-        colorImageView.components.a = VK_COMPONENT_SWIZZLE_A;
-        colorImageView.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        colorImageView.subresourceRange.baseMipLevel = 0;
-        colorImageView.subresourceRange.levelCount = 1;
-        colorImageView.subresourceRange.baseArrayLayer = 0;
-        colorImageView.subresourceRange.layerCount = 1;
-        colorImageView.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        colorImageView.flags = 0;
-
         windowCtx.m_bufs[i].m_image = swapchainImages[i];
 
+        /*
         SetImageLayout(m_loadCmdBuf, windowCtx.m_bufs[i].m_image, VK_IMAGE_ASPECT_COLOR_BIT,
                        VK_IMAGE_LAYOUT_UNDEFINED,
                        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
-
-        colorImageView.image = windowCtx.m_bufs[i].m_image;
-
-        ThrowIfFailed(vkCreateImageView(m_dev, &colorImageView, nullptr, &windowCtx.m_bufs[i].m_view));
+                       */
     }
     ThrowIfFailed(vkEndCommandBuffer(m_loadCmdBuf));
 
@@ -664,6 +646,7 @@ class VulkanGraphicsBufferD : public IGraphicsBufferD
         ThrowIfFailed(vkCreateBuffer(ctx->m_dev, &bufInfo, nullptr, &m_bufferInfo[1].buffer));
     }
     void update(int b);
+
 public:
     size_t m_stride;
     size_t m_count;
@@ -715,55 +698,43 @@ class VulkanTextureS : public ITextureS
     size_t m_sz;
     size_t m_width, m_height, m_mips;
     VkFormat m_vkFmt;
+    int m_pixelPitchNum = 1;
+    int m_pixelPitchDenom = 1;
+
     VulkanTextureS(VulkanContext* ctx, size_t width, size_t height, size_t mips,
                    TextureFormat fmt, const void* data, size_t sz)
     : m_ctx(ctx), m_fmt(fmt), m_sz(sz), m_width(width), m_height(height), m_mips(mips)
     {
         VkFormat pfmt;
-        int pxPitchNum = 1;
-        int pxPitchDenom = 1;
         switch (fmt)
         {
         case TextureFormat::RGBA8:
             pfmt = VK_FORMAT_R8G8B8A8_UNORM;
-            pxPitchNum = 4;
+            m_pixelPitchNum = 4;
             break;
         case TextureFormat::I8:
             pfmt = VK_FORMAT_R8_UNORM;
             break;
         case TextureFormat::DXT1:
             pfmt = VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
-            pxPitchNum = 1;
-            pxPitchDenom = 2;
+            m_pixelPitchNum = 1;
+            m_pixelPitchDenom = 2;
             break;
         default:
             Log.report(logvisor::Fatal, "unsupported tex format");
         }
         m_vkFmt = pfmt;
 
-        /* create cpu image */
-        VkImageCreateInfo texCreateInfo = {};
-        texCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        texCreateInfo.pNext = nullptr;
-        texCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-        texCreateInfo.format = pfmt;
-        texCreateInfo.extent.width = width;
-        texCreateInfo.extent.height = height;
-        texCreateInfo.extent.depth = 1;
-        texCreateInfo.mipLevels = mips;
-        texCreateInfo.arrayLayers = 1;
-        texCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        texCreateInfo.tiling = VK_IMAGE_TILING_LINEAR;
-        texCreateInfo.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-        texCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-        texCreateInfo.queueFamilyIndexCount = 0;
-        texCreateInfo.pQueueFamilyIndices = nullptr;
-        texCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        texCreateInfo.flags = 0;
-        ThrowIfFailed(vkCreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_cpuTex));
+        /* create cpu image buffer */
+        VkBufferCreateInfo bufCreateInfo = {};
+        bufCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufCreateInfo.size = sz;
+        bufCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        bufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        ThrowIfFailed(vkCreateBuffer(ctx->m_dev, &bufCreateInfo, nullptr, &m_cpuBuf));
 
         VkMemoryRequirements memReqs;
-        vkGetImageMemoryRequirements(ctx->m_dev, m_cpuTex, &memReqs);
+        vkGetBufferMemoryRequirements(ctx->m_dev, m_cpuBuf, &memReqs);
 
         VkMemoryAllocateInfo memAlloc = {};
         memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -778,97 +749,52 @@ class VulkanTextureS : public ITextureS
         ThrowIfFailed(vkAllocateMemory(ctx->m_dev, &memAlloc, nullptr, &m_cpuMem));
 
         /* bind memory */
-        ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_cpuTex, m_cpuMem, 0));
+        ThrowIfFailed(vkBindBufferMemory(ctx->m_dev, m_cpuBuf, m_cpuMem, 0));
 
-        /* map memory */
+        /* map memory and copy data */
         uint8_t* mappedData;
         ThrowIfFailed(vkMapMemory(ctx->m_dev, m_cpuMem, 0, memReqs.size, 0, reinterpret_cast<void**>(&mappedData)));
-
-        /* copy pitch-linear data */
-        const uint8_t* srcDataIt = static_cast<const uint8_t*>(data);
-        VkImageSubresource subres = {};
-        subres.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        subres.arrayLayer = 0;
-        for (size_t i=0 ; i<mips ; ++i)
-        {
-            subres.mipLevel = i;
-            VkSubresourceLayout layout;
-            vkGetImageSubresourceLayout(ctx->m_dev, m_cpuTex, &subres, &layout);
-            uint8_t* dstDataIt = static_cast<uint8_t*>(mappedData) + layout.offset;
-
-            size_t srcRowPitch = width * pxPitchNum / pxPitchDenom;
-
-            for (size_t y=0 ; y<height ; ++y)
-            {
-                memmove(dstDataIt, srcDataIt, srcRowPitch);
-                srcDataIt += srcRowPitch;
-                dstDataIt += layout.rowPitch;
-            }
-
-            if (width > 1)
-                width /= 2;
-            if (height > 1)
-                height /= 2;
-        }
-
-        /* flush to gpu */
-        VkMappedMemoryRange mappedRange;
-        mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-        mappedRange.pNext = nullptr;
-        mappedRange.memory = m_cpuMem;
-        mappedRange.offset = 0;
-        mappedRange.size = memReqs.size;
-        ThrowIfFailed(vkFlushMappedMemoryRanges(ctx->m_dev, 1, &mappedRange));
+        memmove(mappedData, data, sz);
         vkUnmapMemory(ctx->m_dev, m_cpuMem);
 
         /* create gpu image */
+        VkImageCreateInfo texCreateInfo = {};
+        texCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        texCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+        texCreateInfo.format = pfmt;
+        texCreateInfo.mipLevels = mips;
+        texCreateInfo.arrayLayers = 1;
+        texCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         texCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        texCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+        texCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         texCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        texCreateInfo.extent = { m_width, m_height, 1 };
         texCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         ThrowIfFailed(vkCreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex));
 
-        /* create image view */
-        VkImageViewCreateInfo viewInfo = {};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.pNext = nullptr;
-        viewInfo.image = m_gpuTex;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = pfmt;
-        viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
-        viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
-        viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
-        viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = mips;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-
-        ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewInfo, nullptr, &m_gpuView));
-
         m_descInfo.sampler = ctx->m_linearSampler;
-        m_descInfo.imageView = m_gpuView;
         m_descInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 public:
-    VkImage m_cpuTex;
+    VkBuffer m_cpuBuf;
     VkDeviceMemory m_cpuMem;
     VkImage m_gpuTex;
-    VkImageView m_gpuView;
+    VkImageView m_gpuView = VK_NULL_HANDLE;
     VkDescriptorImageInfo m_descInfo;
     VkDeviceSize m_gpuOffset;
     ~VulkanTextureS()
     {
         vkDestroyImageView(m_ctx->m_dev, m_gpuView, nullptr);
-        vkDestroyImage(m_ctx->m_dev, m_cpuTex, nullptr);
+        vkDestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
         vkDestroyImage(m_ctx->m_dev, m_gpuTex, nullptr);
         vkFreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
     }
 
     void deleteUploadObjects()
     {
-        vkDestroyImage(m_ctx->m_dev, m_cpuTex, nullptr);
-        m_cpuTex = VK_NULL_HANDLE;
+        vkDestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
+        m_cpuBuf = VK_NULL_HANDLE;
         vkFreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
         m_cpuMem = VK_NULL_HANDLE;
     }
@@ -891,11 +817,25 @@ public:
         /* bind memory */
         ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_gpuTex, mem, m_gpuOffset));
 
-        /* Since we're going to blit from the mappable image, set its layout to
-         * SOURCE_OPTIMAL */
-        SetImageLayout(ctx->m_loadCmdBuf, m_cpuTex, VK_IMAGE_ASPECT_COLOR_BIT,
-                       VK_IMAGE_LAYOUT_PREINITIALIZED,
-                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_mips, 1);
+        /* create image view */
+        VkImageViewCreateInfo viewInfo = {};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.pNext = nullptr;
+        viewInfo.image = m_gpuTex;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = m_vkFmt;
+        viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+        viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+        viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+        viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = m_mips;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = 1;
+
+        ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewInfo, nullptr, &m_gpuView));
+        m_descInfo.imageView = m_gpuView;
 
         /* Since we're going to blit to the texture image, set its layout to
          * DESTINATION_OPTIMAL */
@@ -903,40 +843,38 @@ public:
                        VK_IMAGE_LAYOUT_UNDEFINED,
                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, m_mips, 1);
 
-        VkImageCopy copyRegions[16];
+        VkBufferImageCopy copyRegions[16] = {};
         size_t width = m_width;
         size_t height = m_height;
         size_t regionCount = std::min(size_t(16), m_mips);
+        size_t offset = 0;
         for (int i=0 ; i<regionCount ; ++i)
         {
-            copyRegions[i].srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyRegions[i].srcSubresource.mipLevel = i;
-            copyRegions[i].srcSubresource.baseArrayLayer = 0;
-            copyRegions[i].srcSubresource.layerCount = 1;
-            copyRegions[i].srcOffset.x = 0;
-            copyRegions[i].srcOffset.y = 0;
-            copyRegions[i].srcOffset.z = 0;
-            copyRegions[i].dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyRegions[i].dstSubresource.mipLevel = i;
-            copyRegions[i].dstSubresource.baseArrayLayer = 0;
-            copyRegions[i].dstSubresource.layerCount = 1;
-            copyRegions[i].dstOffset.x = 0;
-            copyRegions[i].dstOffset.y = 0;
-            copyRegions[i].dstOffset.z = 0;
-            copyRegions[i].extent.width = width;
-            copyRegions[i].extent.height = height;
-            copyRegions[i].extent.depth = 1;
+            size_t srcRowPitch = width * m_pixelPitchNum / m_pixelPitchDenom;
+
+            copyRegions[i].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyRegions[i].imageSubresource.mipLevel = i;
+            copyRegions[i].imageSubresource.baseArrayLayer = 0;
+            copyRegions[i].imageSubresource.layerCount = 1;
+            copyRegions[i].imageExtent.width = width;
+            copyRegions[i].imageExtent.height = height;
+            copyRegions[i].imageExtent.depth = 1;
+            copyRegions[i].bufferOffset = offset;
 
             if (width > 1)
                 width /= 2;
             if (height > 1)
                 height /= 2;
+            offset += srcRowPitch;
         }
 
         /* Put the copy command into the command buffer */
-        vkCmdCopyImage(ctx->m_loadCmdBuf, m_cpuTex,
-                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_gpuTex,
-                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, regionCount, copyRegions);
+        vkCmdCopyBufferToImage(ctx->m_loadCmdBuf,
+                               m_cpuBuf,
+                               m_gpuTex,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               regionCount,
+                               copyRegions);
 
         /* Set the layout for the texture image from DESTINATION_OPTIMAL to
          * SHADER_READ_ONLY */
@@ -956,18 +894,19 @@ class VulkanTextureSA : public ITextureSA
     size_t m_sz;
     size_t m_width, m_height, m_layers;
     VkFormat m_vkFmt;
+    int m_pixelPitchNum = 1;
+    int m_pixelPitchDenom = 1;
+
     VulkanTextureSA(VulkanContext* ctx, size_t width, size_t height, size_t layers,
                    TextureFormat fmt, const void* data, size_t sz)
     : m_ctx(ctx), m_fmt(fmt), m_width(width), m_height(height), m_layers(layers), m_sz(sz)
     {
         VkFormat pfmt;
-        int pxPitchNum = 1;
-        int pxPitchDenom = 1;
         switch (fmt)
         {
         case TextureFormat::RGBA8:
             pfmt = VK_FORMAT_R8G8B8A8_UNORM;
-            pxPitchNum = 4;
+            m_pixelPitchNum = 4;
             break;
         case TextureFormat::I8:
             pfmt = VK_FORMAT_R8_UNORM;
@@ -977,29 +916,16 @@ class VulkanTextureSA : public ITextureSA
         }
         m_vkFmt = pfmt;
 
-        /* create cpu image */
-        VkImageCreateInfo texCreateInfo = {};
-        texCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        texCreateInfo.pNext = nullptr;
-        texCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-        texCreateInfo.format = pfmt;
-        texCreateInfo.extent.width = width;
-        texCreateInfo.extent.height = height;
-        texCreateInfo.extent.depth = 1;
-        texCreateInfo.mipLevels = 1;
-        texCreateInfo.arrayLayers = layers;
-        texCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        texCreateInfo.tiling = VK_IMAGE_TILING_LINEAR;
-        texCreateInfo.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-        texCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-        texCreateInfo.queueFamilyIndexCount = 0;
-        texCreateInfo.pQueueFamilyIndices = nullptr;
-        texCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        texCreateInfo.flags = 0;
-        ThrowIfFailed(vkCreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_cpuTex));
+        /* create cpu image buffer */
+        VkBufferCreateInfo bufCreateInfo = {};
+        bufCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufCreateInfo.size = sz;
+        bufCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        bufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        ThrowIfFailed(vkCreateBuffer(ctx->m_dev, &bufCreateInfo, nullptr, &m_cpuBuf));
 
         VkMemoryRequirements memReqs;
-        vkGetImageMemoryRequirements(ctx->m_dev, m_cpuTex, &memReqs);
+        vkGetBufferMemoryRequirements(ctx->m_dev, m_cpuBuf, &memReqs);
 
         VkMemoryAllocateInfo memAlloc = {};
         memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -1014,92 +940,52 @@ class VulkanTextureSA : public ITextureSA
         ThrowIfFailed(vkAllocateMemory(ctx->m_dev, &memAlloc, nullptr, &m_cpuMem));
 
         /* bind memory */
-        ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_cpuTex, m_cpuMem, 0));
+        ThrowIfFailed(vkBindBufferMemory(ctx->m_dev, m_cpuBuf, m_cpuMem, 0));
 
-        /* map memory */
+        /* map memory and copy data */
         uint8_t* mappedData;
         ThrowIfFailed(vkMapMemory(ctx->m_dev, m_cpuMem, 0, memReqs.size, 0, reinterpret_cast<void**>(&mappedData)));
-
-        /* copy pitch-linear data */
-        const uint8_t* srcDataIt = static_cast<const uint8_t*>(data);
-        VkImageSubresource subres = {};
-        subres.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        subres.mipLevel = 0;
-        for (size_t i=0 ; i<layers ; ++i)
-        {
-            subres.arrayLayer = i;
-            VkSubresourceLayout layout;
-            vkGetImageSubresourceLayout(ctx->m_dev, m_cpuTex, &subres, &layout);
-            uint8_t* dstDataIt = static_cast<uint8_t*>(mappedData) + layout.offset;
-
-            size_t srcRowPitch = width * pxPitchNum / pxPitchDenom;
-
-            for (size_t y=0 ; y<height ; ++y)
-            {
-                memmove(dstDataIt, srcDataIt, srcRowPitch);
-                srcDataIt += srcRowPitch;
-                dstDataIt += layout.rowPitch;
-            }
-        }
-
-        /* flush to gpu */
-        VkMappedMemoryRange mappedRange;
-        mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-        mappedRange.pNext = nullptr;
-        mappedRange.memory = m_cpuMem;
-        mappedRange.offset = 0;
-        mappedRange.size = memReqs.size;
-        ThrowIfFailed(vkFlushMappedMemoryRanges(ctx->m_dev, 1, &mappedRange));
+        memmove(mappedData, data, sz);
         vkUnmapMemory(ctx->m_dev, m_cpuMem);
 
         /* create gpu image */
+        VkImageCreateInfo texCreateInfo = {};
+        texCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        texCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+        texCreateInfo.format = pfmt;
+        texCreateInfo.mipLevels = 1;
+        texCreateInfo.arrayLayers = layers;
+        texCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         texCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        texCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+        texCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         texCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        texCreateInfo.extent = { m_width, m_height, 1 };
         texCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         ThrowIfFailed(vkCreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex));
 
-        /* create image view */
-        VkImageViewCreateInfo viewInfo = {};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.pNext = nullptr;
-        viewInfo.image = m_gpuTex;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = pfmt;
-        viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
-        viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
-        viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
-        viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = layers;
-
-        ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewInfo, nullptr, &m_gpuView));
-
         m_descInfo.sampler = ctx->m_linearSampler;
-        m_descInfo.imageView = m_gpuView;
         m_descInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 public:
-    VkImage m_cpuTex;
+    VkBuffer m_cpuBuf;
     VkDeviceMemory m_cpuMem;
     VkImage m_gpuTex;
-    VkImageView m_gpuView;
+    VkImageView m_gpuView = VK_NULL_HANDLE;
     VkDescriptorImageInfo m_descInfo;
     VkDeviceSize m_gpuOffset;
     ~VulkanTextureSA()
     {
         vkDestroyImageView(m_ctx->m_dev, m_gpuView, nullptr);
-        vkDestroyImage(m_ctx->m_dev, m_cpuTex, nullptr);
+        vkDestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
         vkDestroyImage(m_ctx->m_dev, m_gpuTex, nullptr);
         vkFreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
     }
 
     void deleteUploadObjects()
     {
-        vkDestroyImage(m_ctx->m_dev, m_cpuTex, nullptr);
-        m_cpuTex = VK_NULL_HANDLE;
+        vkDestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
+        m_cpuBuf = VK_NULL_HANDLE;
         vkFreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
         m_cpuMem = VK_NULL_HANDLE;
     }
@@ -1122,11 +1008,25 @@ public:
         /* bind memory */
         ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_gpuTex, mem, m_gpuOffset));
 
-        /* Since we're going to blit from the mappable image, set its layout to
-         * SOURCE_OPTIMAL */
-        SetImageLayout(ctx->m_loadCmdBuf, m_cpuTex, VK_IMAGE_ASPECT_COLOR_BIT,
-                       VK_IMAGE_LAYOUT_PREINITIALIZED,
-                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, m_layers);
+        /* create image view */
+        VkImageViewCreateInfo viewInfo = {};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.pNext = nullptr;
+        viewInfo.image = m_gpuTex;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = m_vkFmt;
+        viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+        viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+        viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+        viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = m_layers;
+
+        ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewInfo, nullptr, &m_gpuView));
+        m_descInfo.imageView = m_gpuView;
 
         /* Since we're going to blit to the texture image, set its layout to
          * DESTINATION_OPTIMAL */
@@ -1134,29 +1034,23 @@ public:
                        VK_IMAGE_LAYOUT_UNDEFINED,
                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, m_layers);
 
-        VkImageCopy copyRegion;
-        copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copyRegion.srcSubresource.mipLevel = 0;
-        copyRegion.srcSubresource.baseArrayLayer = 0;
-        copyRegion.srcSubresource.layerCount = m_layers;
-        copyRegion.srcOffset.x = 0;
-        copyRegion.srcOffset.y = 0;
-        copyRegion.srcOffset.z = 0;
-        copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copyRegion.dstSubresource.mipLevel = 0;
-        copyRegion.dstSubresource.baseArrayLayer = 0;
-        copyRegion.dstSubresource.layerCount = m_layers;
-        copyRegion.dstOffset.x = 0;
-        copyRegion.dstOffset.y = 0;
-        copyRegion.dstOffset.z = 0;
-        copyRegion.extent.width = m_width;
-        copyRegion.extent.height = m_height;
-        copyRegion.extent.depth = 1;
+        VkBufferImageCopy copyRegion = {};
+        copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyRegion.imageSubresource.mipLevel = 0;
+        copyRegion.imageSubresource.baseArrayLayer = 0;
+        copyRegion.imageSubresource.layerCount = m_layers;
+        copyRegion.imageExtent.width = m_width;
+        copyRegion.imageExtent.height = m_height;
+        copyRegion.imageExtent.depth = 1;
+        copyRegion.bufferOffset = 0;
 
         /* Put the copy command into the command buffer */
-        vkCmdCopyImage(ctx->m_loadCmdBuf, m_cpuTex,
-                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_gpuTex,
-                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+        vkCmdCopyBufferToImage(ctx->m_loadCmdBuf,
+                               m_cpuBuf,
+                               m_gpuTex,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               1,
+                               &copyRegion);
 
         /* Set the layout for the texture image from DESTINATION_OPTIMAL to
          * SHADER_READ_ONLY */
@@ -1177,10 +1071,11 @@ class VulkanTextureD : public ITextureD
     size_t m_height;
     TextureFormat m_fmt;
     VulkanCommandQueue* m_q;
-    std::unique_ptr<uint8_t[]> m_cpuBuf;
+    std::unique_ptr<uint8_t[]> m_stagingBuf;
     size_t m_cpuSz;
     VkDeviceSize m_srcRowPitch;
     VkDeviceSize m_cpuOffsets[2];
+    VkFormat m_vkFmt;
     int m_validSlots = 0;
     VulkanTextureD(VulkanCommandQueue* q, VulkanContext* ctx, size_t width, size_t height, TextureFormat fmt)
     : m_width(width), m_height(height), m_fmt(fmt), m_q(q)
@@ -1201,28 +1096,17 @@ class VulkanTextureD : public ITextureD
         default:
             Log.report(logvisor::Fatal, "unsupported tex format");
         }
-        m_cpuBuf.reset(new uint8_t[m_cpuSz]);
+        m_vkFmt = pfmt;
+        m_stagingBuf.reset(new uint8_t[m_cpuSz]);
 
-        VkImageCreateInfo texCreateInfo = {};
-        texCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        texCreateInfo.pNext = nullptr;
-        texCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-        texCreateInfo.format = pfmt;
-        texCreateInfo.extent.width = width;
-        texCreateInfo.extent.height = height;
-        texCreateInfo.extent.depth = 1;
-        texCreateInfo.mipLevels = 1;
-        texCreateInfo.arrayLayers = 1;
-        texCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        texCreateInfo.tiling = VK_IMAGE_TILING_LINEAR;
-        texCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        texCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-        texCreateInfo.queueFamilyIndexCount = 0;
-        texCreateInfo.pQueueFamilyIndices = nullptr;
-        texCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        texCreateInfo.flags = 0;
+        /* create buffers */
+        VkBufferCreateInfo bufCreateInfo = {};
+        bufCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufCreateInfo.size = m_cpuSz;
+        bufCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        bufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        /* create images and compute size for host-mappable images */
+        /* compute size for host-mappable images */
         VkMemoryAllocateInfo memAlloc = {};
         memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         memAlloc.pNext = nullptr;
@@ -1233,12 +1117,11 @@ class VulkanTextureD : public ITextureD
         {
             m_cpuOffsets[i] = memAlloc.allocationSize;
 
-            /* create cpu image */
-            ThrowIfFailed(vkCreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_cpuTex[i]));
-            m_cpuTexLayout[i] = VK_IMAGE_LAYOUT_UNDEFINED;
+            /* create cpu buffer */
+            ThrowIfFailed(vkCreateBuffer(ctx->m_dev, &bufCreateInfo, nullptr, &m_cpuBuf[i]));
 
             VkMemoryRequirements memReqs;
-            vkGetImageMemoryRequirements(ctx->m_dev, m_cpuTex[i], &memReqs);
+            vkGetBufferMemoryRequirements(ctx->m_dev, m_cpuBuf[i], &memReqs);
             memAlloc.allocationSize += memReqs.size;
             memAlloc.allocationSize = (memAlloc.allocationSize + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
             memTypeBits &= memReqs.memoryTypeBits;
@@ -1251,36 +1134,32 @@ class VulkanTextureD : public ITextureD
         /* allocate memory */
         ThrowIfFailed(vkAllocateMemory(ctx->m_dev, &memAlloc, nullptr, &m_cpuMem));
 
+        VkImageCreateInfo texCreateInfo = {};
+        texCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        texCreateInfo.pNext = nullptr;
+        texCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+        texCreateInfo.format = pfmt;
+        texCreateInfo.extent.width = width;
+        texCreateInfo.extent.height = height;
+        texCreateInfo.extent.depth = 1;
+        texCreateInfo.mipLevels = 1;
+        texCreateInfo.arrayLayers = 1;
+        texCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         texCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        texCreateInfo.initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         texCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-
-        VkImageViewCreateInfo viewInfo = {};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.pNext = nullptr;
-        viewInfo.image = nullptr;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = pfmt;
-        viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
-        viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
-        viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
-        viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
+        texCreateInfo.queueFamilyIndexCount = 0;
+        texCreateInfo.pQueueFamilyIndices = nullptr;
+        texCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        texCreateInfo.flags = 0;
 
         for (int i=0 ; i<2 ; ++i)
         {
             /* bind cpu memory */
-            ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_cpuTex[i], m_cpuMem, m_cpuOffsets[i]));
+            ThrowIfFailed(vkBindBufferMemory(ctx->m_dev, m_cpuBuf[i], m_cpuMem, m_cpuOffsets[i]));
 
             /* create gpu image */
             ThrowIfFailed(vkCreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex[i]));
-
-            /* create image view */
-            viewInfo.image = m_gpuTex[i];
-            ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewInfo, nullptr, &m_gpuView[i]));
 
             m_descInfo[i].sampler = ctx->m_linearSampler;
             m_descInfo[i].imageView = m_gpuView[i];
@@ -1289,8 +1168,7 @@ class VulkanTextureD : public ITextureD
     }
     void update(int b);
 public:
-    VkImageLayout m_cpuTexLayout[2];
-    VkImage m_cpuTex[2];
+    VkBuffer m_cpuBuf[2];
     VkDeviceMemory m_cpuMem;
     VkImage m_gpuTex[2];
     VkImageView m_gpuView[2];
@@ -1320,10 +1198,30 @@ public:
 
     void placeForGPU(VulkanContext* ctx, VkDeviceMemory mem)
     {
+        VkImageViewCreateInfo viewInfo = {};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.pNext = nullptr;
+        viewInfo.image = nullptr;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = m_vkFmt;
+        viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+        viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+        viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+        viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = 1;
+
         for (int i=0 ; i<2 ; ++i)
         {
             /* bind memory */
             ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_gpuTex[i], mem, m_gpuOffset[i]));
+
+            /* create image view */
+            viewInfo.image = m_gpuTex[i];
+            ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewInfo, nullptr, &m_gpuView[i]));
         }
     }
 
@@ -1370,55 +1268,10 @@ class VulkanTextureR : public ITextureR
         texCreateInfo.flags = 0;
         ThrowIfFailed(vkCreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_colorTex));
 
-        VkImageViewCreateInfo viewCreateInfo = {};
-        viewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewCreateInfo.pNext = nullptr;
-        viewCreateInfo.image = m_colorTex;
-        viewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewCreateInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-        viewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_R;
-        viewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_G;
-        viewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_B;
-        viewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_A;
-        viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        viewCreateInfo.subresourceRange.baseMipLevel = 0;
-        viewCreateInfo.subresourceRange.levelCount = 1;
-        viewCreateInfo.subresourceRange.baseArrayLayer = 0;
-        viewCreateInfo.subresourceRange.layerCount = 1;
-        ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_colorView));
-
         /* depth target */
         texCreateInfo.format = VK_FORMAT_D24_UNORM_S8_UINT;
         texCreateInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        viewCreateInfo.format = VK_FORMAT_D24_UNORM_S8_UINT;
-        viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
         ThrowIfFailed(vkCreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_depthTex));
-        viewCreateInfo.image = m_depthTex;
-        ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_depthView));
-
-        /* framebuffer */
-        VkFramebufferCreateInfo fbCreateInfo = {};
-        fbCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fbCreateInfo.pNext = nullptr;
-        fbCreateInfo.renderPass = ctx->m_pass;
-        fbCreateInfo.attachmentCount = 2;
-        fbCreateInfo.width = width;
-        fbCreateInfo.height = height;
-        fbCreateInfo.layers = 1;
-        VkImageView attachments[2] = {m_colorView, m_depthView};
-        fbCreateInfo.pAttachments = attachments;
-        ThrowIfFailed(vkCreateFramebuffer(ctx->m_dev, &fbCreateInfo, nullptr, &m_framebuffer));
-
-        m_passBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        m_passBeginInfo.pNext = nullptr;
-        m_passBeginInfo.renderPass = ctx->m_pass;
-        m_passBeginInfo.framebuffer = m_framebuffer;
-        m_passBeginInfo.renderArea.offset.x = 0;
-        m_passBeginInfo.renderArea.offset.y = 0;
-        m_passBeginInfo.renderArea.extent.width = width;
-        m_passBeginInfo.renderArea.extent.height = height;
-        m_passBeginInfo.clearValueCount = 2;
-        m_passBeginInfo.pClearValues = BlackClear;
 
         /* tally total memory requirements */
         VkMemoryRequirements memReqs;
@@ -1447,11 +1300,7 @@ class VulkanTextureR : public ITextureR
         {
             texCreateInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
             texCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-            viewCreateInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-            viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             ThrowIfFailed(vkCreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_colorBindTex));
-            viewCreateInfo.image = m_colorBindTex;
-            ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_colorBindView));
 
             vkGetImageMemoryRequirements(ctx->m_dev, m_colorBindTex, &memReqs);
             gpuOffsets[2] = memAlloc.allocationSize;
@@ -1460,7 +1309,6 @@ class VulkanTextureR : public ITextureR
             memTypeBits &= memReqs.memoryTypeBits;
 
             m_colorBindDescInfo.sampler = ctx->m_linearSampler;
-            m_colorBindDescInfo.imageView = m_colorBindView;
             m_colorBindDescInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
 
@@ -1468,11 +1316,7 @@ class VulkanTextureR : public ITextureR
         {
             texCreateInfo.format = VK_FORMAT_D24_UNORM_S8_UINT;
             texCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-            viewCreateInfo.format = VK_FORMAT_D24_UNORM_S8_UINT;
-            viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
             ThrowIfFailed(vkCreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_depthBindTex));
-            viewCreateInfo.image = m_depthBindTex;
-            ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_depthBindView));
 
             vkGetImageMemoryRequirements(ctx->m_dev, m_depthBindTex, &memReqs);
             gpuOffsets[3] = memAlloc.allocationSize;
@@ -1481,7 +1325,6 @@ class VulkanTextureR : public ITextureR
             memTypeBits &= memReqs.memoryTypeBits;
 
             m_depthBindDescInfo.sampler = ctx->m_linearSampler;
-            m_depthBindDescInfo.imageView = m_depthBindView;
             m_depthBindDescInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
 
@@ -1493,10 +1336,73 @@ class VulkanTextureR : public ITextureR
         /* bind memory */
         ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_colorTex, m_gpuMem, gpuOffsets[0]));
         ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_depthTex, m_gpuMem, gpuOffsets[1]));
+
+        /* Create resource views */
+        VkImageViewCreateInfo viewCreateInfo = {};
+        viewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewCreateInfo.pNext = nullptr;
+        viewCreateInfo.image = m_colorTex;
+        viewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewCreateInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+        viewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+        viewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+        viewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+        viewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+        viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewCreateInfo.subresourceRange.baseMipLevel = 0;
+        viewCreateInfo.subresourceRange.levelCount = 1;
+        viewCreateInfo.subresourceRange.baseArrayLayer = 0;
+        viewCreateInfo.subresourceRange.layerCount = 1;
+        ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_colorView));
+
+        viewCreateInfo.image = m_depthTex;
+        viewCreateInfo.format = VK_FORMAT_D24_UNORM_S8_UINT;
+        viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+        ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_depthView));
+
         if (enableShaderColorBinding)
+        {
             ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_colorBindTex, m_gpuMem, gpuOffsets[2]));
+            viewCreateInfo.image = m_colorBindTex;
+            viewCreateInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+            viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_colorBindView));
+            m_colorBindDescInfo.imageView = m_colorBindView;
+        }
+
         if (enableShaderDepthBinding)
+        {
             ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_depthBindTex, m_gpuMem, gpuOffsets[3]));
+            viewCreateInfo.image = m_depthBindTex;
+            viewCreateInfo.format = VK_FORMAT_D24_UNORM_S8_UINT;
+            viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_depthBindView));
+            m_depthBindDescInfo.imageView = m_depthBindView;
+        }
+
+        /* framebuffer */
+        VkFramebufferCreateInfo fbCreateInfo = {};
+        fbCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        fbCreateInfo.pNext = nullptr;
+        fbCreateInfo.renderPass = ctx->m_pass;
+        fbCreateInfo.attachmentCount = 2;
+        fbCreateInfo.width = width;
+        fbCreateInfo.height = height;
+        fbCreateInfo.layers = 1;
+        VkImageView attachments[2] = {m_colorView, m_depthView};
+        fbCreateInfo.pAttachments = attachments;
+        ThrowIfFailed(vkCreateFramebuffer(ctx->m_dev, &fbCreateInfo, nullptr, &m_framebuffer));
+
+        m_passBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        m_passBeginInfo.pNext = nullptr;
+        m_passBeginInfo.renderPass = ctx->m_pass;
+        m_passBeginInfo.framebuffer = m_framebuffer;
+        m_passBeginInfo.renderArea.offset.x = 0;
+        m_passBeginInfo.renderArea.offset.y = 0;
+        m_passBeginInfo.renderArea.extent.width = width;
+        m_passBeginInfo.renderArea.extent.height = height;
+        m_passBeginInfo.clearValueCount = 2;
+        m_passBeginInfo.pClearValues = BlackClear;
     }
 
     VulkanCommandQueue* m_q;
@@ -1664,7 +1570,7 @@ class VulkanShaderPipeline : public IShaderPipeline
                          const VulkanVertexFormat* vtxFmt,
                          BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                          bool depthTest, bool depthWrite, bool backfaceCulling)
-    : m_ctx(ctx)
+    : m_ctx(ctx), m_pipelineCache(pipelineCache)
     {
         VkDynamicState dynamicStateEnables[VK_DYNAMIC_STATE_RANGE_SIZE] = {};
         VkPipelineDynamicStateCreateInfo dynamicState = {};
@@ -1782,9 +1688,11 @@ class VulkanShaderPipeline : public IShaderPipeline
     }
 public:
     VkPipeline m_pipeline;
+    VkPipelineCache m_pipelineCache;
     ~VulkanShaderPipeline()
     {
         vkDestroyPipeline(m_ctx->m_dev, m_pipeline, nullptr);
+        vkDestroyPipelineCache(m_ctx->m_dev, m_pipelineCache, nullptr);
     }
     VulkanShaderPipeline& operator=(const VulkanShaderPipeline&) = delete;
     VulkanShaderPipeline(const VulkanShaderPipeline&) = delete;
@@ -2108,8 +2016,8 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
 
     VkCommandPool m_cmdPool;
     VkCommandBuffer m_cmdBufs[2];
-    VkSemaphore m_swapChainReadySem;
-    VkSemaphore m_drawCompleteSem;
+    VkSemaphore m_swapChainReadySem = VK_NULL_HANDLE;
+    VkSemaphore m_drawCompleteSem = VK_NULL_HANDLE;
     VkFence m_drawCompleteFence;
 
     VkCommandPool m_dynamicCmdPool;
@@ -2155,7 +2063,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
     {
         VkCommandPoolCreateInfo poolInfo = {};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        poolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+        poolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         poolInfo.queueFamilyIndex = m_ctx->m_graphicsQueueFamilyIndex;
         ThrowIfFailed(vkCreateCommandPool(ctx->m_dev, &poolInfo, nullptr, &m_cmdPool));
         ThrowIfFailed(vkCreateCommandPool(ctx->m_dev, &poolInfo, nullptr, &m_dynamicCmdPool));
@@ -2179,12 +2087,13 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
 
         VkSemaphoreCreateInfo semInfo = {};
         semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-        ThrowIfFailed(vkCreateSemaphore(ctx->m_dev, &semInfo, nullptr, &m_swapChainReadySem));
         ThrowIfFailed(vkCreateSemaphore(ctx->m_dev, &semInfo, nullptr, &m_drawCompleteSem));
 
         VkFenceCreateInfo fenceInfo = {};
         fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
         ThrowIfFailed(vkCreateFence(m_ctx->m_dev, &fenceInfo, nullptr, &m_drawCompleteFence));
+        fenceInfo.flags = 0;
         ThrowIfFailed(vkCreateFence(m_ctx->m_dev, &fenceInfo, nullptr, &m_dynamicBufFence));
     }
 
@@ -2335,6 +2244,14 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         VkCommandBuffer cmdBuf = m_cmdBufs[m_fillBuf];
         VulkanTextureR* csource = static_cast<VulkanTextureR*>(source);
 
+        vkCmdEndRenderPass(cmdBuf);
+
+        if (m_swapChainReadySem)
+            vkDestroySemaphore(m_ctx->m_dev, m_swapChainReadySem, nullptr);
+        VkSemaphoreCreateInfo semInfo = {};
+        semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        ThrowIfFailed(vkCreateSemaphore(m_ctx->m_dev, &semInfo, nullptr, &m_swapChainReadySem));
+
         ThrowIfFailed(vkAcquireNextImageKHR(m_ctx->m_dev, m_windowCtx->m_swapChain, UINT64_MAX,
                                             m_swapChainReadySem, nullptr, &m_windowCtx->m_backBuf));
         VulkanContext::Window::Buffer& dest = m_windowCtx->m_bufs[m_windowCtx->m_backBuf];
@@ -2393,6 +2310,8 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
     {
         VkCommandBuffer cmdBuf = m_cmdBufs[m_fillBuf];
         VulkanTextureR* ctexture = static_cast<VulkanTextureR*>(texture);
+
+        vkCmdEndRenderPass(cmdBuf);
 
         if (color && ctexture->m_enableShaderColorBinding)
         {
@@ -2488,8 +2407,8 @@ VulkanTextureD::~VulkanTextureD()
 {
     vkDestroyImageView(m_q->m_ctx->m_dev, m_gpuView[0], nullptr);
     vkDestroyImageView(m_q->m_ctx->m_dev, m_gpuView[1], nullptr);
-    vkDestroyImage(m_q->m_ctx->m_dev, m_cpuTex[0], nullptr);
-    vkDestroyImage(m_q->m_ctx->m_dev, m_cpuTex[1], nullptr);
+    vkDestroyBuffer(m_q->m_ctx->m_dev, m_cpuBuf[0], nullptr);
+    vkDestroyBuffer(m_q->m_ctx->m_dev, m_cpuBuf[1], nullptr);
     vkDestroyImage(m_q->m_ctx->m_dev, m_gpuTex[0], nullptr);
     vkDestroyImage(m_q->m_ctx->m_dev, m_gpuTex[1], nullptr);
     vkFreeMemory(m_q->m_ctx->m_dev, m_cpuMem, nullptr);
@@ -2614,77 +2533,33 @@ void VulkanTextureD::update(int b)
         m_q->stallDynamicUpload();
         VkCommandBuffer cmdBuf = m_q->m_dynamicCmdBufs[b];
 
-        /* initialize texture layouts if needed */
-        if (m_cpuTexLayout[b] == VK_IMAGE_LAYOUT_UNDEFINED)
-        {
-            SetImageLayout(cmdBuf, m_cpuTex[b], VK_IMAGE_ASPECT_COLOR_BIT,
-                           VK_IMAGE_LAYOUT_UNDEFINED,
-                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
-            SetImageLayout(cmdBuf, m_gpuTex[b], VK_IMAGE_ASPECT_COLOR_BIT,
-                           VK_IMAGE_LAYOUT_UNDEFINED,
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
-            m_cpuTexLayout[b] = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        }
-        else
-        {
-            SetImageLayout(cmdBuf, m_gpuTex[b], VK_IMAGE_ASPECT_COLOR_BIT,
-                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
-        }
-
-        /* map memory */
+        /* map memory and copy staging data */
         uint8_t* mappedData;
         ThrowIfFailed(vkMapMemory(m_q->m_ctx->m_dev, m_cpuMem, m_cpuOffsets[b], m_cpuSz, 0, reinterpret_cast<void**>(&mappedData)));
-
-        /* copy pitch-linear data */
-        const uint8_t* srcDataIt = static_cast<const uint8_t*>(m_cpuBuf.get());
-        VkImageSubresource subres = {};
-        subres.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        subres.arrayLayer = 0;
-        subres.mipLevel = 0;
-        VkSubresourceLayout layout;
-        vkGetImageSubresourceLayout(m_q->m_ctx->m_dev, m_cpuTex[b], &subres, &layout);
-        uint8_t* dstDataIt = static_cast<uint8_t*>(mappedData);
-
-        for (size_t y=0 ; y<m_height ; ++y)
-        {
-            memmove(dstDataIt, srcDataIt, m_srcRowPitch);
-            srcDataIt += m_srcRowPitch;
-            dstDataIt += layout.rowPitch;
-        }
-
-        /* flush to gpu */
-        VkMappedMemoryRange mappedRange;
-        mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-        mappedRange.pNext = nullptr;
-        mappedRange.memory = m_cpuMem;
-        mappedRange.offset = m_cpuOffsets[b];
-        mappedRange.size = m_cpuSz;
-        ThrowIfFailed(vkFlushMappedMemoryRanges(m_q->m_ctx->m_dev, 1, &mappedRange));
+        memmove(mappedData, m_stagingBuf.get(), m_cpuSz);
         vkUnmapMemory(m_q->m_ctx->m_dev, m_cpuMem);
 
+        SetImageLayout(cmdBuf, m_gpuTex[b], VK_IMAGE_ASPECT_COLOR_BIT,
+                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
+
         /* Put the copy command into the command buffer */
-        VkImageCopy copyRegion;
-        copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copyRegion.srcSubresource.mipLevel = 0;
-        copyRegion.srcSubresource.baseArrayLayer = 0;
-        copyRegion.srcSubresource.layerCount = 1;
-        copyRegion.srcOffset.x = 0;
-        copyRegion.srcOffset.y = 0;
-        copyRegion.srcOffset.z = 0;
-        copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copyRegion.dstSubresource.mipLevel = 0;
-        copyRegion.dstSubresource.baseArrayLayer = 0;
-        copyRegion.dstSubresource.layerCount = 1;
-        copyRegion.dstOffset.x = 0;
-        copyRegion.dstOffset.y = 0;
-        copyRegion.dstOffset.z = 0;
-        copyRegion.extent.width = m_width;
-        copyRegion.extent.height = m_height;
-        copyRegion.extent.depth = 1;
-        vkCmdCopyImage(cmdBuf, m_cpuTex[b],
-                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_gpuTex[b],
-                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+        VkBufferImageCopy copyRegion = {};
+        copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyRegion.imageSubresource.mipLevel = 0;
+        copyRegion.imageSubresource.baseArrayLayer = 0;
+        copyRegion.imageSubresource.layerCount = 1;
+        copyRegion.imageExtent.width = m_width;
+        copyRegion.imageExtent.height = m_height;
+        copyRegion.imageExtent.depth = 1;
+        copyRegion.bufferOffset = 0;
+
+        vkCmdCopyBufferToImage(cmdBuf,
+                               m_cpuBuf[b],
+                               m_gpuTex[b],
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               1,
+                               &copyRegion);
 
         /* Set the layout for the texture image from DESTINATION_OPTIMAL to
          * SHADER_READ_ONLY */
@@ -2698,14 +2573,14 @@ void VulkanTextureD::update(int b)
 void VulkanTextureD::load(const void* data, size_t sz)
 {
     size_t bufSz = std::min(sz, m_cpuSz);
-    memmove(m_cpuBuf.get(), data, bufSz);
+    memmove(m_stagingBuf.get(), data, bufSz);
     m_validSlots = 0;
 }
 void* VulkanTextureD::map(size_t sz)
 {
     if (sz > m_cpuSz)
         return nullptr;
-    return m_cpuBuf.get();
+    return m_stagingBuf.get();
 }
 void VulkanTextureD::unmap()
 {
@@ -2900,7 +2775,6 @@ IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
         }
     }
 
-    vkDestroyPipelineCache(m_parent.m_ctx->m_dev, pipelineCache, nullptr);
     vkDestroyShaderModule(m_parent.m_ctx->m_dev, fragModule, nullptr);
     vkDestroyShaderModule(m_parent.m_ctx->m_dev, vertModule, nullptr);
 
@@ -3161,7 +3035,7 @@ void VulkanCommandQueue::execute()
         return;
     }
 
-    vkCmdEndRenderPass(m_cmdBufs[m_fillBuf]);
+    vkResetFences(m_ctx->m_dev, 1, &m_drawCompleteFence);
     vkEndCommandBuffer(m_cmdBufs[m_fillBuf]);
 
     m_drawBuf = m_fillBuf;
