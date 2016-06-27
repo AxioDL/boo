@@ -35,34 +35,45 @@ struct VulkanContext
     uint32_t m_queueCount;
     uint32_t m_graphicsQueueFamilyIndex = UINT32_MAX;
     std::vector<VkQueueFamilyProperties> m_queueProps;
-    VkQueue m_queue;
+    VkQueue m_queue = VK_NULL_HANDLE;
+    std::mutex m_queueLock;
     VkDescriptorSetLayout m_descSetLayout;
     VkPipelineLayout m_pipelinelayout;
     VkRenderPass m_pass;
     VkCommandPool m_loadPool;
     VkCommandBuffer m_loadCmdBuf;
-    VkFence m_loadFence;
     VkSampler m_linearSampler;
     struct Window
     {
-        VkSwapchainKHR m_swapChain = VK_NULL_HANDLE;
-        struct Buffer
+        struct SwapChain
         {
-            VkImage m_image;
+            VkSwapchainKHR m_swapChain = VK_NULL_HANDLE;
+            struct Buffer
+            {
+                VkImage m_image = VK_NULL_HANDLE;
+                VkImageLayout m_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+            };
+            std::vector<Buffer> m_bufs;
+            uint32_t m_backBuf = 0;
             void destroy(VkDevice dev)
             {
-                vkDestroyImage(dev, m_image, nullptr);
+                m_bufs.clear();
+                if (m_swapChain)
+                {
+                    vkDestroySwapchainKHR(dev, m_swapChain, nullptr);
+                    m_swapChain = VK_NULL_HANDLE;
+                }
+                m_backBuf = 0;
             }
-        };
-        std::vector<Buffer> m_bufs;
-        uint32_t m_backBuf = 0;
-        size_t width, height;
+        } m_swapChains[2];
+        uint32_t m_activeSwapChain = 0;
     };
     std::unordered_map<const boo::IWindow*, std::unique_ptr<Window>> m_windows;
 
     void initVulkan(const char* appName);
     void initDevice();
     void initSwapChain(Window& windowCtx, VkSurfaceKHR surface, VkFormat format);
+    void resizeSwapChain(Window& windowCtx, VkSurfaceKHR surface, VkFormat format);
 };
 extern VulkanContext g_VulkanContext;
 

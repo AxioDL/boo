@@ -296,6 +296,7 @@ struct GraphicsContextXlib : IGraphicsContext
       m_parentWindow(parentWindow),
       m_xDisp(disp) {}
     virtual void destroy()=0;
+    virtual void resized(SWindowRect& rect)=0;
 };
     
 struct GraphicsContextXlibGLX : GraphicsContextXlib
@@ -411,6 +412,10 @@ public:
     }
 
     ~GraphicsContextXlibGLX() {destroy();}
+
+    void resized(SWindowRect& rect)
+    {
+    }
 
     void _setCallback(IWindowCallback* cb)
     {
@@ -680,11 +685,9 @@ public:
     void destroy()
     {
         VulkanContext::Window& m_windowCtx = *m_ctx->m_windows[m_parentWindow];
-        vkDestroySwapchainKHR(m_ctx->m_dev, m_windowCtx.m_swapChain, nullptr);
-        vkDestroySurfaceKHR(m_ctx->m_instance, m_surface, nullptr);
-        for (VulkanContext::Window::Buffer& buf : m_windowCtx.m_bufs)
-            buf.destroy(m_ctx->m_dev);
-        m_windowCtx.m_bufs.clear();
+        m_windowCtx.m_swapChains[0].destroy(m_ctx->m_dev);
+        m_windowCtx.m_swapChains[1].destroy(m_ctx->m_dev);
+        //vkDestroySurfaceKHR(m_ctx->m_instance, m_surface, nullptr);
 
         if (m_vsyncRunning)
         {
@@ -694,6 +697,14 @@ public:
     }
 
     ~GraphicsContextXlibVulkan() {destroy();}
+
+    VulkanContext::Window* m_windowCtx = nullptr;
+
+    void resized(SWindowRect& rect)
+    {
+        if (m_windowCtx)
+            m_ctx->resizeSwapChain(*m_windowCtx, m_surface, m_format);
+    }
 
     void _setCallback(IWindowCallback* cb)
     {
@@ -730,9 +741,9 @@ public:
         if (m_ctx->m_instance == VK_NULL_HANDLE)
             m_ctx->initVulkan(APP->getUniqueName().c_str());
 
-        VulkanContext::Window& m_windowCtx =
-            *m_ctx->m_windows.emplace(std::make_pair(m_parentWindow,
-            std::make_unique<VulkanContext::Window>())).first->second;
+        m_windowCtx =
+            m_ctx->m_windows.emplace(std::make_pair(m_parentWindow,
+            std::make_unique<VulkanContext::Window>())).first->second.get();
 
         VkXcbSurfaceCreateInfoKHR surfaceInfo = {};
         surfaceInfo.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
@@ -757,7 +768,6 @@ public:
                     if (supportsPresent[i] == VK_TRUE)
                     {
                         m_ctx->m_graphicsQueueFamilyIndex = i;
-                        break;
                     }
                 }
             }
@@ -804,7 +814,7 @@ public:
         else
             Log.report(logvisor::Fatal, "no surface formats available for Vulkan swapchain");
 
-        m_ctx->initSwapChain(m_windowCtx, m_surface, m_format);
+        m_ctx->initSwapChain(*m_windowCtx, m_surface, m_format);
 
         /* Spawn vsync thread */
         m_vsyncRunning = true;
@@ -1613,6 +1623,7 @@ public:
             if (m_callback)
             {
                 XUnlockDisplay(m_xDisp);
+                m_gfxCtx->resized(m_wrect);
                 m_callback->resized(m_wrect);
                 XLockDisplay(m_xDisp);
             }

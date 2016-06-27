@@ -124,6 +124,11 @@ static void SetImageLayout(VkCommandBuffer cmd, VkImage image,
             VK_ACCESS_TRANSFER_READ_BIT;
     }
 
+    if (old_image_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        imageMemoryBarrier.srcAccessMask =
+            VK_ACCESS_TRANSFER_WRITE_BIT;
+    }
+
     if (new_image_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
         /* Make sure anything that was copying from this image has completed */
         imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -346,7 +351,7 @@ void VulkanContext::initDevice()
         Log.report(logvisor::Fatal,
                    "VulkanContext::m_graphicsQueueFamilyIndex hasn't been initialized");
 
-    /* create the device */
+    /* create the device and queues */
     VkDeviceQueueCreateInfo queueInfo = {};
     float queuePriorities[1] = {0.0};
     queueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -453,15 +458,19 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
     swapChainInfo.queueFamilyIndexCount = 0;
     swapChainInfo.pQueueFamilyIndices = nullptr;
 
-    ThrowIfFailed(vkCreateSwapchainKHR(m_dev, &swapChainInfo, nullptr, &windowCtx.m_swapChain));
+    Window::SwapChain& sc = windowCtx.m_swapChains[windowCtx.m_activeSwapChain];
+    ThrowIfFailed(vkCreateSwapchainKHR(m_dev, &swapChainInfo, nullptr, &sc.m_swapChain));
 
     uint32_t swapchainImageCount;
-    ThrowIfFailed(vkGetSwapchainImagesKHR(m_dev, windowCtx.m_swapChain, &swapchainImageCount, nullptr));
+    ThrowIfFailed(vkGetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, nullptr));
 
     VkImage* swapchainImages = (VkImage*)malloc(swapchainImageCount * sizeof(VkImage));
-    ThrowIfFailed(vkGetSwapchainImagesKHR(m_dev, windowCtx.m_swapChain, &swapchainImageCount, swapchainImages));
+    ThrowIfFailed(vkGetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, swapchainImages));
 
-    windowCtx.m_bufs.resize(swapchainImageCount);
+    sc.m_bufs.resize(swapchainImageCount);
+    for (uint32_t i=0 ; i<swapchainImageCount ; ++i)
+        sc.m_bufs[i].m_image = swapchainImages[i];
+    free(swapchainImages);
 
     // Going to need a command buffer to send the memory barriers in
     // set_image_layout but we couldn't have created one before we knew
@@ -483,48 +492,112 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
     cmd.commandBufferCount = 1;
     ThrowIfFailed(vkAllocateCommandBuffers(m_dev, &cmd, &m_loadCmdBuf));
 
+    vkGetDeviceQueue(m_dev, m_graphicsQueueFamilyIndex, 0, &m_queue);
+
+    /* Begin load command buffer here */
     VkCommandBufferBeginInfo cmdBufBeginInfo = {};
     cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     cmdBufBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     ThrowIfFailed(vkBeginCommandBuffer(m_loadCmdBuf, &cmdBufBeginInfo));
+}
 
-    vkGetDeviceQueue(m_dev, m_graphicsQueueFamilyIndex, 0, &m_queue);
 
-    for (uint32_t i=0 ; i<swapchainImageCount ; ++i)
+void VulkanContext::resizeSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR surface, VkFormat format)
+{
+    VkSurfaceCapabilitiesKHR surfCapabilities;
+    ThrowIfFailed(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_gpus[0], surface, &surfCapabilities));
+
+    uint32_t presentModeCount;
+    ThrowIfFailed(vkGetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, nullptr));
+    VkPresentModeKHR* presentModes = (VkPresentModeKHR*)malloc(presentModeCount * sizeof(VkPresentModeKHR));
+
+    ThrowIfFailed(vkGetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, presentModes));
+
+    VkExtent2D swapChainExtent;
+    // width and height are either both -1, or both not -1.
+    if (surfCapabilities.currentExtent.width == (uint32_t)-1)
     {
-        windowCtx.m_bufs[i].m_image = swapchainImages[i];
-
-        /*
-        SetImageLayout(m_loadCmdBuf, windowCtx.m_bufs[i].m_image, VK_IMAGE_ASPECT_COLOR_BIT,
-                       VK_IMAGE_LAYOUT_UNDEFINED,
-                       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
-                       */
+        // If the surface size is undefined, the size is set to
+        // the size of the images requested.
+        swapChainExtent.width = 50;
+        swapChainExtent.height = 50;
     }
-    ThrowIfFailed(vkEndCommandBuffer(m_loadCmdBuf));
+    else
+    {
+        // If the surface size is defined, the swap chain size must match
+        swapChainExtent = surfCapabilities.currentExtent;
+    }
 
-    VkFenceCreateInfo fenceInfo = {};
-    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    ThrowIfFailed(vkCreateFence(m_dev, &fenceInfo, nullptr, &m_loadFence));
+    // If mailbox mode is available, use it, as is the lowest-latency non-
+    // tearing mode.  If not, try IMMEDIATE which will usually be available,
+    // and is fastest (though it tears).  If not, fall back to FIFO which is
+    // always available.
+    VkPresentModeKHR swapchainPresentMode = VK_PRESENT_MODE_FIFO_KHR;
+    for (size_t i=0 ; i<presentModeCount ; ++i)
+    {
+        if (presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
+        {
+            swapchainPresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+            break;
+        }
+        if ((swapchainPresentMode != VK_PRESENT_MODE_MAILBOX_KHR) &&
+            (presentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR))
+        {
+            swapchainPresentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+        }
+    }
 
-    VkPipelineStageFlags pipeStageFlags = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-    VkSubmitInfo submitInfo[1] = {};
-    submitInfo[0].pNext = nullptr;
-    submitInfo[0].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo[0].waitSemaphoreCount = 0;
-    submitInfo[0].pWaitSemaphores = nullptr;
-    submitInfo[0].pWaitDstStageMask = &pipeStageFlags;
-    submitInfo[0].commandBufferCount = 1;
-    submitInfo[0].pCommandBuffers = &m_loadCmdBuf;
-    submitInfo[0].signalSemaphoreCount = 0;
-    submitInfo[0].pSignalSemaphores = nullptr;
+    // Determine the number of VkImage's to use in the swap chain (we desire to
+    // own only 1 image at a time, besides the images being displayed and
+    // queued for display):
+    uint32_t desiredNumberOfSwapChainImages = surfCapabilities.minImageCount + 1;
+    if ((surfCapabilities.maxImageCount > 0) &&
+        (desiredNumberOfSwapChainImages > surfCapabilities.maxImageCount))
+    {
+        // Application must settle for fewer images than desired:
+        desiredNumberOfSwapChainImages = surfCapabilities.maxImageCount;
+    }
 
-    ThrowIfFailed(vkQueueSubmit(m_queue, 1, submitInfo, m_loadFence));
-    ThrowIfFailed(vkWaitForFences(m_dev, 1, &m_loadFence, VK_TRUE, -1));
+    VkSurfaceTransformFlagBitsKHR preTransform;
+    if (surfCapabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+        preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    else
+        preTransform = surfCapabilities.currentTransform;
 
-    /* Reset fence and command buffer */
-    ThrowIfFailed(vkResetFences(m_dev, 1, &m_loadFence));
-    ThrowIfFailed(vkResetCommandBuffer(m_loadCmdBuf, 0));
-    ThrowIfFailed(vkBeginCommandBuffer(m_loadCmdBuf, &cmdBufBeginInfo));
+    VkSwapchainCreateInfoKHR swapChainInfo = {};
+    swapChainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapChainInfo.pNext = nullptr;
+    swapChainInfo.surface = surface;
+    swapChainInfo.minImageCount = desiredNumberOfSwapChainImages;
+    swapChainInfo.imageFormat = format;
+    swapChainInfo.imageExtent.width = swapChainExtent.width;
+    swapChainInfo.imageExtent.height = swapChainExtent.height;
+    swapChainInfo.preTransform = preTransform;
+    swapChainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swapChainInfo.imageArrayLayers = 1;
+    swapChainInfo.presentMode = swapchainPresentMode;
+    swapChainInfo.oldSwapchain = nullptr;
+    swapChainInfo.clipped = true;
+    swapChainInfo.imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+    swapChainInfo.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    swapChainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapChainInfo.queueFamilyIndexCount = 0;
+    swapChainInfo.pQueueFamilyIndices = nullptr;
+
+    Window::SwapChain& sc = windowCtx.m_swapChains[windowCtx.m_activeSwapChain ^ 1];
+    sc.destroy(m_dev);
+    ThrowIfFailed(vkCreateSwapchainKHR(m_dev, &swapChainInfo, nullptr, &sc.m_swapChain));
+
+    uint32_t swapchainImageCount;
+    ThrowIfFailed(vkGetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, nullptr));
+
+    VkImage* swapchainImages = (VkImage*)malloc(swapchainImageCount * sizeof(VkImage));
+    ThrowIfFailed(vkGetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, swapchainImages));
+
+    sc.m_bufs.resize(swapchainImageCount);
+    for (uint32_t i=0 ; i<swapchainImageCount ; ++i)
+        sc.m_bufs[i].m_image = swapchainImages[i];
+    free(swapchainImages);
 }
 
 struct VulkanData : IGraphicsData
@@ -544,8 +617,10 @@ struct VulkanData : IGraphicsData
     VulkanData(VulkanContext* ctx) : m_ctx(ctx) {}
     ~VulkanData()
     {
-        vkFreeMemory(m_ctx->m_dev, m_bufMem, nullptr);
-        vkFreeMemory(m_ctx->m_dev, m_texMem, nullptr);
+        if (m_bufMem)
+            vkFreeMemory(m_ctx->m_dev, m_bufMem, nullptr);
+        if (m_texMem)
+            vkFreeMemory(m_ctx->m_dev, m_texMem, nullptr);
     }
 };
 
@@ -786,9 +861,11 @@ public:
     ~VulkanTextureS()
     {
         vkDestroyImageView(m_ctx->m_dev, m_gpuView, nullptr);
-        vkDestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
         vkDestroyImage(m_ctx->m_dev, m_gpuTex, nullptr);
-        vkFreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
+        if (m_cpuBuf)
+            vkDestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
+        if (m_cpuMem)
+            vkFreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
     }
 
     void deleteUploadObjects()
@@ -977,9 +1054,11 @@ public:
     ~VulkanTextureSA()
     {
         vkDestroyImageView(m_ctx->m_dev, m_gpuView, nullptr);
-        vkDestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
         vkDestroyImage(m_ctx->m_dev, m_gpuTex, nullptr);
-        vkFreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
+        if (m_cpuBuf)
+            vkDestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
+        if (m_cpuMem)
+            vkFreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
     }
 
     void deleteUploadObjects()
@@ -1246,6 +1325,7 @@ class VulkanTextureR : public ITextureR
     {
         /* no-ops on first call */
         doDestroy();
+        m_layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
         /* color target */
         VkImageCreateInfo texCreateInfo = {};
@@ -1332,6 +1412,11 @@ class VulkanTextureR : public ITextureR
 
         /* allocate memory */
         ThrowIfFailed(vkAllocateMemory(ctx->m_dev, &memAlloc, nullptr, &m_gpuMem));
+
+        uint8_t* mappedData;
+        ThrowIfFailed(vkMapMemory(ctx->m_dev, m_gpuMem, 0, memAlloc.allocationSize, 0, reinterpret_cast<void**>(&mappedData)));
+        memset(mappedData, 0, memAlloc.allocationSize);
+        vkUnmapMemory(ctx->m_dev, m_gpuMem);
 
         /* bind memory */
         ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_colorTex, m_gpuMem, gpuOffsets[0]));
@@ -1435,6 +1520,8 @@ public:
 
     VkFramebuffer m_framebuffer = VK_NULL_HANDLE;
     VkRenderPassBeginInfo m_passBeginInfo = {};
+
+    VkImageLayout m_layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
     void doDestroy();
     ~VulkanTextureR();
@@ -2026,6 +2113,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
 
     bool m_running = true;
     bool m_dynamicNeedsReset = false;
+    bool m_submitted = false;
 
     size_t m_fillBuf = 0;
     size_t m_drawBuf = 0;
@@ -2087,13 +2175,13 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
 
         VkSemaphoreCreateInfo semInfo = {};
         semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        ThrowIfFailed(vkCreateSemaphore(ctx->m_dev, &semInfo, nullptr, &m_swapChainReadySem));
         ThrowIfFailed(vkCreateSemaphore(ctx->m_dev, &semInfo, nullptr, &m_drawCompleteSem));
 
         VkFenceCreateInfo fenceInfo = {};
         fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
         ThrowIfFailed(vkCreateFence(m_ctx->m_dev, &fenceInfo, nullptr, &m_drawCompleteFence));
-        fenceInfo.flags = 0;
         ThrowIfFailed(vkCreateFence(m_ctx->m_dev, &fenceInfo, nullptr, &m_dynamicBufFence));
     }
 
@@ -2128,22 +2216,26 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         VulkanTextureR* ctarget = static_cast<VulkanTextureR*>(target);
         VkCommandBuffer cmdBuf = m_cmdBufs[m_fillBuf];
 
-        if (m_boundTarget)
+        if (m_boundTarget != target)
         {
-            SetImageLayout(cmdBuf, m_boundTarget->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
-                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
-            SetImageLayout(cmdBuf, m_boundTarget->m_depthTex, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
-                           VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
+            if (m_boundTarget)
+            {
+                SetImageLayout(cmdBuf, m_boundTarget->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
+                               VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
+                SetImageLayout(cmdBuf, m_boundTarget->m_depthTex, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+                               VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
+            }
+
+            SetImageLayout(cmdBuf, ctarget->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
+                           ctarget->m_layout, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
+            SetImageLayout(cmdBuf, ctarget->m_depthTex, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+                           ctarget->m_layout, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, 1);
+            ctarget->m_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+            m_boundTarget = ctarget;
         }
 
-        SetImageLayout(cmdBuf, ctarget->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
-                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
-        SetImageLayout(cmdBuf, ctarget->m_depthTex, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
-                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, 1);
-
         vkCmdBeginRenderPass(cmdBuf, &ctarget->m_passBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-        m_boundTarget = ctarget;
     }
 
     void setViewport(const SWindowRect& rect, float znear, float zfar)
@@ -2238,25 +2330,30 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         vkCmdDrawIndexed(m_cmdBufs[m_fillBuf], count, instCount, start, 0, 0);
     }
 
-    bool m_doPresent = false;
+    ITextureR* m_resolveDispSource = nullptr;
     void resolveDisplay(ITextureR* source)
     {
-        VkCommandBuffer cmdBuf = m_cmdBufs[m_fillBuf];
-        VulkanTextureR* csource = static_cast<VulkanTextureR*>(source);
+        m_resolveDispSource = source;
+    }
 
-        vkCmdEndRenderPass(cmdBuf);
+    bool _resolveDisplay()
+    {
+        if (!m_resolveDispSource)
+            return false;
+        VulkanContext::Window::SwapChain& sc = m_windowCtx->m_swapChains[m_windowCtx->m_activeSwapChain];
+        if (!sc.m_swapChain)
+            return false;
 
-        if (m_swapChainReadySem)
-            vkDestroySemaphore(m_ctx->m_dev, m_swapChainReadySem, nullptr);
-        VkSemaphoreCreateInfo semInfo = {};
-        semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-        ThrowIfFailed(vkCreateSemaphore(m_ctx->m_dev, &semInfo, nullptr, &m_swapChainReadySem));
+        VkCommandBuffer cmdBuf = m_cmdBufs[m_drawBuf];
+        VulkanTextureR* csource = static_cast<VulkanTextureR*>(m_resolveDispSource);
 
-        ThrowIfFailed(vkAcquireNextImageKHR(m_ctx->m_dev, m_windowCtx->m_swapChain, UINT64_MAX,
-                                            m_swapChainReadySem, nullptr, &m_windowCtx->m_backBuf));
-        VulkanContext::Window::Buffer& dest = m_windowCtx->m_bufs[m_windowCtx->m_backBuf];
+        ThrowIfFailed(vkAcquireNextImageKHR(m_ctx->m_dev, sc.m_swapChain, UINT64_MAX,
+                                            m_swapChainReadySem, nullptr, &sc.m_backBuf));
+        VulkanContext::Window::SwapChain::Buffer& dest = sc.m_bufs[sc.m_backBuf];
+        SetImageLayout(cmdBuf, dest.m_image, VK_IMAGE_ASPECT_COLOR_BIT,
+                       dest.m_layout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
 
-        if (source == m_boundTarget)
+        if (m_resolveDispSource == m_boundTarget)
             SetImageLayout(cmdBuf, csource->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
                            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
 
@@ -2299,11 +2396,16 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
                            1, &copyInfo);
         }
 
-        if (source == m_boundTarget)
+        SetImageLayout(cmdBuf, dest.m_image, VK_IMAGE_ASPECT_COLOR_BIT,
+                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1, 1);
+        dest.m_layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+        if (m_resolveDispSource == m_boundTarget)
             SetImageLayout(cmdBuf, csource->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
 
-        m_doPresent = true;
+        m_resolveDispSource = nullptr;
+        return true;
     }
 
     void resolveBindTexture(ITextureR* texture, const SWindowRect& rect, bool tlOrigin, bool color, bool depth)
@@ -2475,10 +2577,14 @@ VulkanTextureR::~VulkanTextureR()
     vkDestroyImage(m_q->m_ctx->m_dev, m_colorTex, nullptr);
     vkDestroyImageView(m_q->m_ctx->m_dev, m_depthView, nullptr);
     vkDestroyImage(m_q->m_ctx->m_dev, m_depthTex, nullptr);
-    vkDestroyImageView(m_q->m_ctx->m_dev, m_colorBindView, nullptr);
-    vkDestroyImage(m_q->m_ctx->m_dev, m_colorBindTex, nullptr);
-    vkDestroyImageView(m_q->m_ctx->m_dev, m_depthBindView, nullptr);
-    vkDestroyImage(m_q->m_ctx->m_dev, m_depthBindTex, nullptr);
+    if (m_colorBindView)
+        vkDestroyImageView(m_q->m_ctx->m_dev, m_colorBindView, nullptr);
+    if (m_colorBindTex)
+        vkDestroyImage(m_q->m_ctx->m_dev, m_colorBindTex, nullptr);
+    if (m_depthBindView)
+        vkDestroyImageView(m_q->m_ctx->m_dev, m_depthBindView, nullptr);
+    if (m_depthBindTex)
+        vkDestroyImage(m_q->m_ctx->m_dev, m_depthBindTex, nullptr);
     vkFreeMemory(m_q->m_ctx->m_dev, m_gpuMem, nullptr);
     if (m_q->m_boundTarget == this)
         m_q->m_boundTarget = nullptr;
@@ -2491,7 +2597,7 @@ void VulkanGraphicsBufferD::update(int b)
     {
         void* ptr;
         ThrowIfFailed(vkMapMemory(m_q->m_ctx->m_dev, m_mem,
-                                  m_bufferInfo[slot].offset, m_bufferInfo[slot].range, 0, &ptr));
+                                  m_bufferInfo[b].offset, m_bufferInfo[b].range, 0, &ptr));
         memmove(ptr, m_cpuBuf.get(), m_cpuSz);
 
         /* flush to gpu */
@@ -2499,8 +2605,8 @@ void VulkanGraphicsBufferD::update(int b)
         mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
         mappedRange.pNext = nullptr;
         mappedRange.memory = m_mem;
-        mappedRange.offset = m_bufferInfo[slot].offset;
-        mappedRange.size = m_bufferInfo[slot].range;
+        mappedRange.offset = m_bufferInfo[b].offset;
+        mappedRange.size = m_bufferInfo[b].range;
         ThrowIfFailed(vkFlushMappedMemoryRanges(m_q->m_ctx->m_dev, 1, &mappedRange));
 
         vkUnmapMemory(m_q->m_ctx->m_dev, m_mem);
@@ -2945,17 +3051,21 @@ GraphicsDataToken VulkanDataFactory::commitTransaction
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &m_ctx->m_loadCmdBuf;
-    ThrowIfFailed(vkQueueSubmit(m_ctx->m_queue, 1, &submitInfo, m_ctx->m_loadFence));
+
+    /* Take exclusive lock here and submit queue */
+    std::unique_lock<std::mutex> qlk(m_ctx->m_queueLock);
+    ThrowIfFailed(vkQueueWaitIdle(m_ctx->m_queue));
+    ThrowIfFailed(vkQueueSubmit(m_ctx->m_queue, 1, &submitInfo, VK_NULL_HANDLE));
 
     /* Commit data bindings (create descriptor heaps) */
     for (std::unique_ptr<VulkanShaderDataBinding>& bind : retval->m_SBinds)
         bind->commit(m_ctx);
 
-    /* Block handle return until data is ready on GPU */
-    ThrowIfFailed(vkWaitForFences(m_ctx->m_dev, 1, &m_ctx->m_loadFence, VK_TRUE, -1));
+    /* Wait for uploads to complete */
+    ThrowIfFailed(vkQueueWaitIdle(m_ctx->m_queue));
+    qlk.unlock();
 
-    /* Reset fence and command buffer */
-    ThrowIfFailed(vkResetFences(m_ctx->m_dev, 1, &m_ctx->m_loadFence));
+    /* Reset command buffer */
     ThrowIfFailed(vkResetCommandBuffer(m_ctx->m_loadCmdBuf, 0));
     VkCommandBufferBeginInfo cmdBufBeginInfo = {};
     cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -2996,9 +3106,13 @@ void VulkanCommandQueue::execute()
     datalk.unlock();
 
     /* Perform dynamic uploads */
+    std::unique_lock<std::mutex> lk(m_ctx->m_queueLock);
     if (!m_dynamicNeedsReset)
     {
         vkEndCommandBuffer(m_dynamicCmdBufs[m_fillBuf]);
+
+        vkWaitForFences(m_ctx->m_dev, 1, &m_dynamicBufFence, VK_FALSE, -1);
+        vkResetFences(m_ctx->m_dev, 1, &m_dynamicBufFence);
 
         VkSubmitInfo submitInfo = {};
         submitInfo.pNext = nullptr;
@@ -3014,12 +3128,12 @@ void VulkanCommandQueue::execute()
     }
 
     /* Check on fence */
-    if (vkGetFenceStatus(m_ctx->m_dev, m_drawCompleteFence) == VK_NOT_READY)
+    if (m_submitted && vkGetFenceStatus(m_ctx->m_dev, m_drawCompleteFence) == VK_NOT_READY)
     {
         /* Abandon this list (renderer too slow) */
         resetCommandBuffer();
         m_dynamicNeedsReset = true;
-        m_doPresent = false;
+        m_resolveDispSource = nullptr;
         return;
     }
 
@@ -3027,16 +3141,27 @@ void VulkanCommandQueue::execute()
     if (m_texResizes.size())
     {
         for (const auto& resize : m_texResizes)
+        {
+            if (m_boundTarget == resize.first)
+                m_boundTarget = nullptr;
             resize.first->resize(m_ctx, resize.second.first, resize.second.second);
+        }
         m_texResizes.clear();
         resetCommandBuffer();
         m_dynamicNeedsReset = true;
-        m_doPresent = false;
+        m_resolveDispSource = nullptr;
+
+        VulkanContext::Window::SwapChain& otherSc = m_windowCtx->m_swapChains[m_windowCtx->m_activeSwapChain ^ 1];
+        if (otherSc.m_swapChain)
+        {
+            otherSc.destroy(m_ctx->m_dev);
+            m_windowCtx->m_activeSwapChain ^= 1;
+        }
         return;
     }
 
     vkResetFences(m_ctx->m_dev, 1, &m_drawCompleteFence);
-    vkEndCommandBuffer(m_cmdBufs[m_fillBuf]);
+    vkCmdEndRenderPass(m_cmdBufs[m_fillBuf]);
 
     m_drawBuf = m_fillBuf;
     m_fillBuf ^= 1;
@@ -3046,34 +3171,39 @@ void VulkanCommandQueue::execute()
     VkSubmitInfo submitInfo = {};
     submitInfo.pNext = nullptr;
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &m_swapChainReadySem;
+    submitInfo.waitSemaphoreCount = 0;
+    submitInfo.pWaitSemaphores = nullptr;
     submitInfo.pWaitDstStageMask = &pipeStageFlags;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &m_cmdBufs[m_drawBuf];
     submitInfo.signalSemaphoreCount = 0;
     submitInfo.pSignalSemaphores = nullptr;
-    if (m_doPresent)
+    if (_resolveDisplay())
     {
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = &m_swapChainReadySem;
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = &m_drawCompleteSem;
     }
+    ThrowIfFailed(vkEndCommandBuffer(m_cmdBufs[m_drawBuf]));
     ThrowIfFailed(vkQueueSubmit(m_ctx->m_queue, 1, &submitInfo, m_drawCompleteFence));
+    m_submitted = true;
 
-    if (m_doPresent)
+    if (submitInfo.signalSemaphoreCount)
     {
+        VulkanContext::Window::SwapChain& thisSc = m_windowCtx->m_swapChains[m_windowCtx->m_activeSwapChain];
+
         VkPresentInfoKHR present;
         present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
         present.pNext = nullptr;
         present.swapchainCount = 1;
-        present.pSwapchains = &m_windowCtx->m_swapChain;
-        present.pImageIndices = &m_windowCtx->m_backBuf;
+        present.pSwapchains = &thisSc.m_swapChain;
+        present.pImageIndices = &thisSc.m_backBuf;
         present.waitSemaphoreCount = 1;
         present.pWaitSemaphores = &m_drawCompleteSem;
         present.pResults = nullptr;
 
         ThrowIfFailed(vkQueuePresentKHR(m_ctx->m_queue, &present));
-        m_doPresent = false;
     }
 
     resetCommandBuffer();
