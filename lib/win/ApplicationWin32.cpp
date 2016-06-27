@@ -141,39 +141,44 @@ public:
 
             /* Create device */
             HRESULT hr = MyD3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), &m_3dCtx.m_ctx12.m_dev);
-            if (FAILED(hr))
-                Log.report(logvisor::Fatal, "unable to create D3D12 device");
-
-            /* Obtain DXGI Factory */
-            hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory2), &m_3dCtx.m_ctx12.m_dxFactory);
-            if (FAILED(hr))
-                Log.report(logvisor::Fatal, "unable to create DXGI factory");
-
-            /* Establish loader objects */
-            if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
-                __uuidof(ID3D12CommandAllocator), &m_3dCtx.m_ctx12.m_loadqalloc)))
-                Log.report(logvisor::Fatal, "unable to create loader allocator");
-
-            D3D12_COMMAND_QUEUE_DESC desc =
+            if (!FAILED(hr))
             {
-                D3D12_COMMAND_LIST_TYPE_DIRECT,
-                D3D12_COMMAND_QUEUE_PRIORITY_NORMAL,
-                D3D12_COMMAND_QUEUE_FLAG_NONE
-            };
-            if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandQueue(&desc, __uuidof(ID3D12CommandQueue), &m_3dCtx.m_ctx12.m_loadq)))
-                Log.report(logvisor::Fatal, "unable to create loader queue");
+                /* Obtain DXGI Factory */
+                hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory2), &m_3dCtx.m_ctx12.m_dxFactory);
+                if (FAILED(hr))
+                    Log.report(logvisor::Fatal, "unable to create DXGI factory");
 
-            if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), &m_3dCtx.m_ctx12.m_loadfence)))
-                Log.report(logvisor::Fatal, "unable to create loader fence");
+                /* Establish loader objects */
+                if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+                    __uuidof(ID3D12CommandAllocator), &m_3dCtx.m_ctx12.m_loadqalloc)))
+                    Log.report(logvisor::Fatal, "unable to create loader allocator");
 
-            m_3dCtx.m_ctx12.m_loadfencehandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+                D3D12_COMMAND_QUEUE_DESC desc =
+                {
+                    D3D12_COMMAND_LIST_TYPE_DIRECT,
+                    D3D12_COMMAND_QUEUE_PRIORITY_NORMAL,
+                    D3D12_COMMAND_QUEUE_FLAG_NONE
+                };
+                if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandQueue(&desc, __uuidof(ID3D12CommandQueue), &m_3dCtx.m_ctx12.m_loadq)))
+                    Log.report(logvisor::Fatal, "unable to create loader queue");
 
-            if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_3dCtx.m_ctx12.m_loadqalloc.Get(),
-                nullptr, __uuidof(ID3D12GraphicsCommandList), &m_3dCtx.m_ctx12.m_loadlist)))
-                Log.report(logvisor::Fatal, "unable to create loader list");
+                if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), &m_3dCtx.m_ctx12.m_loadfence)))
+                    Log.report(logvisor::Fatal, "unable to create loader fence");
 
-            Log.report(logvisor::Info, "initialized D3D12 renderer");
-            return;
+                m_3dCtx.m_ctx12.m_loadfencehandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+
+                if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_3dCtx.m_ctx12.m_loadqalloc.Get(),
+                    nullptr, __uuidof(ID3D12GraphicsCommandList), &m_3dCtx.m_ctx12.m_loadlist)))
+                    Log.report(logvisor::Fatal, "unable to create loader list");
+
+                Log.report(logvisor::Info, "initialized D3D12 renderer");
+                return;
+            }
+            else
+            {
+                /* Some Win10 client HW doesn't support D3D12 (despite being supposedly HW-agnostic) */
+                m_3dCtx.m_ctx12.m_dev.Reset();
+            }
         }
 #endif
         HMODULE d3d11lib = LoadLibraryW(L"D3D11.dll");
