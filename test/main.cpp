@@ -239,8 +239,8 @@ struct TestApplicationCallback : IApplicationCallback
             /* Make Tri-strip VBO */
             struct Vert
             {
-                float pos[3];
-                float uv[2];
+                float pos[4];
+                float uv[4];
             };
             static const Vert quad[4] =
             {
@@ -255,8 +255,8 @@ struct TestApplicationCallback : IApplicationCallback
             /* Make vertex format */
             VertexElementDescriptor descs[2] =
             {
-                {vbo, nullptr, VertexSemantic::Position3},
-                {vbo, nullptr, VertexSemantic::UV2}
+                {vbo, nullptr, VertexSemantic::Position4},
+                {vbo, nullptr, VertexSemantic::UV4}
             };
             IVertexFormat* vfmt = ctx.newVertexFormat(2, descs);
 

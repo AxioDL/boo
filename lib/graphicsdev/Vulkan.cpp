@@ -460,6 +460,7 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
 
     Window::SwapChain& sc = windowCtx.m_swapChains[windowCtx.m_activeSwapChain];
     ThrowIfFailed(vkCreateSwapchainKHR(m_dev, &swapChainInfo, nullptr, &sc.m_swapChain));
+    sc.m_format = format;
 
     uint32_t swapchainImageCount;
     ThrowIfFailed(vkGetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, nullptr));
@@ -587,6 +588,7 @@ void VulkanContext::resizeSwapChain(VulkanContext::Window& windowCtx, VkSurfaceK
     Window::SwapChain& sc = windowCtx.m_swapChains[windowCtx.m_activeSwapChain ^ 1];
     sc.destroy(m_dev);
     ThrowIfFailed(vkCreateSwapchainKHR(m_dev, &swapChainInfo, nullptr, &sc.m_swapChain));
+    sc.m_format = format;
 
     uint32_t swapchainImageCount;
     ThrowIfFailed(vkGetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, nullptr));
@@ -2292,20 +2294,20 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
 
         if (render && depth)
         {
-            clr[0].clearValue.color.uint32[0] = m_clearColor[0] * 255;
-            clr[0].clearValue.color.uint32[1] = m_clearColor[1] * 255;
-            clr[0].clearValue.color.uint32[2] = m_clearColor[2] * 255;
-            clr[0].clearValue.color.uint32[3] = m_clearColor[3] * 255;
+            clr[0].clearValue.color.float32[0] = m_clearColor[0];
+            clr[0].clearValue.color.float32[1] = m_clearColor[1];
+            clr[0].clearValue.color.float32[2] = m_clearColor[2];
+            clr[0].clearValue.color.float32[3] = m_clearColor[3];
             clr[0].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             clr[1].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
             vkCmdClearAttachments(m_cmdBufs[m_fillBuf], 2, clr, 1, &rect);
         }
         else if (render)
         {
-            clr[0].clearValue.color.uint32[0] = m_clearColor[0] * 255;
-            clr[0].clearValue.color.uint32[1] = m_clearColor[1] * 255;
-            clr[0].clearValue.color.uint32[2] = m_clearColor[2] * 255;
-            clr[0].clearValue.color.uint32[3] = m_clearColor[3] * 255;
+            clr[0].clearValue.color.float32[0] = m_clearColor[0];
+            clr[0].clearValue.color.float32[1] = m_clearColor[1];
+            clr[0].clearValue.color.float32[2] = m_clearColor[2];
+            clr[0].clearValue.color.float32[3] = m_clearColor[3];
             clr[0].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             vkCmdClearAttachments(m_cmdBufs[m_fillBuf], 1, clr, 1, &rect);
         }
@@ -2384,22 +2386,41 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         }
         else
         {
-            VkImageCopy copyInfo = {};
-            copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyInfo.srcSubresource.mipLevel = 0;
-            copyInfo.srcSubresource.baseArrayLayer = 0;
-            copyInfo.srcSubresource.layerCount = 1;
-            copyInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyInfo.dstSubresource.mipLevel = 0;
-            copyInfo.dstSubresource.baseArrayLayer = 0;
-            copyInfo.dstSubresource.layerCount = 1;
-            copyInfo.extent.width = csource->m_width;
-            copyInfo.extent.height = csource->m_height;
-            copyInfo.extent.depth = 1;
-            vkCmdCopyImage(cmdBuf,
-                           csource->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                           dest.m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                           1, &copyInfo);
+            if (sc.m_format == VK_FORMAT_R8G8B8A8_UNORM)
+            {
+                VkImageCopy copyInfo = {};
+                copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                copyInfo.srcSubresource.mipLevel = 0;
+                copyInfo.srcSubresource.baseArrayLayer = 0;
+                copyInfo.srcSubresource.layerCount = 1;
+                copyInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                copyInfo.dstSubresource.mipLevel = 0;
+                copyInfo.dstSubresource.baseArrayLayer = 0;
+                copyInfo.dstSubresource.layerCount = 1;
+                copyInfo.extent.width = csource->m_width;
+                copyInfo.extent.height = csource->m_height;
+                copyInfo.extent.depth = 1;
+                vkCmdCopyImage(cmdBuf,
+                               csource->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               dest.m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               1, &copyInfo);
+            }
+            else
+            {
+                VkImageBlit blitInfo = {};
+                blitInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                blitInfo.srcSubresource.layerCount = 1;
+                blitInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                blitInfo.dstSubresource.layerCount = 1;
+                blitInfo.dstOffsets[1].x = csource->m_width;
+                blitInfo.dstOffsets[1].y = csource->m_height;
+                blitInfo.srcOffsets[1].x = csource->m_width;
+                blitInfo.srcOffsets[1].y = csource->m_height;
+                vkCmdBlitImage(cmdBuf,
+                               csource->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               dest.m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               1, &blitInfo, VK_FILTER_NEAREST);
+            }
         }
 
         SetImageLayout(cmdBuf, dest.m_image, VK_IMAGE_ASPECT_COLOR_BIT,

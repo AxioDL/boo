@@ -47,6 +47,7 @@ struct VulkanContext
     {
         struct SwapChain
         {
+            VkFormat m_format = VK_FORMAT_UNDEFINED;
             VkSwapchainKHR m_swapChain = VK_NULL_HANDLE;
             struct Buffer
             {
