@@ -2,6 +2,7 @@
 #include <math.h>
 #include <boo/boo.hpp>
 #include <boo/graphicsdev/GL.hpp>
+#include <boo/graphicsdev/Vulkan.hpp>
 #include <boo/graphicsdev/D3D.hpp>
 #include <boo/graphicsdev/Metal.hpp>
 #include <thread>
@@ -275,7 +276,8 @@ struct TestApplicationCallback : IApplicationCallback
 
             /* Make shader pipeline */
             IShaderPipeline* pipeline = nullptr;
-            if (ctx.platform() == IGraphicsDataFactory::Platform::OGL)
+            auto plat = ctx.platform();
+            if (plat == IGraphicsDataFactory::Platform::OGL)
             {
                 GLDataFactory::Context& glF = dynamic_cast<GLDataFactory::Context&>(ctx);
 
@@ -306,6 +308,38 @@ struct TestApplicationCallback : IApplicationCallback
                                                  BlendFactor::One, BlendFactor::Zero,
                                                  Primitive::TriStrips, true, true, false);
             }
+#if BOO_HAS_VULKAN
+            else if (plat == IGraphicsDataFactory::Platform::Vulkan)
+            {
+                VulkanDataFactory::Context& vkF = dynamic_cast<VulkanDataFactory::Context&>(ctx);
+
+                static const char* VS =
+                "#version 330\n"
+                "layout(location=0) in vec3 in_pos;\n"
+                "layout(location=1) in vec2 in_uv;\n"
+                "out vec4 out_uv;\n"
+                "void main()\n"
+                "{\n"
+                "    gl_Position = vec4(in_pos, 1.0);\n"
+                "    out_uv.xy = in_uv;\n"
+                "}\n";
+
+                static const char* FS =
+                "#version 330\n"
+                BOO_GLSL_BINDING_HEAD
+                "precision highp float;\n"
+                "TBINDING0 uniform sampler2D texs[1];\n"
+                "layout(location=0) out vec4 out_frag;\n"
+                "in vec4 out_uv;\n"
+                "void main()\n"
+                "{\n"
+                "    out_frag = texture(texs[0], out_uv.xy);\n"
+                "}\n";
+
+                pipeline = vkF.newShaderPipeline(VS, FS, vfmt, BlendFactor::One, BlendFactor::Zero,
+                                                 Primitive::TriStrips, false, false, false);
+            }
+#endif
 #if _WIN32
             else if (ctx.platform() == IGraphicsDataFactory::Platform::D3D12 ||
                      ctx.platform() == IGraphicsDataFactory::Platform::D3D11)

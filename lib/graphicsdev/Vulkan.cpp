@@ -1307,8 +1307,6 @@ public:
     TextureFormat format() const {return m_fmt;}
 };
 
-static const VkClearValue BlackClear[2] = {{},{}};
-
 class VulkanTextureR : public ITextureR
 {
     friend class VulkanDataFactory;
@@ -1486,8 +1484,8 @@ class VulkanTextureR : public ITextureR
         m_passBeginInfo.renderArea.offset.y = 0;
         m_passBeginInfo.renderArea.extent.width = width;
         m_passBeginInfo.renderArea.extent.height = height;
-        m_passBeginInfo.clearValueCount = 2;
-        m_passBeginInfo.pClearValues = BlackClear;
+        m_passBeginInfo.clearValueCount = 0;
+        m_passBeginInfo.pClearValues = nullptr;
     }
 
     VulkanCommandQueue* m_q;
@@ -2294,12 +2292,20 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
 
         if (render && depth)
         {
+            clr[0].clearValue.color.uint32[0] = m_clearColor[0] * 255;
+            clr[0].clearValue.color.uint32[1] = m_clearColor[1] * 255;
+            clr[0].clearValue.color.uint32[2] = m_clearColor[2] * 255;
+            clr[0].clearValue.color.uint32[3] = m_clearColor[3] * 255;
             clr[0].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             clr[1].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
             vkCmdClearAttachments(m_cmdBufs[m_fillBuf], 2, clr, 1, &rect);
         }
         else if (render)
         {
+            clr[0].clearValue.color.uint32[0] = m_clearColor[0] * 255;
+            clr[0].clearValue.color.uint32[1] = m_clearColor[1] * 255;
+            clr[0].clearValue.color.uint32[2] = m_clearColor[2] * 255;
+            clr[0].clearValue.color.uint32[3] = m_clearColor[3] * 255;
             clr[0].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             vkCmdClearAttachments(m_cmdBufs[m_fillBuf], 1, clr, 1, &rect);
         }
@@ -3154,7 +3160,8 @@ void VulkanCommandQueue::execute()
         VulkanContext::Window::SwapChain& otherSc = m_windowCtx->m_swapChains[m_windowCtx->m_activeSwapChain ^ 1];
         if (otherSc.m_swapChain)
         {
-            otherSc.destroy(m_ctx->m_dev);
+            VulkanContext::Window::SwapChain& thisSc = m_windowCtx->m_swapChains[m_windowCtx->m_activeSwapChain];
+            thisSc.destroy(m_ctx->m_dev);
             m_windowCtx->m_activeSwapChain ^= 1;
         }
         return;
