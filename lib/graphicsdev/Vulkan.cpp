@@ -1654,7 +1654,7 @@ class VulkanShaderPipeline : public IShaderPipeline
                          const VulkanVertexFormat* vtxFmt,
                          BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                          bool depthTest, bool depthWrite, bool backfaceCulling)
-    : m_ctx(ctx), m_pipelineCache(pipelineCache)
+    : m_ctx(ctx)
     {
         VkDynamicState dynamicStateEnables[VK_DYNAMIC_STATE_RANGE_SIZE] = {};
         VkPipelineDynamicStateCreateInfo dynamicState = {};
@@ -1767,11 +1767,9 @@ class VulkanShaderPipeline : public IShaderPipeline
     }
 public:
     VkPipeline m_pipeline;
-    VkPipelineCache m_pipelineCache;
     ~VulkanShaderPipeline()
     {
         vk::DestroyPipeline(m_ctx->m_dev, m_pipeline, nullptr);
-        vk::DestroyPipelineCache(m_ctx->m_dev, m_pipelineCache, nullptr);
     }
     VulkanShaderPipeline& operator=(const VulkanShaderPipeline&) = delete;
     VulkanShaderPipeline(const VulkanShaderPipeline&) = delete;
