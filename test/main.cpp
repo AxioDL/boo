@@ -223,7 +223,7 @@ struct TestApplicationCallback : IApplicationCallback
     std::mutex m_initmt;
     std::condition_variable m_initcv;
 
-    static void LoaderProc(TestApplicationCallback* self)
+    static GraphicsDataToken LoaderProc(TestApplicationCallback* self)
     {
         std::unique_lock<std::mutex> lk(self->m_initmt);
 
@@ -239,8 +239,8 @@ struct TestApplicationCallback : IApplicationCallback
             /* Make Tri-strip VBO */
             struct Vert
             {
-                float pos[4];
-                float uv[4];
+                float pos[3];
+                float uv[2];
             };
             static const Vert quad[4] =
             {
@@ -255,8 +255,8 @@ struct TestApplicationCallback : IApplicationCallback
             /* Make vertex format */
             VertexElementDescriptor descs[2] =
             {
-                {vbo, nullptr, VertexSemantic::Position4},
-                {vbo, nullptr, VertexSemantic::UV4}
+                {vbo, nullptr, VertexSemantic::Position3},
+                {vbo, nullptr, VertexSemantic::UV2}
             };
             IVertexFormat* vfmt = ctx.newVertexFormat(2, descs);
 
@@ -315,13 +315,14 @@ struct TestApplicationCallback : IApplicationCallback
 
                 static const char* VS =
                 "#version 330\n"
+                BOO_GLSL_BINDING_HEAD
                 "layout(location=0) in vec3 in_pos;\n"
                 "layout(location=1) in vec2 in_uv;\n"
-                "out vec4 out_uv;\n"
+                "SBINDING(0) out vec2 out_uv;\n"
                 "void main()\n"
                 "{\n"
                 "    gl_Position = vec4(in_pos, 1.0);\n"
-                "    out_uv.xy = in_uv;\n"
+                "    out_uv = in_uv;\n"
                 "}\n";
 
                 static const char* FS =
@@ -330,19 +331,19 @@ struct TestApplicationCallback : IApplicationCallback
                 "precision highp float;\n"
                 "TBINDING0 uniform sampler2D texs[1];\n"
                 "layout(location=0) out vec4 out_frag;\n"
-                "in vec4 out_uv;\n"
+                "SBINDING(0) in vec2 out_uv;\n"
                 "void main()\n"
                 "{\n"
-                "    out_frag = texture(texs[0], out_uv.xy);\n"
+                "    out_frag = texture(texs[0], out_uv);\n"
                 "}\n";
 
                 pipeline = vkF.newShaderPipeline(VS, FS, vfmt, BlendFactor::One, BlendFactor::Zero,
-                                                 Primitive::TriStrips, false, false, false);
+                                                 Primitive::TriStrips, true, true, false);
             }
 #endif
 #if _WIN32
-            else if (ctx.platform() == IGraphicsDataFactory::Platform::D3D12 ||
-                     ctx.platform() == IGraphicsDataFactory::Platform::D3D11)
+            else if (plat == IGraphicsDataFactory::Platform::D3D12 ||
+                     plat == IGraphicsDataFactory::Platform::D3D11)
             {
                 ID3DDataFactory::Context& d3dF = dynamic_cast<ID3DDataFactory::Context&>(ctx);
 
@@ -374,7 +375,7 @@ struct TestApplicationCallback : IApplicationCallback
                                                   true, true, false);
             }
 #elif BOO_HAS_METAL
-            else if (ctx.platform() == IGraphicsDataFactory::Platform::Metal)
+            else if (plat == IGraphicsDataFactory::Platform::Metal)
             {
                 MetalDataFactory::Context& metalF = dynamic_cast<MetalDataFactory::Context&>(ctx);
 
@@ -426,6 +427,7 @@ struct TestApplicationCallback : IApplicationCallback
             if (!self->running)
                 break;
         }
+        return data;
     }
 
     int appMain(IApplication* app)
@@ -473,7 +475,7 @@ struct TestApplicationCallback : IApplicationCallback
             r.location[1] = 0;
             gfxQ->setViewport(r);
             gfxQ->setScissor(r);
-            float rgba[] = {sinf(frameIdx / 60.0), cosf(frameIdx / 60.0), 0.0, 1.0};
+            float rgba[] = {std::max(0.f, sinf(frameIdx / 60.0)), std::max(0.f, cosf(frameIdx / 60.0)), 0.0, 1.0};
             gfxQ->setClearColor(rgba);
             gfxQ->clearTarget();
 

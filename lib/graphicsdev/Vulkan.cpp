@@ -1,9 +1,3 @@
-#ifdef _WIN32
-#define VK_USE_PLATFORM_WIN32_KHR
-#else
-#define VK_USE_PLATFORM_XCB_KHR
-#endif
-
 #include "boo/graphicsdev/Vulkan.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include <vector>
@@ -159,8 +153,8 @@ static void SetImageLayout(VkCommandBuffer cmd, VkImage image,
     VkPipelineStageFlags src_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
     VkPipelineStageFlags dest_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 
-    vkCmdPipelineBarrier(cmd, src_stages, dest_stages, 0, 0, NULL, 0, NULL,
-                         1, &imageMemoryBarrier);
+    vk::CmdPipelineBarrier(cmd, src_stages, dest_stages, 0, 0, NULL, 0, NULL,
+                           1, &imageMemoryBarrier);
 }
 
 static VkResult InitGlobalExtensionProperties(VulkanContext::LayerProperties& layerProps) {
@@ -172,7 +166,7 @@ static VkResult InitGlobalExtensionProperties(VulkanContext::LayerProperties& la
     layer_name = layerProps.properties.layerName;
 
     do {
-        res = vkEnumerateInstanceExtensionProperties(
+        res = vk::EnumerateInstanceExtensionProperties(
             layer_name, &instance_extension_count, nullptr);
         if (res)
             return res;
@@ -183,7 +177,7 @@ static VkResult InitGlobalExtensionProperties(VulkanContext::LayerProperties& la
 
         layerProps.extensions.resize(instance_extension_count);
         instance_extensions = layerProps.extensions.data();
-        res = vkEnumerateInstanceExtensionProperties(
+        res = vk::EnumerateInstanceExtensionProperties(
             layer_name, &instance_extension_count, instance_extensions);
     } while (res == VK_INCOMPLETE);
 
@@ -234,14 +228,14 @@ void VulkanContext::initVulkan(const char* appName)
      */
     setenv("VK_LAYER_PATH", "/usr/share/vulkan/explicit_layer.d", 1);
     do {
-        ThrowIfFailed(vkEnumerateInstanceLayerProperties(&instanceLayerCount, nullptr));
+        ThrowIfFailed(vk::EnumerateInstanceLayerProperties(&instanceLayerCount, nullptr));
 
         if (instanceLayerCount == 0)
             break;
 
         vkProps = (VkLayerProperties *)realloc(vkProps, instanceLayerCount * sizeof(VkLayerProperties));
 
-        res = vkEnumerateInstanceLayerProperties(&instanceLayerCount, vkProps);
+        res = vk::EnumerateInstanceLayerProperties(&instanceLayerCount, vkProps);
     } while (res == VK_INCOMPLETE);
 
     /*
@@ -306,13 +300,13 @@ void VulkanContext::initVulkan(const char* appName)
     instInfo.enabledExtensionCount = m_instanceExtensionNames.size();
     instInfo.ppEnabledExtensionNames = m_instanceExtensionNames.data();
 
-    ThrowIfFailed(vkCreateInstance(&instInfo, nullptr, &m_instance));
+    ThrowIfFailed(vk::CreateInstance(&instInfo, nullptr, &m_instance));
 
 #ifndef NDEBUG
     VkDebugReportCallbackEXT debugReportCallback;
 
     PFN_vkCreateDebugReportCallbackEXT createDebugReportCallback =
-        (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(m_instance, "vkCreateDebugReportCallbackEXT");
+        (PFN_vkCreateDebugReportCallbackEXT)vk::GetInstanceProcAddr(m_instance, "vkCreateDebugReportCallbackEXT");
     if (!createDebugReportCallback)
         Log.report(logvisor::Fatal, "GetInstanceProcAddr: Unable to find vkCreateDebugReportCallbackEXT function.");
 
@@ -324,25 +318,28 @@ void VulkanContext::initVulkan(const char* appName)
     debugCreateInfo.pUserData = nullptr;
     ThrowIfFailed(createDebugReportCallback(m_instance, &debugCreateInfo, nullptr, &debugReportCallback));
 #endif
+}
 
+void VulkanContext::enumerateDevices()
+{
     uint32_t gpuCount = 1;
-    ThrowIfFailed(vkEnumeratePhysicalDevices(m_instance, &gpuCount, nullptr));
+    ThrowIfFailed(vk::EnumeratePhysicalDevices(m_instance, &gpuCount, nullptr));
     assert(gpuCount);
     m_gpus.resize(gpuCount);
 
-    ThrowIfFailed(vkEnumeratePhysicalDevices(m_instance, &gpuCount, m_gpus.data()));
+    ThrowIfFailed(vk::EnumeratePhysicalDevices(m_instance, &gpuCount, m_gpus.data()));
     assert(gpuCount >= 1);
 
-    vkGetPhysicalDeviceQueueFamilyProperties(m_gpus[0], &m_queueCount, nullptr);
+    vk::GetPhysicalDeviceQueueFamilyProperties(m_gpus[0], &m_queueCount, nullptr);
     assert(m_queueCount >= 1);
 
     m_queueProps.resize(m_queueCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(m_gpus[0], &m_queueCount, m_queueProps.data());
+    vk::GetPhysicalDeviceQueueFamilyProperties(m_gpus[0], &m_queueCount, m_queueProps.data());
     assert(m_queueCount >= 1);
 
     /* This is as good a place as any to do this */
-    vkGetPhysicalDeviceMemoryProperties(m_gpus[0], &m_memoryProperties);
-    vkGetPhysicalDeviceProperties(m_gpus[0], &m_gpuProps);
+    vk::GetPhysicalDeviceMemoryProperties(m_gpus[0], &m_memoryProperties);
+    vk::GetPhysicalDeviceProperties(m_gpus[0], &m_gpuProps);
 }
 
 void VulkanContext::initDevice()
@@ -373,19 +370,19 @@ void VulkanContext::initDevice()
         deviceInfo.enabledExtensionCount ? m_deviceExtensionNames.data() : nullptr;
     deviceInfo.pEnabledFeatures = nullptr;
 
-    ThrowIfFailed(vkCreateDevice(m_gpus[0], &deviceInfo, nullptr, &m_dev));
+    ThrowIfFailed(vk::CreateDevice(m_gpus[0], &deviceInfo, nullptr, &m_dev));
 }
 
 void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR surface, VkFormat format)
 {
     VkSurfaceCapabilitiesKHR surfCapabilities;
-    ThrowIfFailed(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_gpus[0], surface, &surfCapabilities));
+    ThrowIfFailed(vk::GetPhysicalDeviceSurfaceCapabilitiesKHR(m_gpus[0], surface, &surfCapabilities));
 
     uint32_t presentModeCount;
-    ThrowIfFailed(vkGetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, nullptr));
+    ThrowIfFailed(vk::GetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, nullptr));
     VkPresentModeKHR* presentModes = (VkPresentModeKHR*)malloc(presentModeCount * sizeof(VkPresentModeKHR));
 
-    ThrowIfFailed(vkGetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, presentModes));
+    ThrowIfFailed(vk::GetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, presentModes));
 
     VkExtent2D swapChainExtent;
     // width and height are either both -1, or both not -1.
@@ -459,14 +456,14 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
     swapChainInfo.pQueueFamilyIndices = nullptr;
 
     Window::SwapChain& sc = windowCtx.m_swapChains[windowCtx.m_activeSwapChain];
-    ThrowIfFailed(vkCreateSwapchainKHR(m_dev, &swapChainInfo, nullptr, &sc.m_swapChain));
+    ThrowIfFailed(vk::CreateSwapchainKHR(m_dev, &swapChainInfo, nullptr, &sc.m_swapChain));
     sc.m_format = format;
 
     uint32_t swapchainImageCount;
-    ThrowIfFailed(vkGetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, nullptr));
+    ThrowIfFailed(vk::GetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, nullptr));
 
     VkImage* swapchainImages = (VkImage*)malloc(swapchainImageCount * sizeof(VkImage));
-    ThrowIfFailed(vkGetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, swapchainImages));
+    ThrowIfFailed(vk::GetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, swapchainImages));
 
     sc.m_bufs.resize(swapchainImageCount);
     for (uint32_t i=0 ; i<swapchainImageCount ; ++i)
@@ -483,7 +480,7 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
     cmdPoolInfo.pNext = nullptr;
     cmdPoolInfo.queueFamilyIndex = m_graphicsQueueFamilyIndex;
     cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    ThrowIfFailed(vkCreateCommandPool(m_dev, &cmdPoolInfo, nullptr, &m_loadPool));
+    ThrowIfFailed(vk::CreateCommandPool(m_dev, &cmdPoolInfo, nullptr, &m_loadPool));
 
     VkCommandBufferAllocateInfo cmd = {};
     cmd.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -491,28 +488,28 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
     cmd.commandPool = m_loadPool;
     cmd.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     cmd.commandBufferCount = 1;
-    ThrowIfFailed(vkAllocateCommandBuffers(m_dev, &cmd, &m_loadCmdBuf));
+    ThrowIfFailed(vk::AllocateCommandBuffers(m_dev, &cmd, &m_loadCmdBuf));
 
-    vkGetDeviceQueue(m_dev, m_graphicsQueueFamilyIndex, 0, &m_queue);
+    vk::GetDeviceQueue(m_dev, m_graphicsQueueFamilyIndex, 0, &m_queue);
 
     /* Begin load command buffer here */
     VkCommandBufferBeginInfo cmdBufBeginInfo = {};
     cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    cmdBufBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    ThrowIfFailed(vkBeginCommandBuffer(m_loadCmdBuf, &cmdBufBeginInfo));
+    cmdBufBeginInfo.flags = 0;
+    ThrowIfFailed(vk::BeginCommandBuffer(m_loadCmdBuf, &cmdBufBeginInfo));
 }
 
 
 void VulkanContext::resizeSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR surface, VkFormat format)
 {
     VkSurfaceCapabilitiesKHR surfCapabilities;
-    ThrowIfFailed(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_gpus[0], surface, &surfCapabilities));
+    ThrowIfFailed(vk::GetPhysicalDeviceSurfaceCapabilitiesKHR(m_gpus[0], surface, &surfCapabilities));
 
     uint32_t presentModeCount;
-    ThrowIfFailed(vkGetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, nullptr));
+    ThrowIfFailed(vk::GetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, nullptr));
     VkPresentModeKHR* presentModes = (VkPresentModeKHR*)malloc(presentModeCount * sizeof(VkPresentModeKHR));
 
-    ThrowIfFailed(vkGetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, presentModes));
+    ThrowIfFailed(vk::GetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, presentModes));
 
     VkExtent2D swapChainExtent;
     // width and height are either both -1, or both not -1.
@@ -587,14 +584,14 @@ void VulkanContext::resizeSwapChain(VulkanContext::Window& windowCtx, VkSurfaceK
 
     Window::SwapChain& sc = windowCtx.m_swapChains[windowCtx.m_activeSwapChain ^ 1];
     sc.destroy(m_dev);
-    ThrowIfFailed(vkCreateSwapchainKHR(m_dev, &swapChainInfo, nullptr, &sc.m_swapChain));
+    ThrowIfFailed(vk::CreateSwapchainKHR(m_dev, &swapChainInfo, nullptr, &sc.m_swapChain));
     sc.m_format = format;
 
     uint32_t swapchainImageCount;
-    ThrowIfFailed(vkGetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, nullptr));
+    ThrowIfFailed(vk::GetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, nullptr));
 
     VkImage* swapchainImages = (VkImage*)malloc(swapchainImageCount * sizeof(VkImage));
-    ThrowIfFailed(vkGetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, swapchainImages));
+    ThrowIfFailed(vk::GetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, swapchainImages));
 
     sc.m_bufs.resize(swapchainImageCount);
     for (uint32_t i=0 ; i<swapchainImageCount ; ++i)
@@ -620,9 +617,9 @@ struct VulkanData : IGraphicsData
     ~VulkanData()
     {
         if (m_bufMem)
-            vkFreeMemory(m_ctx->m_dev, m_bufMem, nullptr);
+            vk::FreeMemory(m_ctx->m_dev, m_bufMem, nullptr);
         if (m_texMem)
-            vkFreeMemory(m_ctx->m_dev, m_texMem, nullptr);
+            vk::FreeMemory(m_ctx->m_dev, m_texMem, nullptr);
     }
 };
 
@@ -656,7 +653,7 @@ class VulkanGraphicsBufferS : public IGraphicsBufferS
         bufInfo.pQueueFamilyIndices = nullptr;
         bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         bufInfo.flags = 0;
-        ThrowIfFailed(vkCreateBuffer(ctx->m_dev, &bufInfo, nullptr, &m_bufferInfo.buffer));
+        ThrowIfFailed(vk::CreateBuffer(ctx->m_dev, &bufInfo, nullptr, &m_bufferInfo.buffer));
     }
 public:
     size_t size() const {return m_sz;}
@@ -666,7 +663,7 @@ public:
     bool m_uniform = false;
     ~VulkanGraphicsBufferS()
     {
-        vkDestroyBuffer(m_ctx->m_dev, m_bufferInfo.buffer, nullptr);
+        vk::DestroyBuffer(m_ctx->m_dev, m_bufferInfo.buffer, nullptr);
     }
 
     VkDeviceSize sizeForGPU(VulkanContext* ctx, uint32_t& memTypeBits, VkDeviceSize offset)
@@ -679,12 +676,12 @@ public:
         }
 
         VkMemoryRequirements memReqs;
-        vkGetBufferMemoryRequirements(ctx->m_dev, m_bufferInfo.buffer, &memReqs);
+        vk::GetBufferMemoryRequirements(ctx->m_dev, m_bufferInfo.buffer, &memReqs);
         memTypeBits &= memReqs.memoryTypeBits;
-        offset = (offset + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
         m_bufferInfo.offset = offset;
 
         offset += m_sz;
+        offset = (offset + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
         m_bufferInfo.range = offset - m_bufferInfo.offset;
 
         return offset;
@@ -694,7 +691,7 @@ public:
     {
         memmove(buf + m_bufferInfo.offset, m_stagingBuf.get(), m_sz);
         m_stagingBuf.reset();
-        ThrowIfFailed(vkBindBufferMemory(ctx->m_dev, m_bufferInfo.buffer, mem, m_bufferInfo.offset));
+        ThrowIfFailed(vk::BindBufferMemory(ctx->m_dev, m_bufferInfo.buffer, mem, m_bufferInfo.offset));
     }
 };
 
@@ -719,8 +716,8 @@ class VulkanGraphicsBufferD : public IGraphicsBufferD
         bufInfo.pQueueFamilyIndices = nullptr;
         bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         bufInfo.flags = 0;
-        ThrowIfFailed(vkCreateBuffer(ctx->m_dev, &bufInfo, nullptr, &m_bufferInfo[0].buffer));
-        ThrowIfFailed(vkCreateBuffer(ctx->m_dev, &bufInfo, nullptr, &m_bufferInfo[1].buffer));
+        ThrowIfFailed(vk::CreateBuffer(ctx->m_dev, &bufInfo, nullptr, &m_bufferInfo[0].buffer));
+        ThrowIfFailed(vk::CreateBuffer(ctx->m_dev, &bufInfo, nullptr, &m_bufferInfo[1].buffer));
     }
     void update(int b);
 
@@ -747,12 +744,12 @@ public:
             }
 
             VkMemoryRequirements memReqs;
-            vkGetBufferMemoryRequirements(ctx->m_dev, m_bufferInfo[i].buffer, &memReqs);
+            vk::GetBufferMemoryRequirements(ctx->m_dev, m_bufferInfo[i].buffer, &memReqs);
             memTypeBits &= memReqs.memoryTypeBits;
-            offset = (offset + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
             m_bufferInfo[i].offset = offset;
 
             offset += memReqs.size;
+            offset = (offset + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
             m_bufferInfo[i].range = offset - m_bufferInfo[i].offset;
         }
 
@@ -762,8 +759,8 @@ public:
     void placeForGPU(VulkanContext* ctx, VkDeviceMemory mem)
     {
         m_mem = mem;
-        ThrowIfFailed(vkBindBufferMemory(ctx->m_dev, m_bufferInfo[0].buffer, mem, m_bufferInfo[0].offset));
-        ThrowIfFailed(vkBindBufferMemory(ctx->m_dev, m_bufferInfo[1].buffer, mem, m_bufferInfo[1].offset));
+        ThrowIfFailed(vk::BindBufferMemory(ctx->m_dev, m_bufferInfo[0].buffer, mem, m_bufferInfo[0].offset));
+        ThrowIfFailed(vk::BindBufferMemory(ctx->m_dev, m_bufferInfo[1].buffer, mem, m_bufferInfo[1].offset));
     }
 };
 
@@ -808,10 +805,10 @@ class VulkanTextureS : public ITextureS
         bufCreateInfo.size = sz;
         bufCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         bufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        ThrowIfFailed(vkCreateBuffer(ctx->m_dev, &bufCreateInfo, nullptr, &m_cpuBuf));
+        ThrowIfFailed(vk::CreateBuffer(ctx->m_dev, &bufCreateInfo, nullptr, &m_cpuBuf));
 
         VkMemoryRequirements memReqs;
-        vkGetBufferMemoryRequirements(ctx->m_dev, m_cpuBuf, &memReqs);
+        vk::GetBufferMemoryRequirements(ctx->m_dev, m_cpuBuf, &memReqs);
 
         VkMemoryAllocateInfo memAlloc = {};
         memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -823,16 +820,16 @@ class VulkanTextureS : public ITextureS
                                               &memAlloc.memoryTypeIndex));
 
         /* allocate memory */
-        ThrowIfFailed(vkAllocateMemory(ctx->m_dev, &memAlloc, nullptr, &m_cpuMem));
+        ThrowIfFailed(vk::AllocateMemory(ctx->m_dev, &memAlloc, nullptr, &m_cpuMem));
 
         /* bind memory */
-        ThrowIfFailed(vkBindBufferMemory(ctx->m_dev, m_cpuBuf, m_cpuMem, 0));
+        ThrowIfFailed(vk::BindBufferMemory(ctx->m_dev, m_cpuBuf, m_cpuMem, 0));
 
         /* map memory and copy data */
         uint8_t* mappedData;
-        ThrowIfFailed(vkMapMemory(ctx->m_dev, m_cpuMem, 0, memReqs.size, 0, reinterpret_cast<void**>(&mappedData)));
+        ThrowIfFailed(vk::MapMemory(ctx->m_dev, m_cpuMem, 0, memReqs.size, 0, reinterpret_cast<void**>(&mappedData)));
         memmove(mappedData, data, sz);
-        vkUnmapMemory(ctx->m_dev, m_cpuMem);
+        vk::UnmapMemory(ctx->m_dev, m_cpuMem);
 
         /* create gpu image */
         VkImageCreateInfo texCreateInfo = {};
@@ -848,7 +845,7 @@ class VulkanTextureS : public ITextureS
         texCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         texCreateInfo.extent = { m_width, m_height, 1 };
         texCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        ThrowIfFailed(vkCreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex));
+        ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex));
 
         m_descInfo.sampler = ctx->m_linearSampler;
         m_descInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -862,31 +859,31 @@ public:
     VkDeviceSize m_gpuOffset;
     ~VulkanTextureS()
     {
-        vkDestroyImageView(m_ctx->m_dev, m_gpuView, nullptr);
-        vkDestroyImage(m_ctx->m_dev, m_gpuTex, nullptr);
+        vk::DestroyImageView(m_ctx->m_dev, m_gpuView, nullptr);
+        vk::DestroyImage(m_ctx->m_dev, m_gpuTex, nullptr);
         if (m_cpuBuf)
-            vkDestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
+            vk::DestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
         if (m_cpuMem)
-            vkFreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
+            vk::FreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
     }
 
     void deleteUploadObjects()
     {
-        vkDestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
+        vk::DestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
         m_cpuBuf = VK_NULL_HANDLE;
-        vkFreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
+        vk::FreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
         m_cpuMem = VK_NULL_HANDLE;
     }
 
     VkDeviceSize sizeForGPU(VulkanContext* ctx, uint32_t& memTypeBits, VkDeviceSize offset)
     {
         VkMemoryRequirements memReqs;
-        vkGetImageMemoryRequirements(ctx->m_dev, m_gpuTex, &memReqs);
+        vk::GetImageMemoryRequirements(ctx->m_dev, m_gpuTex, &memReqs);
         memTypeBits &= memReqs.memoryTypeBits;
-        offset = (offset + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
 
         m_gpuOffset = offset;
         offset += memReqs.size;
+        offset = (offset + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
 
         return offset;
     }
@@ -894,7 +891,7 @@ public:
     void placeForGPU(VulkanContext* ctx, VkDeviceMemory mem)
     {
         /* bind memory */
-        ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_gpuTex, mem, m_gpuOffset));
+        ThrowIfFailed(vk::BindImageMemory(ctx->m_dev, m_gpuTex, mem, m_gpuOffset));
 
         /* create image view */
         VkImageViewCreateInfo viewInfo = {};
@@ -913,7 +910,7 @@ public:
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = 1;
 
-        ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewInfo, nullptr, &m_gpuView));
+        ThrowIfFailed(vk::CreateImageView(ctx->m_dev, &viewInfo, nullptr, &m_gpuView));
         m_descInfo.imageView = m_gpuView;
 
         /* Since we're going to blit to the texture image, set its layout to
@@ -948,12 +945,12 @@ public:
         }
 
         /* Put the copy command into the command buffer */
-        vkCmdCopyBufferToImage(ctx->m_loadCmdBuf,
-                               m_cpuBuf,
-                               m_gpuTex,
-                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                               regionCount,
-                               copyRegions);
+        vk::CmdCopyBufferToImage(ctx->m_loadCmdBuf,
+                                 m_cpuBuf,
+                                 m_gpuTex,
+                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                 regionCount,
+                                 copyRegions);
 
         /* Set the layout for the texture image from DESTINATION_OPTIMAL to
          * SHADER_READ_ONLY */
@@ -1001,10 +998,10 @@ class VulkanTextureSA : public ITextureSA
         bufCreateInfo.size = sz;
         bufCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         bufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        ThrowIfFailed(vkCreateBuffer(ctx->m_dev, &bufCreateInfo, nullptr, &m_cpuBuf));
+        ThrowIfFailed(vk::CreateBuffer(ctx->m_dev, &bufCreateInfo, nullptr, &m_cpuBuf));
 
         VkMemoryRequirements memReqs;
-        vkGetBufferMemoryRequirements(ctx->m_dev, m_cpuBuf, &memReqs);
+        vk::GetBufferMemoryRequirements(ctx->m_dev, m_cpuBuf, &memReqs);
 
         VkMemoryAllocateInfo memAlloc = {};
         memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -1016,16 +1013,16 @@ class VulkanTextureSA : public ITextureSA
                                               &memAlloc.memoryTypeIndex));
 
         /* allocate memory */
-        ThrowIfFailed(vkAllocateMemory(ctx->m_dev, &memAlloc, nullptr, &m_cpuMem));
+        ThrowIfFailed(vk::AllocateMemory(ctx->m_dev, &memAlloc, nullptr, &m_cpuMem));
 
         /* bind memory */
-        ThrowIfFailed(vkBindBufferMemory(ctx->m_dev, m_cpuBuf, m_cpuMem, 0));
+        ThrowIfFailed(vk::BindBufferMemory(ctx->m_dev, m_cpuBuf, m_cpuMem, 0));
 
         /* map memory and copy data */
         uint8_t* mappedData;
-        ThrowIfFailed(vkMapMemory(ctx->m_dev, m_cpuMem, 0, memReqs.size, 0, reinterpret_cast<void**>(&mappedData)));
+        ThrowIfFailed(vk::MapMemory(ctx->m_dev, m_cpuMem, 0, memReqs.size, 0, reinterpret_cast<void**>(&mappedData)));
         memmove(mappedData, data, sz);
-        vkUnmapMemory(ctx->m_dev, m_cpuMem);
+        vk::UnmapMemory(ctx->m_dev, m_cpuMem);
 
         /* create gpu image */
         VkImageCreateInfo texCreateInfo = {};
@@ -1041,7 +1038,7 @@ class VulkanTextureSA : public ITextureSA
         texCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         texCreateInfo.extent = { m_width, m_height, 1 };
         texCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        ThrowIfFailed(vkCreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex));
+        ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex));
 
         m_descInfo.sampler = ctx->m_linearSampler;
         m_descInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1055,31 +1052,31 @@ public:
     VkDeviceSize m_gpuOffset;
     ~VulkanTextureSA()
     {
-        vkDestroyImageView(m_ctx->m_dev, m_gpuView, nullptr);
-        vkDestroyImage(m_ctx->m_dev, m_gpuTex, nullptr);
+        vk::DestroyImageView(m_ctx->m_dev, m_gpuView, nullptr);
+        vk::DestroyImage(m_ctx->m_dev, m_gpuTex, nullptr);
         if (m_cpuBuf)
-            vkDestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
+            vk::DestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
         if (m_cpuMem)
-            vkFreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
+            vk::FreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
     }
 
     void deleteUploadObjects()
     {
-        vkDestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
+        vk::DestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
         m_cpuBuf = VK_NULL_HANDLE;
-        vkFreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
+        vk::FreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
         m_cpuMem = VK_NULL_HANDLE;
     }
 
     VkDeviceSize sizeForGPU(VulkanContext* ctx, uint32_t& memTypeBits, VkDeviceSize offset)
     {
         VkMemoryRequirements memReqs;
-        vkGetImageMemoryRequirements(ctx->m_dev, m_gpuTex, &memReqs);
+        vk::GetImageMemoryRequirements(ctx->m_dev, m_gpuTex, &memReqs);
         memTypeBits &= memReqs.memoryTypeBits;
-        offset = (offset + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
 
         m_gpuOffset = offset;
         offset += memReqs.size;
+        offset = (offset + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
 
         return offset;
     }
@@ -1087,7 +1084,7 @@ public:
     void placeForGPU(VulkanContext* ctx, VkDeviceMemory mem)
     {
         /* bind memory */
-        ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_gpuTex, mem, m_gpuOffset));
+        ThrowIfFailed(vk::BindImageMemory(ctx->m_dev, m_gpuTex, mem, m_gpuOffset));
 
         /* create image view */
         VkImageViewCreateInfo viewInfo = {};
@@ -1106,7 +1103,7 @@ public:
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = m_layers;
 
-        ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewInfo, nullptr, &m_gpuView));
+        ThrowIfFailed(vk::CreateImageView(ctx->m_dev, &viewInfo, nullptr, &m_gpuView));
         m_descInfo.imageView = m_gpuView;
 
         /* Since we're going to blit to the texture image, set its layout to
@@ -1126,12 +1123,12 @@ public:
         copyRegion.bufferOffset = 0;
 
         /* Put the copy command into the command buffer */
-        vkCmdCopyBufferToImage(ctx->m_loadCmdBuf,
-                               m_cpuBuf,
-                               m_gpuTex,
-                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                               1,
-                               &copyRegion);
+        vk::CmdCopyBufferToImage(ctx->m_loadCmdBuf,
+                                 m_cpuBuf,
+                                 m_gpuTex,
+                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                 1,
+                                 &copyRegion);
 
         /* Set the layout for the texture image from DESTINATION_OPTIMAL to
          * SHADER_READ_ONLY */
@@ -1199,10 +1196,10 @@ class VulkanTextureD : public ITextureD
             m_cpuOffsets[i] = memAlloc.allocationSize;
 
             /* create cpu buffer */
-            ThrowIfFailed(vkCreateBuffer(ctx->m_dev, &bufCreateInfo, nullptr, &m_cpuBuf[i]));
+            ThrowIfFailed(vk::CreateBuffer(ctx->m_dev, &bufCreateInfo, nullptr, &m_cpuBuf[i]));
 
             VkMemoryRequirements memReqs;
-            vkGetBufferMemoryRequirements(ctx->m_dev, m_cpuBuf[i], &memReqs);
+            vk::GetBufferMemoryRequirements(ctx->m_dev, m_cpuBuf[i], &memReqs);
             memAlloc.allocationSize += memReqs.size;
             memAlloc.allocationSize = (memAlloc.allocationSize + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
             memTypeBits &= memReqs.memoryTypeBits;
@@ -1213,7 +1210,7 @@ class VulkanTextureD : public ITextureD
                                               &memAlloc.memoryTypeIndex));
 
         /* allocate memory */
-        ThrowIfFailed(vkAllocateMemory(ctx->m_dev, &memAlloc, nullptr, &m_cpuMem));
+        ThrowIfFailed(vk::AllocateMemory(ctx->m_dev, &memAlloc, nullptr, &m_cpuMem));
 
         VkImageCreateInfo texCreateInfo = {};
         texCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1237,10 +1234,10 @@ class VulkanTextureD : public ITextureD
         for (int i=0 ; i<2 ; ++i)
         {
             /* bind cpu memory */
-            ThrowIfFailed(vkBindBufferMemory(ctx->m_dev, m_cpuBuf[i], m_cpuMem, m_cpuOffsets[i]));
+            ThrowIfFailed(vk::BindBufferMemory(ctx->m_dev, m_cpuBuf[i], m_cpuMem, m_cpuOffsets[i]));
 
             /* create gpu image */
-            ThrowIfFailed(vkCreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex[i]));
+            ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex[i]));
 
             m_descInfo[i].sampler = ctx->m_linearSampler;
             m_descInfo[i].imageView = m_gpuView[i];
@@ -1266,12 +1263,12 @@ public:
         for (int i=0 ; i<2 ; ++i)
         {
             VkMemoryRequirements memReqs;
-            vkGetImageMemoryRequirements(ctx->m_dev, m_gpuTex[i], &memReqs);
+            vk::GetImageMemoryRequirements(ctx->m_dev, m_gpuTex[i], &memReqs);
             memTypeBits &= memReqs.memoryTypeBits;
-            offset = (offset + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
 
             m_gpuOffset[i] = offset;
             offset += memReqs.size;
+            offset = (offset + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
         }
 
         return offset;
@@ -1298,11 +1295,11 @@ public:
         for (int i=0 ; i<2 ; ++i)
         {
             /* bind memory */
-            ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_gpuTex[i], mem, m_gpuOffset[i]));
+            ThrowIfFailed(vk::BindImageMemory(ctx->m_dev, m_gpuTex[i], mem, m_gpuOffset[i]));
 
             /* create image view */
             viewInfo.image = m_gpuTex[i];
-            ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewInfo, nullptr, &m_gpuView[i]));
+            ThrowIfFailed(vk::CreateImageView(ctx->m_dev, &viewInfo, nullptr, &m_gpuView[i]));
         }
     }
 
@@ -1346,12 +1343,12 @@ class VulkanTextureR : public ITextureR
         texCreateInfo.pQueueFamilyIndices = nullptr;
         texCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         texCreateInfo.flags = 0;
-        ThrowIfFailed(vkCreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_colorTex));
+        ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_colorTex));
 
         /* depth target */
         texCreateInfo.format = VK_FORMAT_D24_UNORM_S8_UINT;
         texCreateInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        ThrowIfFailed(vkCreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_depthTex));
+        ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_depthTex));
 
         /* tally total memory requirements */
         VkMemoryRequirements memReqs;
@@ -1364,13 +1361,13 @@ class VulkanTextureR : public ITextureR
 
         VkDeviceSize gpuOffsets[4];
 
-        vkGetImageMemoryRequirements(ctx->m_dev, m_colorTex, &memReqs);
+        vk::GetImageMemoryRequirements(ctx->m_dev, m_colorTex, &memReqs);
         gpuOffsets[0] = memAlloc.allocationSize;
         memAlloc.allocationSize += memReqs.size;
         memAlloc.allocationSize = (memAlloc.allocationSize + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
         memTypeBits &= memReqs.memoryTypeBits;
 
-        vkGetImageMemoryRequirements(ctx->m_dev, m_depthTex, &memReqs);
+        vk::GetImageMemoryRequirements(ctx->m_dev, m_depthTex, &memReqs);
         gpuOffsets[1] = memAlloc.allocationSize;
         memAlloc.allocationSize += memReqs.size;
         memAlloc.allocationSize = (memAlloc.allocationSize + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
@@ -1380,9 +1377,9 @@ class VulkanTextureR : public ITextureR
         {
             texCreateInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
             texCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-            ThrowIfFailed(vkCreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_colorBindTex));
+            ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_colorBindTex));
 
-            vkGetImageMemoryRequirements(ctx->m_dev, m_colorBindTex, &memReqs);
+            vk::GetImageMemoryRequirements(ctx->m_dev, m_colorBindTex, &memReqs);
             gpuOffsets[2] = memAlloc.allocationSize;
             memAlloc.allocationSize += memReqs.size;
             memAlloc.allocationSize = (memAlloc.allocationSize + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
@@ -1396,9 +1393,9 @@ class VulkanTextureR : public ITextureR
         {
             texCreateInfo.format = VK_FORMAT_D24_UNORM_S8_UINT;
             texCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-            ThrowIfFailed(vkCreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_depthBindTex));
+            ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_depthBindTex));
 
-            vkGetImageMemoryRequirements(ctx->m_dev, m_depthBindTex, &memReqs);
+            vk::GetImageMemoryRequirements(ctx->m_dev, m_depthBindTex, &memReqs);
             gpuOffsets[3] = memAlloc.allocationSize;
             memAlloc.allocationSize += memReqs.size;
             memAlloc.allocationSize = (memAlloc.allocationSize + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
@@ -1411,16 +1408,16 @@ class VulkanTextureR : public ITextureR
         ThrowIfFalse(MemoryTypeFromProperties(ctx, memTypeBits, 0, &memAlloc.memoryTypeIndex));
 
         /* allocate memory */
-        ThrowIfFailed(vkAllocateMemory(ctx->m_dev, &memAlloc, nullptr, &m_gpuMem));
+        ThrowIfFailed(vk::AllocateMemory(ctx->m_dev, &memAlloc, nullptr, &m_gpuMem));
 
         uint8_t* mappedData;
-        ThrowIfFailed(vkMapMemory(ctx->m_dev, m_gpuMem, 0, memAlloc.allocationSize, 0, reinterpret_cast<void**>(&mappedData)));
+        ThrowIfFailed(vk::MapMemory(ctx->m_dev, m_gpuMem, 0, memAlloc.allocationSize, 0, reinterpret_cast<void**>(&mappedData)));
         memset(mappedData, 0, memAlloc.allocationSize);
-        vkUnmapMemory(ctx->m_dev, m_gpuMem);
+        vk::UnmapMemory(ctx->m_dev, m_gpuMem);
 
         /* bind memory */
-        ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_colorTex, m_gpuMem, gpuOffsets[0]));
-        ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_depthTex, m_gpuMem, gpuOffsets[1]));
+        ThrowIfFailed(vk::BindImageMemory(ctx->m_dev, m_colorTex, m_gpuMem, gpuOffsets[0]));
+        ThrowIfFailed(vk::BindImageMemory(ctx->m_dev, m_depthTex, m_gpuMem, gpuOffsets[1]));
 
         /* Create resource views */
         VkImageViewCreateInfo viewCreateInfo = {};
@@ -1438,30 +1435,30 @@ class VulkanTextureR : public ITextureR
         viewCreateInfo.subresourceRange.levelCount = 1;
         viewCreateInfo.subresourceRange.baseArrayLayer = 0;
         viewCreateInfo.subresourceRange.layerCount = 1;
-        ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_colorView));
+        ThrowIfFailed(vk::CreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_colorView));
 
         viewCreateInfo.image = m_depthTex;
         viewCreateInfo.format = VK_FORMAT_D24_UNORM_S8_UINT;
         viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-        ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_depthView));
+        ThrowIfFailed(vk::CreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_depthView));
 
         if (enableShaderColorBinding)
         {
-            ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_colorBindTex, m_gpuMem, gpuOffsets[2]));
+            ThrowIfFailed(vk::BindImageMemory(ctx->m_dev, m_colorBindTex, m_gpuMem, gpuOffsets[2]));
             viewCreateInfo.image = m_colorBindTex;
             viewCreateInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
             viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_colorBindView));
+            ThrowIfFailed(vk::CreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_colorBindView));
             m_colorBindDescInfo.imageView = m_colorBindView;
         }
 
         if (enableShaderDepthBinding)
         {
-            ThrowIfFailed(vkBindImageMemory(ctx->m_dev, m_depthBindTex, m_gpuMem, gpuOffsets[3]));
+            ThrowIfFailed(vk::BindImageMemory(ctx->m_dev, m_depthBindTex, m_gpuMem, gpuOffsets[3]));
             viewCreateInfo.image = m_depthBindTex;
             viewCreateInfo.format = VK_FORMAT_D24_UNORM_S8_UINT;
             viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-            ThrowIfFailed(vkCreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_depthBindView));
+            ThrowIfFailed(vk::CreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_depthBindView));
             m_depthBindDescInfo.imageView = m_depthBindView;
         }
 
@@ -1476,7 +1473,7 @@ class VulkanTextureR : public ITextureR
         fbCreateInfo.layers = 1;
         VkImageView attachments[2] = {m_colorView, m_depthView};
         fbCreateInfo.pAttachments = attachments;
-        ThrowIfFailed(vkCreateFramebuffer(ctx->m_dev, &fbCreateInfo, nullptr, &m_framebuffer));
+        ThrowIfFailed(vk::CreateFramebuffer(ctx->m_dev, &fbCreateInfo, nullptr, &m_framebuffer));
 
         m_passBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         m_passBeginInfo.pNext = nullptr;
@@ -1745,13 +1742,8 @@ class VulkanShaderPipeline : public IShaderPipeline
         colorBlendInfo.pNext = nullptr;
         colorBlendInfo.flags = 0;
         colorBlendInfo.logicOpEnable = VK_FALSE;
-        colorBlendInfo.logicOp = VK_LOGIC_OP_NO_OP;
         colorBlendInfo.attachmentCount = 1;
         colorBlendInfo.pAttachments = &colorAttachment;
-        colorBlendInfo.blendConstants[0] = 1.f;
-        colorBlendInfo.blendConstants[1] = 1.f;
-        colorBlendInfo.blendConstants[2] = 1.f;
-        colorBlendInfo.blendConstants[3] = 1.f;
 
         VkGraphicsPipelineCreateInfo pipelineCreateInfo = {};
         pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -1770,16 +1762,16 @@ class VulkanShaderPipeline : public IShaderPipeline
         pipelineCreateInfo.layout = ctx->m_pipelinelayout;
         pipelineCreateInfo.renderPass = ctx->m_pass;
 
-        ThrowIfFailed(vkCreateGraphicsPipelines(ctx->m_dev, pipelineCache, 1, &pipelineCreateInfo,
-                                                nullptr, &m_pipeline));
+        ThrowIfFailed(vk::CreateGraphicsPipelines(ctx->m_dev, pipelineCache, 1, &pipelineCreateInfo,
+                                                  nullptr, &m_pipeline));
     }
 public:
     VkPipeline m_pipeline;
     VkPipelineCache m_pipelineCache;
     ~VulkanShaderPipeline()
     {
-        vkDestroyPipeline(m_ctx->m_dev, m_pipeline, nullptr);
-        vkDestroyPipelineCache(m_ctx->m_dev, m_pipelineCache, nullptr);
+        vk::DestroyPipeline(m_ctx->m_dev, m_pipeline, nullptr);
+        vk::DestroyPipelineCache(m_ctx->m_dev, m_pipelineCache, nullptr);
     }
     VulkanShaderPipeline& operator=(const VulkanShaderPipeline&) = delete;
     VulkanShaderPipeline(const VulkanShaderPipeline&) = delete;
@@ -1958,7 +1950,7 @@ struct VulkanShaderDataBinding : IShaderDataBinding
             poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             poolSizes[1].descriptorCount = BOO_GLSL_MAX_TEXTURE_COUNT * 2;
 
-            ThrowIfFailed(vkCreateDescriptorPool(ctx->m_dev, &descriptorPoolInfo, nullptr, &m_descPool));
+            ThrowIfFailed(vk::CreateDescriptorPool(ctx->m_dev, &descriptorPoolInfo, nullptr, &m_descPool));
 
             VkDescriptorSetLayout layouts[] = {ctx->m_descSetLayout, ctx->m_descSetLayout};
             VkDescriptorSetAllocateInfo descAllocInfo;
@@ -1967,13 +1959,13 @@ struct VulkanShaderDataBinding : IShaderDataBinding
             descAllocInfo.descriptorPool = m_descPool;
             descAllocInfo.descriptorSetCount = 2;
             descAllocInfo.pSetLayouts = layouts;
-            ThrowIfFailed(vkAllocateDescriptorSets(ctx->m_dev, &descAllocInfo, m_descSets));
+            ThrowIfFailed(vk::AllocateDescriptorSets(ctx->m_dev, &descAllocInfo, m_descSets));
         }
     }
 
     ~VulkanShaderDataBinding()
     {
-        vkDestroyDescriptorPool(m_ctx->m_dev, m_descPool, nullptr);
+        vk::DestroyDescriptorPool(m_ctx->m_dev, m_descPool, nullptr);
     }
 
     void commit(VulkanContext* ctx)
@@ -2063,7 +2055,7 @@ struct VulkanShaderDataBinding : IShaderDataBinding
             }
         }
         if (totalWrites)
-            vkUpdateDescriptorSets(ctx->m_dev, totalWrites, writes, 0, nullptr);
+            vk::UpdateDescriptorSets(ctx->m_dev, totalWrites, writes, 0, nullptr);
 
 #ifndef NDEBUG
         m_committed = true;
@@ -2078,18 +2070,18 @@ struct VulkanShaderDataBinding : IShaderDataBinding
                        "attempted to use uncommitted VulkanShaderDataBinding");
 #endif
 
-        vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline->m_pipeline);
-        vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_ctx->m_pipelinelayout, 0, 1, &m_descSets[b], 0, nullptr);
+        vk::CmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline->m_pipeline);
+        vk::CmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_ctx->m_pipelinelayout, 0, 1, &m_descSets[b], 0, nullptr);
 
         if (m_vbuf && m_instVbuf)
-            vkCmdBindVertexBuffers(cmdBuf, 0, 2, m_vboBufs[b], m_vboOffs[b]);
+            vk::CmdBindVertexBuffers(cmdBuf, 0, 2, m_vboBufs[b], m_vboOffs[b]);
         else if (m_vbuf)
-            vkCmdBindVertexBuffers(cmdBuf, 0, 1, m_vboBufs[b], m_vboOffs[b]);
+            vk::CmdBindVertexBuffers(cmdBuf, 0, 1, m_vboBufs[b], m_vboOffs[b]);
         else if (m_instVbuf)
-            vkCmdBindVertexBuffers(cmdBuf, 1, 1, &m_vboBufs[b][1], &m_vboOffs[b][1]);
+            vk::CmdBindVertexBuffers(cmdBuf, 1, 1, &m_vboBufs[b][1], &m_vboOffs[b][1]);
 
         if (m_ibuf)
-            vkCmdBindIndexBuffer(cmdBuf, m_iboBufs[b], m_iboOffs[b], VK_INDEX_TYPE_UINT32);
+            vk::CmdBindIndexBuffer(cmdBuf, m_iboBufs[b], m_iboOffs[b], VK_INDEX_TYPE_UINT32);
     }
 };
 
@@ -2120,20 +2112,20 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
 
     void resetCommandBuffer()
     {
-        ThrowIfFailed(vkResetCommandBuffer(m_cmdBufs[m_fillBuf], 0));
+        ThrowIfFailed(vk::ResetCommandBuffer(m_cmdBufs[m_fillBuf], 0));
         VkCommandBufferBeginInfo cmdBufBeginInfo = {};
         cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        cmdBufBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        ThrowIfFailed(vkBeginCommandBuffer(m_cmdBufs[m_fillBuf], &cmdBufBeginInfo));
+        cmdBufBeginInfo.flags = 0;
+        ThrowIfFailed(vk::BeginCommandBuffer(m_cmdBufs[m_fillBuf], &cmdBufBeginInfo));
     }
 
     void resetDynamicCommandBuffer()
     {
-        ThrowIfFailed(vkResetCommandBuffer(m_dynamicCmdBufs[m_fillBuf], 0));
+        ThrowIfFailed(vk::ResetCommandBuffer(m_dynamicCmdBufs[m_fillBuf], 0));
         VkCommandBufferBeginInfo cmdBufBeginInfo = {};
         cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        cmdBufBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        ThrowIfFailed(vkBeginCommandBuffer(m_dynamicCmdBufs[m_fillBuf], &cmdBufBeginInfo));
+        cmdBufBeginInfo.flags = 0;
+        ThrowIfFailed(vk::BeginCommandBuffer(m_dynamicCmdBufs[m_fillBuf], &cmdBufBeginInfo));
         m_dynamicNeedsReset = false;
     }
 
@@ -2141,7 +2133,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
     {
         if (m_dynamicNeedsReset)
         {
-            ThrowIfFailed(vkWaitForFences(m_ctx->m_dev, 1, &m_dynamicBufFence, VK_FALSE, -1));
+            ThrowIfFailed(vk::WaitForFences(m_ctx->m_dev, 1, &m_dynamicBufFence, VK_FALSE, -1));
             resetDynamicCommandBuffer();
         }
     }
@@ -2151,10 +2143,10 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
     {
         VkCommandPoolCreateInfo poolInfo = {};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        poolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         poolInfo.queueFamilyIndex = m_ctx->m_graphicsQueueFamilyIndex;
-        ThrowIfFailed(vkCreateCommandPool(ctx->m_dev, &poolInfo, nullptr, &m_cmdPool));
-        ThrowIfFailed(vkCreateCommandPool(ctx->m_dev, &poolInfo, nullptr, &m_dynamicCmdPool));
+        ThrowIfFailed(vk::CreateCommandPool(ctx->m_dev, &poolInfo, nullptr, &m_cmdPool));
+        ThrowIfFailed(vk::CreateCommandPool(ctx->m_dev, &poolInfo, nullptr, &m_dynamicCmdPool));
 
         VkCommandBufferAllocateInfo allocInfo = {};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -2164,31 +2156,31 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
 
         VkCommandBufferBeginInfo cmdBufBeginInfo = {};
         cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        cmdBufBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        cmdBufBeginInfo.flags = 0;
 
-        ThrowIfFailed(vkAllocateCommandBuffers(m_ctx->m_dev, &allocInfo, m_cmdBufs));
-        ThrowIfFailed(vkBeginCommandBuffer(m_cmdBufs[0], &cmdBufBeginInfo));
+        ThrowIfFailed(vk::AllocateCommandBuffers(m_ctx->m_dev, &allocInfo, m_cmdBufs));
+        ThrowIfFailed(vk::BeginCommandBuffer(m_cmdBufs[0], &cmdBufBeginInfo));
 
         allocInfo.commandPool = m_dynamicCmdPool;
-        ThrowIfFailed(vkAllocateCommandBuffers(m_ctx->m_dev, &allocInfo, m_dynamicCmdBufs));
-        ThrowIfFailed(vkBeginCommandBuffer(m_dynamicCmdBufs[0], &cmdBufBeginInfo));
+        ThrowIfFailed(vk::AllocateCommandBuffers(m_ctx->m_dev, &allocInfo, m_dynamicCmdBufs));
+        ThrowIfFailed(vk::BeginCommandBuffer(m_dynamicCmdBufs[0], &cmdBufBeginInfo));
 
         VkSemaphoreCreateInfo semInfo = {};
         semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-        ThrowIfFailed(vkCreateSemaphore(ctx->m_dev, &semInfo, nullptr, &m_swapChainReadySem));
-        ThrowIfFailed(vkCreateSemaphore(ctx->m_dev, &semInfo, nullptr, &m_drawCompleteSem));
+        ThrowIfFailed(vk::CreateSemaphore(ctx->m_dev, &semInfo, nullptr, &m_swapChainReadySem));
+        ThrowIfFailed(vk::CreateSemaphore(ctx->m_dev, &semInfo, nullptr, &m_drawCompleteSem));
 
         VkFenceCreateInfo fenceInfo = {};
         fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-        ThrowIfFailed(vkCreateFence(m_ctx->m_dev, &fenceInfo, nullptr, &m_drawCompleteFence));
-        ThrowIfFailed(vkCreateFence(m_ctx->m_dev, &fenceInfo, nullptr, &m_dynamicBufFence));
+        ThrowIfFailed(vk::CreateFence(m_ctx->m_dev, &fenceInfo, nullptr, &m_drawCompleteFence));
+        ThrowIfFailed(vk::CreateFence(m_ctx->m_dev, &fenceInfo, nullptr, &m_dynamicBufFence));
     }
 
     void stopRenderer()
     {
         m_running = false;
-        vkWaitForFences(m_ctx->m_dev, 1, &m_drawCompleteFence, VK_FALSE, -1);
+        vk::WaitForFences(m_ctx->m_dev, 1, &m_drawCompleteFence, VK_FALSE, -1);
     }
 
     ~VulkanCommandQueue()
@@ -2196,12 +2188,12 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         if (m_running)
             stopRenderer();
 
-        vkDestroyFence(m_ctx->m_dev, m_dynamicBufFence, nullptr);
-        vkDestroyFence(m_ctx->m_dev, m_drawCompleteFence, nullptr);
-        vkDestroySemaphore(m_ctx->m_dev, m_drawCompleteSem, nullptr);
-        vkDestroySemaphore(m_ctx->m_dev, m_swapChainReadySem, nullptr);
-        vkDestroyCommandPool(m_ctx->m_dev, m_dynamicCmdPool, nullptr);
-        vkDestroyCommandPool(m_ctx->m_dev, m_cmdPool, nullptr);
+        vk::DestroyFence(m_ctx->m_dev, m_dynamicBufFence, nullptr);
+        vk::DestroyFence(m_ctx->m_dev, m_drawCompleteFence, nullptr);
+        vk::DestroySemaphore(m_ctx->m_dev, m_drawCompleteSem, nullptr);
+        vk::DestroySemaphore(m_ctx->m_dev, m_swapChainReadySem, nullptr);
+        vk::DestroyCommandPool(m_ctx->m_dev, m_dynamicCmdPool, nullptr);
+        vk::DestroyCommandPool(m_ctx->m_dev, m_cmdPool, nullptr);
     }
 
     void setShaderDataBinding(IShaderDataBinding* binding)
@@ -2235,7 +2227,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
             m_boundTarget = ctarget;
         }
 
-        vkCmdBeginRenderPass(cmdBuf, &ctarget->m_passBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vk::CmdBeginRenderPass(cmdBuf, &ctarget->m_passBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     }
 
     void setViewport(const SWindowRect& rect, float znear, float zfar)
@@ -2244,7 +2236,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         {
             VkViewport vp = {float(rect.location[0]), float(m_boundTarget->m_height - rect.location[1] - rect.size[1]),
                              float(rect.size[0]), float(rect.size[1]), znear, zfar};
-            vkCmdSetViewport(m_cmdBufs[m_fillBuf], 0, 1, &vp);
+            vk::CmdSetViewport(m_cmdBufs[m_fillBuf], 0, 1, &vp);
         }
     }
 
@@ -2257,7 +2249,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
                 {int32_t(rect.location[0]), int32_t(m_boundTarget->m_height - rect.location[1] - rect.size[1])},
                 {uint32_t(rect.size[0]), uint32_t(rect.size[1])}
             };
-            vkCmdSetScissor(m_cmdBufs[m_fillBuf], 0, 1, &vkrect);
+            vk::CmdSetScissor(m_cmdBufs[m_fillBuf], 0, 1, &vkrect);
         }
     }
 
@@ -2300,7 +2292,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
             clr[0].clearValue.color.float32[3] = m_clearColor[3];
             clr[0].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             clr[1].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-            vkCmdClearAttachments(m_cmdBufs[m_fillBuf], 2, clr, 1, &rect);
+            vk::CmdClearAttachments(m_cmdBufs[m_fillBuf], 2, clr, 1, &rect);
         }
         else if (render)
         {
@@ -2309,33 +2301,33 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
             clr[0].clearValue.color.float32[2] = m_clearColor[2];
             clr[0].clearValue.color.float32[3] = m_clearColor[3];
             clr[0].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            vkCmdClearAttachments(m_cmdBufs[m_fillBuf], 1, clr, 1, &rect);
+            vk::CmdClearAttachments(m_cmdBufs[m_fillBuf], 1, clr, 1, &rect);
         }
         else if (depth)
         {
             clr[0].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-            vkCmdClearAttachments(m_cmdBufs[m_fillBuf], 1, clr, 1, &rect);
+            vk::CmdClearAttachments(m_cmdBufs[m_fillBuf], 1, clr, 1, &rect);
         }
     }
 
     void draw(size_t start, size_t count)
     {
-        vkCmdDraw(m_cmdBufs[m_fillBuf], count, 1, start, 0);
+        vk::CmdDraw(m_cmdBufs[m_fillBuf], count, 1, start, 0);
     }
 
     void drawIndexed(size_t start, size_t count)
     {
-        vkCmdDrawIndexed(m_cmdBufs[m_fillBuf], count, 1, start, 0, 0);
+        vk::CmdDrawIndexed(m_cmdBufs[m_fillBuf], count, 1, start, 0, 0);
     }
 
     void drawInstances(size_t start, size_t count, size_t instCount)
     {
-        vkCmdDraw(m_cmdBufs[m_fillBuf], count, instCount, start, 0);
+        vk::CmdDraw(m_cmdBufs[m_fillBuf], count, instCount, start, 0);
     }
 
     void drawInstancesIndexed(size_t start, size_t count, size_t instCount)
     {
-        vkCmdDrawIndexed(m_cmdBufs[m_fillBuf], count, instCount, start, 0, 0);
+        vk::CmdDrawIndexed(m_cmdBufs[m_fillBuf], count, instCount, start, 0, 0);
     }
 
     ITextureR* m_resolveDispSource = nullptr;
@@ -2355,8 +2347,8 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         VkCommandBuffer cmdBuf = m_cmdBufs[m_drawBuf];
         VulkanTextureR* csource = static_cast<VulkanTextureR*>(m_resolveDispSource);
 
-        ThrowIfFailed(vkAcquireNextImageKHR(m_ctx->m_dev, sc.m_swapChain, UINT64_MAX,
-                                            m_swapChainReadySem, nullptr, &sc.m_backBuf));
+        ThrowIfFailed(vk::AcquireNextImageKHR(m_ctx->m_dev, sc.m_swapChain, UINT64_MAX,
+                                              m_swapChainReadySem, nullptr, &sc.m_backBuf));
         VulkanContext::Window::SwapChain::Buffer& dest = sc.m_bufs[sc.m_backBuf];
         SetImageLayout(cmdBuf, dest.m_image, VK_IMAGE_ASPECT_COLOR_BIT,
                        dest.m_layout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
@@ -2379,10 +2371,10 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
             resolveInfo.extent.width = csource->m_width;
             resolveInfo.extent.height = csource->m_height;
             resolveInfo.extent.depth = 1;
-            vkCmdResolveImage(cmdBuf,
-                              csource->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                              dest.m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                              1, &resolveInfo);
+            vk::CmdResolveImage(cmdBuf,
+                                csource->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                dest.m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                1, &resolveInfo);
         }
         else
         {
@@ -2400,10 +2392,10 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
                 copyInfo.extent.width = csource->m_width;
                 copyInfo.extent.height = csource->m_height;
                 copyInfo.extent.depth = 1;
-                vkCmdCopyImage(cmdBuf,
-                               csource->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                               dest.m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                               1, &copyInfo);
+                vk::CmdCopyImage(cmdBuf,
+                                 csource->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                 dest.m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                 1, &copyInfo);
             }
             else
             {
@@ -2416,10 +2408,10 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
                 blitInfo.dstOffsets[1].y = csource->m_height;
                 blitInfo.srcOffsets[1].x = csource->m_width;
                 blitInfo.srcOffsets[1].y = csource->m_height;
-                vkCmdBlitImage(cmdBuf,
-                               csource->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                               dest.m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                               1, &blitInfo, VK_FILTER_NEAREST);
+                vk::CmdBlitImage(cmdBuf,
+                                 csource->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                 dest.m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                 1, &blitInfo, VK_FILTER_NEAREST);
             }
         }
 
@@ -2440,7 +2432,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         VkCommandBuffer cmdBuf = m_cmdBufs[m_fillBuf];
         VulkanTextureR* ctexture = static_cast<VulkanTextureR*>(texture);
 
-        vkCmdEndRenderPass(cmdBuf);
+        vk::CmdEndRenderPass(cmdBuf);
 
         if (color && ctexture->m_enableShaderColorBinding)
         {
@@ -2469,10 +2461,10 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
             copyInfo.extent.width = ctexture->m_width;
             copyInfo.extent.height = ctexture->m_height;
             copyInfo.extent.depth = 1;
-            vkCmdCopyImage(cmdBuf,
-                           ctexture->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                           ctexture->m_colorBindTex, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                           1, &copyInfo);
+            vk::CmdCopyImage(cmdBuf,
+                             ctexture->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                             ctexture->m_colorBindTex, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             1, &copyInfo);
 
             if (ctexture == m_boundTarget)
                 SetImageLayout(cmdBuf, ctexture->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
@@ -2509,10 +2501,10 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
             copyInfo.extent.width = ctexture->m_width;
             copyInfo.extent.height = ctexture->m_height;
             copyInfo.extent.depth = 1;
-            vkCmdCopyImage(cmdBuf,
-                           ctexture->m_depthTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                           ctexture->m_depthBindTex, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                           1, &copyInfo);
+            vk::CmdCopyImage(cmdBuf,
+                             ctexture->m_depthTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                             ctexture->m_depthBindTex, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             1, &copyInfo);
 
             if (ctexture == m_boundTarget)
                 SetImageLayout(cmdBuf, ctexture->m_depthTex, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
@@ -2528,91 +2520,91 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
 
 VulkanGraphicsBufferD::~VulkanGraphicsBufferD()
 {
-    vkDestroyBuffer(m_q->m_ctx->m_dev, m_bufferInfo[0].buffer, nullptr);
-    vkDestroyBuffer(m_q->m_ctx->m_dev, m_bufferInfo[1].buffer, nullptr);
+    vk::DestroyBuffer(m_q->m_ctx->m_dev, m_bufferInfo[0].buffer, nullptr);
+    vk::DestroyBuffer(m_q->m_ctx->m_dev, m_bufferInfo[1].buffer, nullptr);
 }
 
 VulkanTextureD::~VulkanTextureD()
 {
-    vkDestroyImageView(m_q->m_ctx->m_dev, m_gpuView[0], nullptr);
-    vkDestroyImageView(m_q->m_ctx->m_dev, m_gpuView[1], nullptr);
-    vkDestroyBuffer(m_q->m_ctx->m_dev, m_cpuBuf[0], nullptr);
-    vkDestroyBuffer(m_q->m_ctx->m_dev, m_cpuBuf[1], nullptr);
-    vkDestroyImage(m_q->m_ctx->m_dev, m_gpuTex[0], nullptr);
-    vkDestroyImage(m_q->m_ctx->m_dev, m_gpuTex[1], nullptr);
-    vkFreeMemory(m_q->m_ctx->m_dev, m_cpuMem, nullptr);
+    vk::DestroyImageView(m_q->m_ctx->m_dev, m_gpuView[0], nullptr);
+    vk::DestroyImageView(m_q->m_ctx->m_dev, m_gpuView[1], nullptr);
+    vk::DestroyBuffer(m_q->m_ctx->m_dev, m_cpuBuf[0], nullptr);
+    vk::DestroyBuffer(m_q->m_ctx->m_dev, m_cpuBuf[1], nullptr);
+    vk::DestroyImage(m_q->m_ctx->m_dev, m_gpuTex[0], nullptr);
+    vk::DestroyImage(m_q->m_ctx->m_dev, m_gpuTex[1], nullptr);
+    vk::FreeMemory(m_q->m_ctx->m_dev, m_cpuMem, nullptr);
 }
 
 void VulkanTextureR::doDestroy()
 {
     if (m_framebuffer)
     {
-        vkDestroyFramebuffer(m_q->m_ctx->m_dev, m_framebuffer, nullptr);
+        vk::DestroyFramebuffer(m_q->m_ctx->m_dev, m_framebuffer, nullptr);
         m_framebuffer = VK_NULL_HANDLE;
     }
     if (m_colorView)
     {
-        vkDestroyImageView(m_q->m_ctx->m_dev, m_colorView, nullptr);
+        vk::DestroyImageView(m_q->m_ctx->m_dev, m_colorView, nullptr);
         m_colorView = VK_NULL_HANDLE;
     }
     if (m_colorTex)
     {
-        vkDestroyImage(m_q->m_ctx->m_dev, m_colorTex, nullptr);
+        vk::DestroyImage(m_q->m_ctx->m_dev, m_colorTex, nullptr);
         m_colorTex = VK_NULL_HANDLE;
     }
     if (m_depthView)
     {
-        vkDestroyImageView(m_q->m_ctx->m_dev, m_depthView, nullptr);
+        vk::DestroyImageView(m_q->m_ctx->m_dev, m_depthView, nullptr);
         m_depthView = VK_NULL_HANDLE;
     }
     if (m_depthTex)
     {
-        vkDestroyImage(m_q->m_ctx->m_dev, m_depthTex, nullptr);
+        vk::DestroyImage(m_q->m_ctx->m_dev, m_depthTex, nullptr);
         m_depthTex = VK_NULL_HANDLE;
     }
     if (m_colorBindView)
     {
-        vkDestroyImageView(m_q->m_ctx->m_dev, m_colorBindView, nullptr);
+        vk::DestroyImageView(m_q->m_ctx->m_dev, m_colorBindView, nullptr);
         m_colorBindView = VK_NULL_HANDLE;
     }
     if (m_colorBindTex)
     {
-        vkDestroyImage(m_q->m_ctx->m_dev, m_colorBindTex, nullptr);
+        vk::DestroyImage(m_q->m_ctx->m_dev, m_colorBindTex, nullptr);
         m_colorBindTex = VK_NULL_HANDLE;
     }
     if (m_depthBindView)
     {
-        vkDestroyImageView(m_q->m_ctx->m_dev, m_depthBindView, nullptr);
+        vk::DestroyImageView(m_q->m_ctx->m_dev, m_depthBindView, nullptr);
         m_depthBindView = VK_NULL_HANDLE;
     }
     if (m_depthBindTex)
     {
-        vkDestroyImage(m_q->m_ctx->m_dev, m_depthBindTex, nullptr);
+        vk::DestroyImage(m_q->m_ctx->m_dev, m_depthBindTex, nullptr);
         m_depthBindTex = VK_NULL_HANDLE;
     }
     if (m_gpuMem)
     {
-        vkFreeMemory(m_q->m_ctx->m_dev, m_gpuMem, nullptr);
+        vk::FreeMemory(m_q->m_ctx->m_dev, m_gpuMem, nullptr);
         m_gpuMem = VK_NULL_HANDLE;
     }
 }
 
 VulkanTextureR::~VulkanTextureR()
 {
-    vkDestroyFramebuffer(m_q->m_ctx->m_dev, m_framebuffer, nullptr);
-    vkDestroyImageView(m_q->m_ctx->m_dev, m_colorView, nullptr);
-    vkDestroyImage(m_q->m_ctx->m_dev, m_colorTex, nullptr);
-    vkDestroyImageView(m_q->m_ctx->m_dev, m_depthView, nullptr);
-    vkDestroyImage(m_q->m_ctx->m_dev, m_depthTex, nullptr);
+    vk::DestroyFramebuffer(m_q->m_ctx->m_dev, m_framebuffer, nullptr);
+    vk::DestroyImageView(m_q->m_ctx->m_dev, m_colorView, nullptr);
+    vk::DestroyImage(m_q->m_ctx->m_dev, m_colorTex, nullptr);
+    vk::DestroyImageView(m_q->m_ctx->m_dev, m_depthView, nullptr);
+    vk::DestroyImage(m_q->m_ctx->m_dev, m_depthTex, nullptr);
     if (m_colorBindView)
-        vkDestroyImageView(m_q->m_ctx->m_dev, m_colorBindView, nullptr);
+        vk::DestroyImageView(m_q->m_ctx->m_dev, m_colorBindView, nullptr);
     if (m_colorBindTex)
-        vkDestroyImage(m_q->m_ctx->m_dev, m_colorBindTex, nullptr);
+        vk::DestroyImage(m_q->m_ctx->m_dev, m_colorBindTex, nullptr);
     if (m_depthBindView)
-        vkDestroyImageView(m_q->m_ctx->m_dev, m_depthBindView, nullptr);
+        vk::DestroyImageView(m_q->m_ctx->m_dev, m_depthBindView, nullptr);
     if (m_depthBindTex)
-        vkDestroyImage(m_q->m_ctx->m_dev, m_depthBindTex, nullptr);
-    vkFreeMemory(m_q->m_ctx->m_dev, m_gpuMem, nullptr);
+        vk::DestroyImage(m_q->m_ctx->m_dev, m_depthBindTex, nullptr);
+    vk::FreeMemory(m_q->m_ctx->m_dev, m_gpuMem, nullptr);
     if (m_q->m_boundTarget == this)
         m_q->m_boundTarget = nullptr;
 }
@@ -2623,20 +2615,10 @@ void VulkanGraphicsBufferD::update(int b)
     if ((slot & m_validSlots) == 0)
     {
         void* ptr;
-        ThrowIfFailed(vkMapMemory(m_q->m_ctx->m_dev, m_mem,
+        ThrowIfFailed(vk::MapMemory(m_q->m_ctx->m_dev, m_mem,
                                   m_bufferInfo[b].offset, m_bufferInfo[b].range, 0, &ptr));
         memmove(ptr, m_cpuBuf.get(), m_cpuSz);
-
-        /* flush to gpu */
-        VkMappedMemoryRange mappedRange;
-        mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-        mappedRange.pNext = nullptr;
-        mappedRange.memory = m_mem;
-        mappedRange.offset = m_bufferInfo[b].offset;
-        mappedRange.size = m_bufferInfo[b].range;
-        ThrowIfFailed(vkFlushMappedMemoryRanges(m_q->m_ctx->m_dev, 1, &mappedRange));
-
-        vkUnmapMemory(m_q->m_ctx->m_dev, m_mem);
+        vk::UnmapMemory(m_q->m_ctx->m_dev, m_mem);
         m_validSlots |= slot;
     }
 }
@@ -2668,9 +2650,9 @@ void VulkanTextureD::update(int b)
 
         /* map memory and copy staging data */
         uint8_t* mappedData;
-        ThrowIfFailed(vkMapMemory(m_q->m_ctx->m_dev, m_cpuMem, m_cpuOffsets[b], m_cpuSz, 0, reinterpret_cast<void**>(&mappedData)));
+        ThrowIfFailed(vk::MapMemory(m_q->m_ctx->m_dev, m_cpuMem, m_cpuOffsets[b], m_cpuSz, 0, reinterpret_cast<void**>(&mappedData)));
         memmove(mappedData, m_stagingBuf.get(), m_cpuSz);
-        vkUnmapMemory(m_q->m_ctx->m_dev, m_cpuMem);
+        vk::UnmapMemory(m_q->m_ctx->m_dev, m_cpuMem);
 
         SetImageLayout(cmdBuf, m_gpuTex[b], VK_IMAGE_ASPECT_COLOR_BIT,
                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -2687,12 +2669,12 @@ void VulkanTextureD::update(int b)
         copyRegion.imageExtent.depth = 1;
         copyRegion.bufferOffset = 0;
 
-        vkCmdCopyBufferToImage(cmdBuf,
-                               m_cpuBuf[b],
-                               m_gpuTex[b],
-                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                               1,
-                               &copyRegion);
+        vk::CmdCopyBufferToImage(cmdBuf,
+                                 m_cpuBuf[b],
+                                 m_gpuTex[b],
+                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                 1,
+                                 &copyRegion);
 
         /* Set the layout for the texture image from DESTINATION_OPTIMAL to
          * SHADER_READ_ONLY */
@@ -2748,8 +2730,7 @@ VulkanDataFactory::VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ct
     samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    ThrowIfFailed(vkCreateSampler(ctx->m_dev, &samplerInfo, nullptr, &ctx->m_linearSampler));
+    ThrowIfFailed(vk::CreateSampler(ctx->m_dev, &samplerInfo, nullptr, &ctx->m_linearSampler));
 
     VkDescriptorSetLayoutBinding layoutBindings[BOO_GLSL_MAX_UNIFORM_COUNT + BOO_GLSL_MAX_TEXTURE_COUNT];
     for (int i=0 ; i<BOO_GLSL_MAX_UNIFORM_COUNT ; ++i)
@@ -2775,14 +2756,14 @@ VulkanDataFactory::VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ct
     descriptorLayout.bindingCount = BOO_GLSL_MAX_UNIFORM_COUNT + BOO_GLSL_MAX_TEXTURE_COUNT;
     descriptorLayout.pBindings = layoutBindings;
 
-    ThrowIfFailed(vkCreateDescriptorSetLayout(ctx->m_dev, &descriptorLayout, nullptr,
-                                              &ctx->m_descSetLayout));
+    ThrowIfFailed(vk::CreateDescriptorSetLayout(ctx->m_dev, &descriptorLayout, nullptr,
+                                                &ctx->m_descSetLayout));
 
     VkPipelineLayoutCreateInfo pipelineLayout = {};
     pipelineLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayout.setLayoutCount = 1;
     pipelineLayout.pSetLayouts = &ctx->m_descSetLayout;
-    ThrowIfFailed(vkCreatePipelineLayout(ctx->m_dev, &pipelineLayout, nullptr, &ctx->m_pipelinelayout));
+    ThrowIfFailed(vk::CreatePipelineLayout(ctx->m_dev, &pipelineLayout, nullptr, &ctx->m_pipelinelayout));
 
     VkAttachmentDescription attachments[2] = {};
 
@@ -2822,7 +2803,7 @@ VulkanDataFactory::VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ct
     renderPass.pAttachments = attachments;
     renderPass.subpassCount = 1;
     renderPass.pSubpasses = &subpass;
-    ThrowIfFailed(vkCreateRenderPass(ctx->m_dev, &renderPass, nullptr, &ctx->m_pass));
+    ThrowIfFailed(vk::CreateRenderPass(ctx->m_dev, &renderPass, nullptr, &ctx->m_pass));
 }
 
 IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
@@ -2835,7 +2816,6 @@ IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
     if (vertBlobOut.empty() || fragBlobOut.empty())
     {
         const EShMessages messages = EShMessages(EShMsgSpvRules | EShMsgVulkanRules);
-        //init_resources(DefaultBuiltInResource);
 
         glslang::TShader vs(EShLangVertex);
         vs.setStrings(&vertSource, 1);
@@ -2875,12 +2855,12 @@ IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
     smCreateInfo.codeSize = vertBlobOut.size() * sizeof(unsigned int);
     smCreateInfo.pCode = vertBlobOut.data();
     VkShaderModule vertModule;
-    ThrowIfFailed(vkCreateShaderModule(m_parent.m_ctx->m_dev, &smCreateInfo, nullptr, &vertModule));
+    ThrowIfFailed(vk::CreateShaderModule(m_parent.m_ctx->m_dev, &smCreateInfo, nullptr, &vertModule));
 
     smCreateInfo.codeSize = fragBlobOut.size() * sizeof(unsigned int);
     smCreateInfo.pCode = fragBlobOut.data();
     VkShaderModule fragModule;
-    ThrowIfFailed(vkCreateShaderModule(m_parent.m_ctx->m_dev, &smCreateInfo, nullptr, &fragModule));
+    ThrowIfFailed(vk::CreateShaderModule(m_parent.m_ctx->m_dev, &smCreateInfo, nullptr, &fragModule));
 
     VkPipelineCacheCreateInfo cacheDataInfo = {};
     cacheDataInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
@@ -2890,7 +2870,7 @@ IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
         cacheDataInfo.pInitialData = pipelineBlob.data();
 
     VkPipelineCache pipelineCache;
-    ThrowIfFailed(vkCreatePipelineCache(m_parent.m_ctx->m_dev, &cacheDataInfo, nullptr, &pipelineCache));
+    ThrowIfFailed(vk::CreatePipelineCache(m_parent.m_ctx->m_dev, &cacheDataInfo, nullptr, &pipelineCache));
 
     VulkanShaderPipeline* retval = new VulkanShaderPipeline(m_parent.m_ctx, vertModule, fragModule, pipelineCache,
                                                             static_cast<const VulkanVertexFormat*>(vtxFmt),
@@ -2899,17 +2879,19 @@ IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
     if (pipelineBlob.empty())
     {
         size_t cacheSz = 0;
-        ThrowIfFailed(vkGetPipelineCacheData(m_parent.m_ctx->m_dev, pipelineCache, &cacheSz, nullptr));
+        ThrowIfFailed(vk::GetPipelineCacheData(m_parent.m_ctx->m_dev, pipelineCache, &cacheSz, nullptr));
         if (cacheSz)
         {
             pipelineBlob.resize(cacheSz);
-            ThrowIfFailed(vkGetPipelineCacheData(m_parent.m_ctx->m_dev, pipelineCache, &cacheSz, pipelineBlob.data()));
+            ThrowIfFailed(vk::GetPipelineCacheData(m_parent.m_ctx->m_dev, pipelineCache, &cacheSz, pipelineBlob.data()));
             pipelineBlob.resize(cacheSz);
         }
     }
 
-    vkDestroyShaderModule(m_parent.m_ctx->m_dev, fragModule, nullptr);
-    vkDestroyShaderModule(m_parent.m_ctx->m_dev, vertModule, nullptr);
+    vk::DestroyPipelineCache(m_parent.m_ctx->m_dev, pipelineCache, nullptr);
+
+    vk::DestroyShaderModule(m_parent.m_ctx->m_dev, fragModule, nullptr);
+    vk::DestroyShaderModule(m_parent.m_ctx->m_dev, vertModule, nullptr);
 
     static_cast<VulkanData*>(m_deferredData.get())->m_SPs.emplace_back(retval);
     return retval;
@@ -3029,25 +3011,20 @@ GraphicsDataToken VulkanDataFactory::commitTransaction
         VkMemoryAllocateInfo memAlloc = {};
         memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         memAlloc.allocationSize = bufMemSize;
-        ThrowIfFalse(MemoryTypeFromProperties(m_ctx, bufMemTypeBits, 0, &memAlloc.memoryTypeIndex));
-        ThrowIfFailed(vkAllocateMemory(m_ctx->m_dev, &memAlloc, nullptr, &retval->m_bufMem));
+        ThrowIfFalse(MemoryTypeFromProperties(m_ctx, bufMemTypeBits,
+                                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                              &memAlloc.memoryTypeIndex));
+        ThrowIfFailed(vk::AllocateMemory(m_ctx->m_dev, &memAlloc, nullptr, &retval->m_bufMem));
 
         /* place resources */
         uint8_t* mappedData;
-        ThrowIfFailed(vkMapMemory(m_ctx->m_dev, retval->m_bufMem, 0, bufMemSize, 0, reinterpret_cast<void**>(&mappedData)));
+        ThrowIfFailed(vk::MapMemory(m_ctx->m_dev, retval->m_bufMem, 0, bufMemSize, 0, reinterpret_cast<void**>(&mappedData)));
 
         for (std::unique_ptr<VulkanGraphicsBufferS>& buf : retval->m_SBufs)
             buf->placeForGPU(m_ctx, retval->m_bufMem, mappedData);
 
-        /* flush static buffers to gpu */
-        VkMappedMemoryRange mappedRange;
-        mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-        mappedRange.pNext = nullptr;
-        mappedRange.memory = retval->m_bufMem;
-        mappedRange.offset = 0;
-        mappedRange.size = bufMemSize;
-        ThrowIfFailed(vkFlushMappedMemoryRanges(m_ctx->m_dev, 1, &mappedRange));
-        vkUnmapMemory(m_ctx->m_dev, retval->m_bufMem);
+        vk::UnmapMemory(m_ctx->m_dev, retval->m_bufMem);
 
         for (std::unique_ptr<VulkanGraphicsBufferD>& buf : retval->m_DBufs)
             buf->placeForGPU(m_ctx, retval->m_bufMem);
@@ -3060,7 +3037,7 @@ GraphicsDataToken VulkanDataFactory::commitTransaction
         memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         memAlloc.allocationSize = texMemSize;
         ThrowIfFalse(MemoryTypeFromProperties(m_ctx, texMemTypeBits, 0, &memAlloc.memoryTypeIndex));
-        ThrowIfFailed(vkAllocateMemory(m_ctx->m_dev, &memAlloc, nullptr, &retval->m_texMem));
+        ThrowIfFailed(vk::AllocateMemory(m_ctx->m_dev, &memAlloc, nullptr, &retval->m_texMem));
 
         for (std::unique_ptr<VulkanTextureS>& tex : retval->m_STexs)
             tex->placeForGPU(m_ctx, retval->m_texMem);
@@ -3073,7 +3050,7 @@ GraphicsDataToken VulkanDataFactory::commitTransaction
     }
 
     /* Execute static uploads */
-    ThrowIfFailed(vkEndCommandBuffer(m_ctx->m_loadCmdBuf));
+    ThrowIfFailed(vk::EndCommandBuffer(m_ctx->m_loadCmdBuf));
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
@@ -3081,23 +3058,23 @@ GraphicsDataToken VulkanDataFactory::commitTransaction
 
     /* Take exclusive lock here and submit queue */
     std::unique_lock<std::mutex> qlk(m_ctx->m_queueLock);
-    ThrowIfFailed(vkQueueWaitIdle(m_ctx->m_queue));
-    ThrowIfFailed(vkQueueSubmit(m_ctx->m_queue, 1, &submitInfo, VK_NULL_HANDLE));
+    ThrowIfFailed(vk::QueueWaitIdle(m_ctx->m_queue));
+    ThrowIfFailed(vk::QueueSubmit(m_ctx->m_queue, 1, &submitInfo, VK_NULL_HANDLE));
 
     /* Commit data bindings (create descriptor heaps) */
     for (std::unique_ptr<VulkanShaderDataBinding>& bind : retval->m_SBinds)
         bind->commit(m_ctx);
 
     /* Wait for uploads to complete */
-    ThrowIfFailed(vkQueueWaitIdle(m_ctx->m_queue));
+    ThrowIfFailed(vk::QueueWaitIdle(m_ctx->m_queue));
     qlk.unlock();
 
     /* Reset command buffer */
-    ThrowIfFailed(vkResetCommandBuffer(m_ctx->m_loadCmdBuf, 0));
+    ThrowIfFailed(vk::ResetCommandBuffer(m_ctx->m_loadCmdBuf, 0));
     VkCommandBufferBeginInfo cmdBufBeginInfo = {};
     cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    cmdBufBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    ThrowIfFailed(vkBeginCommandBuffer(m_ctx->m_loadCmdBuf, &cmdBufBeginInfo));
+    cmdBufBeginInfo.flags = 0;
+    ThrowIfFailed(vk::BeginCommandBuffer(m_ctx->m_loadCmdBuf, &cmdBufBeginInfo));
 
     /* Delete upload objects */
     for (std::unique_ptr<VulkanTextureS>& tex : retval->m_STexs)
@@ -3136,10 +3113,10 @@ void VulkanCommandQueue::execute()
     std::unique_lock<std::mutex> lk(m_ctx->m_queueLock);
     if (!m_dynamicNeedsReset)
     {
-        vkEndCommandBuffer(m_dynamicCmdBufs[m_fillBuf]);
+        vk::EndCommandBuffer(m_dynamicCmdBufs[m_fillBuf]);
 
-        vkWaitForFences(m_ctx->m_dev, 1, &m_dynamicBufFence, VK_FALSE, -1);
-        vkResetFences(m_ctx->m_dev, 1, &m_dynamicBufFence);
+        vk::WaitForFences(m_ctx->m_dev, 1, &m_dynamicBufFence, VK_FALSE, -1);
+        vk::ResetFences(m_ctx->m_dev, 1, &m_dynamicBufFence);
 
         VkSubmitInfo submitInfo = {};
         submitInfo.pNext = nullptr;
@@ -3151,11 +3128,11 @@ void VulkanCommandQueue::execute()
         submitInfo.pCommandBuffers = &m_dynamicCmdBufs[m_fillBuf];
         submitInfo.signalSemaphoreCount = 0;
         submitInfo.pSignalSemaphores = nullptr;
-        ThrowIfFailed(vkQueueSubmit(m_ctx->m_queue, 1, &submitInfo, m_dynamicBufFence));
+        ThrowIfFailed(vk::QueueSubmit(m_ctx->m_queue, 1, &submitInfo, m_dynamicBufFence));
     }
 
     /* Check on fence */
-    if (m_submitted && vkGetFenceStatus(m_ctx->m_dev, m_drawCompleteFence) == VK_NOT_READY)
+    if (m_submitted && vk::GetFenceStatus(m_ctx->m_dev, m_drawCompleteFence) == VK_NOT_READY)
     {
         /* Abandon this list (renderer too slow) */
         resetCommandBuffer();
@@ -3188,8 +3165,8 @@ void VulkanCommandQueue::execute()
         return;
     }
 
-    vkResetFences(m_ctx->m_dev, 1, &m_drawCompleteFence);
-    vkCmdEndRenderPass(m_cmdBufs[m_fillBuf]);
+    vk::ResetFences(m_ctx->m_dev, 1, &m_drawCompleteFence);
+    vk::CmdEndRenderPass(m_cmdBufs[m_fillBuf]);
 
     m_drawBuf = m_fillBuf;
     m_fillBuf ^= 1;
@@ -3213,8 +3190,8 @@ void VulkanCommandQueue::execute()
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = &m_drawCompleteSem;
     }
-    ThrowIfFailed(vkEndCommandBuffer(m_cmdBufs[m_drawBuf]));
-    ThrowIfFailed(vkQueueSubmit(m_ctx->m_queue, 1, &submitInfo, m_drawCompleteFence));
+    ThrowIfFailed(vk::EndCommandBuffer(m_cmdBufs[m_drawBuf]));
+    ThrowIfFailed(vk::QueueSubmit(m_ctx->m_queue, 1, &submitInfo, m_drawCompleteFence));
     m_submitted = true;
 
     if (submitInfo.signalSemaphoreCount)
@@ -3231,7 +3208,7 @@ void VulkanCommandQueue::execute()
         present.pWaitSemaphores = &m_drawCompleteSem;
         present.pResults = nullptr;
 
-        ThrowIfFailed(vkQueuePresentKHR(m_ctx->m_queue, &present));
+        ThrowIfFailed(vk::QueuePresentKHR(m_ctx->m_queue, &present));
     }
 
     resetCommandBuffer();

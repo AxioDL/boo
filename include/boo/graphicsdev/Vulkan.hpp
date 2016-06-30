@@ -10,7 +10,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <mutex>
-#include <vulkan/vulkan.h>
+#include "boo/graphicsdev/VulkanDispatchTable.hpp"
 
 namespace boo
 {
@@ -61,7 +61,7 @@ struct VulkanContext
                 m_bufs.clear();
                 if (m_swapChain)
                 {
-                    vkDestroySwapchainKHR(dev, m_swapChain, nullptr);
+                    vk::DestroySwapchainKHR(dev, m_swapChain, nullptr);
                     m_swapChain = VK_NULL_HANDLE;
                 }
                 m_backBuf = 0;
@@ -72,6 +72,7 @@ struct VulkanContext
     std::unordered_map<const boo::IWindow*, std::unique_ptr<Window>> m_windows;
 
     void initVulkan(const char* appName);
+    void enumerateDevices();
     void initDevice();
     void initSwapChain(Window& windowCtx, VkSurfaceKHR surface, VkFormat format);
     void resizeSwapChain(Window& windowCtx, VkSurfaceKHR surface, VkFormat format);

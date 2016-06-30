@@ -4,7 +4,6 @@
 #include "boo/graphicsdev/GL.hpp"
 
 #if BOO_HAS_VULKAN
-#define VK_USE_PLATFORM_XCB_KHR
 #include "boo/graphicsdev/Vulkan.hpp"
 #include <X11/Xlib-xcb.h>
 #endif
@@ -14,6 +13,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <dlfcn.h>
+
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -687,7 +688,7 @@ public:
         VulkanContext::Window& m_windowCtx = *m_ctx->m_windows[m_parentWindow];
         m_windowCtx.m_swapChains[0].destroy(m_ctx->m_dev);
         m_windowCtx.m_swapChains[1].destroy(m_ctx->m_dev);
-        //vkDestroySurfaceKHR(m_ctx->m_instance, m_surface, nullptr);
+        //vk::DestroySurfaceKHR(m_ctx->m_instance, m_surface, nullptr);
 
         if (m_vsyncRunning)
         {
@@ -728,6 +729,35 @@ public:
         m_pf = pf;
     }
 
+    static void* m_vkHandle;
+    static PFN_vkGetInstanceProcAddr loadVk()
+    {
+        const char filename[] = "libvulkan.so";
+        void *handle, *symbol;
+
+#ifdef UNINSTALLED_LOADER
+        handle = dlopen(UNINSTALLED_LOADER, RTLD_LAZY);
+        if (!handle)
+            handle = dlopen(filename, RTLD_LAZY);
+#else
+        handle = dlopen(filename, RTLD_LAZY);
+#endif
+
+        if (handle)
+            symbol = dlsym(handle, "vkGetInstanceProcAddr");
+
+        if (!handle || !symbol) {
+            Log.report(logvisor::Fatal, "unable to load vulkan: %s", dlerror());
+
+            if (handle)
+                dlclose(handle);
+        }
+
+        m_vkHandle = handle;
+
+        return reinterpret_cast<PFN_vkGetInstanceProcAddr>(symbol);
+    }
+
     void initializeContext()
     {
         if (!glXWaitVideoSyncSGI)
@@ -738,8 +768,12 @@ public:
                 Log.report(logvisor::Fatal, "unable to resolve glXWaitVideoSyncSGI");
         }
 
+        vk::init_dispatch_table_top(loadVk());
         if (m_ctx->m_instance == VK_NULL_HANDLE)
             m_ctx->initVulkan(APP->getUniqueName().c_str());
+
+        vk::init_dispatch_table_middle(m_ctx->m_instance, false);
+        m_ctx->enumerateDevices();
 
         m_windowCtx =
             m_ctx->m_windows.emplace(std::make_pair(m_parentWindow,
@@ -749,12 +783,12 @@ public:
         surfaceInfo.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
         surfaceInfo.connection = m_xcbConn;
         surfaceInfo.window = m_parentWindow->getPlatformHandle();
-        ThrowIfFailed(vkCreateXcbSurfaceKHR(m_ctx->m_instance, &surfaceInfo, nullptr, &m_surface));
+        ThrowIfFailed(vk::CreateXcbSurfaceKHR(m_ctx->m_instance, &surfaceInfo, nullptr, &m_surface));
 
         /* Iterate over each queue to learn whether it supports presenting */
         VkBool32 *supportsPresent = (VkBool32*)malloc(m_ctx->m_queueCount * sizeof(VkBool32));
         for (uint32_t i=0 ; i<m_ctx->m_queueCount ; ++i)
-            vkGetPhysicalDeviceSurfaceSupportKHR(m_ctx->m_gpus[0], i, m_surface, &supportsPresent[i]);
+            vk::GetPhysicalDeviceSurfaceSupportKHR(m_ctx->m_gpus[0], i, m_surface, &supportsPresent[i]);
 
         /* Search for a graphics queue and a present queue in the array of queue
          * families, try to find one that supports both */
@@ -788,7 +822,9 @@ public:
         }
         free(supportsPresent);
 
-        if (!vkGetPhysicalDeviceXcbPresentationSupportKHR(m_ctx->m_gpus[0], m_ctx->m_graphicsQueueFamilyIndex, m_xcbConn, m_visualid))
+        vk::init_dispatch_table_bottom(m_ctx->m_instance, m_ctx->m_dev);
+
+        if (!vk::GetPhysicalDeviceXcbPresentationSupportKHR(m_ctx->m_gpus[0], m_ctx->m_graphicsQueueFamilyIndex, m_xcbConn, m_visualid))
         {
             Log.report(logvisor::Fatal, "XCB visual doesn't support vulkan present");
             return;
@@ -796,9 +832,9 @@ public:
 
         /* Get the list of VkFormats that are supported */
         uint32_t formatCount;
-        ThrowIfFailed(vkGetPhysicalDeviceSurfaceFormatsKHR(m_ctx->m_gpus[0], m_surface, &formatCount, nullptr));
+        ThrowIfFailed(vk::GetPhysicalDeviceSurfaceFormatsKHR(m_ctx->m_gpus[0], m_surface, &formatCount, nullptr));
         VkSurfaceFormatKHR* surfFormats = (VkSurfaceFormatKHR*)malloc(formatCount * sizeof(VkSurfaceFormatKHR));
-        ThrowIfFailed(vkGetPhysicalDeviceSurfaceFormatsKHR(m_ctx->m_gpus[0], m_surface, &formatCount, surfFormats));
+        ThrowIfFailed(vk::GetPhysicalDeviceSurfaceFormatsKHR(m_ctx->m_gpus[0], m_surface, &formatCount, surfFormats));
 
 
         /* If the format list includes just one entry of VK_FORMAT_UNDEFINED,
@@ -892,6 +928,7 @@ public:
     void present() {}
 
 };
+void* GraphicsContextXlibVulkan::m_vkHandle = nullptr;
 #endif
 
 class WindowXlib : public IWindow

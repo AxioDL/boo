@@ -7,6 +7,10 @@
 #define BOO_GLSL_BINDING_HEAD \
 "#ifdef VULKAN\n" \
 "#define gl_VertexID gl_VertexIndex\n" \
+"#extension GL_ARB_separate_shader_objects: enable\n" \
+"#define SBINDING(idx) layout(location=idx)\n" \
+"#else\n" \
+"#define SBINDING(idx)\n" \
 "#endif\n" \
 "#extension GL_ARB_shading_language_420pack: enable\n" \
 "#ifdef GL_ARB_shading_language_420pack\n" \
