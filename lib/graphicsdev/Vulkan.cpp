@@ -654,12 +654,15 @@ class VulkanGraphicsBufferS : public IGraphicsBufferS
         bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         bufInfo.flags = 0;
         ThrowIfFailed(vk::CreateBuffer(ctx->m_dev, &bufInfo, nullptr, &m_bufferInfo.buffer));
+        m_bufferInfo.offset = 0;
+        m_bufferInfo.range = m_sz;
     }
 public:
     size_t size() const {return m_sz;}
     size_t m_stride;
     size_t m_count;
     VkDescriptorBufferInfo m_bufferInfo;
+    VkDeviceSize m_memOffset;
     bool m_uniform = false;
     ~VulkanGraphicsBufferS()
     {
@@ -668,30 +671,29 @@ public:
 
     VkDeviceSize sizeForGPU(VulkanContext* ctx, uint32_t& memTypeBits, VkDeviceSize offset)
     {
-        if (m_uniform && ctx->m_gpuProps.limits.minUniformBufferOffsetAlignment)
+        if (m_uniform)
         {
-            offset = (offset +
-                ctx->m_gpuProps.limits.minUniformBufferOffsetAlignment - 1) &
-                ~(ctx->m_gpuProps.limits.minUniformBufferOffsetAlignment - 1);
+            size_t minOffset = std::max(VkDeviceSize(256),
+                ctx->m_gpuProps.limits.minUniformBufferOffsetAlignment);
+            offset = (offset + minOffset - 1) & ~(minOffset - 1);
         }
 
         VkMemoryRequirements memReqs;
         vk::GetBufferMemoryRequirements(ctx->m_dev, m_bufferInfo.buffer, &memReqs);
         memTypeBits &= memReqs.memoryTypeBits;
-        m_bufferInfo.offset = offset;
+        m_memOffset = offset;
 
         offset += m_sz;
         offset = (offset + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
-        m_bufferInfo.range = offset - m_bufferInfo.offset;
 
         return offset;
     }
 
     void placeForGPU(VulkanContext* ctx, VkDeviceMemory mem, uint8_t* buf)
     {
-        memmove(buf + m_bufferInfo.offset, m_stagingBuf.get(), m_sz);
+        memmove(buf + m_memOffset, m_stagingBuf.get(), m_sz);
         m_stagingBuf.reset();
-        ThrowIfFailed(vk::BindBufferMemory(ctx->m_dev, m_bufferInfo.buffer, mem, m_bufferInfo.offset));
+        ThrowIfFailed(vk::BindBufferMemory(ctx->m_dev, m_bufferInfo.buffer, mem, m_memOffset));
     }
 };
 
@@ -718,6 +720,10 @@ class VulkanGraphicsBufferD : public IGraphicsBufferD
         bufInfo.flags = 0;
         ThrowIfFailed(vk::CreateBuffer(ctx->m_dev, &bufInfo, nullptr, &m_bufferInfo[0].buffer));
         ThrowIfFailed(vk::CreateBuffer(ctx->m_dev, &bufInfo, nullptr, &m_bufferInfo[1].buffer));
+        m_bufferInfo[0].offset = 0;
+        m_bufferInfo[0].range = m_cpuSz;
+        m_bufferInfo[1].offset = 0;
+        m_bufferInfo[1].range = m_cpuSz;
     }
     void update(int b);
 
@@ -725,6 +731,7 @@ public:
     size_t m_stride;
     size_t m_count;
     VkDeviceMemory m_mem;
+    VkDeviceSize m_memOffset[2];
     VkDescriptorBufferInfo m_bufferInfo[2];
     bool m_uniform = false;
     ~VulkanGraphicsBufferD();
@@ -736,21 +743,20 @@ public:
     {
         for (int i=0 ; i<2 ; ++i)
         {
-            if (m_uniform && ctx->m_gpuProps.limits.minUniformBufferOffsetAlignment)
+            if (m_uniform)
             {
-                offset = (offset +
-                    ctx->m_gpuProps.limits.minUniformBufferOffsetAlignment - 1) &
-                    ~(ctx->m_gpuProps.limits.minUniformBufferOffsetAlignment - 1);
+                size_t minOffset = std::max(VkDeviceSize(256),
+                    ctx->m_gpuProps.limits.minUniformBufferOffsetAlignment);
+                offset = (offset + minOffset - 1) & ~(minOffset - 1);
             }
 
             VkMemoryRequirements memReqs;
             vk::GetBufferMemoryRequirements(ctx->m_dev, m_bufferInfo[i].buffer, &memReqs);
             memTypeBits &= memReqs.memoryTypeBits;
-            m_bufferInfo[i].offset = offset;
+            m_memOffset[i] = offset;
 
             offset += memReqs.size;
             offset = (offset + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
-            m_bufferInfo[i].range = offset - m_bufferInfo[i].offset;
         }
 
         return offset;
@@ -759,8 +765,8 @@ public:
     void placeForGPU(VulkanContext* ctx, VkDeviceMemory mem)
     {
         m_mem = mem;
-        ThrowIfFailed(vk::BindBufferMemory(ctx->m_dev, m_bufferInfo[0].buffer, mem, m_bufferInfo[0].offset));
-        ThrowIfFailed(vk::BindBufferMemory(ctx->m_dev, m_bufferInfo[1].buffer, mem, m_bufferInfo[1].offset));
+        ThrowIfFailed(vk::BindBufferMemory(ctx->m_dev, m_bufferInfo[0].buffer, mem, m_memOffset[0]));
+        ThrowIfFailed(vk::BindBufferMemory(ctx->m_dev, m_bufferInfo[1].buffer, mem, m_memOffset[1]));
     }
 };
 
@@ -1647,6 +1653,7 @@ class VulkanShaderPipeline : public IShaderPipeline
 {
     friend class VulkanDataFactory;
     VulkanContext* m_ctx;
+    VkPipelineCache m_pipelineCache;
     VulkanShaderPipeline(VulkanContext* ctx,
                          VkShaderModule vert,
                          VkShaderModule frag,
@@ -1654,7 +1661,7 @@ class VulkanShaderPipeline : public IShaderPipeline
                          const VulkanVertexFormat* vtxFmt,
                          BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                          bool depthTest, bool depthWrite, bool backfaceCulling)
-    : m_ctx(ctx)
+    : m_ctx(ctx), m_pipelineCache(pipelineCache)
     {
         VkDynamicState dynamicStateEnables[VK_DYNAMIC_STATE_RANGE_SIZE] = {};
         VkPipelineDynamicStateCreateInfo dynamicState = {};
@@ -1770,6 +1777,7 @@ public:
     ~VulkanShaderPipeline()
     {
         vk::DestroyPipeline(m_ctx->m_dev, m_pipeline, nullptr);
+        vk::DestroyPipelineCache(m_ctx->m_dev, m_pipelineCache, nullptr);
     }
     VulkanShaderPipeline& operator=(const VulkanShaderPipeline&) = delete;
     VulkanShaderPipeline(const VulkanShaderPipeline&) = delete;
@@ -1869,7 +1877,7 @@ struct VulkanShaderDataBinding : IShaderDataBinding
     IGraphicsBuffer* m_ibuf;
     size_t m_ubufCount;
     std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
-    std::vector<VkDescriptorBufferInfo> m_ubufOffs;
+    std::vector<std::array<VkDescriptorBufferInfo, 2>> m_ubufOffs;
     size_t m_texCount;
     std::unique_ptr<ITexture*[]> m_texs;
 
@@ -1911,7 +1919,9 @@ struct VulkanShaderDataBinding : IShaderDataBinding
                 if (ubufOffs[i] % 256)
                     Log.report(logvisor::Fatal, "non-256-byte-aligned uniform-offset %d provided to newShaderDataBinding", int(i));
 #endif
-                m_ubufOffs.push_back({VK_NULL_HANDLE, ubufOffs[i], (ubufSizes[i] + 255) & ~255});
+                std::array<VkDescriptorBufferInfo, 2> fillArr;
+                fillArr.fill({VK_NULL_HANDLE, ubufOffs[i], (ubufSizes[i] + 255) & ~255});
+                m_ubufOffs.push_back(fillArr);
             }
         }
         for (size_t i=0 ; i<ubufCount ; ++i)
@@ -2004,7 +2014,7 @@ struct VulkanShaderDataBinding : IShaderDataBinding
                         writes[totalWrites].descriptorCount = 1;
                         writes[totalWrites].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
                         const VkDescriptorBufferInfo* origInfo = GetBufferGPUResource(m_ubufs[i], b);
-                        VkDescriptorBufferInfo& modInfo = m_ubufOffs[i];
+                        VkDescriptorBufferInfo& modInfo = m_ubufOffs[i][b];
                         modInfo.buffer = origInfo->buffer;
                         modInfo.offset += origInfo->offset;
                         writes[totalWrites].pBufferInfo = &modInfo;
@@ -2614,7 +2624,7 @@ void VulkanGraphicsBufferD::update(int b)
     {
         void* ptr;
         ThrowIfFailed(vk::MapMemory(m_q->m_ctx->m_dev, m_mem,
-                                  m_bufferInfo[b].offset, m_bufferInfo[b].range, 0, &ptr));
+                                    m_memOffset[b], m_cpuSz, 0, &ptr));
         memmove(ptr, m_cpuBuf.get(), m_cpuSz);
         vk::UnmapMemory(m_q->m_ctx->m_dev, m_mem);
         m_validSlots |= slot;
@@ -2885,8 +2895,6 @@ IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
             pipelineBlob.resize(cacheSz);
         }
     }
-
-    vk::DestroyPipelineCache(m_parent.m_ctx->m_dev, pipelineCache, nullptr);
 
     vk::DestroyShaderModule(m_parent.m_ctx->m_dev, fragModule, nullptr);
     vk::DestroyShaderModule(m_parent.m_ctx->m_dev, vertModule, nullptr);

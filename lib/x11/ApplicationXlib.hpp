@@ -27,6 +27,8 @@ DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
 
 #if BOO_HAS_VULKAN
 #include <X11/Xlib-xcb.h>
+#include <vulkan/vulkan.h>
+#include <dlfcn.h>
 #endif
 
 namespace boo
@@ -115,7 +117,7 @@ static Window GetWindowOfEvent(XEvent* event, bool& windowEvent)
 IWindow* _WindowXlibNew(const std::string& title,
                         Display* display, void* xcbConn,
                         int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
-                        GLXContext lastCtx, bool useVulkan, uint32_t drawSamples);
+                        GLXContext lastCtx, void* vulkanHandle, uint32_t drawSamples);
 
 static XIMStyle ChooseBetterStyle(XIMStyle style1, XIMStyle style2)
 {
@@ -177,8 +179,37 @@ class ApplicationXlib final : public IApplication
 
 #if BOO_HAS_VULKAN
     /* Vulkan enable */
-    bool m_useVulkan = true;
     xcb_connection_t* m_xcbConn;
+
+    void* m_vkHandle = nullptr;
+    PFN_vkGetInstanceProcAddr m_getVkProc = 0;
+    bool loadVk()
+    {
+        const char filename[] = "libvulkan.so";
+        void *handle, *symbol;
+
+#ifdef UNINSTALLED_LOADER
+        handle = dlopen(UNINSTALLED_LOADER, RTLD_LAZY);
+        if (!handle)
+            handle = dlopen(filename, RTLD_LAZY);
+#else
+        handle = dlopen(filename, RTLD_LAZY);
+#endif
+
+        if (handle)
+            symbol = dlsym(handle, "vkGetInstanceProcAddr");
+
+        if (!handle || !symbol) {
+
+            if (handle)
+                dlclose(handle);
+            return false;
+        }
+
+        m_vkHandle = handle;
+        m_getVkProc = reinterpret_cast<PFN_vkGetInstanceProcAddr>(symbol);
+        return true;
+    }
 #endif
     
     void _deletedWindow(IWindow* window)
@@ -200,6 +231,29 @@ public:
       m_args(args),
       m_singleInstance(singleInstance)
     {
+#if BOO_HAS_VULKAN
+        /* Check for Vulkan presence and preference */
+        bool hasVk = loadVk();
+        if (hasVk)
+        {
+            for (const std::string& arg : args)
+            {
+                if (!arg.compare("--gl"))
+                {
+                    dlclose(m_vkHandle);
+                    m_vkHandle = nullptr;
+                    m_getVkProc = 0;
+                    break;
+                }
+            }
+        }
+
+        if (m_getVkProc)
+            Log.report(logvisor::Info, "using Vulkan renderer");
+        else
+#endif
+            Log.report(logvisor::Info, "using OpenGL renderer");
+
         /* DBus single instance registration */
         bool isFirst;
         m_dbus = RegisterDBus(uniqueName.c_str(), isFirst);
@@ -477,10 +531,10 @@ public:
     {
 #if BOO_HAS_VULKAN
         IWindow* newWindow = _WindowXlibNew(title, m_xDisp, m_xcbConn, m_xDefaultScreen, m_xIM,
-                                            m_bestStyle, m_fontset, m_lastGlxCtx, m_useVulkan, drawSamples);
+                                            m_bestStyle, m_fontset, m_lastGlxCtx, (void*)m_getVkProc, drawSamples);
 #else
         IWindow* newWindow = _WindowXlibNew(title, m_xDisp, nullptr, m_xDefaultScreen, m_xIM,
-                                            m_bestStyle, m_fontset, m_lastGlxCtx, false, drawSamples);
+                                            m_bestStyle, m_fontset, m_lastGlxCtx, nullptr, drawSamples);
 #endif
         m_windows[(Window)newWindow->getPlatformHandle()] = newWindow;
         return newWindow;

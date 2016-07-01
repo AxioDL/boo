@@ -154,7 +154,7 @@ public:
         m_pf = pf;
     }
 
-    void initializeContext() {}
+    void initializeContext(void*) {}
 
     void makeCurrent() {}
 
@@ -295,7 +295,7 @@ public:
         m_pf = pf;
     }
 
-    void initializeContext() {}
+    void initializeContext(void*) {}
 
     void makeCurrent()
     {

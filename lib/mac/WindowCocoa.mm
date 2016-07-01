@@ -219,7 +219,7 @@ public:
         m_pf = pf;
     }
 
-    void initializeContext()
+    void initializeContext(void*)
     {
         m_nsContext = [[GraphicsContextCocoaGLInternal alloc] initWithBooContext:this];
         if (!m_nsContext)
@@ -375,7 +375,7 @@ public:
         m_pf = pf;
     }
 
-    void initializeContext()
+    void initializeContext(void*)
     {
         MetalContext::Window& w = m_metalCtx->m_windows[m_parentWindow];
         m_nsContext = [[GraphicsContextCocoaMetalInternal alloc] initWithBooContext:this];
@@ -1246,7 +1246,7 @@ public:
 #endif
                 m_gfxCtx = static_cast<GraphicsContextCocoa*>(_GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI::OpenGL3_3,
                                                                                          this, lastGLCtx, sampleCount));
-            m_gfxCtx->initializeContext();
+            m_gfxCtx->initializeContext(nullptr);
         });
     }
 

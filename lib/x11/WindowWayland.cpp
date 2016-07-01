@@ -50,7 +50,7 @@ public:
         m_pf = pf;
     }
 
-    void initializeContext()
+    void initializeContext(void*)
     {
 
     }

@@ -13,7 +13,6 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include <dlfcn.h>
 
 #include <thread>
 #include <mutex>
@@ -440,7 +439,7 @@ public:
         m_pf = pf;
     }
 
-    void initializeContext()
+    void initializeContext(void*)
     {
         if (!glXCreateContextAttribsARB)
         {
@@ -729,36 +728,7 @@ public:
         m_pf = pf;
     }
 
-    static void* m_vkHandle;
-    static PFN_vkGetInstanceProcAddr loadVk()
-    {
-        const char filename[] = "libvulkan.so";
-        void *handle, *symbol;
-
-#ifdef UNINSTALLED_LOADER
-        handle = dlopen(UNINSTALLED_LOADER, RTLD_LAZY);
-        if (!handle)
-            handle = dlopen(filename, RTLD_LAZY);
-#else
-        handle = dlopen(filename, RTLD_LAZY);
-#endif
-
-        if (handle)
-            symbol = dlsym(handle, "vkGetInstanceProcAddr");
-
-        if (!handle || !symbol) {
-            Log.report(logvisor::Fatal, "unable to load vulkan: %s", dlerror());
-
-            if (handle)
-                dlclose(handle);
-        }
-
-        m_vkHandle = handle;
-
-        return reinterpret_cast<PFN_vkGetInstanceProcAddr>(symbol);
-    }
-
-    void initializeContext()
+    void initializeContext(void* getVkProc)
     {
         if (!glXWaitVideoSyncSGI)
         {
@@ -768,7 +738,7 @@ public:
                 Log.report(logvisor::Fatal, "unable to resolve glXWaitVideoSyncSGI");
         }
 
-        vk::init_dispatch_table_top(loadVk());
+        vk::init_dispatch_table_top(PFN_vkGetInstanceProcAddr(getVkProc));
         if (m_ctx->m_instance == VK_NULL_HANDLE)
             m_ctx->initVulkan(APP->getUniqueName().c_str());
 
@@ -928,7 +898,6 @@ public:
     void present() {}
 
 };
-void* GraphicsContextXlibVulkan::m_vkHandle = nullptr;
 #endif
 
 class WindowXlib : public IWindow
@@ -992,7 +961,7 @@ public:
     WindowXlib(const std::string& title,
                Display* display, void* xcbConn,
                int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
-               GLXContext lastCtx, bool useVulkan, uint32_t drawSamples)
+               GLXContext lastCtx, void* vulkanHandle, uint32_t drawSamples)
     : m_xDisp(display), m_callback(nullptr),
       m_bestStyle(bestInputStyle)
     {
@@ -1000,7 +969,7 @@ public:
             S_ATOMS = new XlibAtoms(display);
 
 #if BOO_HAS_VULKAN
-        if (useVulkan)
+        if (vulkanHandle)
             m_gfxCtx.reset(new GraphicsContextXlibVulkan(this, display, (xcb_connection_t*)xcbConn, defaultScreen,
                                                          &g_VulkanContext, m_visualId, drawSamples));
         else
@@ -1100,7 +1069,7 @@ public:
         setCursor(EMouseCursor::Pointer);
         XFlush(m_xDisp);
 
-        m_gfxCtx->initializeContext();
+        m_gfxCtx->initializeContext(vulkanHandle);
     }
     
     ~WindowXlib()
@@ -2029,11 +1998,11 @@ public:
 IWindow* _WindowXlibNew(const std::string& title,
                         Display* display, void* xcbConn,
                         int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
-                        GLXContext lastCtx, bool useVulkan, uint32_t drawSamples)
+                        GLXContext lastCtx, void* vulkanHandle, uint32_t drawSamples)
 {
     XLockDisplay(display);
     IWindow* ret = new WindowXlib(title, display, xcbConn, defaultScreen, xIM,
-                                  bestInputStyle, fontset, lastCtx, useVulkan, drawSamples);
+                                  bestInputStyle, fontset, lastCtx, vulkanHandle, drawSamples);
     XUnlockDisplay(display);
     return ret;
 }
