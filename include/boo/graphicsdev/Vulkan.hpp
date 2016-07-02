@@ -2,6 +2,8 @@
 #define GDEV_VULKAN_HPP
 #if BOO_HAS_VULKAN
 
+#define SRGB_HACK 0
+
 #include "IGraphicsDataFactory.hpp"
 #include "IGraphicsCommandQueue.hpp"
 #include "boo/IGraphicsContext.hpp"
@@ -43,6 +45,27 @@ struct VulkanContext
     VkCommandPool m_loadPool;
     VkCommandBuffer m_loadCmdBuf;
     VkSampler m_linearSampler;
+
+#if SRGB_HACK
+    /* Dedicated objects for performing shader-based sRGB conversion */
+    VkDescriptorSetLayout m_srgbDescSetLayout;
+    VkDescriptorPool m_srgbDescPool;
+    VkDescriptorSet m_srgbDescSet;
+    VkPipelineLayout m_srgbPipelinelayout;
+    VkRenderPass m_srgbPass;
+    VkPipelineCache m_srgbPipelineCache;
+    VkBuffer m_srgbVertBuf;
+    VkDeviceMemory m_srgbVertBufMem;
+    VkShaderModule m_srgbVert;
+    VkShaderModule m_srgbFrag;
+    VkPipeline m_srgbPipeline;
+    VkPipeline m_srgbPipelinePreResize = VK_NULL_HANDLE;
+    VkBuffer m_srgbRampTextureBuf;
+    VkDeviceMemory m_srgbRampTextureMem;
+    VkImage m_srgbRampTexture;
+    VkImageView m_srgbRampTextureView;
+#endif
+
     struct Window
     {
         struct SwapChain
@@ -52,6 +75,10 @@ struct VulkanContext
             struct Buffer
             {
                 VkImage m_image = VK_NULL_HANDLE;
+#if SRGB_HACK
+                VkImageView m_view;
+                VkFramebuffer m_framebuffer;
+#endif
                 VkImageLayout m_layout = VK_IMAGE_LAYOUT_UNDEFINED;
             };
             std::vector<Buffer> m_bufs;
@@ -61,6 +88,13 @@ struct VulkanContext
                 m_bufs.clear();
                 if (m_swapChain)
                 {
+#if SRGB_HACK
+                    for (Buffer& buf : m_bufs)
+                    {
+                        vk::DestroyFramebuffer(dev, buf.m_framebuffer, nullptr);
+                        vk::DestroyImageView(dev, buf.m_view, nullptr);
+                    }
+#endif
                     vk::DestroySwapchainKHR(dev, m_swapChain, nullptr);
                     m_swapChain = VK_NULL_HANDLE;
                 }
@@ -74,8 +108,8 @@ struct VulkanContext
     void initVulkan(const char* appName);
     void enumerateDevices();
     void initDevice();
-    void initSwapChain(Window& windowCtx, VkSurfaceKHR surface, VkFormat format);
-    void resizeSwapChain(Window& windowCtx, VkSurfaceKHR surface, VkFormat format);
+    void initSwapChain(Window& windowCtx, VkSurfaceKHR surface, VkFormat format, VkColorSpaceKHR colorspace);
+    void resizeSwapChain(Window& windowCtx, VkSurfaceKHR surface, VkFormat format, VkColorSpaceKHR colorspace);
 };
 extern VulkanContext g_VulkanContext;
 

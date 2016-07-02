@@ -598,6 +598,7 @@ struct GraphicsContextXlibVulkan : GraphicsContextXlib
     VulkanContext* m_ctx;
     VkSurfaceKHR m_surface = VK_NULL_HANDLE;
     VkFormat m_format;
+    VkColorSpaceKHR m_colorspace;
 
     GLXFBConfig m_fbconfig = 0;
     int m_visualid = 0;
@@ -623,63 +624,9 @@ public:
     : GraphicsContextXlib(EGraphicsAPI::Vulkan, EPixelFormat::RGBA8, parentWindow, display, drawSamples),
       m_xcbConn(xcbConn), m_ctx(ctx)
     {
-        /* Query framebuffer configurations */
-        GLXFBConfig* fbConfigs = nullptr;
-        int numFBConfigs = 0;
-        fbConfigs = glXGetFBConfigs(display, defaultScreen, &numFBConfigs);
-        if (!fbConfigs || numFBConfigs == 0)
-        {
-            Log.report(logvisor::Fatal, "glXGetFBConfigs failed");
-            return;
-        }
-
-        for (int i=0 ; i<numFBConfigs ; ++i)
-        {
-            GLXFBConfig config = fbConfigs[i];
-            int visualId, depthSize, colorSize, doubleBuffer;
-            glXGetFBConfigAttrib(display, config, GLX_VISUAL_ID, &visualId);
-            glXGetFBConfigAttrib(display, config, GLX_DEPTH_SIZE, &depthSize);
-            glXGetFBConfigAttrib(display, config, GLX_BUFFER_SIZE, &colorSize);
-            glXGetFBConfigAttrib(display, config, GLX_DOUBLEBUFFER, &doubleBuffer);
-
-            /* Double-buffer only */
-            if (!doubleBuffer)
-                continue;
-
-            if (m_pf == EPixelFormat::RGBA8 && colorSize >= 32)
-            {
-                m_fbconfig = config;
-                m_visualid = visualId;
-                break;
-            }
-            else if (m_pf == EPixelFormat::RGBA8_Z24 && colorSize >= 32 && depthSize >= 24)
-            {
-                m_fbconfig = config;
-                m_visualid = visualId;
-                break;
-            }
-            else if (m_pf == EPixelFormat::RGBAF32 && colorSize >= 128)
-            {
-                m_fbconfig = config;
-                m_visualid = visualId;
-                break;
-            }
-            else if (m_pf == EPixelFormat::RGBAF32_Z24 && colorSize >= 128 && depthSize >= 24)
-            {
-                m_fbconfig = config;
-                m_visualid = visualId;
-                break;
-            }
-        }
-        XFree(fbConfigs);
-
-        if (!m_fbconfig)
-        {
-            Log.report(logvisor::Fatal, "unable to find suitable pixel format");
-            return;
-        }
-
-        visualIdOut = m_visualid;
+        Screen* screen = ScreenOfDisplay(display, defaultScreen);
+        m_visualid = screen->root_visual->visualid;
+        visualIdOut = screen->root_visual->visualid;
     }
 
     void destroy()
@@ -703,7 +650,7 @@ public:
     void resized(SWindowRect& rect)
     {
         if (m_windowCtx)
-            m_ctx->resizeSwapChain(*m_windowCtx, m_surface, m_format);
+            m_ctx->resizeSwapChain(*m_windowCtx, m_surface, m_format, m_colorspace);
     }
 
     void _setCallback(IWindowCallback* cb)
@@ -816,11 +763,12 @@ public:
                 m_format = VK_FORMAT_B8G8R8A8_UNORM;
             else
                 m_format = surfFormats[0].format;
+            m_colorspace = surfFormats[0].colorSpace;
         }
         else
             Log.report(logvisor::Fatal, "no surface formats available for Vulkan swapchain");
 
-        m_ctx->initSwapChain(*m_windowCtx, m_surface, m_format);
+        m_ctx->initSwapChain(*m_windowCtx, m_surface, m_format, m_colorspace);
 
         /* Spawn vsync thread */
         m_vsyncRunning = true;
