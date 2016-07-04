@@ -135,7 +135,13 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
         snd_pcm_hw_params_any(m_pcm, hwParams);
 
         snd_pcm_format_t bestFmt;
-        if (!snd_pcm_hw_params_test_format(m_pcm, hwParams, SND_PCM_FORMAT_S32))
+        if (!snd_pcm_hw_params_test_format(m_pcm, hwParams, SND_PCM_FORMAT_FLOAT))
+        {
+            bestFmt = SND_PCM_FORMAT_FLOAT;
+            m_mixInfo.m_sampleFormat = SOXR_FLOAT32_I;
+            m_mixInfo.m_bitsPerSample = 32;
+        }
+        else if (!snd_pcm_hw_params_test_format(m_pcm, hwParams, SND_PCM_FORMAT_S32))
         {
             bestFmt = SND_PCM_FORMAT_S32;
             m_mixInfo.m_sampleFormat = SOXR_INT32_I;

@@ -127,7 +127,7 @@ void AudioVoiceMono::_resetSampleRate(double sampleRate)
     {
         std::vector<float>& scratchFlt = m_root.m_scratchFlt;
         if (scratchFlt.size() < m_root.m_5msFrames)
-            scratchFlt.resize(m_root.m_5msFrames);
+            scratchFlt.resize(m_root.m_5msFrames + 2);
         soxr_output(m_src, scratchFlt.data(), m_root.m_5msFrames);
         break;
     }
@@ -196,7 +196,7 @@ size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
 {
     std::vector<float>& scratchFlt = m_root.m_scratchFlt;
     if (scratchFlt.size() < frames)
-        scratchFlt.resize(frames);
+        scratchFlt.resize(frames + 2);
 
     size_t oDone = soxr_output(m_src, scratchFlt.data(), frames);
     _midUpdate();
@@ -316,7 +316,7 @@ void AudioVoiceStereo::_resetSampleRate(double sampleRate)
     {
         std::vector<float>& scratchFlt = m_root.m_scratchFlt;
         if (scratchFlt.size() < m_root.m_5msFrames * 2)
-            scratchFlt.resize(m_root.m_5msFrames * 2);
+            scratchFlt.resize(m_root.m_5msFrames * 2 + 2);
         soxr_output(m_src, scratchFlt.data(), m_root.m_5msFrames);
         break;
     }
@@ -389,7 +389,7 @@ size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
     std::vector<float>& scratchFlt = m_root.m_scratchFlt;
     size_t samples = frames * 2;
     if (scratchFlt.size() < samples)
-        scratchFlt.resize(samples);
+        scratchFlt.resize(samples + 4);
 
     size_t oDone = soxr_output(m_src, scratchFlt.data(), frames);
     _midUpdate();

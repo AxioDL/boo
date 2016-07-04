@@ -56,7 +56,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         engine->m_engineEnterCv.wait(lk);
         engine->m_cbWaiting = false;
 
-        engine->_pumpAndMixVoices(engine->m_mixInfo.m_periodFrames, reinterpret_cast<int32_t*>(inBuffer->mAudioData));
+        engine->_pumpAndMixVoices(engine->m_mixInfo.m_periodFrames, reinterpret_cast<float*>(inBuffer->mAudioData));
         inBuffer->mAudioDataByteSize = engine->m_frameBytes;
         AudioQueueEnqueueBuffer(inAQ, inBuffer, 0, nullptr);
 
@@ -71,7 +71,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         AudioStreamBasicDescription desc = {};
         desc.mSampleRate = 96000;
         desc.mFormatID = kAudioFormatLinearPCM;
-        desc.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger;
+        desc.mFormatFlags = kLinearPCMFormatFlagIsFloat;
         desc.mBytesPerPacket = chCount * 4;
         desc.mFramesPerPacket = 1;
         desc.mBytesPerFrame = chCount * 4;
@@ -545,7 +545,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         AudioStreamBasicDescription desc = {};
         desc.mSampleRate = 96000;
         desc.mFormatID = kAudioFormatLinearPCM;
-        desc.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger;
+        desc.mFormatFlags = kLinearPCMFormatFlagIsFloat;
         desc.mBytesPerPacket = chCount * 4;
         desc.mFramesPerPacket = 1;
         desc.mBytesPerFrame = chCount * 4;
@@ -579,7 +579,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         }
 
         m_mixInfo.m_sampleRate = actualSampleRate;
-        m_mixInfo.m_sampleFormat = SOXR_INT32_I;
+        m_mixInfo.m_sampleFormat = SOXR_FLOAT32_I;
         m_mixInfo.m_bitsPerSample = 32;
         m_5msFrames = actualSampleRate * 5 / 1000;
 
@@ -676,7 +676,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
         for (unsigned i=0 ; i<3 ; ++i)
         {
-            _pumpAndMixVoices(m_mixInfo.m_periodFrames, reinterpret_cast<int32_t*>(m_buffers[i]->mAudioData));
+            _pumpAndMixVoices(m_mixInfo.m_periodFrames, reinterpret_cast<float*>(m_buffers[i]->mAudioData));
             m_buffers[i]->mAudioDataByteSize = m_frameBytes;
             AudioQueueEnqueueBuffer(m_queue, m_buffers[i], 0, nullptr);
         }
