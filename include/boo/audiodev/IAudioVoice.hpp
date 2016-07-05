@@ -89,6 +89,10 @@ struct IAudioVoice
 
 struct IAudioVoiceCallback
 {
+    /** boo calls this on behalf of the audio platform to proactively invoke potential
+     *  pitch or panning changes before processing samples */
+    virtual void preSupplyAudio(boo::IAudioVoice& voice, double dt)=0;
+
     /** boo calls this on behalf of the audio platform to request more audio
      *  frames from the client */
     virtual size_t supplyAudio(IAudioVoice& voice, size_t frames, int16_t* data)=0;
