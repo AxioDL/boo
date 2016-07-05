@@ -97,7 +97,7 @@ public:
         if (!m_metalCtx.m_dev)
             Log.report(logvisor::Info, "using OpenGL renderer");
 #else
-        Log.report(LogVisor::Info, "using OpenGL renderer");
+        Log.report(logvisor::Info, "using OpenGL renderer");
 #endif
     }
 

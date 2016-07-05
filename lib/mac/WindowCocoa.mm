@@ -520,10 +520,17 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
     }
 }
 
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101100
 - (NSArray<NSString*>*)validAttributesForMarkedText
 {
     return @[];
 }
+#else
+- (NSArray*)validAttributesForMarkedText
+{
+    return @[];
+}
+#endif
 
 - (NSAttributedString*)attributedSubstringForProposedRange:(NSRange)aRange actualRange:(NSRangePointer)actualRange
 {
@@ -1342,7 +1349,7 @@ public:
 
     void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const
     {
-        NSRect wFrame = m_nsWindow.contentView.frame;
+        NSRect wFrame = [[m_nsWindow contentView] frame];
         xOut = wFrame.origin.x;
         yOut = wFrame.origin.y;
         wOut = wFrame.size.width;
@@ -1351,7 +1358,7 @@ public:
 
     void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const
     {
-        NSRect wFrame = m_nsWindow.contentView.frame;
+        NSRect wFrame = [[m_nsWindow contentView] frame];
         xOut = wFrame.origin.x;
         yOut = wFrame.origin.y;
         wOut = wFrame.size.width;
