@@ -8,6 +8,7 @@
 
 struct AudioUnitVoiceEngine;
 struct VSTVoiceEngine;
+struct WAVOutVoiceEngine;
 
 namespace boo
 {
@@ -20,6 +21,7 @@ class AudioSubmix : public IAudioSubmix, public IAudioMix
     friend struct WASAPIAudioVoiceEngine;
     friend struct ::AudioUnitVoiceEngine;
     friend struct ::VSTVoiceEngine;
+    friend struct ::WAVOutVoiceEngine;
 
     /* Mixer-engine relationships */
     BaseAudioVoiceEngine& m_root;

@@ -65,6 +65,7 @@ public:
     const AudioVoiceEngineMixInfo& mixInfo() const;
     AudioChannelSet getAvailableSet() {return m_mixInfo.m_channels;}
     void pumpAndMixVoices() {}
+    size_t get5MsFrames() const {return m_5msFrames;}
 };
 
 }

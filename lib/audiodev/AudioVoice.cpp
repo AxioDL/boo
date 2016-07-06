@@ -88,7 +88,7 @@ void AudioVoiceMono::_resetSampleRate(double sampleRate)
     soxr_quality_spec_t qSpec = soxr_quality_spec(SOXR_20_BITQ, m_dynamicRate ? SOXR_VR : 0);
 
     soxr_error_t err;
-    m_src = soxr_create(sampleRate, rateOut, 1,
+    m_src = soxr_create(1 << 1, 1, 1,
                         &err, &ioSpec, &qSpec, nullptr);
 
     if (err)

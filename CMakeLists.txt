@@ -195,6 +195,7 @@ add_library(boo
             lib/inputdev/GenericPad.cpp include/boo/inputdev/GenericPad.hpp
             lib/inputdev/DeviceSignature.cpp include/boo/inputdev/DeviceSignature.hpp
             lib/inputdev/IHIDDevice.hpp
+            lib/audiodev/WAVOut.cpp
             lib/audiodev/AudioMatrix.hpp
             #lib/audiodev/AudioMatrix.cpp
             lib/audiodev/AudioMatrixSSE.cpp

@@ -64,13 +64,22 @@ struct IAudioVoiceEngine
 
     /** Open named MIDI in/out port, name format depends on OS */
     virtual std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver)=0;
-    
+
     /** If this returns true, MIDI callbacks are assumed to be *not* thread-safe; need protection via mutex */
     virtual bool useMIDILock() const=0;
+
+    /** Get canonical count of frames for each 5ms output block */
+    virtual size_t get5MsFrames() const=0;
 };
 
 /** Construct host platform's voice engine */
 std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine();
+
+/** Construct WAV-rendering voice engine */
+std::unique_ptr<IAudioVoiceEngine> NewWAVAudioVoiceEngine(const char* path, double sampleRate);
+#if _WIN32
+std::unique_ptr<IAudioVoiceEngine> NewWAVAudioVoiceEngine(const wchar_t* path, double sampleRate);
+#endif
 
 }
 
