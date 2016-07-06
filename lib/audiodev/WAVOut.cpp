@@ -113,7 +113,7 @@ struct WAVOutVoiceEngine : boo::BaseAudioVoiceEngine
 #if _WIN32
     WAVOutVoiceEngine(const wchar_t* path, double sampleRate)
     {
-        m_fp = _wfopen(path, "wb");
+        m_fp = _wfopen(path, L"wb");
         if (!m_fp)
             return;
         prepareWAV(sampleRate);
