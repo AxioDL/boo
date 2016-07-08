@@ -1258,7 +1258,7 @@ class VulkanTextureD : public ITextureD
         texCreateInfo.arrayLayers = 1;
         texCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         texCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        texCreateInfo.initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        texCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         texCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         texCreateInfo.queueFamilyIndexCount = 0;
         texCreateInfo.pQueueFamilyIndices = nullptr;
@@ -1274,7 +1274,6 @@ class VulkanTextureD : public ITextureD
             ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex[i]));
 
             m_descInfo[i].sampler = ctx->m_linearSampler;
-            m_descInfo[i].imageView = m_gpuView[i];
             m_descInfo[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
     }
@@ -1334,6 +1333,8 @@ public:
             /* create image view */
             viewInfo.image = m_gpuTex[i];
             ThrowIfFailed(vk::CreateImageView(ctx->m_dev, &viewInfo, nullptr, &m_gpuView[i]));
+
+            m_descInfo[i].imageView = m_gpuView[i];
         }
     }
 
@@ -1758,7 +1759,7 @@ class VulkanShaderPipeline : public IShaderPipeline
         depthStencilInfo.flags = 0;
         depthStencilInfo.depthTestEnable = depthTest;
         depthStencilInfo.depthWriteEnable = depthWrite;
-        depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+        depthStencilInfo.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
         depthStencilInfo.front.compareOp = VK_COMPARE_OP_ALWAYS;
         depthStencilInfo.back.compareOp = VK_COMPARE_OP_ALWAYS;
 
@@ -2672,7 +2673,7 @@ void VulkanTextureD::update(int b)
         vk::UnmapMemory(m_q->m_ctx->m_dev, m_cpuMem);
 
         SetImageLayout(cmdBuf, m_gpuTex[b], VK_IMAGE_ASPECT_COLOR_BIT,
-                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                       VK_IMAGE_LAYOUT_UNDEFINED,
                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
 
         /* Put the copy command into the command buffer */
@@ -2742,7 +2743,7 @@ VulkanDataFactory::VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ct
         layoutBindings[i].binding = i;
         layoutBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         layoutBindings[i].descriptorCount = 1;
-        layoutBindings[i].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        layoutBindings[i].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
         layoutBindings[i].pImmutableSamplers = nullptr;
     }
     for (int i=BOO_GLSL_MAX_UNIFORM_COUNT ; i<BOO_GLSL_MAX_UNIFORM_COUNT+BOO_GLSL_MAX_TEXTURE_COUNT ; ++i)
@@ -2850,10 +2851,16 @@ IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
             Log.report(logvisor::Fatal, "unable to link shader program\n%s", prog.getInfoLog());
             return nullptr;
         }
-        glslang::GlslangToSpv(*prog.getIntermediate(EShLangVertex), vertBlobOut);
-        //spv::Disassemble(std::cerr, vertBlobOut);
-        glslang::GlslangToSpv(*prog.getIntermediate(EShLangFragment), fragBlobOut);
-        //spv::Disassemble(std::cerr, fragBlobOut);
+        if (vertBlobOut.empty())
+        {
+            glslang::GlslangToSpv(*prog.getIntermediate(EShLangVertex), vertBlobOut);
+            //spv::Disassemble(std::cerr, vertBlobOut);
+        }
+        if (fragBlobOut.empty())
+        {
+            glslang::GlslangToSpv(*prog.getIntermediate(EShLangFragment), fragBlobOut);
+            //spv::Disassemble(std::cerr, fragBlobOut);
+        }
     }
 
     VkShaderModuleCreateInfo smCreateInfo = {};

@@ -296,15 +296,17 @@ struct TestApplicationCallback : IApplicationCallback
                 "#version 330\n"
                 BOO_GLSL_BINDING_HEAD
                 "precision highp float;\n"
-                "TBINDING0 uniform sampler2D texs[1];\n"
+                "TBINDING0 uniform sampler2D tex;\n"
                 "layout(location=0) out vec4 out_frag;\n"
                 "in vec2 out_uv;\n"
                 "void main()\n"
                 "{\n"
-                "    out_frag = texture(texs[0], out_uv);\n"
+                "    out_frag = texture(tex, out_uv);\n"
                 "}\n";
 
-                pipeline = glF.newShaderPipeline(VS, FS, 1, "texs", 0, nullptr,
+                static const char* texName = "tex";
+
+                pipeline = glF.newShaderPipeline(VS, FS, 1, &texName, 0, nullptr,
                                                  BlendFactor::One, BlendFactor::Zero,
                                                  Primitive::TriStrips, true, true, false);
             }

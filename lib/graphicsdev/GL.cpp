@@ -437,7 +437,7 @@ static const GLenum BLEND_FACTOR_TABLE[] =
 
 IShaderPipeline* GLDataFactory::Context::newShaderPipeline
 (const char* vertSource, const char* fragSource,
- size_t texCount, const char* texArrayName,
+ size_t texCount, const char** texNames,
  size_t uniformBlockCount, const char** uniformBlockNames,
  BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
  bool depthTest, bool depthWrite, bool backfaceCulling)
@@ -511,17 +511,15 @@ IShaderPipeline* GLDataFactory::Context::newShaderPipeline
         }
     }
 
-    if (texCount && texArrayName)
+    if (texCount && texNames)
     {
-        GLint texLoc = glGetUniformLocation(shader.m_prog, texArrayName);
-        if (texLoc < 0)
-            Log.report(logvisor::Error, "unable to find sampler variable '%s'", texArrayName);
-        else
+        for (int i=0 ; i<texCount ; ++i)
         {
-            if (texCount > m_parent.m_texUnis.size())
-                for (size_t i=m_parent.m_texUnis.size() ; i<texCount ; ++i)
-                    m_parent.m_texUnis.push_back(i);
-            glUniform1iv(texLoc, m_parent.m_texUnis.size(), m_parent.m_texUnis.data());
+            GLint texLoc = glGetUniformLocation(shader.m_prog, texNames[i]);
+            if (texLoc < 0)
+                Log.report(logvisor::Error, "unable to find sampler variable '%s'", texNames[i]);
+            else
+                glUniform1i(texLoc, i);
         }
     }
 

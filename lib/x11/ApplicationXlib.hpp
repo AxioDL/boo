@@ -420,10 +420,12 @@ public:
         sigemptyset(&s.sa_mask);
         s.sa_flags = 0;
         sigaction(SIGINT, &s, nullptr);
+        sigaction(SIGUSR2, &s, nullptr);
 
         sigset_t waitmask, origmask;
         sigemptyset(&waitmask);
         sigaddset(&waitmask, SIGINT);
+        sigaddset(&waitmask, SIGUSR2);
         pthread_sigmask(SIG_BLOCK, &waitmask, &origmask);
 
         /* Spawn client thread */
@@ -437,7 +439,7 @@ public:
             innerLk.unlock();
             initcv.notify_one();
             clientReturn = m_callback.appMain(this);
-            pthread_kill(mainThread, SIGINT);
+            pthread_kill(mainThread, SIGUSR2);
         });
         initcv.wait(outerLk);
 
@@ -450,7 +452,7 @@ public:
             FD_SET(m_dbusFd, &fds);
             if (pselect(m_maxFd+1, &fds, NULL, NULL, NULL, &origmask) < 0)
             {
-                /* SIGINT handled here */
+                /* SIGINT/SIGUSR2 handled here */
                 if (errno == EINTR)
                     break;
             }

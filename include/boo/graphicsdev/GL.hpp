@@ -20,7 +20,6 @@ class GLDataFactory : public IGraphicsDataFactory
     static ThreadLocalPtr<struct GLData> m_deferredData;
     std::unordered_set<struct GLData*> m_committedData;
     std::mutex m_committedMutex;
-    std::vector<int> m_texUnis;
     void destroyData(IGraphicsData*);
     void destroyAllData();
 public:
@@ -54,7 +53,7 @@ public:
         IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
 
         IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
-                                           size_t texCount, const char* texArrayName,
+                                           size_t texCount, const char** texNames,
                                            size_t uniformBlockCount, const char** uniformBlockNames,
                                            BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                                            bool depthTest, bool depthWrite, bool backfaceCulling);
