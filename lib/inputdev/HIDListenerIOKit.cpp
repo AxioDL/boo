@@ -43,6 +43,9 @@ static bool getUSBStringDescriptor(IOUSBDeviceInterface182** usbDevice, UInt8 id
     // we're mallocing this string just as an example. But you probably will want
     // to do something smarter, like pre-allocated buffers in the info class, or
     // use a string class.
+    if (request.wLenDone == 0)
+        return false;
+
     unsigned count = (request.wLenDone - 1) / 2;
     unsigned i;
     for (i=0 ; i<count ; ++i)
