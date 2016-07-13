@@ -7,189 +7,321 @@
 namespace boo
 {
 
-AudioSubmix::AudioSubmix(BaseAudioVoiceEngine& root, IAudioMix& parent, IAudioSubmixCallback* cb)
-: m_root(root), m_parent(parent), m_cb(cb)
+typedef union
 {
-    std::fill(std::begin(m_gains), std::end(m_gains), 1.f);
+    float v[4];
+#if __SSE__
+    __m128 q;
+    __m64 d[2];
+#endif
+} TVectorUnion;
+
+AudioSubmix::AudioSubmix(BaseAudioVoiceEngine& root, IAudioSubmixCallback* cb, bool mainOut)
+: m_root(root), m_cb(cb), m_mainOut(mainOut)
+{
+    if (mainOut)
+        setSendLevel(&m_root.m_mainSubmix, 1.f, false);
 }
 
 AudioSubmix::~AudioSubmix()
 {
-    while (m_activeVoices.size())
-        m_activeVoices.front()->unbindVoice();
-    while (m_activeSubmixes.size())
-        m_activeSubmixes.front()->unbindSubmix();
     unbindSubmix();
 }
 
-void AudioSubmix::_pumpAndMixVoices(size_t frames, int16_t* dataOut, int16_t* mainOut)
+bool AudioSubmix::_isDirectDependencyOf(AudioSubmix* send)
 {
-    const AudioVoiceEngineMixInfo& info = mixInfo();
-    size_t sampleCount = frames * info.m_channelMap.m_channelCount;
+    return m_sendGains.find(send) != m_sendGains.cend();
+}
+
+bool AudioSubmix::_mergeC3(std::list<AudioSubmix*>& output,
+                           std::vector<std::list<AudioSubmix*>>& lists)
+{
+    for (auto outerIt = lists.begin() ; outerIt != lists.cend() ; ++outerIt)
+    {
+        AudioSubmix* smx = outerIt->front();
+        bool found = false;
+        for (auto innerIt = lists.begin() ; innerIt != lists.cend() ; ++innerIt)
+        {
+            if (outerIt == innerIt)
+                continue;
+            if (smx == innerIt->front())
+            {
+                innerIt->pop_front();
+                found = true;
+            }
+        }
+        if (found)
+        {
+            outerIt->pop_front();
+            output.push_back(smx);
+            return true;
+        }
+    }
+    return false;
+}
+
+std::list<AudioSubmix*> AudioSubmix::_linearizeC3()
+{
+    std::vector<std::list<AudioSubmix*>> lists = {{}};
+    for (AudioSubmix* smx : m_root.m_activeSubmixes)
+    {
+        if (smx == this)
+            continue;
+        if (smx->_isDirectDependencyOf(this))
+            lists[0].push_back(smx);
+    }
+    lists.reserve(lists[0].size() + 1);
+    for (AudioSubmix* smx : lists[0])
+        lists.push_back(smx->_linearizeC3());
+
+    std::list<AudioSubmix*> ret = {this};
+    while (_mergeC3(ret, lists)) {}
+    return ret;
+}
+
+void AudioSubmix::_zeroFill16()
+{
+    if (m_scratch16.size())
+        std::fill(m_scratch16.begin(), m_scratch16.end(), 0);
+}
+
+void AudioSubmix::_zeroFill32()
+{
+    if (m_scratch32.size())
+        std::fill(m_scratch32.begin(), m_scratch32.end(), 0);
+}
+
+void AudioSubmix::_zeroFillFlt()
+{
+    if (m_scratchFlt.size())
+        std::fill(m_scratchFlt.begin(), m_scratchFlt.end(), 0);
+}
+
+int16_t* AudioSubmix::_getMergeBuf16(size_t frames)
+{
+    if (m_redirect16)
+        return m_redirect16;
+
+    size_t sampleCount = frames * m_root.m_mixInfo.m_channelMap.m_channelCount;
     if (m_scratch16.size() < sampleCount)
         m_scratch16.resize(sampleCount);
 
-    /* Clear target buffer */
-    memset(m_scratch16.data(), 0, sizeof(int16_t) * sampleCount);
-
-    /* Pump child voices */
-    for (AudioVoice* vox : m_activeVoices)
-        if (vox->m_running)
-            vox->pumpAndMix(m_parent.mixInfo(), frames, mainOut, m_scratch16.data());
-
-    /* Pump child submixes */
-    for (AudioSubmix* smx : m_activeSubmixes)
-        smx->_pumpAndMixVoices(frames, m_scratch16.data(), mainOut);
-
-    /* Apply submix effect (if available) */
-    if (m_cb && m_cb->canApplyEffect())
-        m_cb->applyEffect(m_scratch16.data(), frames, info.m_channelMap, info.m_sampleRate);
-
-    /* Merge into output mix */
-    auto it = m_scratch16.begin();
-    for (size_t f=0 ; f<frames ; ++f)
-        for (size_t c=0 ; c<info.m_channelMap.m_channelCount ; ++c)
-        {
-            *dataOut = Clamp16(*dataOut + *it++ * m_gains[c]);
-            ++dataOut;
-        }
+    return m_scratch16.data();
 }
 
-void AudioSubmix::_pumpAndMixVoices(size_t frames, int32_t* dataOut, int32_t* mainOut)
+int32_t* AudioSubmix::_getMergeBuf32(size_t frames)
 {
-    const AudioVoiceEngineMixInfo& info = mixInfo();
-    size_t sampleCount = frames * info.m_channelMap.m_channelCount;
+    if (m_redirect32)
+        return m_redirect32;
+
+    size_t sampleCount = frames * m_root.m_mixInfo.m_channelMap.m_channelCount;
     if (m_scratch32.size() < sampleCount)
         m_scratch32.resize(sampleCount);
 
-    /* Clear target buffer */
-    memset(m_scratch32.data(), 0, sizeof(int32_t) * sampleCount);
-
-    /* Pump child voices */
-    for (AudioVoice* vox : m_activeVoices)
-        if (vox->m_running)
-            vox->pumpAndMix(m_parent.mixInfo(), frames, mainOut, m_scratch32.data());
-
-    /* Pump child submixes */
-    for (AudioSubmix* smx : m_activeSubmixes)
-        smx->_pumpAndMixVoices(frames, m_scratch32.data(), mainOut);
-
-    /* Apply submix effect (if available) */
-    if (m_cb && m_cb->canApplyEffect())
-        m_cb->applyEffect(m_scratch32.data(), frames, info.m_channelMap, info.m_sampleRate);
-
-    /* Merge into output mix */
-    auto it = m_scratch32.begin();
-    for (size_t f=0 ; f<frames ; ++f)
-        for (size_t c=0 ; c<info.m_channelMap.m_channelCount ; ++c)
-        {
-            *dataOut = Clamp32(*dataOut + *it++ * m_gains[c]);
-            ++dataOut;
-        }
+    return m_scratch32.data();
 }
 
-void AudioSubmix::_pumpAndMixVoices(size_t frames, float* dataOut, float* mainOut)
+float* AudioSubmix::_getMergeBufFlt(size_t frames)
 {
-    const AudioVoiceEngineMixInfo& info = mixInfo();
-    size_t sampleCount = frames * info.m_channelMap.m_channelCount;
+    if (m_redirectFlt)
+        return m_redirectFlt;
+
+    size_t sampleCount = frames * m_root.m_mixInfo.m_channelMap.m_channelCount;
     if (m_scratchFlt.size() < sampleCount)
         m_scratchFlt.resize(sampleCount);
 
-    /* Clear target buffer */
-    memset(m_scratchFlt.data(), 0, sizeof(float) * sampleCount);
+    return m_scratchFlt.data();
+}
 
-    /* Pump child voices */
-    for (AudioVoice* vox : m_activeVoices)
-        if (vox->m_running)
-            vox->pumpAndMix(m_parent.mixInfo(), frames, mainOut, m_scratchFlt.data());
+size_t AudioSubmix::_pumpAndMix16(size_t frames)
+{
+    size_t chanCount = m_root.m_mixInfo.m_channelMap.m_channelCount;
 
-    /* Pump child submixes */
-    for (AudioSubmix* smx : m_activeSubmixes)
-        smx->_pumpAndMixVoices(frames, m_scratchFlt.data(), mainOut);
-
-    /* Apply submix effect (if available) */
-    if (m_cb && m_cb->canApplyEffect())
-        m_cb->applyEffect(m_scratchFlt.data(), frames, info.m_channelMap, info.m_sampleRate);
-
-    /* Merge into output mix */
-    auto it = m_scratchFlt.begin();
-    for (size_t f=0 ; f<frames ; ++f)
-        for (size_t c=0 ; c<info.m_channelMap.m_channelCount ; ++c)
+    if (m_redirect16)
+        m_redirect16 += chanCount * frames;
+    else
+    {
+        size_t curSlewFrame = m_slewFrames;
+        for (auto& smx : m_sendGains)
         {
-            *dataOut = *dataOut + *it++ * m_gains[c];
-            ++dataOut;
+            curSlewFrame = m_curSlewFrame;
+            AudioSubmix& sm = *reinterpret_cast<AudioSubmix*>(smx.first);
+            auto it = m_scratch16.begin();
+            int16_t* dataOut = sm._getMergeBuf16(frames);
+
+            for (size_t f=0 ; f<frames ; ++f)
+            {
+                if (m_slewFrames && curSlewFrame < m_slewFrames)
+                {
+                    double t = curSlewFrame / double(m_slewFrames);
+                    double omt = 1.0 - t;
+
+                    for (unsigned c=0 ; c<chanCount ; ++c)
+                    {
+                        *dataOut = Clamp16(*dataOut + *it * (smx.second[1] * t + smx.second[0] * omt));
+                        ++it;
+                        ++dataOut;
+                    }
+
+                    ++curSlewFrame;
+                }
+                else
+                {
+                    for (unsigned c=0 ; c<chanCount ; ++c)
+                    {
+                        *dataOut = Clamp16(*dataOut + *it * smx.second[1]);
+                        ++it;
+                        ++dataOut;
+                    }
+                }
+            }
         }
+        m_curSlewFrame += curSlewFrame;
+    }
+
+    return frames;
 }
 
-void AudioSubmix::_unbindFrom(std::list<AudioVoice*>::iterator it)
+size_t AudioSubmix::_pumpAndMix32(size_t frames)
 {
-    m_activeVoices.erase(it);
+    size_t chanCount = m_root.m_mixInfo.m_channelMap.m_channelCount;
+
+    if (m_redirect32)
+        m_redirect32 += chanCount * frames;
+    else
+    {
+        size_t curSlewFrame = m_slewFrames;
+        for (auto& smx : m_sendGains)
+        {
+            curSlewFrame = m_curSlewFrame;
+            AudioSubmix& sm = *reinterpret_cast<AudioSubmix*>(smx.first);
+            auto it = m_scratch32.begin();
+            int32_t* dataOut = sm._getMergeBuf32(frames);
+
+            for (size_t f=0 ; f<frames ; ++f)
+            {
+                if (m_slewFrames && curSlewFrame < m_slewFrames)
+                {
+                    double t = curSlewFrame / double(m_slewFrames);
+                    double omt = 1.0 - t;
+
+                    for (unsigned c=0 ; c<chanCount ; ++c)
+                    {
+                        *dataOut = Clamp32(*dataOut + *it * (smx.second[1] * t + smx.second[0] * omt));
+                        ++it;
+                        ++dataOut;
+                    }
+
+                    ++curSlewFrame;
+                }
+                else
+                {
+                    for (unsigned c=0 ; c<chanCount ; ++c)
+                    {
+                        *dataOut = Clamp32(*dataOut + *it * smx.second[1]);
+                        ++it;
+                        ++dataOut;
+                    }
+                }
+            }
+        }
+        m_curSlewFrame += curSlewFrame;
+    }
+
+    return frames;
 }
 
-void AudioSubmix::_unbindFrom(std::list<AudioSubmix*>::iterator it)
+size_t AudioSubmix::_pumpAndMixFlt(size_t frames)
 {
-    m_activeSubmixes.erase(it);
+    size_t chanCount = m_root.m_mixInfo.m_channelMap.m_channelCount;
+
+    if (m_redirectFlt)
+        m_redirectFlt += chanCount * frames;
+    else
+    {
+        size_t curSlewFrame = m_slewFrames;
+        for (auto& smx : m_sendGains)
+        {
+            curSlewFrame = m_curSlewFrame;
+            AudioSubmix& sm = *reinterpret_cast<AudioSubmix*>(smx.first);
+            auto it = m_scratchFlt.begin();
+            float* dataOut = sm._getMergeBufFlt(frames);
+
+            for (size_t f=0 ; f<frames ; ++f)
+            {
+                if (m_slewFrames && curSlewFrame < m_slewFrames)
+                {
+                    double t = curSlewFrame / double(m_slewFrames);
+                    double omt = 1.0 - t;
+
+                    for (unsigned c=0 ; c<chanCount ; ++c)
+                    {
+                        *dataOut = *dataOut + *it * (smx.second[1] * t + smx.second[0] * omt);
+                        ++it;
+                        ++dataOut;
+                    }
+
+                    ++curSlewFrame;
+                }
+                else
+                {
+                    for (unsigned c=0 ; c<chanCount ; ++c)
+                    {
+                        *dataOut = *dataOut + *it * smx.second[1];
+                        ++it;
+                        ++dataOut;
+                    }
+                }
+            }
+        }
+        m_curSlewFrame += curSlewFrame;
+    }
+
+    return frames;
 }
 
 void AudioSubmix::_resetOutputSampleRate()
 {
-    for (AudioVoice* vox : m_activeVoices)
-        vox->_resetSampleRate(vox->m_sampleRateIn);
-    for (AudioSubmix* smx : m_activeSubmixes)
-        smx->_resetOutputSampleRate();
     if (m_cb)
-        m_cb->resetOutputSampleRate(m_parent.mixInfo().m_sampleRate);
+        m_cb->resetOutputSampleRate(m_root.mixInfo().m_sampleRate);
 }
 
-std::unique_ptr<IAudioVoice> AudioSubmix::allocateNewMonoVoice(double sampleRate,
-                                                               IAudioVoiceCallback* cb,
-                                                               bool dynamicPitch)
+void AudioSubmix::resetSendLevels()
 {
-    std::unique_ptr<IAudioVoice> ret =
-        std::make_unique<AudioVoiceMono>(m_root, *this, cb, sampleRate, dynamicPitch);
-    AudioVoiceMono* retMono = static_cast<AudioVoiceMono*>(ret.get());
-    retMono->bindVoice(m_activeVoices.insert(m_activeVoices.end(), retMono));
-    return ret;
+    if (m_sendGains.empty())
+        return;
+    m_sendGains.clear();
+    m_root.m_submixesDirty = true;
 }
 
-std::unique_ptr<IAudioVoice> AudioSubmix::allocateNewStereoVoice(double sampleRate,
-                                                                 IAudioVoiceCallback* cb,
-                                                                 bool dynamicPitch)
+void AudioSubmix::setSendLevel(IAudioSubmix* submix, float level, bool slew)
 {
-    std::unique_ptr<IAudioVoice> ret =
-        std::make_unique<AudioVoiceStereo>(m_root, *this, cb, sampleRate, dynamicPitch);
-    AudioVoiceStereo* retStereo = static_cast<AudioVoiceStereo*>(ret.get());
-    retStereo->bindVoice(m_activeVoices.insert(m_activeVoices.end(), retStereo));
-    return ret;
-}
+    auto search = m_sendGains.find(submix);
+    if (search == m_sendGains.cend())
+    {
+        search = m_sendGains.emplace(submix, std::array<float, 2>{1.f, 1.f}).first;
+        m_root.m_submixesDirty = true;
+    }
 
-std::unique_ptr<IAudioSubmix> AudioSubmix::allocateNewSubmix(IAudioSubmixCallback* cb)
-{
-    std::unique_ptr<IAudioSubmix> ret =
-        std::make_unique<AudioSubmix>(m_root, *this, cb);
-    AudioSubmix* retIntern = static_cast<AudioSubmix*>(ret.get());
-    retIntern->bindSubmix(m_activeSubmixes.insert(m_activeSubmixes.end(), retIntern));
-    return ret;
-}
+    m_slewFrames = slew ? m_root.m_5msFrames : 0;
+    m_curSlewFrame = 0;
 
-void AudioSubmix::setChannelGains(const float gains[8])
-{
-    for (int i=0 ; i<8 ; ++i)
-        m_gains[i] = gains[i];
+    search->second[0] = search->second[1];
+    search->second[1] = level;
 }
 
 void AudioSubmix::unbindSubmix()
 {
     if (m_bound)
     {
-        m_parent._unbindFrom(m_parentIt);
+        m_root._unbindFrom(m_parentIt);
         m_bound = false;
     }
 }
 
 const AudioVoiceEngineMixInfo& AudioSubmix::mixInfo() const
 {
-    return m_parent.mixInfo();
+    return m_root.mixInfo();
 }
 
 double AudioSubmix::getSampleRate() const

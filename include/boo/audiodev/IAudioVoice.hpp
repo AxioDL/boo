@@ -6,6 +6,7 @@
 
 namespace boo
 {
+class IAudioSubmix;
 
 enum class AudioChannelSet
 {
@@ -59,20 +60,14 @@ struct IAudioVoice
     /** Set sample rate into voice (may result in audio discontinuities) */
     virtual void resetSampleRate(double sampleRate)=0;
 
-    /** Reset channel-gains to voice defaults */
-    virtual void setDefaultMatrixCoefficients()=0;
+    /** Reset channel-levels to silence; unbind all submixes */
+    virtual void resetChannelLevels()=0;
 
-    /** Set channel-gains for mono audio source (AudioChannel enum for array index) */
-    virtual void setMonoMatrixCoefficients(const float coefs[8], bool slew)=0;
+    /** Set channel-levels for mono audio source (AudioChannel enum for array index) */
+    virtual void setMonoChannelLevels(IAudioSubmix* submix, const float coefs[8], bool slew)=0;
 
-    /** Set channel-gains for stereo audio source (AudioChannel enum for array index) */
-    virtual void setStereoMatrixCoefficients(const float coefs[8][2], bool slew)=0;
-
-    /** Set submix-channel-gains for mono audio source (AudioChannel enum for array index) */
-    virtual void setMonoSubmixMatrixCoefficients(const float coefs[8], bool slew)=0;
-
-    /** Set submix-channel-gains for stereo audio source (AudioChannel enum for array index) */
-    virtual void setStereoSubmixMatrixCoefficients(const float coefs[8][2], bool slew)=0;
+    /** Set channel-levels for stereo audio source (AudioChannel enum for array index) */
+    virtual void setStereoChannelLevels(IAudioSubmix* submix, const float coefs[8][2], bool slew)=0;
 
     /** Called by client to dynamically adjust the pitch of voices with dynamic pitch enabled */
     virtual void setPitchRatio(double ratio, bool slew)=0;

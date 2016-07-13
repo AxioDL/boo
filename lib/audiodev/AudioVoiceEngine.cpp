@@ -15,6 +15,13 @@ BaseAudioVoiceEngine::~BaseAudioVoiceEngine()
 void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int16_t* dataOut)
 {
     memset(dataOut, 0, sizeof(int16_t) * frames * m_mixInfo.m_channelMap.m_channelCount);
+    m_mainSubmix.m_redirect16 = dataOut;
+
+    if (m_submixesDirty)
+    {
+        m_linearizedSubmixes = m_mainSubmix._linearizeC3();
+        m_submixesDirty = false;
+    }
 
     size_t remFrames = frames;
     while (remFrames)
@@ -33,11 +40,16 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int16_t* dataOut)
                 m_5msCallback(5.0 / 1000.0);
         }
 
+        for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
+            (*it)->_zeroFill16();
+
         for (AudioVoice* vox : m_activeVoices)
             if (vox->m_running)
-                vox->pumpAndMix(m_mixInfo, thisFrames, dataOut, nullptr);
-        for (AudioSubmix* smx : m_activeSubmixes)
-            smx->_pumpAndMixVoices(thisFrames, dataOut, dataOut);
+                vox->pumpAndMix16(thisFrames);
+
+        for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
+            (*it)->_pumpAndMix16(thisFrames);
+
         remFrames -= thisFrames;
         dataOut += thisFrames * m_mixInfo.m_channelMap.m_channelCount;
     }
@@ -46,6 +58,13 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int16_t* dataOut)
 void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int32_t* dataOut)
 {
     memset(dataOut, 0, sizeof(int32_t) * frames * m_mixInfo.m_channelMap.m_channelCount);
+    m_mainSubmix.m_redirect32 = dataOut;
+
+    if (m_submixesDirty)
+    {
+        m_linearizedSubmixes = m_mainSubmix._linearizeC3();
+        m_submixesDirty = false;
+    }
 
     size_t remFrames = frames;
     while (remFrames)
@@ -64,11 +83,16 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int32_t* dataOut)
                 m_5msCallback(5.0 / 1000.0);
         }
 
+        for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
+            (*it)->_zeroFill32();
+
         for (AudioVoice* vox : m_activeVoices)
             if (vox->m_running)
-                vox->pumpAndMix(m_mixInfo, thisFrames, dataOut, nullptr);
-        for (AudioSubmix* smx : m_activeSubmixes)
-            smx->_pumpAndMixVoices(thisFrames, dataOut, dataOut);
+                vox->pumpAndMix32(thisFrames);
+
+        for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
+            (*it)->_pumpAndMix32(thisFrames);
+
         remFrames -= thisFrames;
         dataOut += thisFrames * m_mixInfo.m_channelMap.m_channelCount;
     }
@@ -77,6 +101,13 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int32_t* dataOut)
 void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, float* dataOut)
 {
     memset(dataOut, 0, sizeof(float) * frames * m_mixInfo.m_channelMap.m_channelCount);
+    m_mainSubmix.m_redirectFlt = dataOut;
+
+    if (m_submixesDirty)
+    {
+        m_linearizedSubmixes = m_mainSubmix._linearizeC3();
+        m_submixesDirty = false;
+    }
 
     size_t remFrames = frames;
     while (remFrames)
@@ -95,11 +126,16 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, float* dataOut)
                 m_5msCallback(5.0 / 1000.0);
         }
 
+        for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
+            (*it)->_zeroFillFlt();
+
         for (AudioVoice* vox : m_activeVoices)
             if (vox->m_running)
-                vox->pumpAndMix(m_mixInfo, thisFrames, dataOut, nullptr);
-        for (AudioSubmix* smx : m_activeSubmixes)
-            smx->_pumpAndMixVoices(thisFrames, dataOut, dataOut);
+                vox->pumpAndMixFlt(thisFrames);
+
+        for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
+            (*it)->_pumpAndMixFlt(thisFrames);
+
         remFrames -= thisFrames;
         dataOut += thisFrames * m_mixInfo.m_channelMap.m_channelCount;
     }
@@ -112,6 +148,10 @@ void BaseAudioVoiceEngine::_unbindFrom(std::list<AudioVoice*>::iterator it)
 
 void BaseAudioVoiceEngine::_unbindFrom(std::list<AudioSubmix*>::iterator it)
 {
+    for (AudioVoice* vox : m_activeVoices)
+    {
+
+    }
     m_activeSubmixes.erase(it);
 }
 
@@ -121,7 +161,7 @@ BaseAudioVoiceEngine::allocateNewMonoVoice(double sampleRate,
                                            bool dynamicPitch)
 {
     std::unique_ptr<IAudioVoice> ret =
-        std::make_unique<AudioVoiceMono>(*this, *this, cb, sampleRate, dynamicPitch);
+        std::make_unique<AudioVoiceMono>(*this, cb, sampleRate, dynamicPitch);
     AudioVoiceMono* retMono = static_cast<AudioVoiceMono*>(ret.get());
     retMono->bindVoice(m_activeVoices.insert(m_activeVoices.end(), retMono));
     return ret;
@@ -133,17 +173,16 @@ BaseAudioVoiceEngine::allocateNewStereoVoice(double sampleRate,
                                              bool dynamicPitch)
 {
     std::unique_ptr<IAudioVoice> ret =
-        std::make_unique<AudioVoiceStereo>(*this, *this, cb, sampleRate, dynamicPitch);
+        std::make_unique<AudioVoiceStereo>(*this, cb, sampleRate, dynamicPitch);
     AudioVoiceStereo* retStereo = static_cast<AudioVoiceStereo*>(ret.get());
     retStereo->bindVoice(m_activeVoices.insert(m_activeVoices.end(), retStereo));
     return ret;
 }
 
 std::unique_ptr<IAudioSubmix>
-BaseAudioVoiceEngine::allocateNewSubmix(IAudioSubmixCallback* cb)
+BaseAudioVoiceEngine::allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb)
 {
-    std::unique_ptr<IAudioSubmix> ret =
-        std::make_unique<AudioSubmix>(*this, *this, cb);
+    std::unique_ptr<IAudioSubmix> ret = std::make_unique<AudioSubmix>(*this, cb, mainOut);
     AudioSubmix* retIntern = static_cast<AudioSubmix*>(ret.get());
     retIntern->bindSubmix(m_activeSubmixes.insert(m_activeSubmixes.end(), retIntern));
     return ret;

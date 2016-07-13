@@ -205,7 +205,6 @@ add_library(boo
             lib/audiodev/AudioVoice.cpp
             lib/audiodev/AudioSubmix.hpp
             lib/audiodev/AudioSubmix.cpp
-            lib/audiodev/IAudioMix.hpp
             lib/audiodev/MIDIEncoder.cpp
             lib/audiodev/MIDIDecoder.cpp
             lib/audiodev/MIDICommon.hpp

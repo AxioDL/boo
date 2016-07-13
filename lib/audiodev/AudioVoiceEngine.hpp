@@ -4,7 +4,6 @@
 #include "boo/audiodev/IAudioVoiceEngine.hpp"
 #include "AudioVoice.hpp"
 #include "AudioSubmix.hpp"
-#include "IAudioMix.hpp"
 #include <functional>
 
 namespace boo
@@ -22,7 +21,7 @@ struct AudioVoiceEngineMixInfo
 };
 
 /** Base class for managing mixing and sample-rate-conversion amongst active voices */
-class BaseAudioVoiceEngine : public IAudioVoiceEngine, public IAudioMix
+class BaseAudioVoiceEngine : public IAudioVoiceEngine
 {
 protected:
     friend class AudioVoice;
@@ -41,6 +40,10 @@ protected:
     std::vector<int32_t> m_scratch32;
     std::vector<float> m_scratchFlt;
 
+    AudioSubmix m_mainSubmix;
+    std::list<AudioSubmix*> m_linearizedSubmixes;
+    bool m_submixesDirty = true;
+
     void _pumpAndMixVoices(size_t frames, int16_t* dataOut);
     void _pumpAndMixVoices(size_t frames, int32_t* dataOut);
     void _pumpAndMixVoices(size_t frames, float* dataOut);
@@ -49,6 +52,7 @@ protected:
     void _unbindFrom(std::list<AudioSubmix*>::iterator it);
 
 public:
+    BaseAudioVoiceEngine() : m_mainSubmix(*this, nullptr, false) {}
     ~BaseAudioVoiceEngine();
     std::unique_ptr<IAudioVoice> allocateNewMonoVoice(double sampleRate,
                                                       IAudioVoiceCallback* cb,
@@ -58,7 +62,7 @@ public:
                                                         IAudioVoiceCallback* cb,
                                                         bool dynamicPitch=false);
 
-    std::unique_ptr<IAudioSubmix> allocateNewSubmix(IAudioSubmixCallback* cb);
+    std::unique_ptr<IAudioSubmix> allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb);
 
     void register5MsCallback(std::function<void(double dt)>&& callback);
 
