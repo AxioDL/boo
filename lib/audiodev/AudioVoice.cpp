@@ -6,9 +6,9 @@ namespace boo
 {
 static logvisor::Module Log("boo::AudioVoice");
 
-AudioVoice::AudioVoice(BaseAudioVoiceEngine& root, IAudioMix& parent,
+AudioVoice::AudioVoice(BaseAudioVoiceEngine& root,
                        IAudioVoiceCallback* cb, bool dynamicRate)
-: m_root(root), m_parent(parent), m_cb(cb), m_dynamicRate(dynamicRate) {}
+: m_root(root), m_cb(cb), m_dynamicRate(dynamicRate) {}
 
 AudioVoice::~AudioVoice()
 {
@@ -66,14 +66,14 @@ void AudioVoice::unbindVoice()
 {
     if (m_bound)
     {
-        m_parent._unbindFrom(m_parentIt);
+        m_root._unbindFrom(m_parentIt);
         m_bound = false;
     }
 }
 
-AudioVoiceMono::AudioVoiceMono(BaseAudioVoiceEngine& root, IAudioMix& parent, IAudioVoiceCallback* cb,
+AudioVoiceMono::AudioVoiceMono(BaseAudioVoiceEngine& root, IAudioVoiceCallback* cb,
                                double sampleRate, bool dynamicRate)
-: AudioVoice(root, parent, cb, dynamicRate)
+: AudioVoice(root, cb, dynamicRate)
 {
     _resetSampleRate(sampleRate);
 }
@@ -82,8 +82,8 @@ void AudioVoiceMono::_resetSampleRate(double sampleRate)
 {
     soxr_delete(m_src);
 
-    double rateOut = m_parent.mixInfo().m_sampleRate;
-    soxr_datatype_t formatOut = m_parent.mixInfo().m_sampleFormat;
+    double rateOut = m_root.mixInfo().m_sampleRate;
+    soxr_datatype_t formatOut = m_root.mixInfo().m_sampleFormat;
     soxr_io_spec_t ioSpec = soxr_io_spec(SOXR_INT16_I, formatOut);
     soxr_quality_spec_t qSpec = soxr_quality_spec(SOXR_20_BITQ, m_dynamicRate ? SOXR_VR : 0);
 
@@ -120,82 +120,108 @@ size_t AudioVoiceMono::SRCCallback(AudioVoiceMono* ctx, int16_t** data, size_t f
         return ctx->m_cb->supplyAudio(*ctx, frames, scratchIn.data());
 }
 
-size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
-                                  size_t frames, int16_t* buf, int16_t* rbuf)
+size_t AudioVoiceMono::pumpAndMix16(size_t frames)
 {
-    std::vector<int16_t>& scratch16 = m_root.m_scratch16;
-    if (scratch16.size() < frames)
-        scratch16.resize(frames);
+    std::vector<int16_t>& scratch16Pre = m_root.m_scratch16Pre;
+    if (scratch16Pre.size() < frames)
+        scratch16Pre.resize(frames);
 
-    m_cb->preSupplyAudio(*this, frames / m_sampleRateOut);
+    std::vector<int16_t>& scratch16Post = m_root.m_scratch16Post;
+    if (scratch16Post.size() < frames)
+        scratch16Post.resize(frames);
+
+    double dt = frames / m_sampleRateOut;
+    m_cb->preSupplyAudio(*this, dt);
     _midUpdate();
-    size_t oDone = soxr_output(m_src, scratch16.data(), frames);
+    size_t oDone = soxr_output(m_src, scratch16Pre.data(), frames);
 
     if (oDone)
     {
-        m_matrix.mixMonoSampleData(mixInfo, scratch16.data(), buf, oDone);
-        if (rbuf)
-            m_subMatrix.mixMonoSampleData(mixInfo, scratch16.data(), rbuf, oDone);
+        for (auto& mtx : m_sendMatrices)
+        {
+            AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
+            m_cb->routeAudio(oDone, dt, smx.m_busId, scratch16Pre.data(), scratch16Post.data());
+            mtx.second.mixMonoSampleData(m_root.m_mixInfo, scratch16Post.data(), smx._getMergeBuf16(oDone), oDone);
+        }
     }
 
     return oDone;
 }
 
-size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
-                                  size_t frames, int32_t* buf, int32_t* rbuf)
+size_t AudioVoiceMono::pumpAndMix32(size_t frames)
 {
-    std::vector<int32_t>& scratch32 = m_root.m_scratch32;
-    if (scratch32.size() < frames)
-        scratch32.resize(frames);
+    std::vector<int32_t>& scratch32Pre = m_root.m_scratch32Pre;
+    if (scratch32Pre.size() < frames)
+        scratch32Pre.resize(frames);
 
-    m_cb->preSupplyAudio(*this, frames / m_sampleRateOut);
+    std::vector<int32_t>& scratch32Post = m_root.m_scratch32Post;
+    if (scratch32Post.size() < frames)
+        scratch32Post.resize(frames);
+
+    double dt = frames / m_sampleRateOut;
+    m_cb->preSupplyAudio(*this, dt);
     _midUpdate();
-    size_t oDone = soxr_output(m_src, scratch32.data(), frames);
+    size_t oDone = soxr_output(m_src, scratch32Pre.data(), frames);
 
     if (oDone)
     {
-        m_matrix.mixMonoSampleData(mixInfo, scratch32.data(), buf, oDone);
-        if (rbuf)
-            m_subMatrix.mixMonoSampleData(mixInfo, scratch32.data(), rbuf, oDone);
+        for (auto& mtx : m_sendMatrices)
+        {
+            AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
+            m_cb->routeAudio(oDone, dt, smx.m_busId, scratch32Pre.data(), scratch32Post.data());
+            mtx.second.mixMonoSampleData(m_root.m_mixInfo, scratch32Post.data(), smx._getMergeBuf32(oDone), oDone);
+        }
     }
 
     return oDone;
 }
 
-size_t AudioVoiceMono::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
-                                  size_t frames, float* buf, float* rbuf)
+size_t AudioVoiceMono::pumpAndMixFlt(size_t frames)
 {
-    std::vector<float>& scratchFlt = m_root.m_scratchFlt;
-    if (scratchFlt.size() < frames)
-        scratchFlt.resize(frames + 2);
+    std::vector<float>& scratchFltPre = m_root.m_scratchFltPre;
+    if (scratchFltPre.size() < frames)
+        scratchFltPre.resize(frames + 2);
 
-    m_cb->preSupplyAudio(*this, frames / m_sampleRateOut);
+    std::vector<float>& scratchFltPost = m_root.m_scratchFltPost;
+    if (scratchFltPost.size() < frames)
+        scratchFltPost.resize(frames + 2);
+
+    double dt = frames / m_sampleRateOut;
+    m_cb->preSupplyAudio(*this, dt);
     _midUpdate();
-    size_t oDone = soxr_output(m_src, scratchFlt.data(), frames);
+    size_t oDone = soxr_output(m_src, scratchFltPre.data(), frames);
 
     if (oDone)
     {
-        m_matrix.mixMonoSampleData(mixInfo, scratchFlt.data(), buf, oDone);
-        if (rbuf)
-            m_subMatrix.mixMonoSampleData(mixInfo, scratchFlt.data(), rbuf, oDone);
+        for (auto& mtx : m_sendMatrices)
+        {
+            AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
+            m_cb->routeAudio(oDone, dt, smx.m_busId, scratchFltPre.data(), scratchFltPost.data());
+            mtx.second.mixMonoSampleData(m_root.m_mixInfo, scratchFltPost.data(), smx._getMergeBufFlt(oDone), oDone);
+        }
     }
 
     return oDone;
 }
 
-void AudioVoiceMono::setDefaultMatrixCoefficients()
+void AudioVoiceMono::resetChannelLevels()
 {
-    m_matrix.setDefaultMatrixCoefficients(m_parent.mixInfo().m_channels);
-    float zero[8] = {};
-    m_subMatrix.setMatrixCoefficients(zero);
+    m_root.m_submixesDirty = true;
+    m_sendMatrices.clear();
 }
 
-void AudioVoiceMono::setMonoMatrixCoefficients(const float coefs[8], bool slew)
+void AudioVoiceMono::setMonoChannelLevels(IAudioSubmix* submix, const float coefs[8], bool slew)
 {
-    m_matrix.setMatrixCoefficients(coefs, slew ? m_root.m_5msFrames : 0);
+    auto search = m_sendMatrices.find(submix);
+    if (search == m_sendMatrices.cend())
+    {
+        search = m_sendMatrices.emplace(submix, AudioMatrixMono{}).first;
+        m_root.m_submixesDirty = true;
+    }
+    search->second.setMatrixCoefficients(coefs, slew ? m_root.m_5msFrames : 0);
 }
 
-void AudioVoiceMono::setStereoMatrixCoefficients(const float coefs[8][2], bool slew)
+void AudioVoiceMono::setStereoChannelLevels(IAudioSubmix* submix, const float coefs[8][2], bool slew)
 {
     float newCoefs[8] =
     {
@@ -208,33 +234,19 @@ void AudioVoiceMono::setStereoMatrixCoefficients(const float coefs[8][2], bool s
         coefs[6][0],
         coefs[7][0]
     };
-    m_matrix.setMatrixCoefficients(newCoefs, slew ? m_root.m_5msFrames : 0);
-}
 
-void AudioVoiceMono::setMonoSubmixMatrixCoefficients(const float coefs[8], bool slew)
-{
-    m_subMatrix.setMatrixCoefficients(coefs, slew ? m_root.m_5msFrames : 0);
-}
-
-void AudioVoiceMono::setStereoSubmixMatrixCoefficients(const float coefs[8][2], bool slew)
-{
-    float newCoefs[8] =
+    auto search = m_sendMatrices.find(submix);
+    if (search == m_sendMatrices.cend())
     {
-        coefs[0][0],
-        coefs[1][0],
-        coefs[2][0],
-        coefs[3][0],
-        coefs[4][0],
-        coefs[5][0],
-        coefs[6][0],
-        coefs[7][0]
-    };
-    m_subMatrix.setMatrixCoefficients(newCoefs, slew ? m_root.m_5msFrames : 0);
+        search = m_sendMatrices.emplace(submix, AudioMatrixMono{}).first;
+        m_root.m_submixesDirty = true;
+    }
+    search->second.setMatrixCoefficients(newCoefs, slew ? m_root.m_5msFrames : 0);
 }
 
-AudioVoiceStereo::AudioVoiceStereo(BaseAudioVoiceEngine& root, IAudioMix& parent, IAudioVoiceCallback* cb,
+AudioVoiceStereo::AudioVoiceStereo(BaseAudioVoiceEngine& root, IAudioVoiceCallback* cb,
                                    double sampleRate, bool dynamicRate)
-: AudioVoice(root, parent, cb, dynamicRate)
+: AudioVoice(root, cb, dynamicRate)
 {
     _resetSampleRate(sampleRate);
 }
@@ -243,8 +255,8 @@ void AudioVoiceStereo::_resetSampleRate(double sampleRate)
 {
     soxr_delete(m_src);
 
-    double rateOut = m_parent.mixInfo().m_sampleRate;
-    soxr_datatype_t formatOut = m_parent.mixInfo().m_sampleFormat;
+    double rateOut = m_root.mixInfo().m_sampleRate;
+    soxr_datatype_t formatOut = m_root.mixInfo().m_sampleFormat;
     soxr_io_spec_t ioSpec = soxr_io_spec(SOXR_INT16_I, formatOut);
     soxr_quality_spec_t qSpec = soxr_quality_spec(SOXR_20_BITQ, m_dynamicRate ? SOXR_VR : 0);
 
@@ -282,80 +294,103 @@ size_t AudioVoiceStereo::SRCCallback(AudioVoiceStereo* ctx, int16_t** data, size
         return ctx->m_cb->supplyAudio(*ctx, frames, scratchIn.data());
 }
 
-size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
-                                    size_t frames, int16_t* buf, int16_t* rbuf)
+size_t AudioVoiceStereo::pumpAndMix16(size_t frames)
 {
-    std::vector<int16_t>& scratch16 = m_root.m_scratch16;
     size_t samples = frames * 2;
-    if (scratch16.size() < samples)
-        scratch16.resize(samples);
 
-    m_cb->preSupplyAudio(*this, frames / m_sampleRateOut);
+    std::vector<int16_t>& scratch16Pre = m_root.m_scratch16Pre;
+    if (scratch16Pre.size() < samples)
+        scratch16Pre.resize(samples);
+
+    std::vector<int16_t>& scratch16Post = m_root.m_scratch16Post;
+    if (scratch16Post.size() < samples)
+        scratch16Post.resize(samples);
+
+    double dt = frames / m_sampleRateOut;
+    m_cb->preSupplyAudio(*this, dt);
     _midUpdate();
-    size_t oDone = soxr_output(m_src, scratch16.data(), frames);
+    size_t oDone = soxr_output(m_src, scratch16Pre.data(), frames);
 
     if (oDone)
     {
-        m_matrix.mixStereoSampleData(mixInfo, scratch16.data(), buf, oDone);
-        if (rbuf)
-            m_subMatrix.mixStereoSampleData(mixInfo, scratch16.data(), rbuf, oDone);
+        for (auto& mtx : m_sendMatrices)
+        {
+            AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
+            m_cb->routeAudio(oDone, dt, smx.m_busId, scratch16Pre.data(), scratch16Post.data());
+            mtx.second.mixStereoSampleData(m_root.m_mixInfo, scratch16Post.data(), smx._getMergeBuf16(oDone), oDone);
+        }
     }
 
     return oDone;
 }
 
-size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
-                                    size_t frames, int32_t* buf, int32_t* rbuf)
+size_t AudioVoiceStereo::pumpAndMix32(size_t frames)
 {
-    std::vector<int32_t>& scratch32 = m_root.m_scratch32;
     size_t samples = frames * 2;
-    if (scratch32.size() < samples)
-        scratch32.resize(samples);
 
-    m_cb->preSupplyAudio(*this, frames / m_sampleRateOut);
+    std::vector<int32_t>& scratch32Pre = m_root.m_scratch32Pre;
+    if (scratch32Pre.size() < samples)
+        scratch32Pre.resize(samples);
+
+    std::vector<int32_t>& scratch32Post = m_root.m_scratch32Post;
+    if (scratch32Post.size() < samples)
+        scratch32Post.resize(samples);
+
+    double dt = frames / m_sampleRateOut;
+    m_cb->preSupplyAudio(*this, dt);
     _midUpdate();
-    size_t oDone = soxr_output(m_src, scratch32.data(), frames);
+    size_t oDone = soxr_output(m_src, scratch32Pre.data(), frames);
 
     if (oDone)
     {
-        m_matrix.mixStereoSampleData(mixInfo, scratch32.data(), buf, oDone);
-        if (rbuf)
-            m_subMatrix.mixStereoSampleData(mixInfo, scratch32.data(), rbuf, oDone);
+        for (auto& mtx : m_sendMatrices)
+        {
+            AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
+            m_cb->routeAudio(oDone, dt, smx.m_busId, scratch32Pre.data(), scratch32Post.data());
+            mtx.second.mixStereoSampleData(m_root.m_mixInfo, scratch32Post.data(), smx._getMergeBuf32(oDone), oDone);
+        }
     }
 
     return oDone;
 }
 
-size_t AudioVoiceStereo::pumpAndMix(const AudioVoiceEngineMixInfo& mixInfo,
-                                    size_t frames, float* buf, float* rbuf)
+size_t AudioVoiceStereo::pumpAndMixFlt(size_t frames)
 {
-    std::vector<float>& scratchFlt = m_root.m_scratchFlt;
     size_t samples = frames * 2;
-    if (scratchFlt.size() < samples)
-        scratchFlt.resize(samples + 4);
 
-    m_cb->preSupplyAudio(*this, frames / m_sampleRateOut);
+    std::vector<float>& scratchFltPre = m_root.m_scratchFltPre;
+    if (scratchFltPre.size() < samples)
+        scratchFltPre.resize(samples + 4);
+
+    std::vector<float>& scratchFltPost = m_root.m_scratchFltPost;
+    if (scratchFltPost.size() < samples)
+        scratchFltPost.resize(samples + 4);
+
+    double dt = frames / m_sampleRateOut;
+    m_cb->preSupplyAudio(*this, dt);
     _midUpdate();
-    size_t oDone = soxr_output(m_src, scratchFlt.data(), frames);
+    size_t oDone = soxr_output(m_src, scratchFltPre.data(), frames);
 
     if (oDone)
     {
-        m_matrix.mixStereoSampleData(mixInfo, scratchFlt.data(), buf, oDone);
-        if (rbuf)
-            m_subMatrix.mixStereoSampleData(mixInfo, scratchFlt.data(), rbuf, oDone);
+        for (auto& mtx : m_sendMatrices)
+        {
+            AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
+            m_cb->routeAudio(oDone, dt, smx.m_busId, scratchFltPre.data(), scratchFltPost.data());
+            mtx.second.mixStereoSampleData(m_root.m_mixInfo, scratchFltPost.data(), smx._getMergeBufFlt(oDone), oDone);
+        }
     }
 
     return oDone;
 }
 
-void AudioVoiceStereo::setDefaultMatrixCoefficients()
+void AudioVoiceStereo::resetChannelLevels()
 {
-    m_matrix.setDefaultMatrixCoefficients(m_parent.mixInfo().m_channels);
-    float zero[8][2] = {{}};
-    m_subMatrix.setMatrixCoefficients(zero);
+    m_root.m_submixesDirty = true;
+    m_sendMatrices.clear();
 }
 
-void AudioVoiceStereo::setMonoMatrixCoefficients(const float coefs[8], bool slew)
+void AudioVoiceStereo::setMonoChannelLevels(IAudioSubmix* submix, const float coefs[8], bool slew)
 {
     float newCoefs[8][2] =
     {
@@ -368,33 +403,25 @@ void AudioVoiceStereo::setMonoMatrixCoefficients(const float coefs[8], bool slew
         {coefs[6], coefs[6]},
         {coefs[7], coefs[7]}
     };
-    m_matrix.setMatrixCoefficients(newCoefs, slew ? m_root.m_5msFrames : 0);
-}
 
-void AudioVoiceStereo::setStereoMatrixCoefficients(const float coefs[8][2], bool slew)
-{
-    m_matrix.setMatrixCoefficients(coefs, slew ? m_root.m_5msFrames : 0);
-}
-
-void AudioVoiceStereo::setMonoSubmixMatrixCoefficients(const float coefs[8], bool slew)
-{
-    float newCoefs[8][2] =
+    auto search = m_sendMatrices.find(submix);
+    if (search == m_sendMatrices.cend())
     {
-        {coefs[0], coefs[0]},
-        {coefs[1], coefs[1]},
-        {coefs[2], coefs[2]},
-        {coefs[3], coefs[3]},
-        {coefs[4], coefs[4]},
-        {coefs[5], coefs[5]},
-        {coefs[6], coefs[6]},
-        {coefs[7], coefs[7]}
-    };
-    m_subMatrix.setMatrixCoefficients(newCoefs, slew ? m_root.m_5msFrames : 0);
+        search = m_sendMatrices.emplace(submix, AudioMatrixStereo{}).first;
+        m_root.m_submixesDirty = true;
+    }
+    search->second.setMatrixCoefficients(newCoefs, slew ? m_root.m_5msFrames : 0);
 }
 
-void AudioVoiceStereo::setStereoSubmixMatrixCoefficients(const float coefs[8][2], bool slew)
+void AudioVoiceStereo::setStereoChannelLevels(IAudioSubmix* submix, const float coefs[8][2], bool slew)
 {
-    m_subMatrix.setMatrixCoefficients(coefs, slew ? m_root.m_5msFrames : 0);
+    auto search = m_sendMatrices.find(submix);
+    if (search == m_sendMatrices.cend())
+    {
+        search = m_sendMatrices.emplace(submix, AudioMatrixStereo{}).first;
+        m_root.m_submixesDirty = true;
+    }
+    search->second.setMatrixCoefficients(coefs, slew ? m_root.m_5msFrames : 0);
 }
 
 }

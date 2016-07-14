@@ -23,21 +23,11 @@ struct IAudioSubmix
 {
     virtual ~IAudioSubmix() = default;
 
-    /** Same as the IAudioVoice allocator, but produces audio within the submix */
-    virtual std::unique_ptr<IAudioVoice> allocateNewMonoVoice(double sampleRate,
-                                                              IAudioVoiceCallback* cb,
-                                                              bool dynamicPitch=false)=0;
+    /** Reset channel-levels to silence; unbind all submixes */
+    virtual void resetSendLevels()=0;
 
-    /** Same as allocateNewMonoVoice, but source audio is stereo-interleaved */
-    virtual std::unique_ptr<IAudioVoice> allocateNewStereoVoice(double sampleRate,
-                                                                IAudioVoiceCallback* cb,
-                                                                bool dynamicPitch=false)=0;
-
-    /** Same as the IAudioVoice allocator, but produces audio recursively within the submix */
-    virtual std::unique_ptr<IAudioSubmix> allocateNewSubmix(IAudioSubmixCallback* cb=nullptr)=0;
-
-    /** Sets gain factors for each channel once accumulated by the submix */
-    virtual void setChannelGains(const float gains[8])=0;
+    /** Set channel-levels for target submix (AudioChannel enum for array index) */
+    virtual void setSendLevel(IAudioSubmix* submix, float level, bool slew)=0;
 
     /** Gets fixed sample rate of submix this way */
     virtual double getSampleRate() const=0;

@@ -3,9 +3,11 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 namespace boo
 {
+class IAudioSubmix;
 
 enum class AudioChannelSet
 {
@@ -59,20 +61,14 @@ struct IAudioVoice
     /** Set sample rate into voice (may result in audio discontinuities) */
     virtual void resetSampleRate(double sampleRate)=0;
 
-    /** Reset channel-gains to voice defaults */
-    virtual void setDefaultMatrixCoefficients()=0;
+    /** Reset channel-levels to silence; unbind all submixes */
+    virtual void resetChannelLevels()=0;
 
-    /** Set channel-gains for mono audio source (AudioChannel enum for array index) */
-    virtual void setMonoMatrixCoefficients(const float coefs[8], bool slew)=0;
+    /** Set channel-levels for mono audio source (AudioChannel enum for array index) */
+    virtual void setMonoChannelLevels(IAudioSubmix* submix, const float coefs[8], bool slew)=0;
 
-    /** Set channel-gains for stereo audio source (AudioChannel enum for array index) */
-    virtual void setStereoMatrixCoefficients(const float coefs[8][2], bool slew)=0;
-
-    /** Set submix-channel-gains for mono audio source (AudioChannel enum for array index) */
-    virtual void setMonoSubmixMatrixCoefficients(const float coefs[8], bool slew)=0;
-
-    /** Set submix-channel-gains for stereo audio source (AudioChannel enum for array index) */
-    virtual void setStereoSubmixMatrixCoefficients(const float coefs[8][2], bool slew)=0;
+    /** Set channel-levels for stereo audio source (AudioChannel enum for array index) */
+    virtual void setStereoChannelLevels(IAudioSubmix* submix, const float coefs[8][2], bool slew)=0;
 
     /** Called by client to dynamically adjust the pitch of voices with dynamic pitch enabled */
     virtual void setPitchRatio(double ratio, bool slew)=0;
@@ -96,6 +92,23 @@ struct IAudioVoiceCallback
     /** boo calls this on behalf of the audio platform to request more audio
      *  frames from the client */
     virtual size_t supplyAudio(IAudioVoice& voice, size_t frames, int16_t* data)=0;
+
+    /** after resampling, boo calls this for each submix that this voice targets;
+     *  client performs volume processing and bus-routing this way */
+    virtual void routeAudio(size_t frames, double dt, int busId, int16_t* in, int16_t* out)
+    {
+        memmove(out, in, frames * 2);
+    }
+
+    virtual void routeAudio(size_t frames, double dt, int busId, int32_t* in, int32_t* out)
+    {
+        memmove(out, in, frames * 4);
+    }
+
+    virtual void routeAudio(size_t frames, double dt, int busId, float* in, float* out)
+    {
+        memmove(out, in, frames * 4);
+    }
 };
 
 }

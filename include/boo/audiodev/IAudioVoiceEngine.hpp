@@ -33,7 +33,7 @@ struct IAudioVoiceEngine
                                                                 bool dynamicPitch=false)=0;
 
     /** Client calls this to allocate a Submix for gathering audio together for effects processing */
-    virtual std::unique_ptr<IAudioSubmix> allocateNewSubmix(IAudioSubmixCallback* cb=nullptr)=0;
+    virtual std::unique_ptr<IAudioSubmix> allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb, int busId)=0;
 
     /** Client may optionally register a 200-virtual-updates each second callback for the stream */
     virtual void register5MsCallback(std::function<void(double dt)>&& callback)=0;
