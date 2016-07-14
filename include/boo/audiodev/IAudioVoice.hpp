@@ -7,7 +7,7 @@
 
 namespace boo
 {
-class IAudioSubmix;
+struct IAudioSubmix;
 
 enum class AudioChannelSet
 {

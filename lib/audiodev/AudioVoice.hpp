@@ -15,7 +15,7 @@ namespace boo
 {
 class BaseAudioVoiceEngine;
 struct AudioVoiceEngineMixInfo;
-class IAudioSubmix;
+struct IAudioSubmix;
 
 class AudioVoice : public IAudioVoice
 {
