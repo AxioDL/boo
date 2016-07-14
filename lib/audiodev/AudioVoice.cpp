@@ -214,10 +214,7 @@ void AudioVoiceMono::setMonoChannelLevels(IAudioSubmix* submix, const float coef
 {
     auto search = m_sendMatrices.find(submix);
     if (search == m_sendMatrices.cend())
-    {
         search = m_sendMatrices.emplace(submix, AudioMatrixMono{}).first;
-        m_root.m_submixesDirty = true;
-    }
     search->second.setMatrixCoefficients(coefs, slew ? m_root.m_5msFrames : 0);
 }
 
@@ -237,10 +234,7 @@ void AudioVoiceMono::setStereoChannelLevels(IAudioSubmix* submix, const float co
 
     auto search = m_sendMatrices.find(submix);
     if (search == m_sendMatrices.cend())
-    {
         search = m_sendMatrices.emplace(submix, AudioMatrixMono{}).first;
-        m_root.m_submixesDirty = true;
-    }
     search->second.setMatrixCoefficients(newCoefs, slew ? m_root.m_5msFrames : 0);
 }
 
@@ -406,10 +400,7 @@ void AudioVoiceStereo::setMonoChannelLevels(IAudioSubmix* submix, const float co
 
     auto search = m_sendMatrices.find(submix);
     if (search == m_sendMatrices.cend())
-    {
         search = m_sendMatrices.emplace(submix, AudioMatrixStereo{}).first;
-        m_root.m_submixesDirty = true;
-    }
     search->second.setMatrixCoefficients(newCoefs, slew ? m_root.m_5msFrames : 0);
 }
 
@@ -417,10 +408,7 @@ void AudioVoiceStereo::setStereoChannelLevels(IAudioSubmix* submix, const float 
 {
     auto search = m_sendMatrices.find(submix);
     if (search == m_sendMatrices.cend())
-    {
         search = m_sendMatrices.emplace(submix, AudioMatrixStereo{}).first;
-        m_root.m_submixesDirty = true;
-    }
     search->second.setMatrixCoefficients(coefs, slew ? m_root.m_5msFrames : 0);
 }
 
