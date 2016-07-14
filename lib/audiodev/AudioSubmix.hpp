@@ -4,6 +4,7 @@
 #include "boo/audiodev/IAudioSubmix.hpp"
 #include <list>
 #include <vector>
+#include  <array>
 #include <unordered_map>
 
 #if __SSE__
