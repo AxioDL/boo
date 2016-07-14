@@ -28,6 +28,7 @@ protected:
     friend class AudioSubmix;
     friend class AudioVoiceMono;
     friend class AudioVoiceStereo;
+    float m_totalVol = 1.f;
     AudioVoiceEngineMixInfo m_mixInfo;
     std::list<AudioVoice*> m_activeVoices;
     std::list<AudioSubmix*> m_activeSubmixes;
@@ -69,6 +70,7 @@ public:
 
     void register5MsCallback(std::function<void(double dt)>&& callback);
 
+    void setVolume(float vol);
     const AudioVoiceEngineMixInfo& mixInfo() const;
     AudioChannelSet getAvailableSet() {return m_mixInfo.m_channels;}
     void pumpAndMixVoices() {}

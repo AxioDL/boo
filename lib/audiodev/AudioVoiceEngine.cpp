@@ -50,8 +50,12 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int16_t* dataOut)
         for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
             (*it)->_pumpAndMix16(thisFrames);
 
+        size_t sampleCount = thisFrames * m_mixInfo.m_channelMap.m_channelCount;
+        for (size_t i=0 ; i<sampleCount ; ++i)
+            dataOut[i] *= m_totalVol;
+
         remFrames -= thisFrames;
-        dataOut += thisFrames * m_mixInfo.m_channelMap.m_channelCount;
+        dataOut += sampleCount;
     }
 }
 
@@ -93,8 +97,12 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int32_t* dataOut)
         for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
             (*it)->_pumpAndMix32(thisFrames);
 
+        size_t sampleCount = thisFrames * m_mixInfo.m_channelMap.m_channelCount;
+        for (size_t i=0 ; i<sampleCount ; ++i)
+            dataOut[i] *= m_totalVol;
+
         remFrames -= thisFrames;
-        dataOut += thisFrames * m_mixInfo.m_channelMap.m_channelCount;
+        dataOut += sampleCount;
     }
 }
 
@@ -136,8 +144,12 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, float* dataOut)
         for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
             (*it)->_pumpAndMixFlt(thisFrames);
 
+        size_t sampleCount = thisFrames * m_mixInfo.m_channelMap.m_channelCount;
+        for (size_t i=0 ; i<sampleCount ; ++i)
+            dataOut[i] *= m_totalVol;
+
         remFrames -= thisFrames;
-        dataOut += thisFrames * m_mixInfo.m_channelMap.m_channelCount;
+        dataOut += sampleCount;
     }
 }
 
@@ -191,6 +203,11 @@ BaseAudioVoiceEngine::allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb, 
 void BaseAudioVoiceEngine::register5MsCallback(std::function<void(double dt)>&& callback)
 {
     m_5msCallback = std::move(callback);
+}
+
+void BaseAudioVoiceEngine::setVolume(float vol)
+{
+    m_totalVol = vol;
 }
 
 const AudioVoiceEngineMixInfo& BaseAudioVoiceEngine::mixInfo() const

@@ -44,6 +44,9 @@ struct IAudioVoiceEngine
     /** Ensure backing platform buffer is filled as much as possible with mixed samples */
     virtual void pumpAndMixVoices()=0;
 
+    /** Set total volume of engine */
+    virtual void setVolume(float vol)=0;
+
     /** Get list of MIDI devices found on system */
     virtual std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const=0;
 
