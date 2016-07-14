@@ -7,17 +7,8 @@
 namespace boo
 {
 
-typedef union
-{
-    float v[4];
-#if __SSE__
-    __m128 q;
-    __m64 d[2];
-#endif
-} TVectorUnion;
-
-AudioSubmix::AudioSubmix(BaseAudioVoiceEngine& root, IAudioSubmixCallback* cb, bool mainOut)
-: m_root(root), m_cb(cb), m_mainOut(mainOut)
+AudioSubmix::AudioSubmix(BaseAudioVoiceEngine& root, IAudioSubmixCallback* cb, int busId, bool mainOut)
+: m_root(root), m_busId(busId), m_cb(cb), m_mainOut(mainOut)
 {
     if (mainOut)
         setSendLevel(&m_root.m_mainSubmix, 1.f, false);
@@ -38,11 +29,13 @@ bool AudioSubmix::_mergeC3(std::list<AudioSubmix*>& output,
 {
     for (auto outerIt = lists.begin() ; outerIt != lists.cend() ; ++outerIt)
     {
+        if (outerIt->empty())
+            continue;
         AudioSubmix* smx = outerIt->front();
         bool found = false;
         for (auto innerIt = lists.begin() ; innerIt != lists.cend() ; ++innerIt)
         {
-            if (outerIt == innerIt)
+            if (innerIt->empty() || outerIt == innerIt)
                 continue;
             if (smx == innerIt->front())
             {
@@ -135,12 +128,23 @@ float* AudioSubmix::_getMergeBufFlt(size_t frames)
 
 size_t AudioSubmix::_pumpAndMix16(size_t frames)
 {
-    size_t chanCount = m_root.m_mixInfo.m_channelMap.m_channelCount;
+    ChannelMap& chMap = m_root.m_mixInfo.m_channelMap;
+    size_t chanCount = chMap.m_channelCount;
 
     if (m_redirect16)
+    {
+        if (m_cb && m_cb->canApplyEffect())
+            m_cb->applyEffect(m_redirect16, frames, chMap, m_root.m_mixInfo.m_sampleRate);
         m_redirect16 += chanCount * frames;
+    }
     else
     {
+        size_t sampleCount = frames * chanCount;
+        if (m_scratch16.size() < sampleCount)
+            m_scratch16.resize(sampleCount);
+        if (m_cb && m_cb->canApplyEffect())
+            m_cb->applyEffect(m_scratch16.data(), frames, chMap, m_root.m_mixInfo.m_sampleRate);
+
         size_t curSlewFrame = m_slewFrames;
         for (auto& smx : m_sendGains)
         {
@@ -184,12 +188,23 @@ size_t AudioSubmix::_pumpAndMix16(size_t frames)
 
 size_t AudioSubmix::_pumpAndMix32(size_t frames)
 {
-    size_t chanCount = m_root.m_mixInfo.m_channelMap.m_channelCount;
+    ChannelMap& chMap = m_root.m_mixInfo.m_channelMap;
+    size_t chanCount = chMap.m_channelCount;
 
     if (m_redirect32)
+    {
+        if (m_cb && m_cb->canApplyEffect())
+            m_cb->applyEffect(m_redirect32, frames, chMap, m_root.m_mixInfo.m_sampleRate);
         m_redirect32 += chanCount * frames;
+    }
     else
     {
+        size_t sampleCount = frames * chanCount;
+        if (m_scratch32.size() < sampleCount)
+            m_scratch32.resize(sampleCount);
+        if (m_cb && m_cb->canApplyEffect())
+            m_cb->applyEffect(m_scratch32.data(), frames, chMap, m_root.m_mixInfo.m_sampleRate);
+
         size_t curSlewFrame = m_slewFrames;
         for (auto& smx : m_sendGains)
         {
@@ -233,12 +248,23 @@ size_t AudioSubmix::_pumpAndMix32(size_t frames)
 
 size_t AudioSubmix::_pumpAndMixFlt(size_t frames)
 {
-    size_t chanCount = m_root.m_mixInfo.m_channelMap.m_channelCount;
+    ChannelMap& chMap = m_root.m_mixInfo.m_channelMap;
+    size_t chanCount = chMap.m_channelCount;
 
     if (m_redirectFlt)
+    {
+        if (m_cb && m_cb->canApplyEffect())
+            m_cb->applyEffect(m_redirectFlt, frames, chMap, m_root.m_mixInfo.m_sampleRate);
         m_redirectFlt += chanCount * frames;
+    }
     else
     {
+        size_t sampleCount = frames * chanCount;
+        if (m_scratchFlt.size() < sampleCount)
+            m_scratchFlt.resize(sampleCount);
+        if (m_cb && m_cb->canApplyEffect())
+            m_cb->applyEffect(m_scratchFlt.data(), frames, chMap, m_root.m_mixInfo.m_sampleRate);
+
         size_t curSlewFrame = m_slewFrames;
         for (auto& smx : m_sendGains)
         {

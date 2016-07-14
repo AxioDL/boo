@@ -180,9 +180,9 @@ BaseAudioVoiceEngine::allocateNewStereoVoice(double sampleRate,
 }
 
 std::unique_ptr<IAudioSubmix>
-BaseAudioVoiceEngine::allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb)
+BaseAudioVoiceEngine::allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb, int busId)
 {
-    std::unique_ptr<IAudioSubmix> ret = std::make_unique<AudioSubmix>(*this, cb, mainOut);
+    std::unique_ptr<IAudioSubmix> ret = std::make_unique<AudioSubmix>(*this, cb, busId, mainOut);
     AudioSubmix* retIntern = static_cast<AudioSubmix*>(ret.get());
     retIntern->bindSubmix(m_activeSubmixes.insert(m_activeSubmixes.end(), retIntern));
     return ret;

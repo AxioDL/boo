@@ -122,20 +122,26 @@ size_t AudioVoiceMono::SRCCallback(AudioVoiceMono* ctx, int16_t** data, size_t f
 
 size_t AudioVoiceMono::pumpAndMix16(size_t frames)
 {
-    std::vector<int16_t>& scratch16 = m_root.m_scratch16;
-    if (scratch16.size() < frames)
-        scratch16.resize(frames);
+    std::vector<int16_t>& scratch16Pre = m_root.m_scratch16Pre;
+    if (scratch16Pre.size() < frames)
+        scratch16Pre.resize(frames);
 
-    m_cb->preSupplyAudio(*this, frames / m_sampleRateOut);
+    std::vector<int16_t>& scratch16Post = m_root.m_scratch16Post;
+    if (scratch16Post.size() < frames)
+        scratch16Post.resize(frames);
+
+    double dt = frames / m_sampleRateOut;
+    m_cb->preSupplyAudio(*this, dt);
     _midUpdate();
-    size_t oDone = soxr_output(m_src, scratch16.data(), frames);
+    size_t oDone = soxr_output(m_src, scratch16Pre.data(), frames);
 
     if (oDone)
     {
         for (auto& mtx : m_sendMatrices)
         {
             AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
-            mtx.second.mixMonoSampleData(m_root.m_mixInfo, scratch16.data(), smx._getMergeBuf16(oDone), oDone);
+            m_cb->routeAudio(oDone, dt, smx.m_busId, scratch16Pre.data(), scratch16Post.data());
+            mtx.second.mixMonoSampleData(m_root.m_mixInfo, scratch16Post.data(), smx._getMergeBuf16(oDone), oDone);
         }
     }
 
@@ -144,20 +150,26 @@ size_t AudioVoiceMono::pumpAndMix16(size_t frames)
 
 size_t AudioVoiceMono::pumpAndMix32(size_t frames)
 {
-    std::vector<int32_t>& scratch32 = m_root.m_scratch32;
-    if (scratch32.size() < frames)
-        scratch32.resize(frames);
+    std::vector<int32_t>& scratch32Pre = m_root.m_scratch32Pre;
+    if (scratch32Pre.size() < frames)
+        scratch32Pre.resize(frames);
 
-    m_cb->preSupplyAudio(*this, frames / m_sampleRateOut);
+    std::vector<int32_t>& scratch32Post = m_root.m_scratch32Post;
+    if (scratch32Post.size() < frames)
+        scratch32Post.resize(frames);
+
+    double dt = frames / m_sampleRateOut;
+    m_cb->preSupplyAudio(*this, dt);
     _midUpdate();
-    size_t oDone = soxr_output(m_src, scratch32.data(), frames);
+    size_t oDone = soxr_output(m_src, scratch32Pre.data(), frames);
 
     if (oDone)
     {
         for (auto& mtx : m_sendMatrices)
         {
             AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
-            mtx.second.mixMonoSampleData(m_root.m_mixInfo, scratch32.data(), smx._getMergeBuf32(oDone), oDone);
+            m_cb->routeAudio(oDone, dt, smx.m_busId, scratch32Pre.data(), scratch32Post.data());
+            mtx.second.mixMonoSampleData(m_root.m_mixInfo, scratch32Post.data(), smx._getMergeBuf32(oDone), oDone);
         }
     }
 
@@ -166,20 +178,26 @@ size_t AudioVoiceMono::pumpAndMix32(size_t frames)
 
 size_t AudioVoiceMono::pumpAndMixFlt(size_t frames)
 {
-    std::vector<float>& scratchFlt = m_root.m_scratchFlt;
-    if (scratchFlt.size() < frames)
-        scratchFlt.resize(frames + 2);
+    std::vector<float>& scratchFltPre = m_root.m_scratchFltPre;
+    if (scratchFltPre.size() < frames)
+        scratchFltPre.resize(frames + 2);
 
-    m_cb->preSupplyAudio(*this, frames / m_sampleRateOut);
+    std::vector<float>& scratchFltPost = m_root.m_scratchFltPost;
+    if (scratchFltPost.size() < frames)
+        scratchFltPost.resize(frames + 2);
+
+    double dt = frames / m_sampleRateOut;
+    m_cb->preSupplyAudio(*this, dt);
     _midUpdate();
-    size_t oDone = soxr_output(m_src, scratchFlt.data(), frames);
+    size_t oDone = soxr_output(m_src, scratchFltPre.data(), frames);
 
     if (oDone)
     {
         for (auto& mtx : m_sendMatrices)
         {
             AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
-            mtx.second.mixMonoSampleData(m_root.m_mixInfo, scratchFlt.data(), smx._getMergeBufFlt(oDone), oDone);
+            m_cb->routeAudio(oDone, dt, smx.m_busId, scratchFltPre.data(), scratchFltPost.data());
+            mtx.second.mixMonoSampleData(m_root.m_mixInfo, scratchFltPost.data(), smx._getMergeBufFlt(oDone), oDone);
         }
     }
 
@@ -278,21 +296,28 @@ size_t AudioVoiceStereo::SRCCallback(AudioVoiceStereo* ctx, int16_t** data, size
 
 size_t AudioVoiceStereo::pumpAndMix16(size_t frames)
 {
-    std::vector<int16_t>& scratch16 = m_root.m_scratch16;
     size_t samples = frames * 2;
-    if (scratch16.size() < samples)
-        scratch16.resize(samples);
 
-    m_cb->preSupplyAudio(*this, frames / m_sampleRateOut);
+    std::vector<int16_t>& scratch16Pre = m_root.m_scratch16Pre;
+    if (scratch16Pre.size() < samples)
+        scratch16Pre.resize(samples);
+
+    std::vector<int16_t>& scratch16Post = m_root.m_scratch16Post;
+    if (scratch16Post.size() < samples)
+        scratch16Post.resize(samples);
+
+    double dt = frames / m_sampleRateOut;
+    m_cb->preSupplyAudio(*this, dt);
     _midUpdate();
-    size_t oDone = soxr_output(m_src, scratch16.data(), frames);
+    size_t oDone = soxr_output(m_src, scratch16Pre.data(), frames);
 
     if (oDone)
     {
         for (auto& mtx : m_sendMatrices)
         {
             AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
-            mtx.second.mixStereoSampleData(m_root.m_mixInfo, scratch16.data(), smx._getMergeBuf16(oDone), oDone);
+            m_cb->routeAudio(oDone, dt, smx.m_busId, scratch16Pre.data(), scratch16Post.data());
+            mtx.second.mixStereoSampleData(m_root.m_mixInfo, scratch16Post.data(), smx._getMergeBuf16(oDone), oDone);
         }
     }
 
@@ -301,21 +326,28 @@ size_t AudioVoiceStereo::pumpAndMix16(size_t frames)
 
 size_t AudioVoiceStereo::pumpAndMix32(size_t frames)
 {
-    std::vector<int32_t>& scratch32 = m_root.m_scratch32;
     size_t samples = frames * 2;
-    if (scratch32.size() < samples)
-        scratch32.resize(samples);
 
-    m_cb->preSupplyAudio(*this, frames / m_sampleRateOut);
+    std::vector<int32_t>& scratch32Pre = m_root.m_scratch32Pre;
+    if (scratch32Pre.size() < samples)
+        scratch32Pre.resize(samples);
+
+    std::vector<int32_t>& scratch32Post = m_root.m_scratch32Post;
+    if (scratch32Post.size() < samples)
+        scratch32Post.resize(samples);
+
+    double dt = frames / m_sampleRateOut;
+    m_cb->preSupplyAudio(*this, dt);
     _midUpdate();
-    size_t oDone = soxr_output(m_src, scratch32.data(), frames);
+    size_t oDone = soxr_output(m_src, scratch32Pre.data(), frames);
 
     if (oDone)
     {
         for (auto& mtx : m_sendMatrices)
         {
             AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
-            mtx.second.mixStereoSampleData(m_root.m_mixInfo, scratch32.data(), smx._getMergeBuf32(oDone), oDone);
+            m_cb->routeAudio(oDone, dt, smx.m_busId, scratch32Pre.data(), scratch32Post.data());
+            mtx.second.mixStereoSampleData(m_root.m_mixInfo, scratch32Post.data(), smx._getMergeBuf32(oDone), oDone);
         }
     }
 
@@ -324,21 +356,28 @@ size_t AudioVoiceStereo::pumpAndMix32(size_t frames)
 
 size_t AudioVoiceStereo::pumpAndMixFlt(size_t frames)
 {
-    std::vector<float>& scratchFlt = m_root.m_scratchFlt;
     size_t samples = frames * 2;
-    if (scratchFlt.size() < samples)
-        scratchFlt.resize(samples + 4);
 
-    m_cb->preSupplyAudio(*this, frames / m_sampleRateOut);
+    std::vector<float>& scratchFltPre = m_root.m_scratchFltPre;
+    if (scratchFltPre.size() < samples)
+        scratchFltPre.resize(samples + 4);
+
+    std::vector<float>& scratchFltPost = m_root.m_scratchFltPost;
+    if (scratchFltPost.size() < samples)
+        scratchFltPost.resize(samples + 4);
+
+    double dt = frames / m_sampleRateOut;
+    m_cb->preSupplyAudio(*this, dt);
     _midUpdate();
-    size_t oDone = soxr_output(m_src, scratchFlt.data(), frames);
+    size_t oDone = soxr_output(m_src, scratchFltPre.data(), frames);
 
     if (oDone)
     {
         for (auto& mtx : m_sendMatrices)
         {
             AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
-            mtx.second.mixStereoSampleData(m_root.m_mixInfo, scratchFlt.data(), smx._getMergeBufFlt(oDone), oDone);
+            m_cb->routeAudio(oDone, dt, smx.m_busId, scratchFltPre.data(), scratchFltPost.data());
+            mtx.second.mixStereoSampleData(m_root.m_mixInfo, scratchFltPost.data(), smx._getMergeBufFlt(oDone), oDone);
         }
     }
 

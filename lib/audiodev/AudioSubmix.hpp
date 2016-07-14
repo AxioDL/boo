@@ -33,6 +33,7 @@ class AudioSubmix : public IAudioSubmix
 
     /* Mixer-engine relationships */
     BaseAudioVoiceEngine& m_root;
+    int m_busId;
     std::list<AudioSubmix*>::iterator m_parentIt;
     bool m_mainOut;
     bool m_bound = false;
@@ -87,7 +88,7 @@ class AudioSubmix : public IAudioSubmix
 
 public:
     ~AudioSubmix();
-    AudioSubmix(BaseAudioVoiceEngine& root, IAudioSubmixCallback* cb, bool mainOut);
+    AudioSubmix(BaseAudioVoiceEngine& root, IAudioSubmixCallback* cb, int busId, bool mainOut);
 
     void resetSendLevels();
     void setSendLevel(IAudioSubmix* submix, float level, bool slew);

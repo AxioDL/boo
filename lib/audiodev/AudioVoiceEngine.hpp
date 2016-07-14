@@ -36,9 +36,12 @@ protected:
 
     /* Shared scratch buffers for accumulating audio data for resampling */
     std::vector<int16_t> m_scratchIn;
-    std::vector<int16_t> m_scratch16;
-    std::vector<int32_t> m_scratch32;
-    std::vector<float> m_scratchFlt;
+    std::vector<int16_t> m_scratch16Pre;
+    std::vector<int32_t> m_scratch32Pre;
+    std::vector<float> m_scratchFltPre;
+    std::vector<int16_t> m_scratch16Post;
+    std::vector<int32_t> m_scratch32Post;
+    std::vector<float> m_scratchFltPost;
 
     AudioSubmix m_mainSubmix;
     std::list<AudioSubmix*> m_linearizedSubmixes;
@@ -52,7 +55,7 @@ protected:
     void _unbindFrom(std::list<AudioSubmix*>::iterator it);
 
 public:
-    BaseAudioVoiceEngine() : m_mainSubmix(*this, nullptr, false) {}
+    BaseAudioVoiceEngine() : m_mainSubmix(*this, nullptr, -1, false) {}
     ~BaseAudioVoiceEngine();
     std::unique_ptr<IAudioVoice> allocateNewMonoVoice(double sampleRate,
                                                       IAudioVoiceCallback* cb,
@@ -62,7 +65,7 @@ public:
                                                         IAudioVoiceCallback* cb,
                                                         bool dynamicPitch=false);
 
-    std::unique_ptr<IAudioSubmix> allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb);
+    std::unique_ptr<IAudioSubmix> allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb, int busId);
 
     void register5MsCallback(std::function<void(double dt)>&& callback);
 

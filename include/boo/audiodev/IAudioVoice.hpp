@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 namespace boo
 {
@@ -91,6 +92,23 @@ struct IAudioVoiceCallback
     /** boo calls this on behalf of the audio platform to request more audio
      *  frames from the client */
     virtual size_t supplyAudio(IAudioVoice& voice, size_t frames, int16_t* data)=0;
+
+    /** after resampling, boo calls this for each submix that this voice targets;
+     *  client performs volume processing and bus-routing this way */
+    virtual void routeAudio(size_t frames, double dt, int busId, int16_t* in, int16_t* out)
+    {
+        memmove(out, in, frames * 2);
+    }
+
+    virtual void routeAudio(size_t frames, double dt, int busId, int32_t* in, int32_t* out)
+    {
+        memmove(out, in, frames * 4);
+    }
+
+    virtual void routeAudio(size_t frames, double dt, int busId, float* in, float* out)
+    {
+        memmove(out, in, frames * 4);
+    }
 };
 
 }
