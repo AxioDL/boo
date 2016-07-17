@@ -312,10 +312,15 @@ void VulkanContext::initVulkan(const char* appName)
     VkResult instRes = vk::CreateInstance(&instInfo, nullptr, &m_instance);
     if (instRes != VK_SUCCESS)
     {
+#ifdef _WIN32
         MessageBoxW(nullptr, L"Error creating Vulkan instance\n\n"
                              L"The Vulkan runtime is installed, but there are no supported "
                              L"hardware vendor interfaces present",
                              L"Vulkan Error", MB_OK | MB_ICONERROR);
+#else
+        Log.report(logvisor::Fatal, "The Vulkan runtime is installed, but there are no supported "
+                                    "hardware vendor interfaces present");
+#endif
         exit(1);
     }
 
