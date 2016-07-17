@@ -33,6 +33,19 @@ list(APPEND PLAT_HDRS
 endif()
 
 if(WIN32)
+
+  unset(VULKAN_SDK_DIRS CACHE)
+  get_filename_component(VULKAN_SDK_DIRS "[HKEY_LOCAL_MACHINE\\SOFTWARE\\LunarG\\VulkanSDK;VK_SDK_PATHs]" ABSOLUTE CACHE)
+  if (NOT ${VULKAN_SDK_DIRS} STREQUAL "/registry")
+    message(STATUS "Enabling Vulkan support")
+    list(GET VULKAN_SDK_DIRS 0 VULKAN_SDK_DIR)
+    include_directories("${VULKAN_SDK_DIR}/Include")
+    list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_VULKAN=1)
+    list(APPEND _BOO_SYS_INCLUDES "${VULKAN_SDK_DIR}/Include")
+    list(APPEND PLAT_SRCS lib/graphicsdev/Vulkan.cpp
+         lib/graphicsdev/VulkanDispatchTable.cpp)
+  endif()
+
   list(APPEND PLAT_SRCS
        lib/win/ApplicationWin32.cpp
        lib/win/WindowWin32.cpp
@@ -182,6 +195,7 @@ list(APPEND _BOO_SYS_LIBS glslang HLSL soxr OSDependent OGLCompiler SPIRV glslan
 
 set(BOO_SYS_LIBS ${_BOO_SYS_LIBS} CACHE PATH "boo system libraries" FORCE)
 set(BOO_SYS_DEFINES ${_BOO_SYS_DEFINES} CACHE PATH "boo system defines" FORCE)
+set(BOO_SYS_INCLUDES ${_BOO_SYS_INCLUDES} CACHE PATH "boo system includes" FORCE)
 
 add_definitions(${_BOO_SYS_DEFINES})
 include_directories(include glslang soxr/src)

@@ -1,5 +1,6 @@
 #include "Win32Common.hpp"
 #include <Windowsx.h>
+#include "boo/IApplication.hpp"
 #include "boo/IWindow.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include "logvisor/logvisor.hpp"
@@ -8,6 +9,10 @@
 #include "boo/graphicsdev/GL.hpp"
 #include "boo/graphicsdev/glew.h"
 #include "boo/graphicsdev/wglew.h"
+
+#if BOO_HAS_VULKAN
+#include "boo/graphicsdev/Vulkan.hpp"
+#endif
 
 static const int ContextAttribs[] =
 {
@@ -30,6 +35,11 @@ IGraphicsDataFactory* _NewD3D12DataFactory(D3D12Context* ctx, IGraphicsContext* 
 IGraphicsCommandQueue* _NewD3D11CommandQueue(D3D11Context* ctx, D3D11Context::Window* windowCtx, IGraphicsContext* parent);
 IGraphicsDataFactory* _NewD3D11DataFactory(D3D11Context* ctx, IGraphicsContext* parent, uint32_t sampleCount);
 IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent);
+#if BOO_HAS_VULKAN
+IGraphicsCommandQueue* _NewVulkanCommandQueue(VulkanContext* ctx,
+                                              VulkanContext::Window* windowCtx,
+                                              IGraphicsContext* parent);
+#endif
 
 struct GraphicsContextWin32 : IGraphicsContext
 {
@@ -370,6 +380,239 @@ public:
     }
 };
 
+#if BOO_HAS_VULKAN
+struct GraphicsContextWin32Vulkan : GraphicsContextWin32
+{
+    HINSTANCE m_appInstance;
+    HWND m_hwnd;
+    VulkanContext* m_ctx;
+    VkSurfaceKHR m_surface = VK_NULL_HANDLE;
+    VkFormat m_format;
+    VkColorSpaceKHR m_colorspace;
+    uint32_t m_sampleCount;
+
+    IGraphicsCommandQueue* m_commandQueue = nullptr;
+    IGraphicsDataFactory* m_dataFactory = nullptr;
+
+    std::thread m_vsyncThread;
+    bool m_vsyncRunning;
+
+    static void ThrowIfFailed(VkResult res)
+    {
+        if (res != VK_SUCCESS)
+            Log.report(logvisor::Fatal, "%d\n", res);
+    }
+
+public:
+    IWindowCallback* m_callback;
+
+    GraphicsContextWin32Vulkan(IWindow* parentWindow, HINSTANCE appInstance, HWND hwnd,
+                               VulkanContext* ctx, Boo3DAppContext& b3dCtx, uint32_t drawSamples)
+    : GraphicsContextWin32(EGraphicsAPI::Vulkan, parentWindow, b3dCtx),
+      m_appInstance(appInstance), m_hwnd(hwnd), m_ctx(ctx), m_sampleCount(drawSamples)
+    {
+        HMONITOR testMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY);
+        ComPtr<IDXGIAdapter1> adapter;
+        ComPtr<IDXGIOutput> foundOut;
+        int i=0;
+        while (b3dCtx.m_vulkanDxFactory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND)
+        {
+            int j=0;
+            ComPtr<IDXGIOutput> out;
+            while (adapter->EnumOutputs(j, &out) != DXGI_ERROR_NOT_FOUND)
+            {
+                DXGI_OUTPUT_DESC desc;
+                out->GetDesc(&desc);
+                if (desc.Monitor == testMon)
+                {
+                    out.As<IDXGIOutput>(&m_output);
+                    break;
+                }
+                ++j;
+            }
+            if (m_output)
+                break;
+            ++i;
+        }
+
+        if (!m_output)
+            Log.report(logvisor::Fatal, "unable to find window's IDXGIOutput");
+    }
+
+    void destroy()
+    {
+        VulkanContext::Window& m_windowCtx = *m_ctx->m_windows[m_parentWindow];
+        m_windowCtx.m_swapChains[0].destroy(m_ctx->m_dev);
+        m_windowCtx.m_swapChains[1].destroy(m_ctx->m_dev);
+        //vk::DestroySurfaceKHR(m_ctx->m_instance, m_surface, nullptr);
+
+        if (m_vsyncRunning)
+        {
+            m_vsyncRunning = false;
+            m_vsyncThread.join();
+        }
+
+        m_ctx->m_windows.erase(m_parentWindow);
+    }
+
+    ~GraphicsContextWin32Vulkan() {destroy();}
+
+    VulkanContext::Window* m_windowCtx = nullptr;
+
+    void resized(SWindowRect& rect)
+    {
+        if (m_windowCtx)
+            m_ctx->resizeSwapChain(*m_windowCtx, m_surface, m_format, m_colorspace);
+    }
+
+    void _setCallback(IWindowCallback* cb)
+    {
+        m_callback = cb;
+    }
+
+    EGraphicsAPI getAPI() const
+    {
+        return m_api;
+    }
+
+    EPixelFormat getPixelFormat() const
+    {
+        return m_pf;
+    }
+
+    void setPixelFormat(EPixelFormat pf)
+    {
+        if (pf > EPixelFormat::RGBAF32_Z24)
+            return;
+        m_pf = pf;
+    }
+
+    void initializeContext(void* getVkProc)
+    {
+        vk::init_dispatch_table_top(PFN_vkGetInstanceProcAddr(getVkProc));
+        if (m_ctx->m_instance == VK_NULL_HANDLE)
+        {
+            const SystemString& appName = APP->getUniqueName();
+            int len = WideCharToMultiByte(CP_UTF8, 0, appName.c_str(), appName.size(), nullptr, 0, nullptr, nullptr);
+            std::string utf8(len, '\0');
+            WideCharToMultiByte(CP_UTF8, 0, appName.c_str(), appName.size(), &utf8[0], len, nullptr, nullptr);
+            m_ctx->initVulkan(utf8.c_str());
+        }
+
+        vk::init_dispatch_table_middle(m_ctx->m_instance, false);
+        m_ctx->enumerateDevices();
+
+        m_windowCtx =
+            m_ctx->m_windows.emplace(std::make_pair(m_parentWindow,
+            std::make_unique<VulkanContext::Window>())).first->second.get();
+
+        VkWin32SurfaceCreateInfoKHR surfaceInfo = {};
+        surfaceInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+        surfaceInfo.hinstance = m_appInstance;
+        surfaceInfo.hwnd = m_hwnd;
+        ThrowIfFailed(vk::CreateWin32SurfaceKHR(m_ctx->m_instance, &surfaceInfo, nullptr, &m_surface));
+
+        /* Iterate over each queue to learn whether it supports presenting */
+        VkBool32 *supportsPresent = (VkBool32*)malloc(m_ctx->m_queueCount * sizeof(VkBool32));
+        for (uint32_t i=0 ; i<m_ctx->m_queueCount ; ++i)
+            vk::GetPhysicalDeviceSurfaceSupportKHR(m_ctx->m_gpus[0], i, m_surface, &supportsPresent[i]);
+
+        /* Search for a graphics queue and a present queue in the array of queue
+         * families, try to find one that supports both */
+        if (m_ctx->m_graphicsQueueFamilyIndex == UINT32_MAX)
+        {
+            /* First window, init device */
+            for (uint32_t i=0 ; i<m_ctx->m_queueCount; ++i)
+            {
+                if ((m_ctx->m_queueProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0)
+                {
+                    if (supportsPresent[i] == VK_TRUE)
+                    {
+                        m_ctx->m_graphicsQueueFamilyIndex = i;
+                    }
+                }
+            }
+
+            /* Generate error if could not find a queue that supports both a graphics
+             * and present */
+            if (m_ctx->m_graphicsQueueFamilyIndex == UINT32_MAX)
+                Log.report(logvisor::Fatal,
+                           "Could not find a queue that supports both graphics and present");
+
+            m_ctx->initDevice();
+        }
+        else
+        {
+            /* Subsequent window, verify present */
+            if (supportsPresent[m_ctx->m_graphicsQueueFamilyIndex] == VK_FALSE)
+                Log.report(logvisor::Fatal, "subsequent surface doesn't support present");
+        }
+        free(supportsPresent);
+
+        vk::init_dispatch_table_bottom(m_ctx->m_instance, m_ctx->m_dev);
+
+        if (!vk::GetPhysicalDeviceWin32PresentationSupportKHR(m_ctx->m_gpus[0], m_ctx->m_graphicsQueueFamilyIndex))
+        {
+            Log.report(logvisor::Fatal, "Win32 doesn't support vulkan present");
+            return;
+        }
+
+        /* Get the list of VkFormats that are supported */
+        uint32_t formatCount;
+        ThrowIfFailed(vk::GetPhysicalDeviceSurfaceFormatsKHR(m_ctx->m_gpus[0], m_surface, &formatCount, nullptr));
+        VkSurfaceFormatKHR* surfFormats = (VkSurfaceFormatKHR*)malloc(formatCount * sizeof(VkSurfaceFormatKHR));
+        ThrowIfFailed(vk::GetPhysicalDeviceSurfaceFormatsKHR(m_ctx->m_gpus[0], m_surface, &formatCount, surfFormats));
+
+
+        /* If the format list includes just one entry of VK_FORMAT_UNDEFINED,
+         * the surface has no preferred format.  Otherwise, at least one
+         * supported format will be returned. */
+        if (formatCount >= 1)
+        {
+            if (surfFormats[0].format == VK_FORMAT_UNDEFINED)
+                m_format = VK_FORMAT_B8G8R8A8_UNORM;
+            else
+                m_format = surfFormats[0].format;
+            m_colorspace = surfFormats[0].colorSpace;
+        }
+        else
+            Log.report(logvisor::Fatal, "no surface formats available for Vulkan swapchain");
+
+        m_ctx->initSwapChain(*m_windowCtx, m_surface, m_format, m_colorspace);
+
+        m_dataFactory = new class VulkanDataFactory(this, m_ctx, m_sampleCount);
+        m_commandQueue = _NewVulkanCommandQueue(m_ctx, m_ctx->m_windows[m_parentWindow].get(), this);
+    }
+
+    void makeCurrent() {}
+
+    void postInit() {}
+
+    IGraphicsCommandQueue* getCommandQueue()
+    {
+        return m_commandQueue;
+    }
+
+    IGraphicsDataFactory* getDataFactory()
+    {
+        return m_dataFactory;
+    }
+
+    IGraphicsDataFactory* getMainContextDataFactory()
+    {
+        return getDataFactory();
+    }
+
+    IGraphicsDataFactory* getLoadContextDataFactory()
+    {
+        return getDataFactory();
+    }
+
+    void present() {}
+
+};
+#endif
+
 static void genFrameDefault(MONITORINFO* screen, int& xOut, int& yOut, int& wOut, int& hOut)
 {
     float width = screen->rcMonitor.right * 2.0 / 3.0;
@@ -709,11 +952,12 @@ class WindowWin32 : public IWindow
 
 public:
 
-    WindowWin32(const SystemString& title, Boo3DAppContext& b3dCtx, uint32_t sampleCount)
+    WindowWin32(const SystemString& title, Boo3DAppContext& b3dCtx, void* vulkanHandle, uint32_t sampleCount)
     {
         m_hwnd = CreateWindowW(L"BooWindow", title.c_str(), WS_OVERLAPPEDWINDOW,
                                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                                NULL, NULL, NULL, NULL);
+        HINSTANCE wndInstance = HINSTANCE(GetWindowLongPtr(m_hwnd, GWLP_HINSTANCE));
         m_imc = ImmGetContext(m_hwnd);
         IGraphicsContext::EGraphicsAPI api = IGraphicsContext::EGraphicsAPI::D3D11;
 #if _WIN32_WINNT_WIN10
@@ -724,6 +968,13 @@ public:
         {
             m_gfxCtx.reset(new GraphicsContextWin32GL(IGraphicsContext::EGraphicsAPI::OpenGL3_3,
                                                       this, m_hwnd, b3dCtx, sampleCount));
+            return;
+        }
+        else if (b3dCtx.m_vulkanDxFactory)
+        {
+            m_gfxCtx.reset(new GraphicsContextWin32Vulkan(this, wndInstance, m_hwnd, &g_VulkanContext,
+                                                          b3dCtx, sampleCount));
+            m_gfxCtx->initializeContext(vulkanHandle);
             return;
         }
         m_gfxCtx.reset(new GraphicsContextWin32D3D(api, this, m_hwnd, b3dCtx, sampleCount));
@@ -1291,9 +1542,10 @@ public:
 
 };
 
-IWindow* _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx, uint32_t sampleCount)
+IWindow* _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx,
+                         void* vulkanHandle, uint32_t sampleCount)
 {
-    return new WindowWin32(title, d3dCtx, sampleCount);
+    return new WindowWin32(title, d3dCtx, vulkanHandle, sampleCount);
 }
 
 }

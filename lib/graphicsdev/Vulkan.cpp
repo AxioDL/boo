@@ -1,6 +1,7 @@
 #include "boo/graphicsdev/Vulkan.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include <vector>
+#include <array>
 #include <cmath>
 #include <glslang/Public/ShaderLang.h>
 #include <StandAlone/ResourceLimits.h>
@@ -230,7 +231,11 @@ void VulkanContext::initVulkan(const char* appName)
      * entries loaded into the data pointer - in case the number
      * of layers went down or is smaller than the size given.
      */
+#ifdef _WIN32
+    _putenv("VK_LAYER_PATH=\\VulkanSDK\\1.0.17.0\\Bin");
+#else
     setenv("VK_LAYER_PATH", "/usr/share/vulkan/explicit_layer.d", 1);
+#endif
     do {
         ThrowIfFailed(vk::EnumerateInstanceLayerProperties(&instanceLayerCount, nullptr));
 
@@ -304,7 +309,15 @@ void VulkanContext::initVulkan(const char* appName)
     instInfo.enabledExtensionCount = m_instanceExtensionNames.size();
     instInfo.ppEnabledExtensionNames = m_instanceExtensionNames.data();
 
-    ThrowIfFailed(vk::CreateInstance(&instInfo, nullptr, &m_instance));
+    VkResult instRes = vk::CreateInstance(&instInfo, nullptr, &m_instance);
+    if (instRes != VK_SUCCESS)
+    {
+        MessageBoxW(nullptr, L"Error creating Vulkan instance\n\n"
+                             L"The Vulkan runtime is installed, but there are no supported "
+                             L"hardware vendor interfaces present",
+                             L"Vulkan Error", MB_OK | MB_ICONERROR);
+        exit(1);
+    }
 
 #ifndef NDEBUG
     VkDebugReportCallbackEXT debugReportCallback;
@@ -877,7 +890,7 @@ class VulkanTextureS : public ITextureS
         texCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
         texCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         texCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        texCreateInfo.extent = { m_width, m_height, 1 };
+        texCreateInfo.extent = { uint32_t(m_width), uint32_t(m_height), 1 };
         texCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex));
 
@@ -1070,7 +1083,7 @@ class VulkanTextureSA : public ITextureSA
         texCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
         texCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         texCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        texCreateInfo.extent = { m_width, m_height, 1 };
+        texCreateInfo.extent = { uint32_t(m_width), uint32_t(m_height), 1 };
         texCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex));
 

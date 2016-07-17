@@ -18,6 +18,10 @@
 #include "boo/graphicsdev/D3D.hpp"
 #include "logvisor/logvisor.hpp"
 
+#if BOO_HAS_VULKAN
+#include <vulkan/vulkan.h>
+#endif
+
 DWORD g_mainThreadId = 0;
 
 static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -60,7 +64,8 @@ namespace boo
 static logvisor::Module Log("boo::ApplicationWin32");
 Win32Cursors WIN32_CURSORS;
 
-IWindow* _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx, uint32_t sampleCount);
+IWindow* _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx,
+                         void* vulkanHandle, uint32_t sampleCount);
 
 class ApplicationWin32 final : public IApplication
 {
@@ -73,6 +78,7 @@ class ApplicationWin32 final : public IApplication
     bool m_singleInstance;
 
     Boo3DAppContext m_3dCtx;
+    PFN_vkGetInstanceProcAddr m_getVkProc = nullptr;
 
     void _deletedWindow(IWindow* window)
     {
@@ -105,12 +111,25 @@ public:
 
         bool no12 = false;
         bool noD3d = false;
+#if BOO_HAS_VULKAN
+        bool useVulkan = true;
+#endif
         for (const SystemString& arg : args)
         {
             if (!arg.compare(L"--d3d11"))
                 no12 = true;
+#if BOO_HAS_VULKAN
+            if (!arg.compare(L"--vulkan"))
+                noD3d = true;
+            if (!arg.compare(L"--gl"))
+            {
+                noD3d = true;
+                useVulkan = false;
+            }
+#else
             if (!arg.compare(L"--gl"))
                 noD3d = true;
+#endif
         }
 
 #if _WIN32_WINNT_WIN10
@@ -226,6 +245,27 @@ public:
             Log.report(logvisor::Info, "initialized D3D11 renderer");
             return;
         }
+
+#if BOO_HAS_VULKAN
+        if (useVulkan)
+        {
+            HMODULE vulkanLib = LoadLibraryW(L"vulkan-1.dll");
+            if (vulkanLib)
+            {
+                m_getVkProc = (PFN_vkGetInstanceProcAddr)GetProcAddress(vulkanLib, "vkGetInstanceProcAddr");
+                if (m_getVkProc)
+                {
+                    /* Obtain DXGI Factory */
+                    HRESULT hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory1), &m_3dCtx.m_vulkanDxFactory);
+                    if (FAILED(hr))
+                        Log.report(logvisor::Fatal, "unable to create DXGI factory");
+
+                    Log.report(logvisor::Info, "initialized Vulkan renderer");
+                    return;
+                }
+            }
+        }
+#endif
 
         /* Finally try OpenGL */
         {
@@ -383,7 +423,7 @@ public:
             return m_mwret;
         }
 
-        IWindow* window = _WindowWin32New(title, m_3dCtx, sampleCount);
+        IWindow* window = _WindowWin32New(title, m_3dCtx, m_getVkProc, sampleCount);
         HWND hwnd = HWND(window->getPlatformHandle());
         m_allWindows[hwnd] = window;
         return window;

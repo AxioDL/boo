@@ -103,6 +103,7 @@ struct Boo3DAppContext
     D3D12Context m_ctx12;
 #endif
     OGLContext m_ctxOgl;
+    ComPtr<IDXGIFactory1> m_vulkanDxFactory;
 
     void resize(boo::IWindow* window, size_t width, size_t height)
     {
@@ -192,7 +193,7 @@ struct Boo3DAppContext
                 win.m_swapChain->GetContainingOutput(&out);
                 DXGI_OUTPUT_DESC outDesc;
                 out->GetDesc(&outDesc);
-                
+
                 win.m_fsdesc.Width = outDesc.DesktopCoordinates.right;
                 win.m_fsdesc.Height = outDesc.DesktopCoordinates.bottom;
             }
@@ -224,7 +225,7 @@ struct Boo3DAppContext
             GetMonitorInfo(MonitorFromWindow(win.m_hwnd, MONITOR_DEFAULTTONEAREST),
                 &monitor_info);
             SetWindowPos(win.m_hwnd, NULL, monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
-                monitor_info.rcMonitor.right - monitor_info.rcMonitor.left, 
+                monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
                 monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_ASYNCWINDOWPOS);
 
