@@ -160,10 +160,6 @@ void BaseAudioVoiceEngine::_unbindFrom(std::list<AudioVoice*>::iterator it)
 
 void BaseAudioVoiceEngine::_unbindFrom(std::list<AudioSubmix*>::iterator it)
 {
-    for (AudioVoice* vox : m_activeVoices)
-    {
-
-    }
     m_activeSubmixes.erase(it);
 }
 
