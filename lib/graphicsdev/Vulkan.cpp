@@ -409,9 +409,9 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
 
     uint32_t presentModeCount;
     ThrowIfFailed(vk::GetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, nullptr));
-    VkPresentModeKHR* presentModes = (VkPresentModeKHR*)malloc(presentModeCount * sizeof(VkPresentModeKHR));
+    std::unique_ptr<VkPresentModeKHR[]> presentModes(new VkPresentModeKHR[presentModeCount]);
 
-    ThrowIfFailed(vk::GetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, presentModes));
+    ThrowIfFailed(vk::GetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, presentModes.get()));
 
     VkExtent2D swapChainExtent;
     // width and height are either both -1, or both not -1.
@@ -491,8 +491,8 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
     uint32_t swapchainImageCount;
     ThrowIfFailed(vk::GetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, nullptr));
 
-    VkImage* swapchainImages = (VkImage*)malloc(swapchainImageCount * sizeof(VkImage));
-    ThrowIfFailed(vk::GetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, swapchainImages));
+    std::unique_ptr<VkImage[]> swapchainImages(new VkImage[swapchainImageCount]);
+    ThrowIfFailed(vk::GetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, swapchainImages.get()));
 
     // Going to need a command buffer to send the memory barriers in
     // set_image_layout but we couldn't have created one before we knew
@@ -541,8 +541,6 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
         Window::SwapChain::Buffer& buf = sc.m_bufs[i];
         buf.m_image = swapchainImages[i];
     }
-
-    free(swapchainImages);
 }
 
 
@@ -553,9 +551,9 @@ void VulkanContext::resizeSwapChain(VulkanContext::Window& windowCtx, VkSurfaceK
 
     uint32_t presentModeCount;
     ThrowIfFailed(vk::GetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, nullptr));
-    VkPresentModeKHR* presentModes = (VkPresentModeKHR*)malloc(presentModeCount * sizeof(VkPresentModeKHR));
+    std::unique_ptr<VkPresentModeKHR[]> presentModes(new VkPresentModeKHR[presentModeCount]);
 
-    ThrowIfFailed(vk::GetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, presentModes));
+    ThrowIfFailed(vk::GetPhysicalDeviceSurfacePresentModesKHR(m_gpus[0], surface, &presentModeCount, presentModes.get()));
 
     VkExtent2D swapChainExtent;
     // width and height are either both -1, or both not -1.
@@ -636,8 +634,8 @@ void VulkanContext::resizeSwapChain(VulkanContext::Window& windowCtx, VkSurfaceK
     uint32_t swapchainImageCount;
     ThrowIfFailed(vk::GetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, nullptr));
 
-    VkImage* swapchainImages = (VkImage*)malloc(swapchainImageCount * sizeof(VkImage));
-    ThrowIfFailed(vk::GetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, swapchainImages));
+    std::unique_ptr<VkImage[]> swapchainImages(new VkImage[swapchainImageCount]);
+    ThrowIfFailed(vk::GetSwapchainImagesKHR(m_dev, sc.m_swapChain, &swapchainImageCount, swapchainImages.get()));
 
     /* images */
     sc.m_bufs.resize(swapchainImageCount);
@@ -646,8 +644,6 @@ void VulkanContext::resizeSwapChain(VulkanContext::Window& windowCtx, VkSurfaceK
         Window::SwapChain::Buffer& buf = sc.m_bufs[i];
         buf.m_image = swapchainImages[i];
     }
-
-    free(swapchainImages);
 }
 
 struct VulkanData : IGraphicsData

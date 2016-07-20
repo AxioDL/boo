@@ -1069,7 +1069,7 @@ public:
         XUnmapWindow(m_xDisp, m_windowId);
         XUnlockDisplay(m_xDisp);
     }
-    
+
     std::string getTitle()
     {
         unsigned long nitems;
