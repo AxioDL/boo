@@ -164,7 +164,7 @@ public:
         m_pf = pf;
     }
 
-    void initializeContext(void*) {}
+    bool initializeContext(void*) {return true;}
 
     void makeCurrent() {}
 
@@ -305,7 +305,7 @@ public:
         m_pf = pf;
     }
 
-    void initializeContext(void*) {}
+    bool initializeContext(void*) {return true;}
 
     void makeCurrent()
     {
@@ -487,7 +487,7 @@ public:
         m_pf = pf;
     }
 
-    void initializeContext(void* getVkProc)
+    bool initializeContext(void* getVkProc)
     {
         vk::init_dispatch_table_top(PFN_vkGetInstanceProcAddr(getVkProc));
         if (m_ctx->m_instance == VK_NULL_HANDLE)
@@ -500,7 +500,8 @@ public:
         }
 
         vk::init_dispatch_table_middle(m_ctx->m_instance, false);
-        m_ctx->enumerateDevices();
+        if (!m_ctx->enumerateDevices())
+            return false;
 
         m_windowCtx =
             m_ctx->m_windows.emplace(std::make_pair(m_parentWindow,
@@ -554,7 +555,7 @@ public:
         if (!vk::GetPhysicalDeviceWin32PresentationSupportKHR(m_ctx->m_gpus[0], m_ctx->m_graphicsQueueFamilyIndex))
         {
             Log.report(logvisor::Fatal, "Win32 doesn't support vulkan present");
-            return;
+            return false;
         }
 
         /* Get the list of VkFormats that are supported */
@@ -582,6 +583,7 @@ public:
 
         m_dataFactory = new class VulkanDataFactory(this, m_ctx, m_sampleCount);
         m_commandQueue = _NewVulkanCommandQueue(m_ctx, m_ctx->m_windows[m_parentWindow].get(), this);
+        return true;
     }
 
     void makeCurrent() {}
@@ -974,8 +976,8 @@ public:
         {
             m_gfxCtx.reset(new GraphicsContextWin32Vulkan(this, wndInstance, m_hwnd, &g_VulkanContext,
                                                           b3dCtx, sampleCount));
-            m_gfxCtx->initializeContext(vulkanHandle);
-            return;
+            if (m_gfxCtx->initializeContext(vulkanHandle))
+                return;
         }
         m_gfxCtx.reset(new GraphicsContextWin32D3D(api, this, m_hwnd, b3dCtx, sampleCount));
     }

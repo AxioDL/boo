@@ -50,9 +50,9 @@ public:
         m_pf = pf;
     }
 
-    void initializeContext(void*)
+    bool initializeContext(void*)
     {
-
+        return false;
     }
 
     void makeCurrent()

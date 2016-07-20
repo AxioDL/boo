@@ -439,7 +439,7 @@ public:
         m_pf = pf;
     }
 
-    void initializeContext(void*)
+    bool initializeContext(void*)
     {
         if (!glXCreateContextAttribsARB)
         {
@@ -522,6 +522,8 @@ public:
         XUnlockDisplay(m_xDisp);
         m_commandQueue = _NewGLCommandQueue(this);
         XLockDisplay(m_xDisp);
+
+        return true;
     }
 
     void makeCurrent()
@@ -675,7 +677,7 @@ public:
         m_pf = pf;
     }
 
-    void initializeContext(void* getVkProc)
+    bool initializeContext(void* getVkProc)
     {
         if (!glXWaitVideoSyncSGI)
         {
@@ -690,7 +692,8 @@ public:
             m_ctx->initVulkan(APP->getUniqueName().c_str());
 
         vk::init_dispatch_table_middle(m_ctx->m_instance, false);
-        m_ctx->enumerateDevices();
+        if (!m_ctx->enumerateDevices())
+            return false;
 
         m_windowCtx =
             m_ctx->m_windows.emplace(std::make_pair(m_parentWindow,
@@ -744,7 +747,7 @@ public:
         if (!vk::GetPhysicalDeviceXcbPresentationSupportKHR(m_ctx->m_gpus[0], m_ctx->m_graphicsQueueFamilyIndex, m_xcbConn, m_visualid))
         {
             Log.report(logvisor::Fatal, "XCB visual doesn't support vulkan present");
-            return;
+            return false;
         }
 
         /* Get the list of VkFormats that are supported */
@@ -817,6 +820,8 @@ public:
 
         m_dataFactory = new class VulkanDataFactory(this, m_ctx, m_drawSamples);
         m_commandQueue = _NewVulkanCommandQueue(m_ctx, m_ctx->m_windows[m_parentWindow].get(), this);
+
+        return true;
     }
 
     void makeCurrent() {}
@@ -916,108 +921,123 @@ public:
         if (!S_ATOMS)
             S_ATOMS = new XlibAtoms(display);
 
+        for (int i = 1; i >= 0 ; --i)
+        {
 #if BOO_HAS_VULKAN
-        if (vulkanHandle)
-            m_gfxCtx.reset(new GraphicsContextXlibVulkan(this, display, (xcb_connection_t*)xcbConn, defaultScreen,
-                                                         &g_VulkanContext, m_visualId, drawSamples));
-        else
-#endif
-            m_gfxCtx.reset(new GraphicsContextXlibGLX(IGraphicsContext::EGraphicsAPI::OpenGL3_3,
-                                                      this, display, defaultScreen, lastCtx, m_visualId, drawSamples));
-
-        /* Default screen */
-        Screen* screen = ScreenOfDisplay(display, defaultScreen);
-        m_pixelFactor = screen->width / (float)screen->mwidth / REF_DPMM;
-
-        XVisualInfo visTemplate;
-        visTemplate.screen = defaultScreen;
-        int numVisuals;
-        XVisualInfo* visualList = XGetVisualInfo(display, VisualScreenMask, &visTemplate, &numVisuals);
-        Visual* selectedVisual = nullptr;
-        for (int i=0 ; i<numVisuals ; ++i)
-        {
-            if (visualList[i].visualid == m_visualId)
+            if (vulkanHandle && i == 1)
             {
-                selectedVisual = visualList[i].visual;
-                break;
+                m_gfxCtx.reset(new GraphicsContextXlibVulkan(this, display, (xcb_connection_t*)xcbConn, defaultScreen,
+                                                             &g_VulkanContext, m_visualId, drawSamples));
             }
+            else
+#endif
+            {
+                i = 0;
+                m_gfxCtx.reset(new GraphicsContextXlibGLX(IGraphicsContext::EGraphicsAPI::OpenGL3_3,
+                                                          this, display, defaultScreen, lastCtx, m_visualId, drawSamples));
+            }
+
+            /* Default screen */
+            Screen* screen = ScreenOfDisplay(display, defaultScreen);
+            m_pixelFactor = screen->width / (float)screen->mwidth / REF_DPMM;
+
+            XVisualInfo visTemplate;
+            visTemplate.screen = defaultScreen;
+            int numVisuals;
+            XVisualInfo* visualList = XGetVisualInfo(display, VisualScreenMask, &visTemplate, &numVisuals);
+            Visual* selectedVisual = nullptr;
+            for (int i=0 ; i<numVisuals ; ++i)
+            {
+                if (visualList[i].visualid == m_visualId)
+                {
+                    selectedVisual = visualList[i].visual;
+                    break;
+                }
+            }
+            XFree(visualList);
+
+            /* Create colormap */
+            m_colormapId = XCreateColormap(m_xDisp, screen->root, selectedVisual, AllocNone);
+
+            /* Create window */
+            int x, y, w, h;
+            genFrameDefault(screen, x, y, w, h);
+            XSetWindowAttributes swa;
+            swa.colormap = m_colormapId;
+            swa.border_pixmap = 0;
+            swa.event_mask = FocusChangeMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask | ExposureMask | StructureNotifyMask | LeaveWindowMask | EnterWindowMask;
+
+            m_windowId = XCreateWindow(display, screen->root, x, y, w, h, 10,
+                                       CopyFromParent, CopyFromParent, selectedVisual,
+                                       CWBorderPixel | CWEventMask | CWColormap, &swa);
+
+            /*
+             * Now go create an IC using the style we chose.
+             * Also set the window and fontset attributes now.
+             */
+            if (xIM)
+            {
+                XPoint pt = {0,0};
+                XVaNestedList nlist;
+                m_xIC = XCreateIC(xIM, XNInputStyle, bestInputStyle,
+                                  XNClientWindow, m_windowId,
+                                  XNFocusWindow, m_windowId,
+                                  XNPreeditAttributes, nlist = XVaCreateNestedList(0,
+                                                                                   XNSpotLocation, &pt,
+                                                                                   XNFontSet, fontset,
+                                                                                   nullptr),
+                                  nullptr);
+                XFree(nlist);
+                long im_event_mask;
+                XGetICValues(m_xIC, XNFilterEvents, &im_event_mask, nullptr);
+                XSelectInput(display, m_windowId, swa.event_mask | im_event_mask);
+                XSetICFocus(m_xIC);
+            }
+
+            /* The XInput 2.1 extension enables per-pixel smooth scrolling trackpads */
+            XIEventMask mask = {XIAllMasterDevices, XIMaskLen(XI_LASTEVENT)};
+            mask.mask = (unsigned char*)malloc(mask.mask_len);
+            memset(mask.mask, 0, mask.mask_len);
+            /* XISetMask(mask.mask, XI_Motion); Can't do this without losing mouse move events :( */
+            XISetMask(mask.mask, XI_TouchBegin);
+            XISetMask(mask.mask, XI_TouchUpdate);
+            XISetMask(mask.mask, XI_TouchEnd);
+            XISelectEvents(m_xDisp, m_windowId, &mask, 1);
+            free(mask.mask);
+
+
+            /* Register netwm extension atom for window closing */
+            XSetWMProtocols(m_xDisp, m_windowId, &S_ATOMS->m_wmDeleteWindow, 1);
+
+            /* Set the title of the window */
+            const unsigned char* c_title = (unsigned char*)title.c_str();
+            XChangeProperty(m_xDisp, m_windowId, XA_WM_NAME, XA_STRING, 8, PropModeReplace, c_title, title.length());
+
+            /* Set the title of the window icon */
+            XChangeProperty(m_xDisp, m_windowId, XA_WM_ICON_NAME, XA_STRING, 8, PropModeReplace, c_title, title.length());
+
+            /* Add window icon */
+            if (MAINICON_NETWM_SZ && S_ATOMS->m_netwmIcon)
+            {
+                XChangeProperty(display, m_windowId, S_ATOMS->m_netwmIcon, XA_CARDINAL,
+                                32, PropModeReplace, MAINICON_NETWM, MAINICON_NETWM_SZ / sizeof(unsigned long));
+            }
+
+            /* Initialize context */
+            XMapWindow(m_xDisp, m_windowId);
+            setStyle(EWindowStyle::Default);
+            setCursor(EMouseCursor::Pointer);
+            XFlush(m_xDisp);
+
+            if (!m_gfxCtx->initializeContext(vulkanHandle))
+            {
+                XUnmapWindow(m_xDisp, m_windowId);
+                XDestroyWindow(m_xDisp, m_windowId);
+                XFreeColormap(m_xDisp, m_colormapId);
+                continue;
+            }
+            break;
         }
-        XFree(visualList);
-
-        /* Create colormap */
-        m_colormapId = XCreateColormap(m_xDisp, screen->root, selectedVisual, AllocNone);
-
-        /* Create window */
-        int x, y, w, h;
-        genFrameDefault(screen, x, y, w, h);
-        XSetWindowAttributes swa;
-        swa.colormap = m_colormapId;
-        swa.border_pixmap = 0;
-        swa.event_mask = FocusChangeMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask | ExposureMask | StructureNotifyMask | LeaveWindowMask | EnterWindowMask;
-
-        m_windowId = XCreateWindow(display, screen->root, x, y, w, h, 10,
-                                   CopyFromParent, CopyFromParent, selectedVisual,
-                                   CWBorderPixel | CWEventMask | CWColormap, &swa);
-
-        /*
-         * Now go create an IC using the style we chose.
-         * Also set the window and fontset attributes now.
-         */
-        if (xIM)
-        {
-            XPoint pt = {0,0};
-            XVaNestedList nlist;
-            m_xIC = XCreateIC(xIM, XNInputStyle, bestInputStyle,
-                              XNClientWindow, m_windowId,
-                              XNFocusWindow, m_windowId,
-                              XNPreeditAttributes, nlist = XVaCreateNestedList(0,
-                                                                               XNSpotLocation, &pt,
-                                                                               XNFontSet, fontset,
-                                                                               nullptr),
-                              nullptr);
-            XFree(nlist);
-            long im_event_mask;
-            XGetICValues(m_xIC, XNFilterEvents, &im_event_mask, nullptr);
-            XSelectInput(display, m_windowId, swa.event_mask | im_event_mask);
-            XSetICFocus(m_xIC);
-        }
-
-        /* The XInput 2.1 extension enables per-pixel smooth scrolling trackpads */
-        XIEventMask mask = {XIAllMasterDevices, XIMaskLen(XI_LASTEVENT)};
-        mask.mask = (unsigned char*)malloc(mask.mask_len);
-        memset(mask.mask, 0, mask.mask_len);
-        /* XISetMask(mask.mask, XI_Motion); Can't do this without losing mouse move events :( */
-        XISetMask(mask.mask, XI_TouchBegin);
-        XISetMask(mask.mask, XI_TouchUpdate);
-        XISetMask(mask.mask, XI_TouchEnd);
-        XISelectEvents(m_xDisp, m_windowId, &mask, 1);
-        free(mask.mask);
-
-
-        /* Register netwm extension atom for window closing */
-        XSetWMProtocols(m_xDisp, m_windowId, &S_ATOMS->m_wmDeleteWindow, 1);
-
-        /* Set the title of the window */
-        const unsigned char* c_title = (unsigned char*)title.c_str();
-        XChangeProperty(m_xDisp, m_windowId, XA_WM_NAME, XA_STRING, 8, PropModeReplace, c_title, title.length());
-
-        /* Set the title of the window icon */
-        XChangeProperty(m_xDisp, m_windowId, XA_WM_ICON_NAME, XA_STRING, 8, PropModeReplace, c_title, title.length());
-
-        /* Add window icon */
-        if (MAINICON_NETWM_SZ && S_ATOMS->m_netwmIcon)
-        {
-            XChangeProperty(display, m_windowId, S_ATOMS->m_netwmIcon, XA_CARDINAL,
-                            32, PropModeReplace, MAINICON_NETWM, MAINICON_NETWM_SZ / sizeof(unsigned long));
-        }
-
-        /* Initialize context */
-        XMapWindow(m_xDisp, m_windowId);
-        setStyle(EWindowStyle::Default);
-        setCursor(EMouseCursor::Pointer);
-        XFlush(m_xDisp);
-
-        m_gfxCtx->initializeContext(vulkanHandle);
     }
     
     ~WindowXlib()

@@ -342,26 +342,32 @@ void VulkanContext::initVulkan(const char* appName)
 #endif
 }
 
-void VulkanContext::enumerateDevices()
+bool VulkanContext::enumerateDevices()
 {
     uint32_t gpuCount = 1;
     ThrowIfFailed(vk::EnumeratePhysicalDevices(m_instance, &gpuCount, nullptr));
-    assert(gpuCount);
+    if (!gpuCount)
+        return false;
     m_gpus.resize(gpuCount);
 
     ThrowIfFailed(vk::EnumeratePhysicalDevices(m_instance, &gpuCount, m_gpus.data()));
-    assert(gpuCount >= 1);
+    if (!gpuCount)
+        return false;
 
     vk::GetPhysicalDeviceQueueFamilyProperties(m_gpus[0], &m_queueCount, nullptr);
-    assert(m_queueCount >= 1);
+    if (!m_queueCount)
+        return false;
 
     m_queueProps.resize(m_queueCount);
     vk::GetPhysicalDeviceQueueFamilyProperties(m_gpus[0], &m_queueCount, m_queueProps.data());
-    assert(m_queueCount >= 1);
+    if (!m_queueCount)
+        return false;
 
     /* This is as good a place as any to do this */
     vk::GetPhysicalDeviceMemoryProperties(m_gpus[0], &m_memoryProperties);
     vk::GetPhysicalDeviceProperties(m_gpus[0], &m_gpuProps);
+
+    return true;
 }
 
 void VulkanContext::initDevice()

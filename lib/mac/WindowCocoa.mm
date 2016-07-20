@@ -219,7 +219,7 @@ public:
         m_pf = pf;
     }
 
-    void initializeContext(void*)
+    bool initializeContext(void*)
     {
         m_nsContext = [[GraphicsContextCocoaGLInternal alloc] initWithBooContext:this];
         if (!m_nsContext)
@@ -229,6 +229,7 @@ public:
         CVDisplayLinkSetOutputCallback(m_dispLink, (CVDisplayLinkOutputCallback)DLCallback, this);
         CVDisplayLinkStart(m_dispLink);
         m_commandQueue = _NewGLCommandQueue(this);
+        return true;
     }
 
     void makeCurrent()
@@ -375,7 +376,7 @@ public:
         m_pf = pf;
     }
 
-    void initializeContext(void*)
+    bool initializeContext(void*)
     {
         MetalContext::Window& w = m_metalCtx->m_windows[m_parentWindow];
         m_nsContext = [[GraphicsContextCocoaMetalInternal alloc] initWithBooContext:this];
@@ -387,6 +388,7 @@ public:
         CVDisplayLinkSetOutputCallback(m_dispLink, (CVDisplayLinkOutputCallback)DLCallback, this);
         CVDisplayLinkStart(m_dispLink);
         m_commandQueue = _NewMetalCommandQueue(m_metalCtx, m_parentWindow, this);
+        return true;
     }
 
     void makeCurrent()
