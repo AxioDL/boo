@@ -78,7 +78,9 @@ class ApplicationWin32 final : public IApplication
     bool m_singleInstance;
 
     Boo3DAppContext m_3dCtx;
+#if BOO_HAS_VULKAN
     PFN_vkGetInstanceProcAddr m_getVkProc = nullptr;
+#endif
 
     void _deletedWindow(IWindow* window)
     {
@@ -423,7 +425,12 @@ public:
             return m_mwret;
         }
 
+#if BOO_HAS_VULKAN
         IWindow* window = _WindowWin32New(title, m_3dCtx, m_getVkProc, sampleCount);
+#else
+        IWindow* window = _WindowWin32New(title, m_3dCtx, nullptr, sampleCount);
+#endif
+
         HWND hwnd = HWND(window->getPlatformHandle());
         m_allWindows[hwnd] = window;
         return window;

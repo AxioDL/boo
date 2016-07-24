@@ -972,6 +972,7 @@ public:
                                                       this, m_hwnd, b3dCtx, sampleCount));
             return;
         }
+#if BOO_HAS_VULKAN
         else if (b3dCtx.m_vulkanDxFactory)
         {
             m_gfxCtx.reset(new GraphicsContextWin32Vulkan(this, wndInstance, m_hwnd, &g_VulkanContext,
@@ -979,6 +980,7 @@ public:
             if (m_gfxCtx->initializeContext(vulkanHandle))
                 return;
         }
+#endif
         m_gfxCtx.reset(new GraphicsContextWin32D3D(api, this, m_hwnd, b3dCtx, sampleCount));
     }
 
