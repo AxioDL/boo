@@ -2056,19 +2056,22 @@ struct VulkanShaderDataBinding : IShaderDataBinding
                 {
                     if (i<m_ubufCount)
                     {
-                        writes[totalWrites].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                        writes[totalWrites].pNext = nullptr;
-                        writes[totalWrites].dstSet = m_descSets[b];
-                        writes[totalWrites].descriptorCount = 1;
-                        writes[totalWrites].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                        const VkDescriptorBufferInfo* origInfo = GetBufferGPUResource(m_ubufs[i], b);
                         VkDescriptorBufferInfo& modInfo = m_ubufOffs[i][b];
-                        modInfo.buffer = origInfo->buffer;
-                        modInfo.offset += origInfo->offset;
-                        writes[totalWrites].pBufferInfo = &modInfo;
-                        writes[totalWrites].dstArrayElement = 0;
-                        writes[totalWrites].dstBinding = binding;
-                        ++totalWrites;
+                        if (modInfo.range)
+                        {
+                            writes[totalWrites].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                            writes[totalWrites].pNext = nullptr;
+                            writes[totalWrites].dstSet = m_descSets[b];
+                            writes[totalWrites].descriptorCount = 1;
+                            writes[totalWrites].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                            const VkDescriptorBufferInfo* origInfo = GetBufferGPUResource(m_ubufs[i], b);
+                            modInfo.buffer = origInfo->buffer;
+                            modInfo.offset += origInfo->offset;
+                            writes[totalWrites].pBufferInfo = &modInfo;
+                            writes[totalWrites].dstArrayElement = 0;
+                            writes[totalWrites].dstBinding = binding;
+                            ++totalWrites;
+                        }
                     }
                     ++binding;
                 }
@@ -2478,7 +2481,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
                                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
 
             SetImageLayout(cmdBuf, ctexture->m_colorBindTex, VK_IMAGE_ASPECT_COLOR_BIT,
-                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
+                           VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
 
             VkImageCopy copyInfo = {};
             copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -2550,6 +2553,8 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
             SetImageLayout(cmdBuf, ctexture->m_depthBindTex, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, 1);
         }
+
+        vk::CmdBeginRenderPass(cmdBuf, &m_boundTarget->m_passBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     }
 
     void execute();
