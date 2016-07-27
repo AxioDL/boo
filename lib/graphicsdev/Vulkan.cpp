@@ -1778,7 +1778,7 @@ class VulkanShaderPipeline : public IShaderPipeline
         depthStencilInfo.flags = 0;
         depthStencilInfo.depthTestEnable = depthTest;
         depthStencilInfo.depthWriteEnable = depthWrite;
-        depthStencilInfo.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
+        depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
         depthStencilInfo.front.compareOp = VK_COMPARE_OP_ALWAYS;
         depthStencilInfo.back.compareOp = VK_COMPARE_OP_ALWAYS;
 
@@ -2381,6 +2381,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
             clr[0].clearValue.color.float32[3] = m_clearColor[3];
             clr[0].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             clr[1].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            clr[1].clearValue.depthStencil.depth = 1.f;
             vk::CmdClearAttachments(m_cmdBufs[m_fillBuf], 2, clr, 1, &rect);
         }
         else if (render)
@@ -2395,6 +2396,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         else if (depth)
         {
             clr[0].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            clr[0].clearValue.depthStencil.depth = 1.f;
             vk::CmdClearAttachments(m_cmdBufs[m_fillBuf], 1, clr, 1, &rect);
         }
     }
