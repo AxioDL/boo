@@ -273,7 +273,6 @@ void VulkanContext::initVulkan(const char* appName)
 #ifndef NDEBUG
     m_layerNames.push_back("VK_LAYER_LUNARG_core_validation");
     m_layerNames.push_back("VK_LAYER_LUNARG_object_tracker");
-    m_layerNames.push_back("VK_LAYER_LUNARG_device_limits");
     m_layerNames.push_back("VK_LAYER_LUNARG_image");
     m_layerNames.push_back("VK_LAYER_LUNARG_parameter_validation");
     m_layerNames.push_back("VK_LAYER_LUNARG_swapchain");
@@ -1145,7 +1144,7 @@ public:
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.pNext = nullptr;
         viewInfo.image = m_gpuTex;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.viewType = (m_layers > 1) ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
         viewInfo.format = m_vkFmt;
         viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
         viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
@@ -3095,7 +3094,7 @@ GraphicsDataToken VulkanDataFactory::commitTransaction
     ThrowIfFailed(vk::QueueWaitIdle(m_ctx->m_queue));
     ThrowIfFailed(vk::QueueSubmit(m_ctx->m_queue, 1, &submitInfo, VK_NULL_HANDLE));
 
-    /* Commit data bindings (create descriptor heaps) */
+    /* Commit data bindings (create descriptor sets) */
     for (std::unique_ptr<VulkanShaderDataBinding>& bind : retval->m_SBinds)
         bind->commit(m_ctx);
 
