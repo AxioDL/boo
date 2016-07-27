@@ -1927,6 +1927,7 @@ struct VulkanShaderDataBinding : IShaderDataBinding
     std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
     std::vector<std::array<VkDescriptorBufferInfo, 2>> m_ubufOffs;
     size_t m_texCount;
+    VkImageView m_knownViewHandles[2][8] = {};
     std::unique_ptr<ITexture*[]> m_texs;
 
     VkBuffer m_vboBufs[2][2] = {{},{}};
@@ -2108,6 +2109,7 @@ struct VulkanShaderDataBinding : IShaderDataBinding
                     writes[totalWrites].pImageInfo = GetTextureGPUResource(m_texs[i], b);
                     writes[totalWrites].dstArrayElement = 0;
                     writes[totalWrites].dstBinding = binding;
+                    m_knownViewHandles[b][i] = writes[totalWrites].pImageInfo->imageView;
                     ++totalWrites;
                 }
                 ++binding;
@@ -2128,6 +2130,34 @@ struct VulkanShaderDataBinding : IShaderDataBinding
             Log.report(logvisor::Fatal,
                        "attempted to use uncommitted VulkanShaderDataBinding");
 #endif
+
+        /* Ensure resized texture bindings are re-bound */
+        size_t binding = BOO_GLSL_MAX_UNIFORM_COUNT;
+        VkWriteDescriptorSet writes[BOO_GLSL_MAX_TEXTURE_COUNT] = {};
+        size_t totalWrites = 0;
+        for (size_t i=0 ; i<BOO_GLSL_MAX_TEXTURE_COUNT ; ++i)
+        {
+            if (i<m_texCount)
+            {
+                const VkDescriptorImageInfo* resComp = GetTextureGPUResource(m_texs[i], b);
+                if (resComp->imageView != m_knownViewHandles[b][i])
+                {
+                    writes[totalWrites].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                    writes[totalWrites].pNext = nullptr;
+                    writes[totalWrites].dstSet = m_descSets[b];
+                    writes[totalWrites].descriptorCount = 1;
+                    writes[totalWrites].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                    writes[totalWrites].pImageInfo = resComp;
+                    writes[totalWrites].dstArrayElement = 0;
+                    writes[totalWrites].dstBinding = binding;
+                    ++totalWrites;
+                    m_knownViewHandles[b][i] = resComp->imageView;
+                }
+            }
+            ++binding;
+        }
+        if (totalWrites)
+            vk::UpdateDescriptorSets(m_ctx->m_dev, totalWrites, writes, 0, nullptr);
 
         vk::CmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline->m_pipeline);
         vk::CmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_ctx->m_pipelinelayout, 0, 1, &m_descSets[b], 0, nullptr);
