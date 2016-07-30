@@ -2530,8 +2530,8 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
             else
                 copyInfo.srcOffset.y = ctexture->m_height - rect.location[1] - rect.size[1];
             copyInfo.dstOffset = copyInfo.srcOffset;
-            copyInfo.extent.width = ctexture->m_width;
-            copyInfo.extent.height = ctexture->m_height;
+            copyInfo.extent.width = rect.size[0];
+            copyInfo.extent.height = rect.size[1];
             copyInfo.extent.depth = 1;
             vk::CmdCopyImage(cmdBuf,
                              ctexture->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -2570,8 +2570,8 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
             else
                 copyInfo.srcOffset.y = ctexture->m_height - rect.location[1] - rect.size[1];
             copyInfo.dstOffset = copyInfo.srcOffset;
-            copyInfo.extent.width = ctexture->m_width;
-            copyInfo.extent.height = ctexture->m_height;
+            copyInfo.extent.width = rect.size[0];
+            copyInfo.extent.height = rect.size[1];
             copyInfo.extent.depth = 1;
             vk::CmdCopyImage(cmdBuf,
                              ctexture->m_depthTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
