@@ -6,10 +6,7 @@
 #error ARC Required
 #endif
 
-#include <Availability.h>
-
-#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101100
-#define BOO_HAS_METAL 1
+#if BOO_HAS_METAL
 
 #include <Metal/Metal.h>
 #include <QuartzCore/CAMetalLayer.h>
@@ -35,7 +32,6 @@ struct MetalContext
 }
 
 #else
-#define BOO_HAS_METAL 0
 namespace boo
 {
     struct MetalContext {};

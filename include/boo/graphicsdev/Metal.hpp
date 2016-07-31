@@ -1,11 +1,7 @@
 #ifndef GDEV_METAL_HPP
 #define GDEV_METAL_HPP
 #ifdef __APPLE__
-
-#include <Availability.h>
-
-#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101100
-#define BOO_HAS_METAL 1
+#if BOO_HAS_METAL
 
 #include "IGraphicsDataFactory.hpp"
 #include "IGraphicsCommandQueue.hpp"
@@ -80,9 +76,6 @@ public:
 
 }
 
-#else
-#define BOO_HAS_METAL 0
 #endif
-
 #endif // __APPLE__
 #endif // GDEV_METAL_HPP

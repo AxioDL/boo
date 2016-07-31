@@ -621,10 +621,6 @@ struct MetalShaderDataBinding : IShaderDataBinding
         }
         for (size_t i=0 ; i<texCount ; ++i)
         {
-#ifndef NDEBUG
-            if (!texs[i])
-                Log.report(logvisor::Fatal, "null texture %d provided to newShaderDataBinding", int(i));
-#endif
             m_texs[i] = texs[i];
         }
     }
@@ -653,7 +649,8 @@ struct MetalShaderDataBinding : IShaderDataBinding
                     [enc setVertexBuffer:GetBufferGPUResource(m_ubufs[i], b) offset:0 atIndex:i+2];
             }
         for (size_t i=0 ; i<m_texCount ; ++i)
-            [enc setFragmentTexture:GetTextureGPUResource(m_texs[i], b) atIndex:i];
+            if (m_texs[i])
+                [enc setFragmentTexture:GetTextureGPUResource(m_texs[i], b) atIndex:i];
     }
 };
 
