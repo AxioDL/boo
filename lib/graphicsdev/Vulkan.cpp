@@ -1982,13 +1982,7 @@ struct VulkanShaderDataBinding : IShaderDataBinding
             m_ubufs[i] = ubufs[i];
         }
         for (size_t i=0 ; i<texCount ; ++i)
-        {
-#ifndef NDEBUG
-            if (!texs[i])
-                Log.report(logvisor::Fatal, "null texture %d provided to newShaderDataBinding", int(i));
-#endif
             m_texs[i] = texs[i];
-        }
 
         size_t totalDescs = ubufCount + texCount;
         if (totalDescs > 0)
@@ -2099,7 +2093,7 @@ struct VulkanShaderDataBinding : IShaderDataBinding
 
             for (size_t i=0 ; i<BOO_GLSL_MAX_TEXTURE_COUNT ; ++i)
             {
-                if (i<m_texCount)
+                if (i<m_texCount && m_texs[i])
                 {
                     writes[totalWrites].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
                     writes[totalWrites].pNext = nullptr;
@@ -2137,7 +2131,7 @@ struct VulkanShaderDataBinding : IShaderDataBinding
         size_t totalWrites = 0;
         for (size_t i=0 ; i<BOO_GLSL_MAX_TEXTURE_COUNT ; ++i)
         {
-            if (i<m_texCount)
+            if (i<m_texCount && m_texs[i])
             {
                 const VkDescriptorImageInfo* resComp = GetTextureGPUResource(m_texs[i], b);
                 if (resComp->imageView != m_knownViewHandles[b][i])

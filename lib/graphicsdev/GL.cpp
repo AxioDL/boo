@@ -517,7 +517,7 @@ IShaderPipeline* GLDataFactory::Context::newShaderPipeline
         {
             GLint texLoc = glGetUniformLocation(shader.m_prog, texNames[i]);
             if (texLoc < 0)
-                Log.report(logvisor::Error, "unable to find sampler variable '%s'", texNames[i]);
+                Log.report(logvisor::Warning, "unable to find sampler variable '%s'", texNames[i]);
             else
                 glUniform1i(texLoc, i);
         }
@@ -583,13 +583,7 @@ struct GLShaderDataBinding : IShaderDataBinding
             m_ubufs[i] = ubufs[i];
         }
         for (size_t i=0 ; i<texCount ; ++i)
-        {
-#ifndef NDEBUG
-            if (!texs[i])
-                Log.report(logvisor::Fatal, "null texture %d provided to newShaderDataBinding", int(i));
-#endif
             m_texs[i] = texs[i];
-        }
     }
     void bind(int b) const
     {
@@ -629,21 +623,24 @@ struct GLShaderDataBinding : IShaderDataBinding
         for (size_t i=0 ; i<m_texCount ; ++i)
         {
             ITexture* tex = m_texs[i];
-            switch (tex->type())
+            if (tex)
             {
-            case TextureType::Dynamic:
-                static_cast<GLTextureD*>(tex)->bind(i, b);
-                break;
-            case TextureType::Static:
-                static_cast<GLTextureS*>(tex)->bind(i);
-                break;
-            case TextureType::StaticArray:
-                static_cast<GLTextureSA*>(tex)->bind(i);
-                break;
-            case TextureType::Render:
-                static_cast<GLTextureR*>(tex)->bind(i);
-                break;
-            default: break;
+                switch (tex->type())
+                {
+                case TextureType::Dynamic:
+                    static_cast<GLTextureD*>(tex)->bind(i, b);
+                    break;
+                case TextureType::Static:
+                    static_cast<GLTextureS*>(tex)->bind(i);
+                    break;
+                case TextureType::StaticArray:
+                    static_cast<GLTextureSA*>(tex)->bind(i);
+                    break;
+                case TextureType::Render:
+                    static_cast<GLTextureR*>(tex)->bind(i);
+                    break;
+                default: break;
+                }
             }
         }
     }
