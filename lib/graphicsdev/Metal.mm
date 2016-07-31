@@ -503,7 +503,7 @@ class MetalShaderPipeline : public IShaderPipeline
 
         MTLDepthStencilDescriptor* dsDesc = [MTLDepthStencilDescriptor new];
         if (depthTest)
-            dsDesc.depthCompareFunction = MTLCompareFunctionGreater;
+            dsDesc.depthCompareFunction = MTLCompareFunctionGreaterEqual;
         dsDesc.depthWriteEnabled = depthWrite;
         m_dsState = [ctx->m_dev newDepthStencilStateWithDescriptor:dsDesc];
     }
