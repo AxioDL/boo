@@ -164,7 +164,7 @@ class D3D12TextureS : public ITextureS
     D3D12_RESOURCE_DESC m_gpuDesc;
     D3D12TextureS(D3D12Context* ctx, size_t width, size_t height, size_t mips,
                   TextureFormat fmt, const void* data, size_t sz)
-    : m_fmt(fmt), m_sz(sz)
+    : m_fmt(fmt), m_sz(sz), m_mipCount(mips)
     {
         DXGI_FORMAT pfmt;
         int pxPitchNum = 1;
@@ -213,6 +213,7 @@ class D3D12TextureS : public ITextureS
             Log.report(logvisor::Fatal, "error preparing resource for upload");
     }
 public:
+    size_t m_mipCount;
     ComPtr<ID3D12Resource> m_tex;
     ComPtr<ID3D12Resource> m_gpuTex;
     ~D3D12TextureS() = default;
@@ -759,6 +760,17 @@ static ID3D12Resource* GetBufferGPUResource(const IGraphicsBuffer* buf, int idx,
     }
 }
 
+static const struct RGBATex2DNoMipViewDesc : D3D12_SHADER_RESOURCE_VIEW_DESC
+{
+    RGBATex2DNoMipViewDesc()
+    {
+        Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        Texture2D = {UINT(0), UINT(1), UINT(0), 0.0f};
+    }
+} RGBATex2DNoMipViewDesc;
+
 static const struct RGBATex2DViewDesc : D3D12_SHADER_RESOURCE_VIEW_DESC
 {
     RGBATex2DViewDesc()
@@ -799,7 +811,7 @@ static const struct RGBATex2DArrayViewDesc : D3D12_SHADER_RESOURCE_VIEW_DESC
         Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
         Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        Texture2DArray = {UINT(0), UINT(-1), 0, 0, UINT(0), 0.0f};
+        Texture2DArray = {UINT(0), UINT(1), 0, 0, UINT(0), 0.0f};
     }
 } RGBATex2DArrayViewDesc;
 
@@ -810,7 +822,7 @@ static const struct GreyTex2DArrayViewDesc : D3D12_SHADER_RESOURCE_VIEW_DESC
         Format = DXGI_FORMAT_R8_UNORM;
         ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
         Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        Texture2DArray = {UINT(0), UINT(-1), 0, 0, UINT(0), 0.0f};
+        Texture2DArray = {UINT(0), UINT(1), 0, 0, UINT(0), 0.0f};
     }
 } GreyTex2DArrayViewDesc;
 
@@ -832,6 +844,7 @@ static ID3D12Resource* GetTextureGPUResource(const ITexture* tex, int idx,
             break;
         default:break;
         }
+        descOut.Texture2D.MipLevels = 1;
         return ctex->m_gpuTexs[idx].Get();
     }
     case TextureType::Static:
@@ -850,6 +863,7 @@ static ID3D12Resource* GetTextureGPUResource(const ITexture* tex, int idx,
             break;
         default:break;
         }
+        descOut.Texture2D.MipLevels = ctex->m_mipCount;
         return ctex->m_gpuTex.Get();
     }
     case TextureType::StaticArray:
@@ -871,11 +885,8 @@ static ID3D12Resource* GetTextureGPUResource(const ITexture* tex, int idx,
     case TextureType::Render:
     {
         const D3D12TextureR* ctex = static_cast<const D3D12TextureR*>(tex);
-        descOut = RGBATex2DViewDesc;
-        if (idx == 1)
-            return ctex->m_depthBindTex.Get();
-        else
-            return ctex->m_colorBindTex.Get();
+        descOut = RGBATex2DNoMipViewDesc;
+        return ctex->m_colorBindTex.Get();
     }
     default: break;
     }
@@ -894,6 +905,7 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
     std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
     std::vector<std::pair<size_t,size_t>> m_ubufOffs;
     size_t m_texCount;
+    ID3D12Resource* m_knownViewHandles[2][8] = {};
     std::unique_ptr<ITexture*[]> m_texs;
     D3D12_VERTEX_BUFFER_VIEW m_vboView[2][2] = {{},{}};
     D3D12_INDEX_BUFFER_VIEW m_iboView[2];
@@ -996,6 +1008,7 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
                 {
                     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
                     ID3D12Resource* res = GetTextureGPUResource(m_texs[i], b, srvDesc);
+                    m_knownViewHandles[b][i] = res;
                     ctx->m_dev->CreateShaderResourceView(res, &srvDesc, handle);
                 }
                 handle.Offset(1, incSz);
@@ -1003,8 +1016,33 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
         }
     }
 
-    void bind(ID3D12GraphicsCommandList* list, int b)
+    void bind(D3D12Context* ctx, ID3D12GraphicsCommandList* list, int b)
     {
+        UINT incSz = UINT(-1);
+        CD3DX12_CPU_DESCRIPTOR_HANDLE heapStart;
+        for (size_t i=0 ; i<MAX_TEXTURE_COUNT ; ++i)
+        {
+            if (i<m_texCount && m_texs[i])
+            {
+                if (m_texs[i]->type() == TextureType::Render)
+                {
+                    const D3D12TextureR* ctex = static_cast<const D3D12TextureR*>(m_texs[i]);
+                    ID3D12Resource* res = ctex->m_colorBindTex.Get();
+                    if (res != m_knownViewHandles[b][i])
+                    {
+                        if (incSz == UINT(-1))
+                        {
+                            incSz = ctx->m_dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                            heapStart = m_descHeap[b]->GetCPUDescriptorHandleForHeapStart();
+                        }
+                        m_knownViewHandles[b][i] = res;
+                        ctx->m_dev->CreateShaderResourceView(res, &RGBATex2DNoMipViewDesc,
+                            CD3DX12_CPU_DESCRIPTOR_HANDLE(heapStart, MAX_UNIFORM_COUNT + i, incSz));
+                    }
+                }
+            }
+        }
+
         ID3D12DescriptorHeap* heap[] = {m_descHeap[b].Get()};
         list->SetDescriptorHeaps(1, heap);
         list->SetGraphicsRootDescriptorTable(0, m_descHeap[b]->GetGPUDescriptorHandleForHeapStart());
@@ -1131,7 +1169,7 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
     void setShaderDataBinding(IShaderDataBinding* binding)
     {
         D3D12ShaderDataBinding* cbind = static_cast<D3D12ShaderDataBinding*>(binding);
-        cbind->bind(m_cmdList.Get(), m_fillBuf);
+        cbind->bind(m_ctx, m_cmdList.Get(), m_fillBuf);
     }
 
     D3D12TextureR* m_boundTarget = nullptr;
