@@ -500,7 +500,7 @@ class D3D11ShaderPipeline : public IShaderPipeline
         CD3D11_DEPTH_STENCIL_DESC dsDesc(D3D11_DEFAULT);
         dsDesc.DepthEnable = depthTest;
         dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK(depthWrite);
-        dsDesc.DepthFunc = D3D11_COMPARISON_GREATER;
+        dsDesc.DepthFunc = D3D11_COMPARISON_GREATER_EQUAL;
         ThrowIfFailed(ctx->m_dev->CreateDepthStencilState(&dsDesc, &m_dsState));
 
         CD3D11_BLEND_DESC blDesc(D3D11_DEFAULT);
@@ -595,10 +595,6 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
         }
         for (size_t i=0 ; i<texCount ; ++i)
         {
-#ifndef NDEBUG
-            if (!texs[i])
-                Log.report(logvisor::Fatal, "null texture %d provided to newShaderDataBinding", int(i));
-#endif
             m_texs[i] = texs[i];
         }
     }
@@ -747,35 +743,38 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
 
         if (m_texCount)
         {
-            ID3D11ShaderResourceView* srvs[8];
+            ID3D11ShaderResourceView* srvs[8] = {};
             for (int i=0 ; i<8 && i<m_texCount ; ++i)
             {
-                switch (m_texs[i]->type())
+                if (m_texs[i])
                 {
-                case TextureType::Dynamic:
-                {
-                    D3D11TextureD* ctex = static_cast<D3D11TextureD*>(m_texs[i]);
-                    srvs[i] = ctex->m_srvs[b].Get();
-                    break;
-                }
-                case TextureType::Static:
-                {
-                    D3D11TextureS* ctex = static_cast<D3D11TextureS*>(m_texs[i]);
-                    srvs[i] = ctex->m_srv.Get();
-                    break;
-                }
-                case TextureType::StaticArray:
-                {
-                    D3D11TextureSA* ctex = static_cast<D3D11TextureSA*>(m_texs[i]);
-                    srvs[i] = ctex->m_srv.Get();
-                    break;
-                }
-                case TextureType::Render:
-                {
-                    D3D11TextureR* ctex = static_cast<D3D11TextureR*>(m_texs[i]);
-                    srvs[i] = ctex->m_colorSrv.Get();
-                    break;
-                }
+                    switch (m_texs[i]->type())
+                    {
+                    case TextureType::Dynamic:
+                    {
+                        D3D11TextureD* ctex = static_cast<D3D11TextureD*>(m_texs[i]);
+                        srvs[i] = ctex->m_srvs[b].Get();
+                        break;
+                    }
+                    case TextureType::Static:
+                    {
+                        D3D11TextureS* ctex = static_cast<D3D11TextureS*>(m_texs[i]);
+                        srvs[i] = ctex->m_srv.Get();
+                        break;
+                    }
+                    case TextureType::StaticArray:
+                    {
+                        D3D11TextureSA* ctex = static_cast<D3D11TextureSA*>(m_texs[i]);
+                        srvs[i] = ctex->m_srv.Get();
+                        break;
+                    }
+                    case TextureType::Render:
+                    {
+                        D3D11TextureR* ctex = static_cast<D3D11TextureR*>(m_texs[i]);
+                        srvs[i] = ctex->m_colorSrv.Get();
+                        break;
+                    }
+                    }
                 }
             }
             ctx->PSSetShaderResources(0, m_texCount, srvs);

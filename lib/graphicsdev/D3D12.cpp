@@ -648,7 +648,7 @@ class D3D12ShaderPipeline : public IShaderPipeline
         if (!backfaceCulling)
             desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
         desc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-        desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_GREATER;
+        desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
         if (!depthTest)
             desc.DepthStencilState.DepthEnable = false;
         if (!depthWrite)
@@ -935,10 +935,6 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
         }
         for (size_t i=0 ; i<texCount ; ++i)
         {
-#ifndef NDEBUG
-            if (!texs[i])
-                Log.report(logvisor::Fatal, "null texture %d provided to newShaderDataBinding", int(i));
-#endif
             m_texs[i] = texs[i];
         }
     }
@@ -996,7 +992,7 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
             }
             for (size_t i=0 ; i<MAX_TEXTURE_COUNT ; ++i)
             {
-                if (i<m_texCount)
+                if (i<m_texCount && m_texs[i])
                 {
                     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
                     ID3D12Resource* res = GetTextureGPUResource(m_texs[i], b, srvDesc);
@@ -1601,6 +1597,9 @@ public:
              bool depthTest, bool depthWrite, bool backfaceCulling)
         {
             ComPtr<ID3DBlob> errBlob;
+
+            //printf("%s\n", vertSource);
+            //printf("%s\n", fragSource);
 
             if (!vertBlobOut)
             {
