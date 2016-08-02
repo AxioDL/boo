@@ -660,6 +660,7 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
             if (m_ubufFirstConsts)
             {
                 ID3D11Buffer* constBufs[8] = {};
+                ctx->VSSetConstantBuffers(0, m_ubufCount, constBufs);
                 for (int i=0 ; i<8 && i<m_ubufCount ; ++i)
                 {
                     if (m_pubufs && m_pubufs[i])
@@ -680,6 +681,7 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
                 if (m_pubufs)
                 {
                     ID3D11Buffer* constBufs[8] = {};
+                    ctx->PSSetConstantBuffers(0, m_ubufCount, constBufs);
                     for (int i=0 ; i<8 && i<m_ubufCount ; ++i)
                     {
                         if (!m_pubufs[i])
