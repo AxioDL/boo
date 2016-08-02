@@ -2500,6 +2500,22 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
 
         vk::CmdEndRenderPass(cmdBuf);
 
+        VkImageCopy copyInfo = {};
+        SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, ctexture->m_width, ctexture->m_height));
+        copyInfo.srcOffset.y = tlOrigin ? intersectRect.location[1] :
+            (ctexture->m_height - intersectRect.size[1] - intersectRect.location[1]);
+        copyInfo.srcOffset.x = intersectRect.location[0];
+        copyInfo.dstOffset = copyInfo.srcOffset;
+        copyInfo.extent.width = intersectRect.size[0];
+        copyInfo.extent.height = intersectRect.size[1];
+        copyInfo.extent.depth = 1;
+        copyInfo.dstSubresource.mipLevel = 0;
+        copyInfo.dstSubresource.baseArrayLayer = 0;
+        copyInfo.dstSubresource.layerCount = 1;
+        copyInfo.srcSubresource.mipLevel = 0;
+        copyInfo.srcSubresource.baseArrayLayer = 0;
+        copyInfo.srcSubresource.layerCount = 1;
+
         if (color && ctexture->m_enableShaderColorBinding)
         {
             if (ctexture == m_boundTarget)
@@ -2509,24 +2525,9 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
             SetImageLayout(cmdBuf, ctexture->m_colorBindTex, VK_IMAGE_ASPECT_COLOR_BIT,
                            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
 
-            VkImageCopy copyInfo = {};
             copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyInfo.srcSubresource.mipLevel = 0;
-            copyInfo.srcSubresource.baseArrayLayer = 0;
-            copyInfo.srcSubresource.layerCount = 1;
             copyInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyInfo.dstSubresource.mipLevel = 0;
-            copyInfo.dstSubresource.baseArrayLayer = 0;
-            copyInfo.dstSubresource.layerCount = 1;
-            copyInfo.srcOffset.x = rect.location[0];
-            if (tlOrigin)
-                copyInfo.srcOffset.y = rect.location[1];
-            else
-                copyInfo.srcOffset.y = ctexture->m_height - rect.location[1] - rect.size[1];
-            copyInfo.dstOffset = copyInfo.srcOffset;
-            copyInfo.extent.width = rect.size[0];
-            copyInfo.extent.height = rect.size[1];
-            copyInfo.extent.depth = 1;
+
             vk::CmdCopyImage(cmdBuf,
                              ctexture->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                              ctexture->m_colorBindTex, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -2549,24 +2550,9 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
             SetImageLayout(cmdBuf, ctexture->m_depthBindTex, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
 
-            VkImageCopy copyInfo = {};
             copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-            copyInfo.srcSubresource.mipLevel = 0;
-            copyInfo.srcSubresource.baseArrayLayer = 0;
-            copyInfo.srcSubresource.layerCount = 1;
             copyInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-            copyInfo.dstSubresource.mipLevel = 0;
-            copyInfo.dstSubresource.baseArrayLayer = 0;
-            copyInfo.dstSubresource.layerCount = 1;
-            copyInfo.srcOffset.x = rect.location[0];
-            if (tlOrigin)
-                copyInfo.srcOffset.y = rect.location[1];
-            else
-                copyInfo.srcOffset.y = ctexture->m_height - rect.location[1] - rect.size[1];
-            copyInfo.dstOffset = copyInfo.srcOffset;
-            copyInfo.extent.width = rect.size[0];
-            copyInfo.extent.height = rect.size[1];
-            copyInfo.extent.depth = 1;
+
             vk::CmdCopyImage(cmdBuf,
                              ctexture->m_depthTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                              ctexture->m_depthBindTex, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
