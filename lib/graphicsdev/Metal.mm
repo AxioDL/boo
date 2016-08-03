@@ -1049,14 +1049,14 @@ IShaderPipeline* MetalDataFactory::Context::newShaderPipeline(const char* vertSo
     id<MTLLibrary> vertShaderLib = [m_parent.m_ctx->m_dev newLibraryWithSource:@(vertSource)
                                                                        options:compOpts
                                                                          error:&err];
-    if (err)
+    if (!vertShaderLib)
         Log.report(logvisor::Fatal, "error compiling vert shader: %s", [[err localizedDescription] UTF8String]);
     id<MTLFunction> vertFunc = [vertShaderLib newFunctionWithName:@"vmain"];
 
     id<MTLLibrary> fragShaderLib = [m_parent.m_ctx->m_dev newLibraryWithSource:@(fragSource)
                                                                        options:compOpts
                                                                          error:&err];
-    if (err)
+    if (!fragShaderLib)
         Log.report(logvisor::Fatal, "error compiling frag shader: %s", [[err localizedDescription] UTF8String]);
     id<MTLFunction> fragFunc = [fragShaderLib newFunctionWithName:@"fmain"];
 
