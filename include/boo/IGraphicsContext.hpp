@@ -22,13 +22,12 @@ public:
         None       = 0,
         OpenGL3_3  = 1,
         OpenGL4_2  = 2,
-        OpenGLES3  = 3,
-        Vulkan     = 4,
-        D3D11      = 5,
-        D3D12      = 6,
-        Metal      = 7,
-        GX         = 8,
-        GX2        = 9
+        Vulkan     = 3,
+        D3D11      = 4,
+        D3D12      = 5,
+        Metal      = 6,
+        GX         = 7,
+        GX2        = 8
     };
     
     enum class EPixelFormat
