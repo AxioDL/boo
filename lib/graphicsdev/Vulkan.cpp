@@ -1758,7 +1758,7 @@ class VulkanShaderPipeline : public IShaderPipeline
         rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         rasterizationInfo.pNext = nullptr;
         rasterizationInfo.flags = 0;
-        rasterizationInfo.depthClampEnable = VK_TRUE;
+        rasterizationInfo.depthClampEnable = VK_FALSE;
         rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
         rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizationInfo.cullMode = backfaceCulling ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE;
