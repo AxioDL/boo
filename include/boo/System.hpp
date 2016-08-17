@@ -54,6 +54,8 @@ namespace boo
 }
 
 #ifdef _WIN32
+#include <windows.h>
+#include <D3Dcommon.h>
 #include <wrl/client.h>
 template <class T>
 using ComPtr = Microsoft::WRL::ComPtr<T>;

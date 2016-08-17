@@ -209,6 +209,7 @@ add_library(boo
             lib/inputdev/DualshockPad.cpp include/boo/inputdev/DualshockPad.hpp
             lib/inputdev/GenericPad.cpp include/boo/inputdev/GenericPad.hpp
             lib/inputdev/DeviceSignature.cpp include/boo/inputdev/DeviceSignature.hpp
+            lib/inputdev/DeviceFinder.cpp include/boo/inputdev/DeviceFinder.hpp
             lib/inputdev/IHIDDevice.hpp
             lib/audiodev/WAVOut.cpp
             lib/audiodev/AudioMatrix.hpp

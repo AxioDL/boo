@@ -15,7 +15,6 @@
 #define WIN32_LEAN_AND_MEAN 1
 #endif
 #include <windows.h>
-#include <Dbt.h>
 #endif
 
 namespace boo
@@ -30,20 +29,20 @@ public:
     friend class HIDListenerUdev;
     friend class HIDListenerWinUSB;
     static inline DeviceFinder* instance() {return skDevFinder;}
-    
+
 private:
-    
+
     /* Types this finder is interested in (immutable) */
     DeviceSignature::TDeviceSignatureSet m_types;
-    
+
     /* Platform-specific USB event registration
      * (for auto-scanning, NULL if not registered) */
     IHIDListener* m_listener;
-    
+
     /* Set of presently-connected device tokens */
     TDeviceTokens m_tokens;
     std::mutex m_tokensLock;
-    
+
     /* Friend methods for platform-listener to find/insert/remove
      * tokens with type-filtering */
     inline bool _hasToken(const std::string& path)
@@ -80,9 +79,9 @@ private:
             m_tokensLock.unlock();
         }
     }
-    
+
 public:
-    
+
     class CDeviceTokensHandle
     {
         DeviceFinder& m_finder;
@@ -93,7 +92,7 @@ public:
         inline TDeviceTokens::iterator begin() {return m_finder.m_tokens.begin();}
         inline TDeviceTokens::iterator end() {return m_finder.m_tokens.end();}
     };
-    
+
     /* Application must specify its interested device-types */
     DeviceFinder(std::unordered_set<std::type_index> types)
     : m_listener(NULL)
@@ -122,13 +121,13 @@ public:
         delete m_listener;
         skDevFinder = NULL;
     }
-    
+
     /* Get interested device-type mask */
     inline const DeviceSignature::TDeviceSignatureSet& getTypes() const {return m_types;}
-    
+
     /* Iterable set of tokens */
     inline CDeviceTokensHandle getTokens() {return CDeviceTokensHandle(*this);}
-    
+
     /* Automatic device scanning */
     inline bool startScanning()
     {
@@ -156,51 +155,15 @@ public:
             return m_listener->scanNow();
         return false;
     }
-    
+
     virtual void deviceConnected(DeviceToken&) {}
     virtual void deviceDisconnected(DeviceToken&, DeviceBase*) {}
 
 #if _WIN32
     /* Windows-specific WM_DEVICECHANGED handler */
-    static LRESULT winDevChangedHandler(WPARAM wParam, LPARAM lParam)
-    {
-        PDEV_BROADCAST_HDR dbh = (PDEV_BROADCAST_HDR)lParam;
-        PDEV_BROADCAST_DEVICEINTERFACE dbhi = (PDEV_BROADCAST_DEVICEINTERFACE)lParam;
-        DeviceFinder* finder = instance();
-        if (!finder)
-            return 0;
+    static LRESULT winDevChangedHandler(WPARAM wParam, LPARAM lParam);
+#endif
 
-        if (wParam == DBT_DEVICEARRIVAL)
-        {
-            if (dbh->dbch_devicetype == DBT_DEVTYP_DEVICEINTERFACE)
-            {
-#ifdef UNICODE
-                char devPath[1024];
-                wcstombs(devPath, dbhi->dbcc_name, 1024);
-                finder->m_listener->_extDevConnect(devPath);
-#else
-                finder->m_listener->_extDevConnect(dbhi->dbcc_name);
-#endif
-            }
-        }
-        else if (wParam == DBT_DEVICEREMOVECOMPLETE)
-        {
-            if (dbh->dbch_devicetype == DBT_DEVTYP_DEVICEINTERFACE)
-            {
-#ifdef UNICODE
-                char devPath[1024];
-                wcstombs(devPath, dbhi->dbcc_name, 1024);
-                finder->m_listener->_extDevDisconnect(devPath);
-#else
-                finder->m_listener->_extDevDisconnect(dbhi->dbcc_name);
-#endif
-            }
-        }
-
-        return 0;
-    }
-#endif
-    
 };
 
 }

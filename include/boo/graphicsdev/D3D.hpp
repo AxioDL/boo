@@ -7,7 +7,6 @@
 #include "IGraphicsCommandQueue.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include "boo/System.hpp"
-#include <D3Dcommon.h>
 #include <vector>
 #include <unordered_set>
 

@@ -3,6 +3,7 @@
 #include <initguid.h>
 #include <Usbiodef.h>
 #include <winver.h>
+#include <Dbt.h>
 
 #if _DEBUG
 #define D3D11_CREATE_DEVICE_FLAGS D3D11_CREATE_DEVICE_DEBUG
