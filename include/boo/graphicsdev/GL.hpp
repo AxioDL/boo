@@ -26,8 +26,8 @@ public:
     GLDataFactory(IGraphicsContext* parent, uint32_t drawSamples);
     ~GLDataFactory() {destroyAllData();}
 
-    Platform platform() const {return Platform::OGL;}
-    const SystemChar* platformName() const {return _S("OGL");}
+    Platform platform() const {return Platform::OpenGL;}
+    const SystemChar* platformName() const {return _S("OpenGL");}
 
     class Context : public IGraphicsDataFactory::Context
     {
@@ -35,8 +35,8 @@ public:
         GLDataFactory& m_parent;
         Context(GLDataFactory& parent) : m_parent(parent) {}
     public:
-        Platform platform() const {return Platform::OGL;}
-        const SystemChar* platformName() const {return _S("OGL");}
+        Platform platform() const {return Platform::OpenGL;}
+        const SystemChar* platformName() const {return _S("OpenGL");}
 
         IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
         IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count);

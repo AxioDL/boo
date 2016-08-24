@@ -277,7 +277,7 @@ struct TestApplicationCallback : IApplicationCallback
             /* Make shader pipeline */
             IShaderPipeline* pipeline = nullptr;
             auto plat = ctx.platform();
-            if (plat == IGraphicsDataFactory::Platform::OGL)
+            if (plat == IGraphicsDataFactory::Platform::OpenGL)
             {
                 GLDataFactory::Context& glF = dynamic_cast<GLDataFactory::Context&>(ctx);
 

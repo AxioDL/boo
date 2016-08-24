@@ -191,7 +191,7 @@ struct IGraphicsDataFactory
     enum class Platform
     {
         Null,
-        OGL,
+        OpenGL,
         D3D11,
         D3D12,
         Metal,

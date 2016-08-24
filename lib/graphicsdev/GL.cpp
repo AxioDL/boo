@@ -753,8 +753,8 @@ static const GLenum SEMANTIC_TYPE_TABLE[] =
 
 struct GLCommandQueue : IGraphicsCommandQueue
 {
-    Platform platform() const {return IGraphicsDataFactory::Platform::OGL;}
-    const SystemChar* platformName() const {return _S("OGL");}
+    Platform platform() const {return IGraphicsDataFactory::Platform::OpenGL;}
+    const SystemChar* platformName() const {return _S("OpenGL");}
     IGraphicsContext* m_parent = nullptr;
 
     struct Command
