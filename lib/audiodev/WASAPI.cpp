@@ -551,8 +551,8 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
 
         size_t send(const void* buf, size_t len) const
         {
-            memcpy(((MIDIOut*)this)->m_buf, buf, std::min(len, size_t(512)));
-            ((MIDIOut*)this)->m_hdr.dwBytesRecorded = len;
+            memcpy(const_cast<MIDIOut*>(this)->m_buf, buf, std::min(len, size_t(512)));
+            const_cast<MIDIOut*>(this)->m_hdr.dwBytesRecorded = len;
             midiStreamOut(m_strm, LPMIDIHDR(&m_hdr), sizeof(m_hdr));
             return len;
         }
@@ -609,8 +609,8 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
 
         size_t send(const void* buf, size_t len) const
         {
-            memcpy(((MIDIOut*)this)->m_buf, buf, std::min(len, size_t(512)));
-            ((MIDIOut*)this)->m_hdr.dwBytesRecorded = len;
+            memcpy(const_cast<MIDIOut*>(this)->m_buf, buf, std::min(len, size_t(512)));
+            const_cast<MIDIOut*>(this)->m_hdr.dwBytesRecorded = len;
             midiStreamOut(m_strm, LPMIDIHDR(&m_hdr), sizeof(m_hdr));
             return len;
         }
