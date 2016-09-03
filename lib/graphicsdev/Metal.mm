@@ -237,6 +237,9 @@ class MetalTextureR : public ITextureR
     void Setup(MetalContext* ctx, size_t width, size_t height, size_t samples,
                bool enableShaderBindTexture)
     {
+        m_width = width;
+        m_height = height;
+        
         @autoreleasepool
         {
             MTLTextureDescriptor* desc =
@@ -723,23 +726,25 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     {
         _setRenderTarget(target, false, false);
     }
-
+    
+    MTLViewport m_boundVp = {};
     void setViewport(const SWindowRect& rect, float znear, float zfar)
     {
-        MTLViewport vp = {double(rect.location[0]), double(rect.location[1]),
-                          double(rect.size[0]), double(rect.size[1]), znear, zfar};
-        [m_enc setViewport:vp];
+        m_boundVp = MTLViewport{double(rect.location[0]), double(rect.location[1]),
+                                double(rect.size[0]), double(rect.size[1]), znear, zfar};
+        [m_enc setViewport:m_boundVp];
     }
 
+    MTLScissorRect m_boundScissor = {};
     void setScissor(const SWindowRect& rect)
     {
         if (m_boundTarget)
         {
             SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, m_boundTarget->m_width, m_boundTarget->m_height));
-            MTLScissorRect scissor = {NSUInteger(intersectRect.location[0]),
+            m_boundScissor = MTLScissorRect{NSUInteger(intersectRect.location[0]),
                 NSUInteger(m_boundTarget->m_height - intersectRect.location[1] - intersectRect.size[1]),
                 NSUInteger(intersectRect.size[0]), NSUInteger(intersectRect.size[1])};
-            [m_enc setScissorRect:scissor];
+            [m_enc setScissorRect:m_boundScissor];
         }
     }
 
@@ -827,6 +832,11 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                 [blitEnc endEncoding];
                 m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:tex->m_passDesc];
                 [m_enc setFrontFacingWinding:MTLWindingCounterClockwise];
+                
+                if (m_boundVp.width || m_boundVp.height)
+                    [m_enc setViewport:m_boundVp];
+                if (m_boundScissor.width || m_boundScissor.height)
+                    [m_enc setScissorRect:m_boundScissor];
             }
         }
     }
