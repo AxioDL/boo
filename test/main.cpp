@@ -528,6 +528,7 @@ int wmain(int argc, const boo::SystemChar** argv)
 int main(int argc, const boo::SystemChar** argv)
 #endif
 {
+    logvisor::RegisterStandardExceptions();
     logvisor::RegisterConsoleLogger();
     boo::TestApplicationCallback appCb;
     int ret = ApplicationRun(boo::IApplication::EPlatformType::Auto,
