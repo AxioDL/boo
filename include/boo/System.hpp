@@ -1,6 +1,14 @@
 #ifndef BOO_SYSTEM_HPP
 #define BOO_SYSTEM_HPP
 
+#ifdef _WIN32
+#include <windows.h>
+#include <D3Dcommon.h>
+#include <wrl/client.h>
+template <class T>
+using ComPtr = Microsoft::WRL::ComPtr<T>;
+#endif
+
 #include <string>
 
 #ifndef ENABLE_BITWISE_ENUM
@@ -52,13 +60,5 @@ namespace boo
 #endif
 
 }
-
-#ifdef _WIN32
-#include <windows.h>
-#include <D3Dcommon.h>
-#include <wrl/client.h>
-template <class T>
-using ComPtr = Microsoft::WRL::ComPtr<T>;
-#endif
 
 #endif
