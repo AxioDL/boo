@@ -239,7 +239,7 @@ class MetalTextureR : public ITextureR
     {
         m_width = width;
         m_height = height;
-        
+
         @autoreleasepool
         {
             MTLTextureDescriptor* desc =
@@ -719,6 +719,8 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                 m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:ctarget->m_passDesc];
             [m_enc setFrontFacingWinding:MTLWindingCounterClockwise];
         }
+        if (ctarget == m_boundTarget && (m_boundVp.width || m_boundVp.height))
+            [m_enc setViewport:m_boundVp];
         m_boundTarget = ctarget;
     }
 
@@ -726,7 +728,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     {
         _setRenderTarget(target, false, false);
     }
-    
+
     MTLViewport m_boundVp = {};
     void setViewport(const SWindowRect& rect, float znear, float zfar)
     {
@@ -832,7 +834,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                 [blitEnc endEncoding];
                 m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:tex->m_passDesc];
                 [m_enc setFrontFacingWinding:MTLWindingCounterClockwise];
-                
+
                 if (m_boundVp.width || m_boundVp.height)
                     [m_enc setViewport:m_boundVp];
                 if (m_boundScissor.width || m_boundScissor.height)
