@@ -719,9 +719,15 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                 m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:ctarget->m_passDesc];
             [m_enc setFrontFacingWinding:MTLWindingCounterClockwise];
         }
-        if (ctarget == m_boundTarget && (m_boundVp.width || m_boundVp.height))
-            [m_enc setViewport:m_boundVp];
-        m_boundTarget = ctarget;
+        if (ctarget == m_boundTarget)
+        {
+            if (m_boundVp.width || m_boundVp.height)
+                [m_enc setViewport:m_boundVp];
+            if (m_boundScissor.width || m_boundScissor.height)
+                [m_enc setScissorRect:m_boundScissor];
+        }
+        else
+            m_boundTarget = ctarget;
     }
 
     void setRenderTarget(ITextureR* target)
