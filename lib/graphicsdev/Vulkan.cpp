@@ -232,7 +232,14 @@ void VulkanContext::initVulkan(const char* appName)
      * of layers went down or is smaller than the size given.
      */
 #ifdef _WIN32
-    _putenv("VK_LAYER_PATH=\\VulkanSDK\\1.0.17.0\\Bin");
+    char* vkSdkPath = getenv("VK_SDK_PATH");
+    if (vkSdkPath)
+    {
+        std::string str = "VK_LAYER_PATH=";
+        str += vkSdkPath;
+        str += "\\Bin";
+        _putenv(str.c_str());
+    }
 #else
     setenv("VK_LAYER_PATH", "/usr/share/vulkan/explicit_layer.d", 1);
 #endif
