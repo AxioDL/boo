@@ -303,11 +303,8 @@ public:
             return;
         }
 
-        if (setlocale(LC_ALL, "") == nullptr)
-        {
-            Log.report(logvisor::Fatal, "Can't setlocale");
-            return;
-        }
+        /* Program is portable to all locales */
+        setlocale(LC_ALL, "");
 
         /* Open Xlib Display */
         m_xDisp = XOpenDisplay(0);
