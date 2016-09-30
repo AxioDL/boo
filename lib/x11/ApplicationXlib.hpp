@@ -233,20 +233,18 @@ public:
     {
 #if BOO_HAS_VULKAN
         /* Check for Vulkan presence and preference */
-        bool hasVk = loadVk();
-        if (hasVk)
+        bool tryVulkan = true;
+        for (const std::string& arg : args)
         {
-            for (const std::string& arg : args)
+            if (!arg.compare("--gl"))
             {
-                if (!arg.compare("--gl"))
-                {
-                    dlclose(m_vkHandle);
-                    m_vkHandle = nullptr;
-                    m_getVkProc = 0;
-                    break;
-                }
+                tryVulkan = false;
+                break;
             }
         }
+
+        if (tryVulkan)
+            loadVk();
 
         if (m_getVkProc)
             Log.report(logvisor::Info, "using Vulkan renderer");
