@@ -18,12 +18,12 @@ class HIDDeviceIOKit : public IHIDDevice
     uint8_t m_usbIntfInPipe = 0;
     uint8_t m_usbIntfOutPipe = 0;
     bool m_runningTransferLoop = false;
-    
+
     const std::string& m_devPath;
     std::mutex m_initMutex;
     std::condition_variable m_initCond;
-    std::thread* m_thread;
-    
+    std::thread m_thread;
+
     bool _sendUSBInterruptTransfer(const uint8_t* data, size_t length)
     {
         if (m_usbIntf)
@@ -33,7 +33,7 @@ class HIDDeviceIOKit : public IHIDDevice
         }
         return false;
     }
-    
+
     size_t _receiveUSBInterruptTransfer(uint8_t* data, size_t length)
     {
         if (m_usbIntf)
@@ -46,7 +46,7 @@ class HIDDeviceIOKit : public IHIDDevice
         }
         return 0;
     }
-    
+
     static void _threadProcUSBLL(HIDDeviceIOKit* device)
     {
         char thrName[128];
@@ -54,7 +54,7 @@ class HIDDeviceIOKit : public IHIDDevice
         pthread_setname_np(thrName);
         char errStr[256];
         std::unique_lock<std::mutex> lk(device->m_initMutex);
-        
+
         /* Get the HID element's parent (USB interrupt transfer-interface) */
         io_iterator_t devIter;
         io_registry_entry_t devEntry = IORegistryEntryFromPath(kIOMasterPortDefault, device->m_devPath.c_str());
@@ -77,7 +77,7 @@ class HIDDeviceIOKit : public IHIDDevice
             device->m_initCond.notify_one();
             return;
         }
-        
+
         /* IOKit Plugin COM interface (WTF Apple???) */
         IOCFPlugInInterface	**iodev;
         SInt32              score;
@@ -97,7 +97,7 @@ class HIDDeviceIOKit : public IHIDDevice
             device->m_initCond.notify_one();
             return;
         }
-        
+
         /* USB interface function-pointer table */
         IOUSBInterfaceInterface** intf = NULL;
         err = (*iodev)->QueryInterface(iodev,
@@ -113,7 +113,7 @@ class HIDDeviceIOKit : public IHIDDevice
             IODestroyPlugInInterface(iodev);
             return;
         }
-        
+
         /* Obtain exclusive lock on device */
         device->m_usbIntf = intf;
         err = (*intf)->USBInterfaceOpen(intf);
@@ -137,7 +137,7 @@ class HIDDeviceIOKit : public IHIDDevice
             IODestroyPlugInInterface(iodev);
             return;
         }
-        
+
         /* Determine pipe indices for interrupt I/O */
         UInt8 numEndpoints = 0;
         err = (*intf)->GetNumEndpoints(intf, &numEndpoints);
@@ -154,12 +154,12 @@ class HIDDeviceIOKit : public IHIDDevice
                     device->m_usbIntfOutPipe = num;
             }
         }
-        
+
         /* Return control to main thread */
         device->m_runningTransferLoop = true;
         lk.unlock();
         device->m_initCond.notify_one();
-        
+
         /* Start transfer loop */
         device->m_devImp.initialCycle();
         while (device->m_runningTransferLoop)
@@ -171,54 +171,54 @@ class HIDDeviceIOKit : public IHIDDevice
         (*intf)->Release(intf);
         IODestroyPlugInInterface(iodev);
         device->m_usbIntf = NULL;
-        
+
     }
-    
+
     static void _threadProcBTLL(HIDDeviceIOKit* device)
     {
         std::unique_lock<std::mutex> lk(device->m_initMutex);
-        
+
         /* Return control to main thread */
         device->m_runningTransferLoop = true;
         lk.unlock();
         device->m_initCond.notify_one();
-        
+
         /* Start transfer loop */
         device->m_devImp.initialCycle();
         while (device->m_runningTransferLoop)
             device->m_devImp.transferCycle();
         device->m_devImp.finalCycle();
-        
+
     }
-    
+
     static void _threadProcHID(HIDDeviceIOKit* device)
     {
         std::unique_lock<std::mutex> lk(device->m_initMutex);
-        
+
         /* Return control to main thread */
         device->m_runningTransferLoop = true;
         lk.unlock();
         device->m_initCond.notify_one();
-        
+
         /* Start transfer loop */
         device->m_devImp.initialCycle();
         while (device->m_runningTransferLoop)
             device->m_devImp.transferCycle();
         device->m_devImp.finalCycle();
     }
-    
+
     void _deviceDisconnected()
     {
         m_runningTransferLoop = false;
     }
-    
+
     bool _sendHIDReport(const uint8_t* data, size_t length, uint16_t message)
     {
         return false;
     }
-    
+
 public:
-    
+
     HIDDeviceIOKit(DeviceToken& token, DeviceBase& devImp)
     : m_token(token),
       m_devImp(devImp),
@@ -228,11 +228,11 @@ public:
         std::unique_lock<std::mutex> lk(m_initMutex);
         DeviceToken::DeviceType dType = token.getDeviceType();
         if (dType == DeviceToken::DeviceType::USB)
-            m_thread = new std::thread(_threadProcUSBLL, this);
+            m_thread = std::thread(_threadProcUSBLL, this);
         else if (dType == DeviceToken::DeviceType::Bluetooth)
-            m_thread = new std::thread(_threadProcBTLL, this);
+            m_thread = std::thread(_threadProcBTLL, this);
         else if (dType == DeviceToken::DeviceType::GenericHID)
-            m_thread = new std::thread(_threadProcHID, this);
+            m_thread = std::thread(_threadProcHID, this);
         else
         {
             fprintf(stderr, "invalid token supplied to device constructor\n");
@@ -240,14 +240,14 @@ public:
         }
         m_initCond.wait(lk);
     }
-    
+
     ~HIDDeviceIOKit()
     {
         m_runningTransferLoop = false;
-        m_thread->join();
-        delete m_thread;
+        if (m_thread.joinable())
+            m_thread.join();
     }
-    
+
 
 };
 

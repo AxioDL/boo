@@ -33,12 +33,12 @@ class HIDDeviceUdev final : public IHIDDevice
     unsigned m_usbIntfInPipe = 0;
     unsigned m_usbIntfOutPipe = 0;
     bool m_runningTransferLoop = false;
-    
+
     const std::string& m_devPath;
     std::mutex m_initMutex;
     std::condition_variable m_initCond;
-    std::thread* m_thread;
-    
+    std::thread m_thread;
+
     bool _sendUSBInterruptTransfer(const uint8_t* data, size_t length)
     {
         if (m_devFd)
@@ -73,7 +73,7 @@ class HIDDeviceUdev final : public IHIDDevice
         }
         return 0;
     }
-    
+
     static void _threadProcUSBLL(HIDDeviceUdev* device)
     {
         unsigned i;
@@ -131,12 +131,12 @@ class HIDDeviceUdev final : public IHIDDevice
             NULL
         };
         ioctl(fd, USBDEVFS_IOCTL, &disconnectReq);
-        
+
         /* Return control to main thread */
         device->m_runningTransferLoop = true;
         lk.unlock();
         device->m_initCond.notify_one();
-        
+
         /* Start transfer loop */
         device->m_devImp.initialCycle();
         while (device->m_runningTransferLoop)
@@ -147,7 +147,7 @@ class HIDDeviceUdev final : public IHIDDevice
         close(fd);
         device->m_devFd = 0;
         udev_device_unref(udevDev);
-        
+
     }
 
     static void _threadProcBTLL(HIDDeviceUdev* device)
@@ -168,7 +168,7 @@ class HIDDeviceUdev final : public IHIDDevice
 
         udev_device_unref(udevDev);
     }
-    
+
     static void _threadProcHID(HIDDeviceUdev* device)
     {
         std::unique_lock<std::mutex> lk(device->m_initMutex);
@@ -187,12 +187,12 @@ class HIDDeviceUdev final : public IHIDDevice
 
         udev_device_unref(udevDev);
     }
-    
+
     void _deviceDisconnected()
     {
         m_runningTransferLoop = false;
     }
-    
+
     bool _sendHIDReport(const uint8_t* data, size_t length, uint16_t message)
     {
         if (m_devFd)
@@ -233,9 +233,9 @@ class HIDDeviceUdev final : public IHIDDevice
         }
         return 0;
     }
-    
+
 public:
-    
+
     HIDDeviceUdev(DeviceToken& token, DeviceBase& devImp)
     : m_token(token),
       m_devImp(devImp),
@@ -245,11 +245,11 @@ public:
         std::unique_lock<std::mutex> lk(m_initMutex);
         DeviceToken::DeviceType dType = token.getDeviceType();
         if (dType == DeviceToken::DeviceType::USB)
-            m_thread = new std::thread(_threadProcUSBLL, this);
+            m_thread = std::thread(_threadProcUSBLL, this);
         else if (dType == DeviceToken::DeviceType::Bluetooth)
-            m_thread = new std::thread(_threadProcBTLL, this);
+            m_thread = std::thread(_threadProcBTLL, this);
         else if (dType == DeviceToken::DeviceType::GenericHID)
-            m_thread = new std::thread(_threadProcHID, this);
+            m_thread = std::thread(_threadProcHID, this);
         else
         {
             fprintf(stderr, "invalid token supplied to device constructor");
@@ -257,14 +257,14 @@ public:
         }
         m_initCond.wait(lk);
     }
-    
+
     ~HIDDeviceUdev()
     {
         m_runningTransferLoop = false;
-        m_thread->join();
-        delete m_thread;
+        if (m_thread.joinable())
+            m_thread.join();
     }
-    
+
 
 };
 
