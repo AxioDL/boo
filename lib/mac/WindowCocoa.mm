@@ -617,13 +617,13 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 static inline boo::EModifierKey getMod(NSUInteger flags)
 {
     boo::EModifierKey ret = boo::EModifierKey::None;
-    if (flags & NSControlKeyMask)
+    if (flags & NSEventModifierFlagControl)
         ret |= boo::EModifierKey::Ctrl;
-    if (flags & NSAlternateKeyMask)
+    if (flags & NSEventModifierFlagOption)
         ret |= boo::EModifierKey::Alt;
-    if (flags & NSShiftKeyMask)
+    if (flags & NSEventModifierFlagShift)
         ret |= boo::EModifierKey::Shift;
-    if (flags & NSCommandKeyMask)
+    if (flags & NSEventModifierFlagCommand)
         ret |= boo::EModifierKey::Command;
     return ret;
 }
@@ -1061,23 +1061,23 @@ static boo::ESpecialKey translateKeycode(short code)
         NSUInteger changedFlags = modFlags ^ lastModifiers;
 
         NSUInteger downFlags = changedFlags & modFlags;
-        if (downFlags & NSControlKeyMask)
+        if (downFlags & NSEventModifierFlagControl)
             booContext->m_callback->modKeyDown(boo::EModifierKey::Ctrl, false);
-        if (downFlags & NSAlternateKeyMask)
+        if (downFlags & NSEventModifierFlagOption)
             booContext->m_callback->modKeyDown(boo::EModifierKey::Alt, false);
-        if (downFlags & NSShiftKeyMask)
+        if (downFlags & NSEventModifierFlagShift)
             booContext->m_callback->modKeyDown(boo::EModifierKey::Shift, false);
-        if (downFlags & NSCommandKeyMask)
+        if (downFlags & NSEventModifierFlagCommand)
             booContext->m_callback->modKeyDown(boo::EModifierKey::Command, false);
 
         NSUInteger upFlags = changedFlags & ~modFlags;
-        if (upFlags & NSControlKeyMask)
+        if (upFlags & NSEventModifierFlagControl)
             booContext->m_callback->modKeyUp(boo::EModifierKey::Ctrl);
-        if (upFlags & NSAlternateKeyMask)
+        if (upFlags & NSEventModifierFlagOption)
             booContext->m_callback->modKeyUp(boo::EModifierKey::Alt);
-        if (upFlags & NSShiftKeyMask)
+        if (upFlags & NSEventModifierFlagShift)
             booContext->m_callback->modKeyUp(boo::EModifierKey::Shift);
-        if (upFlags & NSCommandKeyMask)
+        if (upFlags & NSEventModifierFlagCommand)
             booContext->m_callback->modKeyUp(boo::EModifierKey::Command);
 
         lastModifiers = modFlags;
@@ -1392,7 +1392,7 @@ public:
 
     bool isFullscreen() const
     {
-        return ([m_nsWindow styleMask] & NSFullScreenWindowMask) == NSFullScreenWindowMask;
+        return ([m_nsWindow styleMask] & NSWindowStyleMaskFullScreen) == NSWindowStyleMaskFullScreen;
     }
 
     void setFullscreen(bool fs)
@@ -1455,14 +1455,14 @@ public:
 #endif
 
         if ((style & EWindowStyle::Close) != EWindowStyle::None)
-            m_nsWindow.styleMask |= NSClosableWindowMask;
+            m_nsWindow.styleMask |= NSWindowStyleMaskClosable;
         else
-            m_nsWindow.styleMask &= ~NSClosableWindowMask;
+            m_nsWindow.styleMask &= ~NSWindowStyleMaskClosable;
 
         if ((style & EWindowStyle::Resize) != EWindowStyle::None)
-            m_nsWindow.styleMask |= NSResizableWindowMask;
+            m_nsWindow.styleMask |= NSWindowStyleMaskResizable;
         else
-            m_nsWindow.styleMask &= ~NSResizableWindowMask;
+            m_nsWindow.styleMask &= ~NSWindowStyleMaskResizable;
     }
 
     EWindowStyle getStyle() const
@@ -1473,8 +1473,8 @@ public:
 #else
         retval |= EWindowStyle::Titlebar;
 #endif
-        retval |= (m_nsWindow.styleMask & NSClosableWindowMask) ? EWindowStyle::Close : EWindowStyle::None;
-        retval |= (m_nsWindow.styleMask & NSResizableWindowMask) ? EWindowStyle::Resize: EWindowStyle::None;
+        retval |= (m_nsWindow.styleMask & NSWindowStyleMaskClosable) ? EWindowStyle::Close : EWindowStyle::None;
+        retval |= (m_nsWindow.styleMask & NSWindowStyleMaskResizable) ? EWindowStyle::Resize: EWindowStyle::None;
         return retval;
     }
 
@@ -1522,10 +1522,10 @@ IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx,
 - (id)initWithBooWindow:(boo::WindowCocoa *)bw title:(const boo::SystemString&)title
 {
     self = [self initWithContentRect:[self genFrameDefault]
-                           styleMask:NSTitledWindowMask|
-                                     NSClosableWindowMask|
-                                     NSMiniaturizableWindowMask|
-                                     NSResizableWindowMask
+                           styleMask:NSWindowStyleMaskTitled|
+                                     NSWindowStyleMaskClosable|
+                                     NSWindowStyleMaskMiniaturizable|
+                                     NSWindowStyleMaskTitled
                              backing:NSBackingStoreBuffered
                                defer:YES];
     self.releasedWhenClosed = NO;

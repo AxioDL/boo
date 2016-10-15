@@ -74,12 +74,12 @@ public:
         NSMenuItem* fsItem = [appMenu addItemWithTitle:@"Toggle Full Screen"
                                                 action:@selector(toggleFs:)
                                          keyEquivalent:@"f"];
-        [fsItem setKeyEquivalentModifierMask:NSCommandKeyMask];
+        [fsItem setKeyEquivalentModifierMask:NSEventModifierFlagCommand];
         [appMenu addItem:[NSMenuItem separatorItem]];
         NSMenuItem* quitItem = [appMenu addItemWithTitle:[NSString stringWithFormat:@"Quit %s", m_friendlyName.c_str()]
                                                   action:@selector(quitApp:)
                                            keyEquivalent:@"q"];
-        [quitItem setKeyEquivalentModifierMask:NSCommandKeyMask];
+        [quitItem setKeyEquivalentModifierMask:NSEventModifierFlagCommand];
         [[rootMenu addItemWithTitle:[NSString stringWithUTF8String:m_friendlyName.c_str()]
                             action:nil keyEquivalent:@""] setSubmenu:appMenu];
         [[NSApplication sharedApplication] setMainMenu:rootMenu];

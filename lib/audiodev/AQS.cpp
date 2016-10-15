@@ -122,27 +122,32 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
         ItemCount numDevices = MIDIGetNumberOfDevices();
         ret.reserve(numDevices);
-        for (ItemCount i=0 ; i<numDevices ; ++i)
+        for (int i=int(numDevices)-1 ; i>=0 ; --i)
         {
             MIDIDeviceRef dev = MIDIGetDevice(i);
             if (!dev)
                 continue;
 
-            CFStringRef idstr;
-            if (MIDIObjectGetStringProperty(dev, kMIDIPropertyDeviceID, &idstr))
+            SInt32 idNum;
+            if (MIDIObjectGetIntegerProperty(dev, kMIDIPropertyUniqueID, &idNum))
                 continue;
 
             CFStringRef namestr;
-            if (MIDIObjectGetStringProperty(dev, kMIDIPropertyDisplayName, &namestr))
+            const char* nameCstr;
+            if (MIDIObjectGetStringProperty(dev, kMIDIPropertyName, &namestr))
+                continue;
+
+            if (!(nameCstr = CFStringGetCStringPtr(namestr, kCFStringEncodingUTF8)))
             {
-                CFRelease(idstr);
+                CFRelease(namestr);
                 continue;
             }
 
-            ret.push_back(std::make_pair(std::string(CFStringGetCStringPtr(idstr, kCFStringEncodingUTF8)),
-                                         std::string(CFStringGetCStringPtr(namestr, kCFStringEncodingUTF8))));
+            char idStr[9];
+            snprintf(idStr, 9, "%08X\n", idNum);
+            ret.push_back(std::make_pair(std::string(idStr),
+                                         std::string(nameCstr)));
 
-            CFRelease(idstr);
             CFRelease(namestr);
         }
 
@@ -158,16 +163,16 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
             if (!dev)
                 continue;
 
-            CFStringRef idstr;
-            if (MIDIObjectGetStringProperty(dev, kMIDIPropertyDeviceID, &idstr))
+            SInt32 idNum;
+            if (MIDIObjectGetIntegerProperty(dev, kMIDIPropertyUniqueID, &idNum))
                 continue;
 
-            if (!strcmp(CFStringGetCStringPtr(idstr, kCFStringEncodingUTF8), name))
-            {
-                CFRelease(idstr);
-                return dev;
-            }
-            CFRelease(idstr);
+            char idStr[9];
+            snprintf(idStr, 9, "%08X\n", idNum);
+            if (strcmp(idStr, name))
+                continue;
+
+            return dev;
         }
 
         return {};
@@ -256,12 +261,18 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         std::string description() const
         {
             CFStringRef namestr;
-            if (MIDIObjectGetStringProperty(m_midi, kMIDIPropertyDisplayName, &namestr))
+            const char* nameCstr;
+            if (MIDIObjectGetStringProperty(m_midi, kMIDIPropertyName, &namestr))
                 return {};
 
-            std::string ret(CFStringGetCStringPtr(namestr, kCFStringEncodingUTF8));
+            if (!(nameCstr = CFStringGetCStringPtr(namestr, kCFStringEncodingUTF8)))
+            {
+                CFRelease(namestr);
+                return {};
+            }
+
             CFRelease(namestr);
-            return ret;
+            return nameCstr;
         }
     };
 
@@ -284,12 +295,18 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         std::string description() const
         {
             CFStringRef namestr;
-            if (MIDIObjectGetStringProperty(m_midi, kMIDIPropertyDisplayName, &namestr))
+            const char* nameCstr;
+            if (MIDIObjectGetStringProperty(m_midi, kMIDIPropertyName, &namestr))
                 return {};
 
-            std::string ret(CFStringGetCStringPtr(namestr, kCFStringEncodingUTF8));
+            if (!(nameCstr = CFStringGetCStringPtr(namestr, kCFStringEncodingUTF8)))
+            {
+                CFRelease(namestr);
+                return {};
+            }
+
             CFRelease(namestr);
-            return ret;
+            return nameCstr;
         }
 
         size_t send(const void* buf, size_t len) const
@@ -338,12 +355,18 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         std::string description() const
         {
             CFStringRef namestr;
-            if (MIDIObjectGetStringProperty(m_midiIn, kMIDIPropertyDisplayName, &namestr))
+            const char* nameCstr;
+            if (MIDIObjectGetStringProperty(m_midiIn, kMIDIPropertyName, &namestr))
                 return {};
 
-            std::string ret(CFStringGetCStringPtr(namestr, kCFStringEncodingUTF8));
+            if (!(nameCstr = CFStringGetCStringPtr(namestr, kCFStringEncodingUTF8)))
+            {
+                CFRelease(namestr);
+                return {};
+            }
+
             CFRelease(namestr);
-            return ret;
+            return nameCstr;
         }
 
         size_t send(const void* buf, size_t len) const
@@ -534,7 +557,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
         return ret;
     }
-    
+
     bool useMIDILock() const {return true;}
 
     AQSAudioVoiceEngine()
@@ -559,7 +582,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
             Log.report(logvisor::Fatal, "unable to create output audio queue");
             return;
         }
-        
+
         Float64 actualSampleRate;
         UInt32 argSize = 8;
         err = AudioQueueGetProperty(m_queue, kAudioQueueDeviceProperty_SampleRate, &actualSampleRate, &argSize);
@@ -569,7 +592,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
             Log.report(logvisor::Fatal, "unable to get native sample rate from audio queue");
             return;
         }
-        
+
         desc.mSampleRate = actualSampleRate;
         if ((err = AudioQueueNewOutput(&desc, AudioQueueOutputCallback(Callback),
                                        this, nullptr, nullptr, 0, &m_queue)))
