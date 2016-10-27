@@ -156,21 +156,20 @@ else(NOT GEKKO)
   include_directories(${DBUS_INCLUDE_DIR} ${DBUS_ARCH_INCLUDE_DIR})
   list(APPEND _BOO_SYS_LIBS X11 Xi GL asound ${DBUS_LIBRARY} pthread)
 
-  message(STATUS "Enabling Vulkan support")
-  list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_VULKAN=1)
-  list(APPEND _BOO_SYS_LIBS xcb X11-xcb dl)
-  list(APPEND PLAT_SRCS lib/graphicsdev/Vulkan.cpp
-       lib/graphicsdev/VulkanDispatchTable.cpp)
-
   if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
+      message(STATUS "Enabling Vulkan support")
       list(APPEND PLAT_SRCS
           lib/inputdev/HIDListenerUdev.cpp
-          lib/inputdev/HIDDeviceUdev.cpp)
-      list(APPEND _BOO_SYS_LIBS udev)
+          lib/inputdev/HIDDeviceUdev.cpp
+          lib/graphicsdev/Vulkan.cpp
+          lib/graphicsdev/VulkanDispatchTable.cpp)
+      list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_VULKAN=1)
+      list(APPEND _BOO_SYS_LIBS xcb X11-xcb udev)
   else()
       list(APPEND PLAT_SRCS
           lib/inputdev/HIDListenerBSD.cpp
           lib/inputdev/HIDDeviceBSD.cpp)
+      list(APPEND _BOO_SYS_LIBS execinfo)
   endif()
 
 endif()
