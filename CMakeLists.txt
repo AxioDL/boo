@@ -164,7 +164,7 @@ else(NOT GEKKO)
           lib/graphicsdev/Vulkan.cpp
           lib/graphicsdev/VulkanDispatchTable.cpp)
       list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_VULKAN=1)
-      list(APPEND _BOO_SYS_LIBS xcb X11-xcb udev)
+      list(APPEND _BOO_SYS_LIBS xcb X11-xcb dl udev)
   else()
       list(APPEND PLAT_SRCS
           lib/inputdev/HIDListenerBSD.cpp
