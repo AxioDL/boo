@@ -31,6 +31,11 @@ struct MetalData : IGraphicsData
     std::vector<std::unique_ptr<struct MetalVertexFormat>> m_VFmts;
 };
 
+struct MetalPool : IGraphicsBufferPool
+{
+    std::vector<std::unique_ptr<class MetalGraphicsBufferD>> m_DBufs;
+};
+
 #define MTL_STATIC MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeShared
 #define MTL_DYNAMIC MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeShared
 
@@ -401,29 +406,29 @@ struct MetalVertexFormat : IVertexFormat
 {
     size_t m_elementCount;
     MTLVertexDescriptor* m_vdesc;
+    size_t m_stride = 0;
+    size_t m_instStride = 0;
     MetalVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)
     : m_elementCount(elementCount)
     {
-        size_t stride = 0;
-        size_t instStride = 0;
         for (size_t i=0 ; i<elementCount ; ++i)
         {
             const VertexElementDescriptor* elemin = &elements[i];
             int semantic = int(elemin->semantic & VertexSemantic::SemanticMask);
             if ((elemin->semantic & VertexSemantic::Instanced) != VertexSemantic::None)
-                instStride += SEMANTIC_SIZE_TABLE[semantic];
+                m_instStride += SEMANTIC_SIZE_TABLE[semantic];
             else
-                stride += SEMANTIC_SIZE_TABLE[semantic];
+                m_stride += SEMANTIC_SIZE_TABLE[semantic];
         }
 
         m_vdesc = [MTLVertexDescriptor vertexDescriptor];
         MTLVertexBufferLayoutDescriptor* layoutDesc = m_vdesc.layouts[0];
-        layoutDesc.stride = stride;
+        layoutDesc.stride = m_stride;
         layoutDesc.stepFunction = MTLVertexStepFunctionPerVertex;
         layoutDesc.stepRate = 1;
 
         layoutDesc = m_vdesc.layouts[1];
-        layoutDesc.stride = instStride;
+        layoutDesc.stride = m_instStride;
         layoutDesc.stepFunction = MTLVertexStepFunctionPerInstance;
         layoutDesc.stepRate = 1;
 
@@ -475,14 +480,16 @@ class MetalShaderPipeline : public IShaderPipeline
 {
     friend class MetalDataFactory;
     friend class MetalCommandQueue;
+    friend struct MetalShaderDataBinding;
     MTLCullMode m_cullMode = MTLCullModeNone;
     MTLPrimitiveType m_drawPrim;
+    const MetalVertexFormat* m_vtxFmt;
 
     MetalShaderPipeline(MetalContext* ctx, id<MTLFunction> vert, id<MTLFunction> frag,
                         const MetalVertexFormat* vtxFmt, NSUInteger targetSamples,
                         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                         bool depthTest, bool depthWrite, bool backfaceCulling)
-    : m_drawPrim(PRIMITIVE_TABLE[int(prim)])
+    : m_drawPrim(PRIMITIVE_TABLE[int(prim)]), m_vtxFmt(vtxFmt)
     {
         if (backfaceCulling)
             m_cullMode = MTLCullModeBack;
@@ -580,12 +587,15 @@ struct MetalShaderDataBinding : IShaderDataBinding
     std::unique_ptr<bool[]> m_fubufs;
     size_t m_texCount;
     std::unique_ptr<ITexture*[]> m_texs;
+    size_t m_baseVert;
+    size_t m_baseInst;
+
     MetalShaderDataBinding(MetalContext* ctx,
                            IShaderPipeline* pipeline,
                            IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibuf,
                            size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                            const size_t* ubufOffs, const size_t* ubufSizes,
-                           size_t texCount, ITexture** texs)
+                           size_t texCount, ITexture** texs, size_t baseVert, size_t baseInst)
     : m_pipeline(static_cast<MetalShaderPipeline*>(pipeline)),
     m_vbuf(vbuf),
     m_instVbo(instVbo),
@@ -593,7 +603,9 @@ struct MetalShaderDataBinding : IShaderDataBinding
     m_ubufCount(ubufCount),
     m_ubufs(new IGraphicsBuffer*[ubufCount]),
     m_texCount(texCount),
-    m_texs(new ITexture*[texCount])
+    m_texs(new ITexture*[texCount]),
+    m_baseVert(baseVert),
+    m_baseInst(baseInst)
     {
         if (ubufCount && ubufStages)
         {
@@ -631,10 +643,13 @@ struct MetalShaderDataBinding : IShaderDataBinding
     void bind(id<MTLRenderCommandEncoder> enc, int b)
     {
         m_pipeline->bind(enc);
+
         if (m_vbuf)
-            [enc setVertexBuffer:GetBufferGPUResource(m_vbuf, b) offset:0 atIndex:0];
+            [enc setVertexBuffer:GetBufferGPUResource(m_vbuf, b)
+             offset:m_pipeline->m_vtxFmt->m_stride * m_baseVert atIndex:0];
         if (m_instVbo)
-            [enc setVertexBuffer:GetBufferGPUResource(m_instVbo, b) offset:0 atIndex:1];
+            [enc setVertexBuffer:GetBufferGPUResource(m_instVbo, b)
+             offset:m_pipeline->m_vtxFmt->m_instStride * m_baseInst atIndex:1];
         if (m_ubufOffs)
             for (size_t i=0 ; i<m_ubufCount ; ++i)
             {
@@ -871,6 +886,11 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             for (std::unique_ptr<MetalTextureD>& t : d->m_DTexs)
                 t->update(m_fillBuf);
         }
+        for (MetalPool* p : gfxF->m_committedPools)
+        {
+            for (std::unique_ptr<MetalGraphicsBufferD>& b : p->m_DBufs)
+                b->update(m_fillBuf);
+        }
         datalk.unlock();
 
         @autoreleasepool
@@ -1048,7 +1068,8 @@ ITextureR* MetalDataFactory::Context::newRenderTexture(size_t width, size_t heig
     return retval;
 }
 
-IVertexFormat* MetalDataFactory::Context::newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)
+IVertexFormat* MetalDataFactory::Context::newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
+                                                          size_t baseVert, size_t baseInst)
 {
     MetalVertexFormat* retval = new struct MetalVertexFormat(elementCount, elements);
     m_deferredData->m_VFmts.emplace_back(retval);
@@ -1091,11 +1112,12 @@ MetalDataFactory::Context::newShaderDataBinding(IShaderPipeline* pipeline,
                                                 IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibuf,
                                                 size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                                                 const size_t* ubufOffs, const size_t* ubufSizes,
-                                                size_t texCount, ITexture** texs)
+                                                size_t texCount, ITexture** texs, size_t baseVert, size_t baseInst)
 {
     MetalShaderDataBinding* retval =
     new MetalShaderDataBinding(m_parent.m_ctx, pipeline, vbuf, instVbo, ibuf,
-                               ubufCount, ubufs, ubufStages, ubufOffs, ubufSizes, texCount, texs);
+                               ubufCount, ubufs, ubufStages, ubufOffs,
+                               ubufSizes, texCount, texs, baseVert, baseInst);
     m_deferredData->m_SBinds.emplace_back(retval);
     return retval;
 }
@@ -1120,6 +1142,15 @@ GraphicsDataToken MetalDataFactory::commitTransaction(const FactoryCommitFunc& t
     m_committedData.insert(retval);
     return GraphicsDataToken(this, retval);
 }
+
+GraphicsBufferPoolToken MetalDataFactory::newBufferPool()
+{
+    std::unique_lock<std::mutex> lk(m_committedMutex);
+    MetalPool* retval = new MetalPool;
+    m_committedPools.insert(retval);
+    return GraphicsBufferPoolToken(this, retval);
+}
+
 void MetalDataFactory::destroyData(IGraphicsData* d)
 {
     std::unique_lock<std::mutex> lk(m_committedMutex);
@@ -1127,12 +1158,34 @@ void MetalDataFactory::destroyData(IGraphicsData* d)
     m_committedData.erase(data);
     delete data;
 }
+
 void MetalDataFactory::destroyAllData()
 {
     std::unique_lock<std::mutex> lk(m_committedMutex);
     for (IGraphicsData* data : m_committedData)
         delete static_cast<MetalData*>(data);
+    for (IGraphicsBufferPool* pool : m_committedPools)
+        delete static_cast<MetalPool*>(pool);
     m_committedData.clear();
+    m_committedPools.clear();
+}
+
+void MetalDataFactory::destroyPool(IGraphicsBufferPool* p)
+{
+    std::unique_lock<std::mutex> lk(m_committedMutex);
+    MetalPool* pool = static_cast<MetalPool*>(p);
+    m_committedPools.erase(pool);
+    delete pool;
+}
+
+IGraphicsBufferD* MetalDataFactory::newPoolBuffer(IGraphicsBufferPool* p, BufferUse use,
+                                                  size_t stride, size_t count)
+{
+    MetalPool* pool = static_cast<MetalPool*>(p);
+    MetalCommandQueue* q = static_cast<MetalCommandQueue*>(m_parent->getCommandQueue());
+    MetalGraphicsBufferD* retval = new MetalGraphicsBufferD(q, use, m_ctx, stride, count);
+    pool->m_DBufs.emplace_back(retval);
+    return retval;
 }
 
 IGraphicsCommandQueue* _NewMetalCommandQueue(MetalContext* ctx, IWindow* parentWindow,

@@ -30,6 +30,11 @@ struct GLData : IGraphicsData
     std::vector<std::unique_ptr<struct GLVertexFormat>> m_VFmts;
 };
 
+struct GLPool : IGraphicsBufferPool
+{
+    std::vector<std::unique_ptr<class GLGraphicsBufferD>> m_DBufs;
+};
+
 static const GLenum USE_TABLE[] =
 {
     GL_INVALID_ENUM,
@@ -533,9 +538,11 @@ struct GLVertexFormat : IVertexFormat
     GLCommandQueue* m_q;
     GLuint m_vao[3] = {};
     size_t m_elementCount;
+    GLuint m_baseVert, m_baseInst;
     std::unique_ptr<VertexElementDescriptor[]> m_elements;
     GLVertexFormat(GLCommandQueue* q, size_t elementCount,
-                   const VertexElementDescriptor* elements);
+                   const VertexElementDescriptor* elements,
+                   size_t baseVert, size_t baseInst);
     ~GLVertexFormat();
     void bind(int idx) const {glBindVertexArray(m_vao[idx]);}
 };
@@ -652,10 +659,11 @@ GLDataFactory::Context::newShaderDataBinding(IShaderPipeline* pipeline,
                                              IGraphicsBuffer*, IGraphicsBuffer*, IGraphicsBuffer*,
                                              size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                                              const size_t* ubufOffs, const size_t* ubufSizes,
-                                             size_t texCount, ITexture** texs)
+                                             size_t texCount, ITexture** texs, size_t baseVert, size_t baseInst)
 {
     GLShaderDataBinding* retval =
-    new GLShaderDataBinding(pipeline, vtxFormat, ubufCount, ubufs, ubufOffs, ubufSizes, texCount, texs);
+    new GLShaderDataBinding(pipeline, vtxFormat, ubufCount, ubufs,
+                            ubufOffs, ubufSizes, texCount, texs);
     m_deferredData->m_SBinds.emplace_back(retval);
     return retval;
 }
@@ -690,6 +698,14 @@ GraphicsDataToken GLDataFactory::commitTransaction(const FactoryCommitFunc& tran
     return GraphicsDataToken(this, retval);
 }
 
+GraphicsBufferPoolToken GLDataFactory::newBufferPool()
+{
+    std::unique_lock<std::mutex> lk(m_committedMutex);
+    GLPool* retval = new GLPool;
+    m_committedPools.insert(retval);
+    return GraphicsBufferPoolToken(this, retval);
+}
+
 void GLDataFactory::destroyData(IGraphicsData* d)
 {
     std::unique_lock<std::mutex> lk(m_committedMutex);
@@ -703,7 +719,27 @@ void GLDataFactory::destroyAllData()
     std::unique_lock<std::mutex> lk(m_committedMutex);
     for (IGraphicsData* data : m_committedData)
         delete static_cast<GLData*>(data);
+    for (IGraphicsBufferPool* pool : m_committedPools)
+        delete static_cast<GLPool*>(pool);
     m_committedData.clear();
+    m_committedPools.clear();
+}
+
+void GLDataFactory::destroyPool(IGraphicsBufferPool* p)
+{
+    std::unique_lock<std::mutex> lk(m_committedMutex);
+    GLPool* pool = static_cast<GLPool*>(p);
+    m_committedPools.erase(pool);
+    delete pool;
+}
+
+IGraphicsBufferD* GLDataFactory::newPoolBuffer(IGraphicsBufferPool* p, BufferUse use,
+                                               size_t stride, size_t count)
+{
+    GLPool* pool = static_cast<GLPool*>(p);
+    GLGraphicsBufferD* retval = new GLGraphicsBufferD(use, stride * count);
+    pool->m_DBufs.emplace_back(retval);
+    return retval;
 }
 
 static const GLint SEMANTIC_COUNT_TABLE[] =
@@ -844,8 +880,8 @@ struct GLCommandQueue : IGraphicsCommandQueue
 
         for (int b=0 ; b<3 ; ++b)
         {
-            size_t offset = 0;
-            size_t instOffset = 0;
+            size_t offset = fmt->m_baseVert * stride;
+            size_t instOffset = fmt->m_baseInst * instStride;
             glBindVertexArray(fmt->m_vao[b]);
             IGraphicsBuffer* lastVBO = nullptr;
             IGraphicsBuffer* lastEBO = nullptr;
@@ -1259,6 +1295,11 @@ struct GLCommandQueue : IGraphicsCommandQueue
             for (std::unique_ptr<GLTextureD>& t : d->m_DTexs)
                 t->update(m_completeBuf);
         }
+        for (GLPool* p : gfxF->m_committedPools)
+        {
+            for (std::unique_ptr<GLGraphicsBufferD>& b : p->m_DBufs)
+                b->update(m_completeBuf);
+        }
         datalk.unlock();
         glFlush();
 
@@ -1464,10 +1505,12 @@ GLDataFactory::Context::newRenderTexture(size_t width, size_t height,
 }
 
 GLVertexFormat::GLVertexFormat(GLCommandQueue* q, size_t elementCount,
-                               const VertexElementDescriptor* elements)
+                               const VertexElementDescriptor* elements,
+                               size_t baseVert, size_t baseInst)
 : m_q(q),
   m_elementCount(elementCount),
-  m_elements(new VertexElementDescriptor[elementCount])
+  m_elements(new VertexElementDescriptor[elementCount]),
+  m_baseVert(baseVert), m_baseInst(baseInst)
 {
     for (size_t i=0 ; i<elementCount ; ++i)
         m_elements[i] = elements[i];
@@ -1476,10 +1519,11 @@ GLVertexFormat::GLVertexFormat(GLCommandQueue* q, size_t elementCount,
 GLVertexFormat::~GLVertexFormat() {m_q->delVertexFormat(this);}
 
 IVertexFormat* GLDataFactory::Context::newVertexFormat
-(size_t elementCount, const VertexElementDescriptor* elements)
+(size_t elementCount, const VertexElementDescriptor* elements,
+ size_t baseVert, size_t baseInst)
 {
     GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent.m_parent->getCommandQueue());
-    GLVertexFormat* retval = new struct GLVertexFormat(q, elementCount, elements);
+    GLVertexFormat* retval = new struct GLVertexFormat(q, elementCount, elements, baseVert, baseInst);
     m_deferredData->m_VFmts.emplace_back(retval);
     return retval;
 }

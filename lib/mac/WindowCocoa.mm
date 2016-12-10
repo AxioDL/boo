@@ -1123,8 +1123,9 @@ static boo::ESpecialKey translateKeycode(short code)
 
 - (void)reshape
 {
-    boo::SWindowRect rect = {int(self.frame.origin.x), int(self.frame.origin.y),
-                             int(self.frame.size.width), int(self.frame.size.height)};
+    NSRect frame = [self convertRectToBacking:self.frame];
+    boo::SWindowRect rect = {int(frame.origin.x), int(frame.origin.y),
+                             int(frame.size.width), int(frame.size.height)};
     if (resp->booContext->m_callback)
         resp->booContext->m_callback->resized(rect);
     [super reshape];
@@ -1143,6 +1144,11 @@ static boo::ESpecialKey translateKeycode(short code)
 - (NSResponder*)nextResponder
 {
     return resp;
+}
+
+- (BOOL)wantsBestResolutionOpenGLSurface
+{
+    return YES;
 }
 
 @end
@@ -1193,8 +1199,9 @@ static boo::ESpecialKey translateKeycode(short code)
 
 - (void)reshapeHandler
 {
-    boo::SWindowRect rect = {int(self.frame.origin.x), int(self.frame.origin.y),
-                             int(self.frame.size.width), int(self.frame.size.height)};
+    NSRect frame = [self convertRectToBacking:self.frame];
+    boo::SWindowRect rect = {int(frame.origin.x), int(frame.origin.y),
+                             int(frame.size.width), int(frame.size.height)};
     boo::MetalContext::Window& w = m_ctx->m_windows[m_window];
     std::unique_lock<std::mutex> lk(w.m_resizeLock);
     if (resp->booContext->m_callback)
@@ -1351,7 +1358,8 @@ public:
 
     void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const
     {
-        NSRect wFrame = [[m_nsWindow contentView] frame];
+        NSView* view = [m_nsWindow contentView];
+        NSRect wFrame = [view convertRectToBacking:view.frame];
         xOut = wFrame.origin.x;
         yOut = wFrame.origin.y;
         wOut = wFrame.size.width;
@@ -1360,7 +1368,8 @@ public:
 
     void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const
     {
-        NSRect wFrame = [[m_nsWindow contentView] frame];
+        NSView* view = [m_nsWindow contentView];
+        NSRect wFrame = [view convertRectToBacking:view.frame];
         xOut = wFrame.origin.x;
         yOut = wFrame.origin.y;
         wOut = wFrame.size.width;
@@ -1525,7 +1534,8 @@ IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx,
                            styleMask:NSWindowStyleMaskTitled|
                                      NSWindowStyleMaskClosable|
                                      NSWindowStyleMaskMiniaturizable|
-                                     NSWindowStyleMaskTitled
+                                     NSWindowStyleMaskTitled|
+                                     NSWindowStyleMaskResizable
                              backing:NSBackingStoreBuffered
                                defer:YES];
     self.releasedWhenClosed = NO;

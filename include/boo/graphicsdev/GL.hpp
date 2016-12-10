@@ -19,9 +19,13 @@ class GLDataFactory : public IGraphicsDataFactory
     uint32_t m_drawSamples;
     static ThreadLocalPtr<struct GLData> m_deferredData;
     std::unordered_set<struct GLData*> m_committedData;
+    std::unordered_set<struct GLPool*> m_committedPools;
     std::mutex m_committedMutex;
     void destroyData(IGraphicsData*);
     void destroyAllData();
+    void destroyPool(IGraphicsBufferPool*);
+    IGraphicsBufferD* newPoolBuffer(IGraphicsBufferPool* pool, BufferUse use,
+                                    size_t stride, size_t count);
 public:
     GLDataFactory(IGraphicsContext* parent, uint32_t drawSamples);
     ~GLDataFactory() {destroyAllData();}
@@ -50,7 +54,8 @@ public:
                                     bool enableShaderColorBinding, bool enableShaderDepthBinding);
 
         bool bindingNeedsVertexFormat() const {return true;}
-        IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
+        IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
+                                       size_t baseVert = 0, size_t baseInst = 0);
 
         IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
                                            size_t texCount, const char** texNames,
@@ -64,10 +69,11 @@ public:
                              IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
                              size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                              const size_t* ubufOffs, const size_t* ubufSizes,
-                             size_t texCount, ITexture** texs);
+                             size_t texCount, ITexture** texs, size_t baseVert = 0, size_t baseInst = 0);
     };
 
     GraphicsDataToken commitTransaction(const FactoryCommitFunc&);
+    GraphicsBufferPoolToken newBufferPool();
 };
 
 }

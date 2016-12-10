@@ -21,12 +21,16 @@ class MetalDataFactory : public IGraphicsDataFactory
     IGraphicsContext* m_parent;
     static ThreadLocalPtr<struct MetalData> m_deferredData;
     std::unordered_set<struct MetalData*> m_committedData;
+    std::unordered_set<struct MetalPool*> m_committedPools;
     std::mutex m_committedMutex;
     struct MetalContext* m_ctx;
     uint32_t m_sampleCount;
 
     void destroyData(IGraphicsData*);
     void destroyAllData();
+    void destroyPool(IGraphicsBufferPool*);
+    IGraphicsBufferD* newPoolBuffer(IGraphicsBufferPool* pool, BufferUse use,
+                                    size_t stride, size_t count);
 public:
     MetalDataFactory(IGraphicsContext* parent, MetalContext* ctx, uint32_t sampleCount);
     ~MetalDataFactory() {}
@@ -55,7 +59,8 @@ public:
                                     bool enableShaderColorBinding, bool enableShaderDepthBinding);
 
         bool bindingNeedsVertexFormat() const {return false;}
-        IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
+        IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
+                                       size_t baseVert = 0, size_t baseInst = 0);
 
         IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
                                            IVertexFormat* vtxFmt, unsigned targetSamples,
@@ -68,10 +73,11 @@ public:
                              IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
                              size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                              const size_t* ubufOffs, const size_t* ubufSizes,
-                             size_t texCount, ITexture** texs);
+                             size_t texCount, ITexture** texs, size_t baseVert = 0, size_t baseInst = 0);
     };
 
-    virtual GraphicsDataToken commitTransaction(const std::function<bool(IGraphicsDataFactory::Context& ctx)>&);
+    GraphicsDataToken commitTransaction(const std::function<bool(IGraphicsDataFactory::Context& ctx)>&);
+    GraphicsBufferPoolToken newBufferPool();
 };
 
 }

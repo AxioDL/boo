@@ -152,6 +152,10 @@ struct IShaderDataBinding {};
 struct IGraphicsData {};
 class GraphicsDataToken;
 
+/** Opaque object for maintaining ownership of factory-created pool buffers */
+struct IGraphicsBufferPool {};
+class GraphicsBufferPoolToken;
+
 /** Used wherever distinction of pipeline stages is needed */
 enum class PipelineStage
 {
@@ -226,7 +230,8 @@ struct IGraphicsDataFactory
 
         virtual bool bindingNeedsVertexFormat() const=0;
         virtual IVertexFormat*
-        newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)=0;
+        newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
+                        size_t baseVert = 0, size_t baseInst = 0)=0;
 
         virtual IShaderDataBinding*
         newShaderDataBinding(IShaderPipeline* pipeline,
@@ -234,32 +239,39 @@ struct IGraphicsDataFactory
                              IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
                              size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                              const size_t* ubufOffs, const size_t* ubufSizes,
-                             size_t texCount, ITexture** texs)=0;
+                             size_t texCount, ITexture** texs, size_t baseVert = 0, size_t baseInst = 0)=0;
 
         IShaderDataBinding*
         newShaderDataBinding(IShaderPipeline* pipeline,
                              IVertexFormat* vtxFormat,
                              IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
                              size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
-                             size_t texCount, ITexture** texs)
+                             size_t texCount, ITexture** texs, size_t baseVert = 0, size_t baseInst = 0)
         {
             return newShaderDataBinding(pipeline, vtxFormat, vbo, instVbo, ibo,
-                                        ubufCount, ubufs, ubufStages, nullptr, nullptr, texCount, texs);
+                                        ubufCount, ubufs, ubufStages, nullptr,
+                                        nullptr, texCount, texs, baseVert, baseInst);
         }
     };
 
     virtual GraphicsDataToken commitTransaction(const std::function<bool(Context& ctx)>&)=0;
+    virtual GraphicsBufferPoolToken newBufferPool()=0;
 
 private:
     friend class GraphicsDataToken;
     virtual void destroyData(IGraphicsData*)=0;
     virtual void destroyAllData()=0;
+
+    friend class GraphicsBufferPoolToken;
+    virtual void destroyPool(IGraphicsBufferPool*)=0;
+    virtual IGraphicsBufferD* newPoolBuffer(IGraphicsBufferPool* pool, BufferUse use,
+                                            size_t stride, size_t count)=0;
 };
 
 using FactoryCommitFunc = std::function<bool(IGraphicsDataFactory::Context& ctx)>;
 
-/** Ownership token for maintaining lifetime of factory-created resources
- *  deletion of this token triggers mass-deallocation of the factory's
+/** Ownership token for maintaining lifetime of factory-created resources.
+ *  Deletion of this token triggers mass-deallocation of the factory's
  *  IGraphicsData (please don't delete and draw contained resources in the same frame). */
 class GraphicsDataToken
 {
@@ -303,6 +315,59 @@ public:
     }
     ~GraphicsDataToken() {doDestroy();}
     operator bool() const {return m_factory && m_data;}
+};
+
+/** Ownership token for maintaining lifetimes of an appendable list of dynamic buffers.
+ *  Deletion of this token triggers mass-deallocation of the IGraphicsBufferPool
+ *  (please don't delete and draw contained resources in the same frame). */
+class GraphicsBufferPoolToken
+{
+    friend class GLDataFactory;
+    friend class D3D12DataFactory;
+    friend class D3D11DataFactory;
+    friend class MetalDataFactory;
+    friend class VulkanDataFactory;
+    IGraphicsDataFactory* m_factory = nullptr;
+    IGraphicsBufferPool* m_pool = nullptr;
+    GraphicsBufferPoolToken(IGraphicsDataFactory* factory, IGraphicsBufferPool* pool)
+    : m_factory(factory), m_pool(pool) {}
+public:
+    void doDestroy()
+    {
+        if (m_factory && m_pool)
+        {
+            m_factory->destroyPool(m_pool);
+            m_factory = nullptr;
+            m_pool = nullptr;
+        }
+    }
+    GraphicsBufferPoolToken() = default;
+    GraphicsBufferPoolToken(const GraphicsBufferPoolToken& other) = delete;
+    GraphicsBufferPoolToken(GraphicsBufferPoolToken&& other)
+    {
+        m_factory = other.m_factory;
+        other.m_factory = nullptr;
+        m_pool = other.m_pool;
+        other.m_pool = nullptr;
+    }
+    GraphicsBufferPoolToken& operator=(const GraphicsBufferPoolToken& other) = delete;
+    GraphicsBufferPoolToken& operator=(GraphicsBufferPoolToken&& other)
+    {
+        doDestroy();
+        m_factory = other.m_factory;
+        other.m_factory = nullptr;
+        m_pool = other.m_pool;
+        other.m_pool = nullptr;
+        return *this;
+    }
+    ~GraphicsBufferPoolToken() {doDestroy();}
+    operator bool() const {return m_factory && m_pool;}
+
+    IGraphicsBufferD* newPoolBuffer(BufferUse use,
+                                    size_t stride, size_t count)
+    {
+        return m_factory->newPoolBuffer(m_pool, use, stride, count);
+    }
 };
 
 }
