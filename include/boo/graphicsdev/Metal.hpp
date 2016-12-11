@@ -31,6 +31,7 @@ class MetalDataFactory : public IGraphicsDataFactory
     void destroyPool(IGraphicsBufferPool*);
     IGraphicsBufferD* newPoolBuffer(IGraphicsBufferPool* pool, BufferUse use,
                                     size_t stride, size_t count);
+    void deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf);
 public:
     MetalDataFactory(IGraphicsContext* parent, MetalContext* ctx, uint32_t sampleCount);
     ~MetalDataFactory() {}

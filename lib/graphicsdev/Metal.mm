@@ -33,7 +33,7 @@ struct MetalData : IGraphicsData
 
 struct MetalPool : IGraphicsBufferPool
 {
-    std::vector<std::unique_ptr<class MetalGraphicsBufferD>> m_DBufs;
+    std::unordered_map<class MetalGraphicsBufferD*, std::unique_ptr<class MetalGraphicsBufferD>> m_DBufs;
 };
 
 #define MTL_STATIC MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeShared
@@ -888,8 +888,8 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         }
         for (MetalPool* p : gfxF->m_committedPools)
         {
-            for (std::unique_ptr<MetalGraphicsBufferD>& b : p->m_DBufs)
-                b->update(m_fillBuf);
+            for (auto& b : p->m_DBufs)
+                b.second->update(m_fillBuf);
         }
         datalk.unlock();
 
@@ -1184,8 +1184,14 @@ IGraphicsBufferD* MetalDataFactory::newPoolBuffer(IGraphicsBufferPool* p, Buffer
     MetalPool* pool = static_cast<MetalPool*>(p);
     MetalCommandQueue* q = static_cast<MetalCommandQueue*>(m_parent->getCommandQueue());
     MetalGraphicsBufferD* retval = new MetalGraphicsBufferD(q, use, m_ctx, stride, count);
-    pool->m_DBufs.emplace_back(retval);
+    pool->m_DBufs.emplace(std::make_pair(retval, std::unique_ptr<MetalGraphicsBufferD>(retval)));
     return retval;
+}
+
+void MetalDataFactory::deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf)
+{
+    MetalPool* pool = static_cast<MetalPool*>(p);
+    pool->m_DBufs.erase(static_cast<MetalGraphicsBufferD*>(buf));
 }
 
 IGraphicsCommandQueue* _NewMetalCommandQueue(MetalContext* ctx, IWindow* parentWindow,

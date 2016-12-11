@@ -739,7 +739,7 @@ IGraphicsBufferD* GLDataFactory::newPoolBuffer(IGraphicsBufferPool* p, BufferUse
 {
     GLPool* pool = static_cast<GLPool*>(p);
     GLGraphicsBufferD* retval = new GLGraphicsBufferD(use, stride * count);
-    pool->m_DBufs.emplace(std::make_pair(retval, retval));
+    pool->m_DBufs.emplace(std::make_pair(retval, std::unique_ptr<GLGraphicsBufferD>(retval)));
     return retval;
 }
 
