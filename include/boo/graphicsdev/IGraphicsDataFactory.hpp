@@ -266,6 +266,7 @@ private:
     virtual void destroyPool(IGraphicsBufferPool*)=0;
     virtual IGraphicsBufferD* newPoolBuffer(IGraphicsBufferPool* pool, BufferUse use,
                                             size_t stride, size_t count)=0;
+    virtual void deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf)=0;
 };
 
 using FactoryCommitFunc = std::function<bool(IGraphicsDataFactory::Context& ctx)>;
@@ -367,6 +368,11 @@ public:
                                     size_t stride, size_t count)
     {
         return m_factory->newPoolBuffer(m_pool, use, stride, count);
+    }
+
+    void deletePoolBuffer(IGraphicsBufferD* buf)
+    {
+        m_factory->deletePoolBuffer(m_pool, buf);
     }
 };
 

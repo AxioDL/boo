@@ -59,22 +59,37 @@ struct D3D11Data : IGraphicsData
     }
 };
 
+class D3D11GraphicsBufferD;
+
 struct D3D11Pool : IGraphicsBufferPool
 {
-    size_t m_deleteCountdown = 4;
-    std::vector<std::unique_ptr<class D3D11GraphicsBufferD>> m_DBufs;
-
-    bool decref()
+    struct Buffer
     {
-        if (!m_deleteCountdown)
-            Log.report(logvisor::Fatal, "Can't decrement 0-data");
-        --m_deleteCountdown;
-        if (!m_deleteCountdown)
+        size_t m_deleteCountdown = 4;
+        std::unique_ptr<D3D11GraphicsBufferD> m_buf;
+        Buffer(D3D11GraphicsBufferD* buf) : m_buf(buf) {}
+
+        bool decref()
         {
-            delete this;
-            return true;
+            if (!m_deleteCountdown)
+                Log.report(logvisor::Fatal, "Can't decrement 0-data");
+            --m_deleteCountdown;
+            if (!m_deleteCountdown)
+            {
+                delete this;
+                return true;
+            }
+            return false;
         }
-        return false;
+    };
+
+    std::unordered_map<D3D11GraphicsBufferD*, Buffer*> m_DBufs;
+
+    void destroyPool(std::unordered_set<D3D11Pool::Buffer*>& delsOut)
+    {
+        for (auto& b : m_DBufs)
+            delsOut.emplace(b.second);
+        m_DBufs.clear();
     }
 };
 
@@ -1060,9 +1075,11 @@ void D3D11GraphicsBufferD::update(ID3D11DeviceContext* ctx, int b)
     {
         ID3D11Buffer* res = m_bufs[b].Get();
         D3D11_MAPPED_SUBRESOURCE d;
-        ctx->Map(res, 0, D3D11_MAP_WRITE_DISCARD, 0, &d);
-        memcpy(d.pData, m_cpuBuf.get(), m_cpuSz);
-        ctx->Unmap(res, 0);
+        if (SUCCEEDED(ctx->Map(res, 0, D3D11_MAP_WRITE_DISCARD, 0, &d)))
+        {
+            memcpy(d.pData, m_cpuBuf.get(), m_cpuSz);
+            ctx->Unmap(res, 0);
+        }
         m_validSlots |= slot;
     }
 }
@@ -1129,7 +1146,7 @@ class D3D11DataFactory : public ID3DDataFactory
     std::unordered_set<D3D11Pool*> m_committedPools;
     std::mutex m_committedMutex;
     std::unordered_set<D3D11Data*> m_deletedData;
-    std::unordered_set<D3D11Pool*> m_deletedPools;
+    std::unordered_set<D3D11Pool::Buffer*> m_deletedPoolBufs;
     uint32_t m_sampleCount;
 
     void destroyData(IGraphicsData* d)
@@ -1146,7 +1163,7 @@ class D3D11DataFactory : public ID3DDataFactory
         for (IGraphicsData* data : m_committedData)
             m_deletedData.insert(static_cast<D3D11Data*>(data));
         for (IGraphicsBufferPool* pool : m_committedPools)
-            m_deletedPools.insert(static_cast<D3D11Pool*>(pool));
+            static_cast<D3D11Pool*>(pool)->destroyPool(m_deletedPoolBufs);
         m_committedData.clear();
         m_committedPools.clear();
     }
@@ -1156,7 +1173,7 @@ class D3D11DataFactory : public ID3DDataFactory
         std::unique_lock<std::mutex> lk(m_committedMutex);
         D3D11Pool* pool = static_cast<D3D11Pool*>(p);
         m_committedPools.erase(pool);
-        m_deletedPools.insert(pool);
+        pool->destroyPool(m_deletedPoolBufs);
     }
 
     void procDeletes()
@@ -1171,12 +1188,12 @@ class D3D11DataFactory : public ID3DDataFactory
             }
             ++it;
         }
-        for (auto it = m_deletedPools.begin(); it != m_deletedPools.end();)
+        for (auto it = m_deletedPoolBufs.begin(); it != m_deletedPoolBufs.end();)
         {
-            D3D11Pool* cpool = static_cast<D3D11Pool*>(*it);
+            D3D11Pool::Buffer* cpool = *it;
             if (cpool->decref())
             {
-                it = m_deletedPools.erase(it);
+                it = m_deletedPoolBufs.erase(it);
                 continue;
             }
             ++it;
@@ -1189,8 +1206,19 @@ class D3D11DataFactory : public ID3DDataFactory
         D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent->getCommandQueue());
         D3D11Pool* pool = static_cast<D3D11Pool*>(p);
         D3D11GraphicsBufferD* retval = new D3D11GraphicsBufferD(q, use, m_ctx, stride, count);
-        pool->m_DBufs.emplace_back(retval);
+        pool->m_DBufs.emplace(std::make_pair(retval, new D3D11Pool::Buffer(retval)));
         return retval;
+    }
+
+    void deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf)
+    {
+        D3D11Pool* pool = static_cast<D3D11Pool*>(p);
+        auto search = pool->m_DBufs.find(static_cast<D3D11GraphicsBufferD*>(buf));
+        if (search != pool->m_DBufs.end())
+        {
+            m_deletedPoolBufs.emplace(search->second);
+            pool->m_DBufs.erase(search);
+        }
     }
 
 public:
@@ -1404,8 +1432,8 @@ void D3D11CommandQueue::ProcessDynamicLoads(ID3D11DeviceContext* ctx)
     }
     for (D3D11Pool* p : gfxF->m_committedPools)
     {
-        for (std::unique_ptr<D3D11GraphicsBufferD>& b : p->m_DBufs)
-            b->update(ctx, m_drawBuf);
+        for (auto& b : p->m_DBufs)
+            b.second->m_buf->update(ctx, m_drawBuf);
     }
 }
 

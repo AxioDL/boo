@@ -64,7 +64,7 @@ struct D3D12Pool : IGraphicsBufferPool
         Buffer(ComPtr<ID3D12Heap>&& heap, class D3D12GraphicsBufferD* buf)
         : m_bufHeap(std::move(heap)), m_buf(buf) {}
     };
-    std::vector<Buffer> m_DBufs;
+    std::unordered_map<class D3D12GraphicsBufferD*, Buffer> m_DBufs;
 };
 
 static const D3D12_RESOURCE_STATES USE_TABLE[] =
@@ -1586,8 +1586,14 @@ class D3D12DataFactory : public ID3DDataFactory
         /* Place resources */
         PlaceBufferForGPU(retval, m_ctx, bufHeap.Get(), 0);
 
-        pool->m_DBufs.emplace_back(std::move(bufHeap), retval);
+        pool->m_DBufs.emplace(std::make_pair(retval, D3D12Pool::Buffer{std::move(bufHeap), retval}));
         return retval;
+    }
+
+    void deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf)
+    {
+        D3D12Pool* pool = static_cast<D3D12Pool*>(p);
+        pool->m_DBufs.erase(static_cast<D3D12GraphicsBufferD*>(buf));
     }
 
 public:
@@ -1893,8 +1899,8 @@ void D3D12CommandQueue::execute()
     }
     for (D3D12Pool* p : gfxF->m_committedPools)
     {
-        for (D3D12Pool::Buffer& b : p->m_DBufs)
-            b.m_buf->update(m_fillBuf);
+        for (auto& b : p->m_DBufs)
+            b.second.m_buf->update(m_fillBuf);
     }
     datalk.unlock();
 

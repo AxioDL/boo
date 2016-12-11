@@ -6,6 +6,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <array>
+#include <unordered_map>
 
 #include "logvisor/logvisor.hpp"
 
@@ -32,7 +33,7 @@ struct GLData : IGraphicsData
 
 struct GLPool : IGraphicsBufferPool
 {
-    std::vector<std::unique_ptr<class GLGraphicsBufferD>> m_DBufs;
+    std::unordered_map<class GLGraphicsBufferD*, std::unique_ptr<class GLGraphicsBufferD>> m_DBufs;
 };
 
 static const GLenum USE_TABLE[] =
@@ -738,8 +739,14 @@ IGraphicsBufferD* GLDataFactory::newPoolBuffer(IGraphicsBufferPool* p, BufferUse
 {
     GLPool* pool = static_cast<GLPool*>(p);
     GLGraphicsBufferD* retval = new GLGraphicsBufferD(use, stride * count);
-    pool->m_DBufs.emplace_back(retval);
+    pool->m_DBufs.emplace(std::make_pair(retval, retval));
     return retval;
+}
+
+void GLDataFactory::deletePoolBuffer(IGraphicsBufferPool *p, IGraphicsBufferD *buf)
+{
+    GLPool* pool = static_cast<GLPool*>(p);
+    pool->m_DBufs.erase(static_cast<GLGraphicsBufferD*>(buf));
 }
 
 static const GLint SEMANTIC_COUNT_TABLE[] =
@@ -1297,8 +1304,8 @@ struct GLCommandQueue : IGraphicsCommandQueue
         }
         for (GLPool* p : gfxF->m_committedPools)
         {
-            for (std::unique_ptr<GLGraphicsBufferD>& b : p->m_DBufs)
-                b->update(m_completeBuf);
+            for (auto& b : p->m_DBufs)
+                b.second->update(m_completeBuf);
         }
         datalk.unlock();
         glFlush();

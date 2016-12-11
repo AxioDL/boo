@@ -142,7 +142,7 @@ public:
 #if _WIN32_WINNT_WIN10
         HMODULE d3d12lib = LoadLibraryW(L"D3D12.dll");
         if (!no12 && !noD3d && d3d12lib)
-        {
+        {   
 #if _DEBUG
             {
                 PFN_D3D12_GET_DEBUG_INTERFACE MyD3D12GetDebugInterface =
@@ -165,15 +165,32 @@ public:
             if (!MyD3D12CreateDevice)
                 Log.report(logvisor::Fatal, "unable to find D3D12CreateDevice in D3D12.dll");
 
+            /* Obtain DXGI Factory */
+            HRESULT hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory2), &m_3dCtx.m_ctx12.m_dxFactory);
+            if (FAILED(hr))
+                Log.report(logvisor::Fatal, "unable to create DXGI factory");
+
+            /* Adapter */
+            ComPtr<IDXGIAdapter1> ppAdapter;
+            for (UINT adapterIndex = 0; ; ++adapterIndex)
+            {
+                ComPtr<IDXGIAdapter1> pAdapter;
+                if (DXGI_ERROR_NOT_FOUND == m_3dCtx.m_ctx12.m_dxFactory->EnumAdapters1(adapterIndex, &pAdapter))
+                    break;
+
+                // Check to see if the adapter supports Direct3D 12, but don't create the
+                // actual device yet.
+                if (SUCCEEDED(MyD3D12CreateDevice(pAdapter.Get(), D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device), nullptr)))
+                {
+                    ppAdapter = std::move(pAdapter);
+                    break;
+                }
+            }
+
             /* Create device */
-            HRESULT hr = MyD3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), &m_3dCtx.m_ctx12.m_dev);
+            hr = ppAdapter ? MyD3D12CreateDevice(ppAdapter.Get(), D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), &m_3dCtx.m_ctx12.m_dev) : E_FAIL;
             if (!FAILED(hr))
             {
-                /* Obtain DXGI Factory */
-                hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory2), &m_3dCtx.m_ctx12.m_dxFactory);
-                if (FAILED(hr))
-                    Log.report(logvisor::Fatal, "unable to create DXGI factory");
-
                 /* Establish loader objects */
                 if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
                     __uuidof(ID3D12CommandAllocator), &m_3dCtx.m_ctx12.m_loadqalloc)))
@@ -204,6 +221,7 @@ public:
             {
                 /* Some Win10 client HW doesn't support D3D12 (despite being supposedly HW-agnostic) */
                 m_3dCtx.m_ctx12.m_dev.Reset();
+                m_3dCtx.m_ctx12.m_dxFactory.Reset();
             }
         }
 #endif

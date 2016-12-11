@@ -26,6 +26,7 @@ class GLDataFactory : public IGraphicsDataFactory
     void destroyPool(IGraphicsBufferPool*);
     IGraphicsBufferD* newPoolBuffer(IGraphicsBufferPool* pool, BufferUse use,
                                     size_t stride, size_t count);
+    void deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf);
 public:
     GLDataFactory(IGraphicsContext* parent, uint32_t drawSamples);
     ~GLDataFactory() {destroyAllData();}

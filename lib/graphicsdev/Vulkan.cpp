@@ -687,14 +687,14 @@ struct VulkanPool : IGraphicsBufferPool
         Buffer(VkDeviceMemory mem, class VulkanGraphicsBufferD* buf)
         : m_bufMem(mem), m_buffer(buf) {}
     };
-    std::vector<Buffer> m_DBufs;
+    std::unordered_map<class VulkanGraphicsBufferD*, Buffer> m_DBufs;
     bool m_dead = false;
     VulkanPool(VulkanContext* ctx) : m_ctx(ctx) {}
     ~VulkanPool()
     {
-        for (Buffer& buf : m_DBufs)
-            if (buf.m_bufMem)
-                vk::FreeMemory(m_ctx->m_dev, buf.m_bufMem, nullptr);
+        for (auto& buf : m_DBufs)
+            if (buf.second.m_bufMem)
+                vk::FreeMemory(m_ctx->m_dev, buf.second.m_bufMem, nullptr);
     }
 };
 
@@ -3221,8 +3221,14 @@ IGraphicsBufferD* VulkanDataFactory::newPoolBuffer(IGraphicsBufferPool* p, Buffe
         retval->placeForGPU(m_ctx, bufMem);
     }
 
-    pool->m_DBufs.emplace_back(bufMem, retval);
+    pool->m_DBufs.emplace(std::make_pair(retval, VulkanPool::Buffer{bufMem, retval}));
     return retval;
+}
+
+void VulkanDataFactory::deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf)
+{
+    VulkanPool* pool = static_cast<VulkanPool*>(p);
+    pool->m_DBufs.erase(static_cast<VulkanGraphicsBufferD*>(buf));
 }
 
 GraphicsBufferPoolToken VulkanDataFactory::newBufferPool()
@@ -3252,8 +3258,8 @@ void VulkanCommandQueue::execute()
     }
     for (VulkanPool* p : gfxF->m_committedPools)
     {
-        for (VulkanPool::Buffer& b : p->m_DBufs)
-            b.m_buffer->update(m_fillBuf);
+        for (auto& b : p->m_DBufs)
+            b.second.m_buffer->update(m_fillBuf);
     }
     datalk.unlock();
 

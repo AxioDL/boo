@@ -97,6 +97,7 @@ class VulkanDataFactory : public IGraphicsDataFactory
     void destroyAllData();
     IGraphicsBufferD* newPoolBuffer(IGraphicsBufferPool *pool, BufferUse use,
                                     size_t stride, size_t count);
+    void deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf);
 public:
     VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx, uint32_t drawSamples);
     ~VulkanDataFactory() {destroyAllData();}
