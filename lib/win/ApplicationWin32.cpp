@@ -5,6 +5,10 @@
 #include <winver.h>
 #include <Dbt.h>
 
+#if _WIN32_WINNT_WINBLUE
+PFN_GetScaleFactorForMonitor MyGetScaleFactorForMonitor = nullptr;
+#endif
+
 #if _DEBUG
 #define D3D11_CREATE_DEVICE_FLAGS D3D11_CREATE_DEVICE_DEBUG
 #else
@@ -452,6 +456,21 @@ int ApplicationRun(IApplication::EPlatformType platform,
     if (platform != IApplication::EPlatformType::Win32 &&
         platform != IApplication::EPlatformType::Auto)
         return 1;
+
+#if _WIN32_WINNT_WINBLUE
+    /* HI-DPI support */
+    HMODULE shcoreLib = LoadLibraryW(L"Shcore.dll");
+    if (shcoreLib)
+    {
+        PFN_SetProcessDpiAwareness MySetProcessDpiAwareness =
+            (PFN_SetProcessDpiAwareness)GetProcAddress(shcoreLib, "SetProcessDpiAwareness");
+        if (MySetProcessDpiAwareness)
+            MySetProcessDpiAwareness(PROCESS_SYSTEM_DPI_AWARE);
+
+        MyGetScaleFactorForMonitor =
+            (PFN_GetScaleFactorForMonitor)GetProcAddress(shcoreLib, "GetScaleFactorForMonitor");
+    }
+#endif
 
     WIN32_CURSORS.m_arrow = LoadCursor(nullptr, IDC_ARROW);
     WIN32_CURSORS.m_hResize = LoadCursor(nullptr, IDC_SIZEWE);

@@ -1092,7 +1092,18 @@ public:
 
     float getVirtualPixelFactor() const
     {
-        return 1.0;
+#if _WIN32_WINNT_WINBLUE
+        if (MyGetScaleFactorForMonitor)
+        {
+            DEVICE_SCALE_FACTOR Factor;
+            HMONITOR mon = MonitorFromWindow(m_hwnd, MONITOR_DEFAULTTOPRIMARY);
+            MyGetScaleFactorForMonitor(mon, &Factor);
+            if (Factor == DEVICE_SCALE_FACTOR_INVALID)
+                return 1.f;
+            return Factor / 100.f;
+        }
+#endif
+        return 1.f;
     }
 
     bool isFullscreen() const

@@ -55,6 +55,18 @@ struct D3D12Data : IGraphicsData
     ComPtr<ID3D12Heap> m_texHeap;
 };
 
+struct D3D12Pool : IGraphicsBufferPool
+{
+    struct Buffer
+    {
+        ComPtr<ID3D12Heap> m_bufHeap;
+        std::unique_ptr<class D3D12GraphicsBufferD> m_buf;
+        Buffer(ComPtr<ID3D12Heap>&& heap, class D3D12GraphicsBufferD* buf)
+        : m_bufHeap(std::move(heap)), m_buf(buf) {}
+    };
+    std::vector<Buffer> m_DBufs;
+};
+
 static const D3D12_RESOURCE_STATES USE_TABLE[] =
 {
     D3D12_RESOURCE_STATE_COMMON,
@@ -569,13 +581,14 @@ struct D3D12VertexFormat : IVertexFormat
 {
     size_t m_elementCount;
     std::unique_ptr<D3D12_INPUT_ELEMENT_DESC[]> m_elements;
+    size_t m_stride = 0;
+    size_t m_instStride = 0;
+
     D3D12VertexFormat(size_t elementCount, const VertexElementDescriptor* elements)
     : m_elementCount(elementCount),
       m_elements(new D3D12_INPUT_ELEMENT_DESC[elementCount])
     {
         memset(m_elements.get(), 0, elementCount * sizeof(D3D12_INPUT_ELEMENT_DESC));
-        size_t offset = 0;
-        size_t instOffset = 0;
         for (size_t i=0 ; i<elementCount ; ++i)
         {
             const VertexElementDescriptor* elemin = &elements[i];
@@ -589,14 +602,14 @@ struct D3D12VertexFormat : IVertexFormat
                 elem.InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA;
                 elem.InstanceDataStepRate = 1;
                 elem.InputSlot = 1;
-                elem.AlignedByteOffset = instOffset;
-                instOffset += SEMANTIC_SIZE_TABLE[semantic];
+                elem.AlignedByteOffset = m_instStride;
+                m_instStride += SEMANTIC_SIZE_TABLE[semantic];
             }
             else
             {
                 elem.InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-                elem.AlignedByteOffset = offset;
-                offset += SEMANTIC_SIZE_TABLE[semantic];
+                elem.AlignedByteOffset = m_stride;
+                m_stride += SEMANTIC_SIZE_TABLE[semantic];
             }
         }
     }
@@ -627,11 +640,14 @@ static const D3D12_BLEND BLEND_FACTOR_TABLE[] =
 class D3D12ShaderPipeline : public IShaderPipeline
 {
     friend class D3D12DataFactory;
+    friend struct D3D12ShaderDataBinding;
+    const D3D12VertexFormat* m_vtxFmt;
+
     D3D12ShaderPipeline(D3D12Context* ctx, ID3DBlob* vert, ID3DBlob* pixel, ID3DBlob* pipeline,
                         const D3D12VertexFormat* vtxFmt,
                         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                         bool depthTest, bool depthWrite, bool backfaceCulling)
-    : m_topology(PRIMITIVE_TABLE[int(prim)])
+    : m_vtxFmt(vtxFmt), m_topology(PRIMITIVE_TABLE[int(prim)])
     {
         D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
         desc.pRootSignature = ctx->m_rs.Get();
@@ -700,22 +716,22 @@ static UINT64 PlaceTextureForGPU(ITexture* tex, D3D12Context* ctx, ID3D12Heap* g
 }
 
 static ID3D12Resource* GetBufferGPUResource(const IGraphicsBuffer* buf, int idx,
-                                            D3D12_VERTEX_BUFFER_VIEW& descOut)
+                                            D3D12_VERTEX_BUFFER_VIEW& descOut, size_t offset)
 {
     if (buf->dynamic())
     {
         const D3D12GraphicsBufferD* cbuf = static_cast<const D3D12GraphicsBufferD*>(buf);
-        descOut.SizeInBytes = cbuf->m_count * cbuf->m_stride;
+        descOut.SizeInBytes = cbuf->m_count * cbuf->m_stride - offset;
         descOut.StrideInBytes = cbuf->m_stride;
-        descOut.BufferLocation = cbuf->m_gpuBufs[idx]->GetGPUVirtualAddress();
+        descOut.BufferLocation = cbuf->m_gpuBufs[idx]->GetGPUVirtualAddress() + offset;
         return cbuf->m_gpuBufs[idx].Get();
     }
     else
     {
         const D3D12GraphicsBufferS* cbuf = static_cast<const D3D12GraphicsBufferS*>(buf);
-        descOut.SizeInBytes = cbuf->m_count * cbuf->m_stride;
+        descOut.SizeInBytes = cbuf->m_count * cbuf->m_stride - offset;
         descOut.StrideInBytes = cbuf->m_stride;
-        descOut.BufferLocation = cbuf->m_gpuBuf->GetGPUVirtualAddress();
+        descOut.BufferLocation = cbuf->m_gpuBuf->GetGPUVirtualAddress() + offset;
         return cbuf->m_gpuBuf.Get();
     }
 }
@@ -909,13 +925,15 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
     std::unique_ptr<ITexture*[]> m_texs;
     D3D12_VERTEX_BUFFER_VIEW m_vboView[2][2] = {{},{}};
     D3D12_INDEX_BUFFER_VIEW m_iboView[2];
+    size_t m_vertOffset, m_instOffset;
 
     D3D12ShaderDataBinding(D3D12Context* ctx,
                            IShaderPipeline* pipeline,
                            IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbuf, IGraphicsBuffer* ibuf,
                            size_t ubufCount, IGraphicsBuffer** ubufs,
                            const size_t* ubufOffs, const size_t* ubufSizes,
-                           size_t texCount, ITexture** texs)
+                           size_t texCount, ITexture** texs,
+                           size_t baseVert, size_t baseInst)
     : m_pipeline(static_cast<D3D12ShaderPipeline*>(pipeline)),
       m_vbuf(vbuf),
       m_instVbuf(instVbuf),
@@ -925,6 +943,9 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
       m_texCount(texCount),
       m_texs(new ITexture*[texCount])
     {
+        m_vertOffset = baseVert * m_pipeline->m_vtxFmt->m_stride;
+        m_instOffset = baseInst * m_pipeline->m_vtxFmt->m_instStride;
+
         if (ubufOffs && ubufSizes)
         {
             m_ubufOffs.reserve(ubufCount);
@@ -967,9 +988,9 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
             CD3DX12_CPU_DESCRIPTOR_HANDLE handle(m_descHeap[b]->GetCPUDescriptorHandleForHeapStart());
 
             if (m_vbuf)
-                GetBufferGPUResource(m_vbuf, b, m_vboView[b][0]);
+                GetBufferGPUResource(m_vbuf, b, m_vboView[b][0], m_vertOffset);
             if (m_instVbuf)
-                GetBufferGPUResource(m_instVbuf, b, m_vboView[b][1]);
+                GetBufferGPUResource(m_instVbuf, b, m_vboView[b][1], m_instOffset);
             if (m_ibuf)
                 GetBufferGPUResource(m_ibuf, b, m_iboView[b]);
             if (m_ubufOffs.size())
@@ -1511,6 +1532,7 @@ class D3D12DataFactory : public ID3DDataFactory
     static thread_local D3D12Data* m_deferredData;
     struct D3D12Context* m_ctx;
     std::unordered_set<D3D12Data*> m_committedData;
+    std::unordered_set<D3D12Pool*> m_committedPools;
     std::mutex m_committedMutex;
     uint32_t m_sampleCount;
 
@@ -1527,8 +1549,47 @@ class D3D12DataFactory : public ID3DDataFactory
         std::unique_lock<std::mutex> lk(m_committedMutex);
         for (IGraphicsData* data : m_committedData)
             delete static_cast<D3D12Data*>(data);
+        for (IGraphicsBufferPool* pool : m_committedPools)
+            delete static_cast<D3D12Pool*>(pool);
         m_committedData.clear();
+        m_committedPools.clear();
     }
+
+    void destroyPool(IGraphicsBufferPool* p)
+    {
+        std::unique_lock<std::mutex> lk(m_committedMutex);
+        D3D12Pool* pool = static_cast<D3D12Pool*>(p);
+        m_committedPools.erase(pool);
+        delete pool;
+    }
+
+    IGraphicsBufferD* newPoolBuffer(IGraphicsBufferPool* p, BufferUse use,
+                                    size_t stride, size_t count)
+    {
+        D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent->getCommandQueue());
+        D3D12Pool* pool = static_cast<D3D12Pool*>(p);
+        D3D12GraphicsBufferD* retval = new D3D12GraphicsBufferD(q, use, m_ctx, stride, count);
+
+        /* Gather resource descriptions */
+        D3D12_RESOURCE_DESC bufDescs[2];
+        bufDescs[0] = retval->m_bufs[0]->GetDesc();
+        bufDescs[1] = retval->m_bufs[1]->GetDesc();
+
+        /* Create heap */
+        ComPtr<ID3D12Heap> bufHeap;
+        D3D12_RESOURCE_ALLOCATION_INFO bufAllocInfo =
+            m_ctx->m_dev->GetResourceAllocationInfo(0, 2, bufDescs);
+        ThrowIfFailed(m_ctx->m_dev->CreateHeap(&CD3DX12_HEAP_DESC(bufAllocInfo,
+            D3D12_HEAP_TYPE_DEFAULT, D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS),
+            __uuidof(ID3D12Heap), &bufHeap));
+
+        /* Place resources */
+        PlaceBufferForGPU(retval, m_ctx, bufHeap.Get(), 0);
+
+        pool->m_DBufs.emplace_back(std::move(bufHeap), retval);
+        return retval;
+    }
+
 public:
     D3D12DataFactory(IGraphicsContext* parent, D3D12Context* ctx, uint32_t sampleCount)
     : m_parent(parent), m_ctx(ctx), m_sampleCount(sampleCount)
@@ -1614,7 +1675,8 @@ public:
             return retval;
         }
 
-        IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)
+        IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
+                                       size_t baseVert, size_t baseInst)
         {
             D3D12VertexFormat* retval = new struct D3D12VertexFormat(elementCount, elements);
             static_cast<D3D12Data*>(m_deferredData)->m_VFmts.emplace_back(retval);
@@ -1673,11 +1735,13 @@ public:
                 IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbuf, IGraphicsBuffer* ibuf,
                 size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                 const size_t* ubufOffs, const size_t* ubufSizes,
-                size_t texCount, ITexture** texs)
+                size_t texCount, ITexture** texs,
+                size_t baseVert, size_t baseInst)
         {
             D3D12ShaderDataBinding* retval =
                 new D3D12ShaderDataBinding(m_parent.m_ctx, pipeline, vbuf, instVbuf, ibuf,
-                                           ubufCount, ubufs, ubufOffs, ubufSizes, texCount, texs);
+                                           ubufCount, ubufs, ubufOffs, ubufSizes, texCount, texs,
+                                           baseVert, baseInst);
             static_cast<D3D12Data*>(m_deferredData)->m_SBinds.emplace_back(retval);
             return retval;
         }
@@ -1800,6 +1864,14 @@ public:
         lk.unlock();
         return GraphicsDataToken(this, retval);
     }
+
+    GraphicsBufferPoolToken newBufferPool()
+    {
+        std::unique_lock<std::mutex> lk(m_committedMutex);
+        D3D12Pool* retval = new D3D12Pool;
+        m_committedPools.insert(retval);
+        return GraphicsBufferPoolToken(this, retval);
+    }
 };
 
 thread_local D3D12Data* D3D12DataFactory::m_deferredData;
@@ -1818,6 +1890,11 @@ void D3D12CommandQueue::execute()
             b->update(m_fillBuf);
         for (std::unique_ptr<D3D12TextureD>& t : d->m_DTexs)
             t->update(m_fillBuf);
+    }
+    for (D3D12Pool* p : gfxF->m_committedPools)
+    {
+        for (D3D12Pool::Buffer& b : p->m_DBufs)
+            b.m_buf->update(m_fillBuf);
     }
     datalk.unlock();
 

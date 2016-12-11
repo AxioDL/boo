@@ -16,6 +16,13 @@ extern DWORD g_mainThreadId;
 
 namespace boo {class IWindow;}
 
+#if _WIN32_WINNT_WINBLUE
+#include <ShellScalingApi.h>
+typedef HRESULT (WINAPI* PFN_SetProcessDpiAwareness)( _In_ PROCESS_DPI_AWARENESS );
+typedef HRESULT (WINAPI* PFN_GetScaleFactorForMonitor)( _In_ HMONITOR, _Out_ DEVICE_SCALE_FACTOR *);
+extern PFN_GetScaleFactorForMonitor MyGetScaleFactorForMonitor;
+#endif
+
 #if _WIN32_WINNT_WIN10
 #include <dxgi1_4.h>
 #include <d3d12.h>

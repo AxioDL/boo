@@ -677,6 +677,27 @@ struct VulkanData : IGraphicsData
     }
 };
 
+struct VulkanPool : IGraphicsBufferPool
+{
+    VulkanContext* m_ctx;
+    struct Buffer
+    {
+        VkDeviceMemory m_bufMem = VK_NULL_HANDLE;
+        std::unique_ptr<class VulkanGraphicsBufferD> m_buffer;
+        Buffer(VkDeviceMemory mem, class VulkanGraphicsBufferD* buf)
+        : m_bufMem(mem), m_buffer(buf) {}
+    };
+    std::vector<Buffer> m_DBufs;
+    bool m_dead = false;
+    VulkanPool(VulkanContext* ctx) : m_ctx(ctx) {}
+    ~VulkanPool()
+    {
+        for (Buffer& buf : m_DBufs)
+            if (buf.m_bufMem)
+                vk::FreeMemory(m_ctx->m_dev, buf.m_bufMem, nullptr);
+    }
+};
+
 static const VkBufferUsageFlagBits USE_TABLE[] =
 {
     VkBufferUsageFlagBits(0),
@@ -1631,6 +1652,9 @@ struct VulkanVertexFormat : IVertexFormat
     VkVertexInputBindingDescription m_bindings[2];
     std::unique_ptr<VkVertexInputAttributeDescription[]> m_attributes;
     VkPipelineVertexInputStateCreateInfo m_info;
+    size_t m_stride = 0;
+    size_t m_instStride = 0;
+
     VulkanVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)
     : m_attributes(new VkVertexInputAttributeDescription[elementCount])
     {
@@ -1642,8 +1666,6 @@ struct VulkanVertexFormat : IVertexFormat
         m_info.vertexAttributeDescriptionCount = elementCount;
         m_info.pVertexAttributeDescriptions = m_attributes.get();
 
-        size_t offset = 0;
-        size_t instOffset = 0;
         for (size_t i=0 ; i<elementCount ; ++i)
         {
             const VertexElementDescriptor* elemin = &elements[i];
@@ -1654,28 +1676,28 @@ struct VulkanVertexFormat : IVertexFormat
             if ((elemin->semantic & boo::VertexSemantic::Instanced) != boo::VertexSemantic::None)
             {
                 attribute.binding = 1;
-                attribute.offset = instOffset;
-                instOffset += SEMANTIC_SIZE_TABLE[semantic];
+                attribute.offset = m_instStride;
+                m_instStride += SEMANTIC_SIZE_TABLE[semantic];
             }
             else
             {
                 attribute.binding = 0;
-                attribute.offset = offset;
-                offset += SEMANTIC_SIZE_TABLE[semantic];
+                attribute.offset = m_stride;
+                m_stride += SEMANTIC_SIZE_TABLE[semantic];
             }
         }
 
-        if (offset)
+        if (m_stride)
         {
             m_bindings[0].binding = 0;
-            m_bindings[0].stride = offset;
+            m_bindings[0].stride = m_stride;
             m_bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
             ++m_info.vertexBindingDescriptionCount;
         }
-        if (instOffset)
+        if (m_instStride)
         {
             m_bindings[m_info.vertexBindingDescriptionCount].binding = 1;
-            m_bindings[m_info.vertexBindingDescriptionCount].stride = instOffset;
+            m_bindings[m_info.vertexBindingDescriptionCount].stride = m_instStride;
             m_bindings[m_info.vertexBindingDescriptionCount].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
             ++m_info.vertexBindingDescriptionCount;
         }
@@ -1707,8 +1729,10 @@ static const VkBlendFactor BLEND_FACTOR_TABLE[] =
 class VulkanShaderPipeline : public IShaderPipeline
 {
     friend class VulkanDataFactory;
+    friend struct VulkanShaderDataBinding;
     VulkanContext* m_ctx;
     VkPipelineCache m_pipelineCache;
+    const VulkanVertexFormat* m_vtxFmt;
     VulkanShaderPipeline(VulkanContext* ctx,
                          VkShaderModule vert,
                          VkShaderModule frag,
@@ -1716,7 +1740,7 @@ class VulkanShaderPipeline : public IShaderPipeline
                          const VulkanVertexFormat* vtxFmt,
                          BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                          bool depthTest, bool depthWrite, bool backfaceCulling)
-    : m_ctx(ctx), m_pipelineCache(pipelineCache)
+    : m_ctx(ctx), m_pipelineCache(pipelineCache), m_vtxFmt(vtxFmt)
     {
         VkDynamicState dynamicStateEnables[VK_DYNAMIC_STATE_RANGE_SIZE] = {};
         VkPipelineDynamicStateCreateInfo dynamicState = {};
@@ -1945,6 +1969,9 @@ struct VulkanShaderDataBinding : IShaderDataBinding
     VkDescriptorPool m_descPool = VK_NULL_HANDLE;
     VkDescriptorSet m_descSets[2];
 
+    size_t m_vertOffset;
+    size_t m_instOffset;
+
 #ifndef NDEBUG
     /* Debugging aids */
     bool m_committed = false;
@@ -1955,7 +1982,8 @@ struct VulkanShaderDataBinding : IShaderDataBinding
                             IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbuf, IGraphicsBuffer* ibuf,
                             size_t ubufCount, IGraphicsBuffer** ubufs,
                             const size_t* ubufOffs, const size_t* ubufSizes,
-                            size_t texCount, ITexture** texs)
+                            size_t texCount, ITexture** texs,
+                            size_t baseVert, size_t baseInst)
     : m_ctx(ctx),
       m_pipeline(static_cast<VulkanShaderPipeline*>(pipeline)),
       m_vbuf(vbuf),
@@ -1966,6 +1994,9 @@ struct VulkanShaderDataBinding : IShaderDataBinding
       m_texCount(texCount),
       m_texs(new ITexture*[texCount])
     {
+        m_vertOffset = baseVert * m_pipeline->m_vtxFmt->m_stride;
+        m_instOffset = baseInst * m_pipeline->m_vtxFmt->m_instStride;
+
         if (ubufOffs && ubufSizes)
         {
             m_ubufOffs.reserve(ubufCount);
@@ -2027,7 +2058,7 @@ struct VulkanShaderDataBinding : IShaderDataBinding
     }
 
     void commit(VulkanContext* ctx)
-    {
+    {        
         VkWriteDescriptorSet writes[(BOO_GLSL_MAX_UNIFORM_COUNT + BOO_GLSL_MAX_TEXTURE_COUNT) * 2] = {};
         size_t totalWrites = 0;
         for (int b=0 ; b<2 ; ++b)
@@ -2036,13 +2067,13 @@ struct VulkanShaderDataBinding : IShaderDataBinding
             {
                 const VkDescriptorBufferInfo* vbufInfo = GetBufferGPUResource(m_vbuf, b);
                 m_vboBufs[b][0] = vbufInfo->buffer;
-                m_vboOffs[b][0] = vbufInfo->offset;
+                m_vboOffs[b][0] = vbufInfo->offset + m_vertOffset;
             }
             if (m_instVbuf)
             {
                 const VkDescriptorBufferInfo* vbufInfo = GetBufferGPUResource(m_instVbuf, b);
                 m_vboBufs[b][1] = vbufInfo->buffer;
-                m_vboOffs[b][1] = vbufInfo->offset;
+                m_vboOffs[b][1] = vbufInfo->offset + m_instOffset;
             }
             if (m_ibuf)
             {
@@ -2769,12 +2800,23 @@ void VulkanDataFactory::destroyData(IGraphicsData* d)
     data->m_dead = true;
 }
 
+void VulkanDataFactory::destroyPool(IGraphicsBufferPool* p)
+{
+    std::unique_lock<std::mutex> lk(m_committedMutex);
+    VulkanPool* pool = static_cast<VulkanPool*>(p);
+    m_committedPools.erase(pool);
+    delete pool;
+}
+
 void VulkanDataFactory::destroyAllData()
 {
     std::unique_lock<std::mutex> lk(m_committedMutex);
     for (IGraphicsData* data : m_committedData)
         delete static_cast<VulkanData*>(data);
+    for (IGraphicsBufferPool* pool : m_committedPools)
+        delete static_cast<VulkanPool*>(pool);
     m_committedData.clear();
+    m_committedPools.clear();
 }
 
 VulkanDataFactory::VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx, uint32_t drawSamples)
@@ -3003,7 +3045,9 @@ ITextureR* VulkanDataFactory::Context::newRenderTexture(size_t width, size_t hei
     return retval;
 }
 
-IVertexFormat* VulkanDataFactory::Context::newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)
+IVertexFormat* VulkanDataFactory::Context::newVertexFormat(size_t elementCount,
+                                                           const VertexElementDescriptor* elements,
+                                                           size_t baseVert, size_t baseInst)
 {
     VulkanVertexFormat* retval = new struct VulkanVertexFormat(elementCount, elements);
     static_cast<VulkanData*>(m_deferredData.get())->m_VFmts.emplace_back(retval);
@@ -3015,11 +3059,13 @@ IShaderDataBinding* VulkanDataFactory::Context::newShaderDataBinding(IShaderPipe
         IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbuf, IGraphicsBuffer* ibuf,
         size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* /*ubufStages*/,
         const size_t* ubufOffs, const size_t* ubufSizes,
-        size_t texCount, ITexture** texs)
+        size_t texCount, ITexture** texs,
+        size_t baseVert, size_t baseInst)
 {
     VulkanShaderDataBinding* retval =
         new VulkanShaderDataBinding(m_parent.m_ctx, pipeline, vbuf, instVbuf, ibuf,
-                                    ubufCount, ubufs, ubufOffs, ubufSizes, texCount, texs);
+                                    ubufCount, ubufs, ubufOffs, ubufSizes, texCount, texs,
+                                    baseVert, baseInst);
     static_cast<VulkanData*>(m_deferredData.get())->m_SBinds.emplace_back(retval);
     return retval;
 }
@@ -3147,6 +3193,46 @@ GraphicsDataToken VulkanDataFactory::commitTransaction
     return GraphicsDataToken(this, retval);
 }
 
+IGraphicsBufferD* VulkanDataFactory::newPoolBuffer(IGraphicsBufferPool* p, BufferUse use,
+                                                   size_t stride, size_t count)
+{
+    VulkanPool* pool = static_cast<VulkanPool*>(p);
+    VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(m_parent->getCommandQueue());
+    VulkanGraphicsBufferD* retval = new VulkanGraphicsBufferD(q, use, m_ctx, stride, count);
+
+    /* size up resources */
+    uint32_t bufMemTypeBits = ~0;
+    VkDeviceSize bufMemSize = retval->sizeForGPU(m_ctx, bufMemTypeBits, 0);
+
+    /* allocate memory */
+    VkDeviceMemory bufMem = VK_NULL_HANDLE;
+    if (bufMemSize)
+    {
+        VkMemoryAllocateInfo memAlloc = {};
+        memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        memAlloc.allocationSize = bufMemSize;
+        ThrowIfFalse(MemoryTypeFromProperties(m_ctx, bufMemTypeBits,
+                                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                              &memAlloc.memoryTypeIndex));
+        ThrowIfFailed(vk::AllocateMemory(m_ctx->m_dev, &memAlloc, nullptr, &bufMem));
+
+        /* place resources */
+        retval->placeForGPU(m_ctx, bufMem);
+    }
+
+    pool->m_DBufs.emplace_back(bufMem, retval);
+    return retval;
+}
+
+GraphicsBufferPoolToken VulkanDataFactory::newBufferPool()
+{
+    std::unique_lock<std::mutex> lk(m_committedMutex);
+    VulkanPool* retval = new VulkanPool(m_ctx);
+    m_committedPools.insert(retval);
+    return GraphicsBufferPoolToken(this, retval);
+}
+
 ThreadLocalPtr<struct VulkanData> VulkanDataFactory::m_deferredData;
 
 void VulkanCommandQueue::execute()
@@ -3163,6 +3249,11 @@ void VulkanCommandQueue::execute()
             b->update(m_fillBuf);
         for (std::unique_ptr<VulkanTextureD>& t : d->m_DTexs)
             t->update(m_fillBuf);
+    }
+    for (VulkanPool* p : gfxF->m_committedPools)
+    {
+        for (VulkanPool::Buffer& b : p->m_DBufs)
+            b.m_buffer->update(m_fillBuf);
     }
     datalk.unlock();
 

@@ -89,10 +89,14 @@ class VulkanDataFactory : public IGraphicsDataFactory
     uint32_t m_drawSamples;
     static ThreadLocalPtr<struct VulkanData> m_deferredData;
     std::unordered_set<struct VulkanData*> m_committedData;
+    std::unordered_set<struct VulkanPool*> m_committedPools;
     std::mutex m_committedMutex;
     std::vector<int> m_texUnis;
     void destroyData(IGraphicsData*);
+    void destroyPool(IGraphicsBufferPool*);
     void destroyAllData();
+    IGraphicsBufferD* newPoolBuffer(IGraphicsBufferPool *pool, BufferUse use,
+                                    size_t stride, size_t count);
 public:
     VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx, uint32_t drawSamples);
     ~VulkanDataFactory() {destroyAllData();}
@@ -121,7 +125,8 @@ public:
                                     bool enableShaderColorBinding, bool enableShaderDepthBinding);
 
         bool bindingNeedsVertexFormat() const {return false;}
-        IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements);
+        IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
+                                       size_t baseVert = 0, size_t baseInst = 0);
 
         IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
                                            std::vector<unsigned int>& vertBlobOut, std::vector<unsigned int>& fragBlobOut,
@@ -146,10 +151,12 @@ public:
                              IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
                              size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                              const size_t* ubufOffs, const size_t* ubufSizes,
-                             size_t texCount, ITexture** texs);
+                             size_t texCount, ITexture** texs,
+                             size_t baseVert = 0, size_t baseInst = 0);
     };
 
     GraphicsDataToken commitTransaction(const FactoryCommitFunc&);
+    GraphicsBufferPoolToken newBufferPool();
 };
 
 }
