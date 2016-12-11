@@ -34,63 +34,21 @@ static inline void ThrowIfFailed(HRESULT hr)
 
 struct D3D11Data : IGraphicsData
 {
-    size_t m_deleteCountdown = 4;
-    std::vector<std::unique_ptr<class D3D11ShaderPipeline>> m_SPs;
-    std::vector<std::unique_ptr<struct D3D11ShaderDataBinding>> m_SBinds;
-    std::vector<std::unique_ptr<class D3D11GraphicsBufferS>> m_SBufs;
-    std::vector<std::unique_ptr<class D3D11GraphicsBufferD>> m_DBufs;
-    std::vector<std::unique_ptr<class D3D11TextureS>> m_STexs;
-    std::vector<std::unique_ptr<class D3D11TextureSA>> m_SATexs;
-    std::vector<std::unique_ptr<class D3D11TextureD>> m_DTexs;
-    std::vector<std::unique_ptr<class D3D11TextureR>> m_RTexs;
-    std::vector<std::unique_ptr<struct D3D11VertexFormat>> m_VFmts;
-
-    bool decref()
-    {
-        if (!m_deleteCountdown)
-            Log.report(logvisor::Fatal, "Can't decrement 0-data");
-        --m_deleteCountdown;
-        if (!m_deleteCountdown)
-        {
-            delete this;
-            return true;
-        }
-        return false;
-    }
+    std::vector<std::shared_ptr<class D3D11ShaderPipeline>> m_SPs;
+    std::vector<std::shared_ptr<struct D3D11ShaderDataBinding>> m_SBinds;
+    std::vector<std::shared_ptr<class D3D11GraphicsBufferS>> m_SBufs;
+    std::vector<std::shared_ptr<class D3D11GraphicsBufferD>> m_DBufs;
+    std::vector<std::shared_ptr<class D3D11TextureS>> m_STexs;
+    std::vector<std::shared_ptr<class D3D11TextureSA>> m_SATexs;
+    std::vector<std::shared_ptr<class D3D11TextureD>> m_DTexs;
+    std::vector<std::shared_ptr<class D3D11TextureR>> m_RTexs;
+    std::vector<std::shared_ptr<struct D3D11VertexFormat>> m_VFmts;
 };
 
 class D3D11GraphicsBufferD;
-
 struct D3D11Pool : IGraphicsBufferPool
 {
-    struct Buffer
-    {
-        size_t m_deleteCountdown = 4;
-        std::unique_ptr<D3D11GraphicsBufferD> m_buf;
-        Buffer(D3D11GraphicsBufferD* buf) : m_buf(buf) {}
-
-        bool decref()
-        {
-            if (!m_deleteCountdown)
-                Log.report(logvisor::Fatal, "Can't decrement 0-data");
-            --m_deleteCountdown;
-            if (!m_deleteCountdown)
-            {
-                delete this;
-                return true;
-            }
-            return false;
-        }
-    };
-
-    std::unordered_map<D3D11GraphicsBufferD*, Buffer*> m_DBufs;
-
-    void destroyPool(std::unordered_set<D3D11Pool::Buffer*>& delsOut)
-    {
-        for (auto& b : m_DBufs)
-            delsOut.emplace(b.second);
-        m_DBufs.clear();
-    }
+    std::unordered_map<D3D11GraphicsBufferD*, std::shared_ptr<D3D11GraphicsBufferD>> m_DBufs;
 };
 
 static const D3D11_BIND_FLAG USE_TABLE[] =
@@ -101,10 +59,17 @@ static const D3D11_BIND_FLAG USE_TABLE[] =
     D3D11_BIND_CONSTANT_BUFFER
 };
 
-class D3D11GraphicsBufferS : public IGraphicsBufferS
+struct D3D11GraphicsBuffer
+{
+    std::weak_ptr<IGraphicsBuffer> m_selfPtr;
+    static std::shared_ptr<IGraphicsBuffer> getPtr(IGraphicsBuffer* buf);
+};
+
+class D3D11GraphicsBufferS : public IGraphicsBufferS, public D3D11GraphicsBuffer
 {
     friend class D3D11DataFactory;
     friend struct D3D11CommandQueue;
+
     size_t m_sz;
     D3D11GraphicsBufferS(BufferUse use, D3D11Context* ctx, const void* data, size_t stride, size_t count)
     : m_stride(stride), m_count(count), m_sz(stride * count)
@@ -119,10 +84,11 @@ public:
     ~D3D11GraphicsBufferS() = default;
 };
 
-class D3D11GraphicsBufferD : public IGraphicsBufferD
+class D3D11GraphicsBufferD : public IGraphicsBufferD, public D3D11GraphicsBuffer
 {
     friend class D3D11DataFactory;
     friend struct D3D11CommandQueue;
+
     D3D11CommandQueue* m_q;
     std::unique_ptr<uint8_t[]> m_cpuBuf;
     size_t m_cpuSz;
@@ -146,14 +112,28 @@ public:
     void load(const void* data, size_t sz);
     void* map(size_t sz);
     void unmap();
-
-
 };
 
-class D3D11TextureS : public ITextureS
+std::shared_ptr<IGraphicsBuffer> D3D11GraphicsBuffer::getPtr(IGraphicsBuffer* buf)
+{
+    if (!buf) return {};
+    if (buf->dynamic())
+        return static_cast<D3D11GraphicsBufferD*>(buf)->m_selfPtr.lock();
+    else
+        return static_cast<D3D11GraphicsBufferS*>(buf)->m_selfPtr.lock();
+}
+
+struct D3D11Texture
+{
+    std::weak_ptr<ITexture> m_selfPtr;
+    static std::shared_ptr<ITexture> getPtr(ITexture* tex);
+};
+
+class D3D11TextureS : public ITextureS, public D3D11Texture
 {
     friend class D3D11DataFactory;
     size_t m_sz;
+
     D3D11TextureS(D3D11Context* ctx, size_t width, size_t height, size_t mips,
                   TextureFormat fmt, const void* data, size_t sz)
     : m_sz(sz)
@@ -206,9 +186,10 @@ public:
     ~D3D11TextureS() = default;
 };
 
-class D3D11TextureSA : public ITextureSA
+class D3D11TextureSA : public ITextureSA, public D3D11Texture
 {
     friend class D3D11DataFactory;
+
     size_t m_sz;
     D3D11TextureSA(D3D11Context* ctx, size_t width, size_t height, size_t layers,
                   TextureFormat fmt, const void* data, size_t sz)
@@ -265,10 +246,11 @@ public:
     ~D3D11TextureSA() = default;
 };
 
-class D3D11TextureD : public ITextureD
+class D3D11TextureD : public ITextureD, public D3D11Texture
 {
     friend class D3D11DataFactory;
     friend struct D3D11CommandQueue;
+
     size_t m_width = 0;
     size_t m_height = 0;
     D3D11CommandQueue* m_q;
@@ -317,10 +299,11 @@ public:
     void unmap();
 };
 
-class D3D11TextureR : public ITextureR
+class D3D11TextureR : public ITextureR, public D3D11Texture
 {
     friend class D3D11DataFactory;
     friend struct D3D11CommandQueue;
+
     size_t m_width = 0;
     size_t m_height = 0;
     size_t m_samples = 0;
@@ -410,6 +393,23 @@ public:
     }
 };
 
+std::shared_ptr<ITexture> D3D11Texture::getPtr(ITexture* tex)
+{
+    if (!tex) return {};
+    switch (tex->type())
+    {
+    case TextureType::Static:
+        return static_cast<D3D11TextureS*>(tex)->m_selfPtr.lock();
+    case TextureType::StaticArray:
+        return static_cast<D3D11TextureSA*>(tex)->m_selfPtr.lock();
+    case TextureType::Dynamic:
+        return static_cast<D3D11TextureD*>(tex)->m_selfPtr.lock();
+    case TextureType::Render:
+        return static_cast<D3D11TextureR*>(tex)->m_selfPtr.lock();
+    }
+    return {};
+}
+
 static const size_t SEMANTIC_SIZE_TABLE[] =
 {
     0,
@@ -457,6 +457,7 @@ static const DXGI_FORMAT SEMANTIC_TYPE_TABLE[] =
 
 struct D3D11VertexFormat : IVertexFormat
 {
+    std::weak_ptr<D3D11VertexFormat> m_selfPtr;
     size_t m_elementCount;
     std::unique_ptr<D3D11_INPUT_ELEMENT_DESC[]> m_elements;
     size_t m_stride = 0;
@@ -519,13 +520,14 @@ class D3D11ShaderPipeline : public IShaderPipeline
 {
     friend class D3D11DataFactory;
     friend struct D3D11ShaderDataBinding;
-    const D3D11VertexFormat* m_vtxFmt;
+    std::weak_ptr<D3D11ShaderPipeline> m_selfPtr;
+    std::shared_ptr<D3D11VertexFormat> m_vtxFmt;
 
     D3D11ShaderPipeline(D3D11Context* ctx, ID3DBlob* vert, ID3DBlob* pixel,
         const D3D11VertexFormat* vtxFmt,
         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
         bool depthTest, bool depthWrite, bool backfaceCulling)
-    : m_vtxFmt(vtxFmt), m_topology(PRIMITIVE_TABLE[int(prim)])
+    : m_vtxFmt(vtxFmt->m_selfPtr.lock()), m_topology(PRIMITIVE_TABLE[int(prim)])
     {
         ThrowIfFailed(ctx->m_dev->CreateVertexShader(vert->GetBufferPointer(), vert->GetBufferSize(), nullptr, &m_vShader));
         ThrowIfFailed(ctx->m_dev->CreatePixelShader(pixel->GetBufferPointer(), pixel->GetBufferSize(), nullptr, &m_pShader));
@@ -576,17 +578,16 @@ public:
 
 struct D3D11ShaderDataBinding : IShaderDataBinding
 {
-    D3D11ShaderPipeline* m_pipeline;
-    IGraphicsBuffer* m_vbuf;
-    IGraphicsBuffer* m_instVbuf;
-    IGraphicsBuffer* m_ibuf;
-    size_t m_ubufCount;
-    std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
+    std::weak_ptr<D3D11ShaderDataBinding> m_selfPtr;
+    std::shared_ptr<D3D11ShaderPipeline> m_pipeline;
+    std::shared_ptr<IGraphicsBuffer> m_vbuf;
+    std::shared_ptr<IGraphicsBuffer> m_instVbuf;
+    std::shared_ptr<IGraphicsBuffer> m_ibuf;
+    std::vector<std::shared_ptr<IGraphicsBuffer>> m_ubufs;
     std::unique_ptr<UINT[]> m_ubufFirstConsts;
     std::unique_ptr<UINT[]> m_ubufNumConsts;
     std::unique_ptr<bool[]> m_pubufs;
-    size_t m_texCount;
-    std::unique_ptr<ITexture*[]> m_texs;
+    std::vector<std::shared_ptr<ITexture>> m_texs;
     UINT m_baseOffsets[2];
 
     D3D11ShaderDataBinding(D3D11Context* ctx,
@@ -595,15 +596,14 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
                            size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                            const size_t* ubufOffs, const size_t* ubufSizes,
                            size_t texCount, ITexture** texs, size_t baseVert, size_t baseInst)
-    : m_pipeline(static_cast<D3D11ShaderPipeline*>(pipeline)),
-      m_vbuf(vbuf),
-      m_instVbuf(instVbuf),
-      m_ibuf(ibuf),
-      m_ubufCount(ubufCount),
-      m_ubufs(new IGraphicsBuffer*[ubufCount]),
-      m_texCount(texCount),
-      m_texs(new ITexture*[texCount])
+    : m_pipeline(static_cast<D3D11ShaderPipeline*>(pipeline)->m_selfPtr),
+      m_vbuf(D3D11GraphicsBuffer::getPtr(vbuf)),
+      m_instVbuf(D3D11GraphicsBuffer::getPtr(instVbuf)),
+      m_ibuf(D3D11GraphicsBuffer::getPtr(ibuf))
     {
+        m_ubufs.reserve(ubufCount);
+        m_texs.reserve(texCount);
+
         m_baseOffsets[0] = UINT(baseVert * m_pipeline->m_vtxFmt->m_stride);
         m_baseOffsets[1] = UINT(baseInst * m_pipeline->m_vtxFmt->m_instStride);
 
@@ -633,11 +633,11 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
             if (!ubufs[i])
                 Log.report(logvisor::Fatal, "null uniform-buffer %d provided to newShaderDataBinding", int(i));
 #endif
-            m_ubufs[i] = ubufs[i];
+            m_ubufs.push_back(D3D11GraphicsBuffer::getPtr(ubufs[i]));
         }
         for (size_t i=0 ; i<texCount ; ++i)
         {
-            m_texs[i] = texs[i];
+            m_texs.push_back(D3D11Texture::getPtr(texs[i]));
         }
     }
 
@@ -652,13 +652,13 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
         {
             if (m_vbuf->dynamic())
             {
-                D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_vbuf);
+                D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_vbuf.get());
                 bufs[0] = cbuf->m_bufs[b].Get();
                 strides[0] = UINT(cbuf->m_stride);
             }
             else
             {
-                D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_vbuf);
+                D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_vbuf.get());
                 bufs[0] = cbuf->m_buf.Get();
                 strides[0] = UINT(cbuf->m_stride);
             }
@@ -668,13 +668,13 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
         {
             if (m_instVbuf->dynamic())
             {
-                D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_instVbuf);
+                D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_instVbuf.get());
                 bufs[1] = cbuf->m_bufs[b].Get();
                 strides[1] = UINT(cbuf->m_stride);
             }
             else
             {
-                D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_instVbuf);
+                D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_instVbuf.get());
                 bufs[1] = cbuf->m_buf.Get();
                 strides[1] = UINT(cbuf->m_stride);
             }
@@ -686,108 +686,108 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
         {
             if (m_ibuf->dynamic())
             {
-                D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_ibuf);
+                D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_ibuf.get());
                 ctx->IASetIndexBuffer(cbuf->m_bufs[b].Get(), DXGI_FORMAT_R32_UINT, 0);
             }
             else
             {
-                D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_ibuf);
+                D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_ibuf.get());
                 ctx->IASetIndexBuffer(cbuf->m_buf.Get(), DXGI_FORMAT_R32_UINT, 0);
             }
         }
 
-        if (m_ubufCount)
+        if (m_ubufs.size())
         {
             if (m_ubufFirstConsts)
             {
                 ID3D11Buffer* constBufs[8] = {};
-                ctx->VSSetConstantBuffers(0, m_ubufCount, constBufs);
-                for (int i=0 ; i<8 && i<m_ubufCount ; ++i)
+                ctx->VSSetConstantBuffers(0, m_ubufs.size(), constBufs);
+                for (int i=0 ; i<8 && i<m_ubufs.size() ; ++i)
                 {
                     if (m_pubufs && m_pubufs[i])
                         continue;
                     if (m_ubufs[i]->dynamic())
                     {
-                        D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_ubufs[i]);
+                        D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_ubufs[i].get());
                         constBufs[i] = cbuf->m_bufs[b].Get();
                     }
                     else
                     {
-                        D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_ubufs[i]);
+                        D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_ubufs[i].get());
                         constBufs[i] = cbuf->m_buf.Get();
                     }
                 }
-                ctx->VSSetConstantBuffers1(0, m_ubufCount, constBufs, m_ubufFirstConsts.get(), m_ubufNumConsts.get());
+                ctx->VSSetConstantBuffers1(0, m_ubufs.size(), constBufs, m_ubufFirstConsts.get(), m_ubufNumConsts.get());
 
                 if (m_pubufs)
                 {
                     ID3D11Buffer* constBufs[8] = {};
-                    ctx->PSSetConstantBuffers(0, m_ubufCount, constBufs);
-                    for (int i=0 ; i<8 && i<m_ubufCount ; ++i)
+                    ctx->PSSetConstantBuffers(0, m_ubufs.size(), constBufs);
+                    for (int i=0 ; i<8 && i<m_ubufs.size() ; ++i)
                     {
                         if (!m_pubufs[i])
                             continue;
                         if (m_ubufs[i]->dynamic())
                         {
-                            D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_ubufs[i]);
+                            D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_ubufs[i].get());
                             constBufs[i] = cbuf->m_bufs[b].Get();
                         }
                         else
                         {
-                            D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_ubufs[i]);
+                            D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_ubufs[i].get());
                             constBufs[i] = cbuf->m_buf.Get();
                         }
                     }
-                    ctx->PSSetConstantBuffers1(0, m_ubufCount, constBufs, m_ubufFirstConsts.get(), m_ubufNumConsts.get());
+                    ctx->PSSetConstantBuffers1(0, m_ubufs.size(), constBufs, m_ubufFirstConsts.get(), m_ubufNumConsts.get());
                 }
             }
             else
             {
                 ID3D11Buffer* constBufs[8] = {};
-                for (int i=0 ; i<8 && i<m_ubufCount ; ++i)
+                for (int i=0 ; i<8 && i<m_ubufs.size() ; ++i)
                 {
                     if (m_pubufs && m_pubufs[i])
                         continue;
                     if (m_ubufs[i]->dynamic())
                     {
-                        D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_ubufs[i]);
+                        D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_ubufs[i].get());
                         constBufs[i] = cbuf->m_bufs[b].Get();
                     }
                     else
                     {
-                        D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_ubufs[i]);
+                        D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_ubufs[i].get());
                         constBufs[i] = cbuf->m_buf.Get();
                     }
                 }
-                ctx->VSSetConstantBuffers(0, m_ubufCount, constBufs);
+                ctx->VSSetConstantBuffers(0, m_ubufs.size(), constBufs);
 
                 if (m_pubufs)
                 {
                     ID3D11Buffer* constBufs[8] = {};
-                    for (int i=0 ; i<8 && i<m_ubufCount ; ++i)
+                    for (int i=0 ; i<8 && i<m_ubufs.size() ; ++i)
                     {
                         if (!m_pubufs[i])
                             continue;
                         if (m_ubufs[i]->dynamic())
                         {
-                            D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_ubufs[i]);
+                            D3D11GraphicsBufferD* cbuf = static_cast<D3D11GraphicsBufferD*>(m_ubufs[i].get());
                             constBufs[i] = cbuf->m_bufs[b].Get();
                         }
                         else
                         {
-                            D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_ubufs[i]);
+                            D3D11GraphicsBufferS* cbuf = static_cast<D3D11GraphicsBufferS*>(m_ubufs[i].get());
                             constBufs[i] = cbuf->m_buf.Get();
                         }
                     }
-                    ctx->PSSetConstantBuffers(0, m_ubufCount, constBufs);
+                    ctx->PSSetConstantBuffers(0, m_ubufs.size(), constBufs);
                 }
             }
         }
 
-        if (m_texCount)
+        if (m_texs.size())
         {
             ID3D11ShaderResourceView* srvs[8] = {};
-            for (int i=0 ; i<8 && i<m_texCount ; ++i)
+            for (int i=0 ; i<8 && i<m_texs.size() ; ++i)
             {
                 if (m_texs[i])
                 {
@@ -795,32 +795,32 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
                     {
                     case TextureType::Dynamic:
                     {
-                        D3D11TextureD* ctex = static_cast<D3D11TextureD*>(m_texs[i]);
+                        D3D11TextureD* ctex = static_cast<D3D11TextureD*>(m_texs[i].get());
                         srvs[i] = ctex->m_srvs[b].Get();
                         break;
                     }
                     case TextureType::Static:
                     {
-                        D3D11TextureS* ctex = static_cast<D3D11TextureS*>(m_texs[i]);
+                        D3D11TextureS* ctex = static_cast<D3D11TextureS*>(m_texs[i].get());
                         srvs[i] = ctex->m_srv.Get();
                         break;
                     }
                     case TextureType::StaticArray:
                     {
-                        D3D11TextureSA* ctex = static_cast<D3D11TextureSA*>(m_texs[i]);
+                        D3D11TextureSA* ctex = static_cast<D3D11TextureSA*>(m_texs[i].get());
                         srvs[i] = ctex->m_srv.Get();
                         break;
                     }
                     case TextureType::Render:
                     {
-                        D3D11TextureR* ctex = static_cast<D3D11TextureR*>(m_texs[i]);
+                        D3D11TextureR* ctex = static_cast<D3D11TextureR*>(m_texs[i].get());
                         srvs[i] = ctex->m_colorSrv.Get();
                         break;
                     }
                     }
                 }
             }
-            ctx->PSSetShaderResources(0, m_texCount, srvs);
+            ctx->PSSetShaderResources(0, m_texs.size(), srvs);
         }
     }
 };
@@ -846,8 +846,20 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
     std::unique_lock<std::mutex> m_initlk;
     std::thread m_thr;
 
-    ComPtr<ID3D11CommandList> m_cmdLists[3];
-    D3D11TextureR* m_workDoPresent[3];
+    struct CommandList
+    {
+        ComPtr<ID3D11CommandList> list;
+        std::vector<std::shared_ptr<D3D11ShaderDataBinding>> bindings;
+        std::shared_ptr<D3D11TextureR> workDoPresent;
+
+        void reset()
+        {
+            list.Reset();
+            bindings.clear();
+            workDoPresent.reset();
+        }
+    };
+    CommandList m_cmdLists[3];
 
     std::recursive_mutex m_dynamicLock;
     void ProcessDynamicLoads(ID3D11DeviceContext* ctx);
@@ -865,6 +877,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
                 if (!self->m_running)
                     break;
                 self->m_drawBuf = self->m_completeBuf;
+                auto& CmdList = self->m_cmdLists[self->m_drawBuf];
 
                 self->ProcessDynamicLoads(self->m_ctx->m_devCtx.Get());
 
@@ -873,7 +886,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
                     for (const auto& resize : self->m_texResizes)
                         resize.first->resize(self->m_ctx, resize.second.first, resize.second.second);
                     self->m_texResizes.clear();
-                    self->m_cmdLists[self->m_drawBuf].Reset();
+                    CmdList.reset();
                     continue;
                 }
 
@@ -888,7 +901,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
                         self->m_windowCtx->m_swapChain->SetFullscreenState(false, nullptr);
 
                     self->m_windowCtx->m_needsFSTransition = false;
-                    self->m_cmdLists[self->m_drawBuf].Reset();
+                    CmdList.reset();
                     continue;
                 }
 
@@ -898,17 +911,16 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
                         self->m_windowCtx->width, self->m_windowCtx->height,
                         DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
                     self->m_windowCtx->m_needsResize = false;
-                    self->m_cmdLists[self->m_drawBuf].Reset();
+                    CmdList.reset();
                     continue;
                 }
             }
 
-            ID3D11CommandList* list = self->m_cmdLists[self->m_drawBuf].Get();
+            auto& CmdList = self->m_cmdLists[self->m_drawBuf];
+            ID3D11CommandList* list = CmdList.list.Get();
             self->m_ctx->m_devCtx->ExecuteCommandList(list, false);
-            self->m_cmdLists[self->m_drawBuf].Reset();
 
-            D3D11TextureR* csource = self->m_workDoPresent[self->m_drawBuf];
-
+            D3D11TextureR* csource = CmdList.workDoPresent.get();
             if (csource)
             {
                 ComPtr<ID3D11Texture2D> dest;
@@ -922,6 +934,8 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
 
                 self->m_windowCtx->m_swapChain->Present(1, 0);
             }
+
+            CmdList.reset();
         }
     }
 
@@ -951,43 +965,50 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
     {
         D3D11ShaderDataBinding* cbind = static_cast<D3D11ShaderDataBinding*>(binding);
         cbind->bind(m_deferredCtx.Get(), m_fillBuf);
+        m_cmdLists[m_fillBuf].bindings.push_back(cbind->m_selfPtr.lock());
 
         ID3D11SamplerState* samp[] = {m_ctx->m_ss.Get()};
         m_deferredCtx->PSSetSamplers(0, 1, samp);
     }
 
-    D3D11TextureR* m_boundTarget = nullptr;
+    std::shared_ptr<D3D11TextureR> m_boundTarget;
     void setRenderTarget(ITextureR* target)
     {
         D3D11TextureR* ctarget = static_cast<D3D11TextureR*>(target);
         ID3D11RenderTargetView* view[] = {ctarget->m_rtv.Get()};
         m_deferredCtx->OMSetRenderTargets(1, view, ctarget->m_dsv.Get());
-        m_boundTarget = ctarget;
+        m_boundTarget = std::static_pointer_cast<D3D11TextureR>(ctarget->m_selfPtr.lock());
     }
 
     void setViewport(const SWindowRect& rect, float znear, float zfar)
     {
-        D3D11_VIEWPORT vp = {FLOAT(rect.location[0]), FLOAT(m_boundTarget->m_height - rect.location[1] - rect.size[1]),
-                             FLOAT(rect.size[0]), FLOAT(rect.size[1]), znear, zfar};
-        m_deferredCtx->RSSetViewports(1, &vp);
+        if (m_boundTarget)
+        {
+            int boundHeight = m_boundTarget->m_height;
+            D3D11_VIEWPORT vp = {FLOAT(rect.location[0]), FLOAT(boundHeight - rect.location[1] - rect.size[1]),
+                                 FLOAT(rect.size[0]), FLOAT(rect.size[1]), znear, zfar};
+            m_deferredCtx->RSSetViewports(1, &vp);
+        }
     }
 
     void setScissor(const SWindowRect& rect)
     {
         if (m_boundTarget)
         {
-            D3D11_RECT d3drect = {LONG(rect.location[0]), LONG(m_boundTarget->m_height - rect.location[1] - rect.size[1]),
-                                  LONG(rect.location[0] + rect.size[0]), LONG(m_boundTarget->m_height - rect.location[1])};
+            int boundHeight = m_boundTarget->m_height;
+            D3D11_RECT d3drect = {LONG(rect.location[0]), LONG(boundHeight - rect.location[1] - rect.size[1]),
+                                  LONG(rect.location[0] + rect.size[0]), LONG(boundHeight - rect.location[1])};
             m_deferredCtx->RSSetScissorRects(1, &d3drect);
         }
     }
 
-    std::unordered_map<D3D11TextureR*, std::pair<size_t, size_t>> m_texResizes;
+    std::unordered_map<std::shared_ptr<D3D11TextureR>, std::pair<size_t, size_t>> m_texResizes;
     void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)
     {
         D3D11TextureR* ctex = static_cast<D3D11TextureR*>(tex);
         std::unique_lock<std::mutex> lk(m_mt);
-        m_texResizes[ctex] = std::make_pair(width, height);
+        m_texResizes[std::static_pointer_cast<D3D11TextureR>(ctex->m_selfPtr.lock())] =
+            std::make_pair(width, height);
     }
 
     void schedulePostFrameHandler(std::function<void(void)>&& func)
@@ -1059,10 +1080,11 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         }
     }
 
-    D3D11TextureR* m_doPresent = nullptr;
+    std::shared_ptr<D3D11TextureR> m_doPresent;
     void resolveDisplay(ITextureR* source)
     {
-        m_doPresent = static_cast<D3D11TextureR*>(source);
+        m_doPresent = std::static_pointer_cast<D3D11TextureR>(
+                      static_cast<D3D11TextureR*>(source)->m_selfPtr.lock());
     }
 
     void execute();
@@ -1145,8 +1167,6 @@ class D3D11DataFactory : public ID3DDataFactory
     std::unordered_set<D3D11Data*> m_committedData;
     std::unordered_set<D3D11Pool*> m_committedPools;
     std::mutex m_committedMutex;
-    std::unordered_set<D3D11Data*> m_deletedData;
-    std::unordered_set<D3D11Pool::Buffer*> m_deletedPoolBufs;
     uint32_t m_sampleCount;
 
     void destroyData(IGraphicsData* d)
@@ -1154,16 +1174,16 @@ class D3D11DataFactory : public ID3DDataFactory
         std::unique_lock<std::mutex> lk(m_committedMutex);
         D3D11Data* data = static_cast<D3D11Data*>(d);
         m_committedData.erase(data);
-        m_deletedData.insert(data);
+        delete data;
     }
 
     void destroyAllData()
     {
         std::unique_lock<std::mutex> lk(m_committedMutex);
         for (IGraphicsData* data : m_committedData)
-            m_deletedData.insert(static_cast<D3D11Data*>(data));
+            delete static_cast<D3D11Data*>(data);
         for (IGraphicsBufferPool* pool : m_committedPools)
-            static_cast<D3D11Pool*>(pool)->destroyPool(m_deletedPoolBufs);
+            delete static_cast<D3D11Pool*>(pool);
         m_committedData.clear();
         m_committedPools.clear();
     }
@@ -1173,31 +1193,7 @@ class D3D11DataFactory : public ID3DDataFactory
         std::unique_lock<std::mutex> lk(m_committedMutex);
         D3D11Pool* pool = static_cast<D3D11Pool*>(p);
         m_committedPools.erase(pool);
-        pool->destroyPool(m_deletedPoolBufs);
-    }
-
-    void procDeletes()
-    {
-        for (auto it = m_deletedData.begin(); it != m_deletedData.end();)
-        {
-            D3D11Data* cdata = static_cast<D3D11Data*>(*it);
-            if (cdata->decref())
-            {
-                it = m_deletedData.erase(it);
-                continue;
-            }
-            ++it;
-        }
-        for (auto it = m_deletedPoolBufs.begin(); it != m_deletedPoolBufs.end();)
-        {
-            D3D11Pool::Buffer* cpool = *it;
-            if (cpool->decref())
-            {
-                it = m_deletedPoolBufs.erase(it);
-                continue;
-            }
-            ++it;
-        }
+        delete pool;
     }
 
     IGraphicsBufferD* newPoolBuffer(IGraphicsBufferPool* p, BufferUse use,
@@ -1206,19 +1202,14 @@ class D3D11DataFactory : public ID3DDataFactory
         D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent->getCommandQueue());
         D3D11Pool* pool = static_cast<D3D11Pool*>(p);
         D3D11GraphicsBufferD* retval = new D3D11GraphicsBufferD(q, use, m_ctx, stride, count);
-        pool->m_DBufs.emplace(std::make_pair(retval, new D3D11Pool::Buffer(retval)));
+        retval->m_selfPtr = pool->m_DBufs.emplace(std::make_pair(retval, retval)).first->second;
         return retval;
     }
 
     void deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf)
     {
         D3D11Pool* pool = static_cast<D3D11Pool*>(p);
-        auto search = pool->m_DBufs.find(static_cast<D3D11GraphicsBufferD*>(buf));
-        if (search != pool->m_DBufs.end())
-        {
-            m_deletedPoolBufs.emplace(search->second);
-            pool->m_DBufs.erase(search);
-        }
+        pool->m_DBufs.erase(static_cast<D3D11GraphicsBufferD*>(buf));
     }
 
 public:
@@ -1241,59 +1232,73 @@ public:
 
         IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
         {
+            D3D11Data* d = static_cast<D3D11Data*>(m_deferredData);
             D3D11GraphicsBufferS* retval = new D3D11GraphicsBufferS(use, m_parent.m_ctx, data, stride, count);
-            static_cast<D3D11Data*>(m_deferredData)->m_SBufs.emplace_back(retval);
+            d->m_SBufs.emplace_back(retval);
+            retval->m_selfPtr = d->m_SBufs.back();
             return retval;
         }
 
         IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count)
         {
+            D3D11Data* d = static_cast<D3D11Data*>(m_deferredData);
             D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent.m_parent->getCommandQueue());
             D3D11GraphicsBufferD* retval = new D3D11GraphicsBufferD(q, use, m_parent.m_ctx, stride, count);
-            static_cast<D3D11Data*>(m_deferredData)->m_DBufs.emplace_back(retval);
+            d->m_DBufs.emplace_back(retval);
+            retval->m_selfPtr = d->m_DBufs.back();
             return retval;
         }
 
         ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
             const void* data, size_t sz)
         {
+            D3D11Data* d = static_cast<D3D11Data*>(m_deferredData);
             D3D11TextureS* retval = new D3D11TextureS(m_parent.m_ctx, width, height, mips, fmt, data, sz);
-            static_cast<D3D11Data*>(m_deferredData)->m_STexs.emplace_back(retval);
+            d->m_STexs.emplace_back(retval);
+            retval->m_selfPtr = d->m_STexs.back();
             return retval;
         }
 
         ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
                                           const void* data, size_t sz)
         {
+            D3D11Data* d = static_cast<D3D11Data*>(m_deferredData);
             D3D11TextureSA* retval = new D3D11TextureSA(m_parent.m_ctx, width, height, layers, fmt, data, sz);
-            static_cast<D3D11Data*>(m_deferredData)->m_SATexs.emplace_back(retval);
+            d->m_SATexs.emplace_back(retval);
+            retval->m_selfPtr = d->m_SATexs.back();
             return retval;
         }
 
         ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
         {
+            D3D11Data* d = static_cast<D3D11Data*>(m_deferredData);
             D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent.m_parent->getCommandQueue());
             D3D11TextureD* retval = new D3D11TextureD(q, m_parent.m_ctx, width, height, fmt);
-            static_cast<D3D11Data*>(m_deferredData)->m_DTexs.emplace_back(retval);
+            d->m_DTexs.emplace_back(retval);
+            retval->m_selfPtr = d->m_DTexs.back();
             return retval;
         }
 
         ITextureR* newRenderTexture(size_t width, size_t height,
                                     bool enableShaderColorBind, bool enableShaderDepthBind)
         {
+            D3D11Data* d = static_cast<D3D11Data*>(m_deferredData);
             D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent.m_parent->getCommandQueue());
             D3D11TextureR* retval = new D3D11TextureR(m_parent.m_ctx, width, height, m_parent.m_sampleCount,
                                                       enableShaderColorBind, enableShaderDepthBind);
-            static_cast<D3D11Data*>(m_deferredData)->m_RTexs.emplace_back(retval);
+            d->m_RTexs.emplace_back(retval);
+            retval->m_selfPtr = d->m_RTexs.back();
             return retval;
         }
 
         IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
                                        size_t baseVert, size_t baseInst)
         {
+            D3D11Data* d = static_cast<D3D11Data*>(m_deferredData);
             D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent.m_parent->getCommandQueue());
             D3D11VertexFormat* retval = new struct D3D11VertexFormat(elementCount, elements);
-            static_cast<D3D11Data*>(m_deferredData)->m_VFmts.emplace_back(retval);
+            d->m_VFmts.emplace_back(retval);
+            retval->m_selfPtr = d->m_VFmts.back();
             return retval;
         }
 
@@ -1332,10 +1337,12 @@ public:
                 }
             }
 
+            D3D11Data* d = static_cast<D3D11Data*>(m_deferredData);
             D3D11ShaderPipeline* retval = new D3D11ShaderPipeline(m_parent.m_ctx, vertBlobOut.Get(), fragBlobOut.Get(),
                 static_cast<const D3D11VertexFormat*>(vtxFmt),
                 srcFac, dstFac, prim, depthTest, depthWrite, backfaceCulling);
-            static_cast<D3D11Data*>(m_deferredData)->m_SPs.emplace_back(retval);
+            d->m_SPs.emplace_back(retval);
+            retval->m_selfPtr = d->m_SPs.back();
             return retval;
         }
 
@@ -1347,11 +1354,13 @@ public:
             size_t texCount, ITexture** texs,
             size_t baseVert, size_t baseInst)
         {
+            D3D11Data* d = static_cast<D3D11Data*>(m_deferredData);
             D3D11ShaderDataBinding* retval =
                 new D3D11ShaderDataBinding(m_parent.m_ctx, pipeline, vbuf, instVbo, ibuf,
                                            ubufCount, ubufs, ubufStages, ubufOffs, ubufSizes, texCount, texs,
                                            baseVert, baseInst);
-            static_cast<D3D11Data*>(m_deferredData)->m_SBinds.emplace_back(retval);
+            d->m_SBinds.emplace_back(retval);
+            retval->m_selfPtr = d->m_SBinds.back();
             return retval;
         }
     };
@@ -1391,13 +1400,11 @@ thread_local D3D11Data* D3D11DataFactory::m_deferredData;
 
 void D3D11CommandQueue::execute()
 {
-    /* Stage dynamic uploads */
-    D3D11DataFactory* gfxF = static_cast<D3D11DataFactory*>(m_parent->getDataFactory());
-    gfxF->procDeletes();
-
-    ThrowIfFailed(m_deferredCtx->FinishCommandList(false, &m_cmdLists[m_fillBuf]));
-    m_workDoPresent[m_fillBuf] = m_doPresent;
-    m_doPresent = nullptr;
+    /* Finish command list */
+    auto& CmdList = m_cmdLists[m_fillBuf];
+    ThrowIfFailed(m_deferredCtx->FinishCommandList(false, &CmdList.list));
+    CmdList.workDoPresent = std::move(m_doPresent);
+    m_doPresent.reset();
 
     /* Wait for worker thread to become ready */
     std::unique_lock<std::mutex> lk(m_mt);
@@ -1425,15 +1432,15 @@ void D3D11CommandQueue::ProcessDynamicLoads(ID3D11DeviceContext* ctx)
 
     for (D3D11Data* d : gfxF->m_committedData)
     {
-        for (std::unique_ptr<D3D11GraphicsBufferD>& b : d->m_DBufs)
+        for (std::shared_ptr<D3D11GraphicsBufferD>& b : d->m_DBufs)
             b->update(ctx, m_drawBuf);
-        for (std::unique_ptr<D3D11TextureD>& t : d->m_DTexs)
+        for (std::shared_ptr<D3D11TextureD>& t : d->m_DTexs)
             t->update(ctx, m_drawBuf);
     }
     for (D3D11Pool* p : gfxF->m_committedPools)
     {
         for (auto& b : p->m_DBufs)
-            b.second->m_buf->update(ctx, m_drawBuf);
+            b.second->update(ctx, m_drawBuf);
     }
 }
 
