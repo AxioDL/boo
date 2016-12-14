@@ -6,6 +6,9 @@ namespace boo
 {
 static logvisor::Module Log("boo::AudioVoice");
 
+static AudioMatrixMono DefaultMonoMtx;
+static AudioMatrixStereo DefaultStereoMtx;
+
 AudioVoice::AudioVoice(BaseAudioVoiceEngine& root,
                        IAudioVoiceCallback* cb, bool dynamicRate)
 : m_root(root), m_cb(cb), m_dynamicRate(dynamicRate) {}
@@ -137,11 +140,20 @@ size_t AudioVoiceMono::pumpAndMix16(size_t frames)
 
     if (oDone)
     {
-        for (auto& mtx : m_sendMatrices)
+        if (m_sendMatrices.size())
         {
-            AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
-            m_cb->routeAudio(oDone, dt, smx.m_busId, scratch16Pre.data(), scratch16Post.data());
-            mtx.second.mixMonoSampleData(m_root.m_mixInfo, scratch16Post.data(), smx._getMergeBuf16(oDone), oDone);
+            for (auto& mtx : m_sendMatrices)
+            {
+                AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
+                m_cb->routeAudio(oDone, 1, dt, smx.m_busId, scratch16Pre.data(), scratch16Post.data());
+                mtx.second.mixMonoSampleData(m_root.m_mixInfo, scratch16Post.data(), smx._getMergeBuf16(oDone), oDone);
+            }
+        }
+        else
+        {
+            AudioSubmix& smx = reinterpret_cast<AudioSubmix&>(m_root.m_mainSubmix);
+            m_cb->routeAudio(oDone, 1, dt, m_root.m_mainSubmix.m_busId, scratch16Pre.data(), scratch16Post.data());
+            DefaultMonoMtx.mixMonoSampleData(m_root.m_mixInfo, scratch16Post.data(), smx._getMergeBuf16(oDone), oDone);
         }
     }
 
@@ -165,11 +177,20 @@ size_t AudioVoiceMono::pumpAndMix32(size_t frames)
 
     if (oDone)
     {
-        for (auto& mtx : m_sendMatrices)
+        if (m_sendMatrices.size())
         {
-            AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
-            m_cb->routeAudio(oDone, dt, smx.m_busId, scratch32Pre.data(), scratch32Post.data());
-            mtx.second.mixMonoSampleData(m_root.m_mixInfo, scratch32Post.data(), smx._getMergeBuf32(oDone), oDone);
+            for (auto& mtx : m_sendMatrices)
+            {
+                AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
+                m_cb->routeAudio(oDone, 1, dt, smx.m_busId, scratch32Pre.data(), scratch32Post.data());
+                mtx.second.mixMonoSampleData(m_root.m_mixInfo, scratch32Post.data(), smx._getMergeBuf32(oDone), oDone);
+            }
+        }
+        else
+        {
+            AudioSubmix& smx = reinterpret_cast<AudioSubmix&>(m_root.m_mainSubmix);
+            m_cb->routeAudio(oDone, 1, dt, m_root.m_mainSubmix.m_busId, scratch32Pre.data(), scratch32Post.data());
+            DefaultMonoMtx.mixMonoSampleData(m_root.m_mixInfo, scratch32Post.data(), smx._getMergeBuf32(oDone), oDone);
         }
     }
 
@@ -193,11 +214,20 @@ size_t AudioVoiceMono::pumpAndMixFlt(size_t frames)
 
     if (oDone)
     {
-        for (auto& mtx : m_sendMatrices)
+        if (m_sendMatrices.size())
         {
-            AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
-            m_cb->routeAudio(oDone, dt, smx.m_busId, scratchFltPre.data(), scratchFltPost.data());
-            mtx.second.mixMonoSampleData(m_root.m_mixInfo, scratchFltPost.data(), smx._getMergeBufFlt(oDone), oDone);
+            for (auto& mtx : m_sendMatrices)
+            {
+                AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
+                m_cb->routeAudio(oDone, 1, dt, smx.m_busId, scratchFltPre.data(), scratchFltPost.data());
+                mtx.second.mixMonoSampleData(m_root.m_mixInfo, scratchFltPost.data(), smx._getMergeBufFlt(oDone), oDone);
+            }
+        }
+        else
+        {
+            AudioSubmix& smx = reinterpret_cast<AudioSubmix&>(m_root.m_mainSubmix);
+            m_cb->routeAudio(oDone, 1, dt, m_root.m_mainSubmix.m_busId, scratchFltPre.data(), scratchFltPost.data());
+            DefaultMonoMtx.mixMonoSampleData(m_root.m_mixInfo, scratchFltPost.data(), smx._getMergeBufFlt(oDone), oDone);
         }
     }
 
@@ -307,11 +337,20 @@ size_t AudioVoiceStereo::pumpAndMix16(size_t frames)
 
     if (oDone)
     {
-        for (auto& mtx : m_sendMatrices)
+        if (m_sendMatrices.size())
         {
-            AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
-            m_cb->routeAudio(oDone, dt, smx.m_busId, scratch16Pre.data(), scratch16Post.data());
-            mtx.second.mixStereoSampleData(m_root.m_mixInfo, scratch16Post.data(), smx._getMergeBuf16(oDone), oDone);
+            for (auto& mtx : m_sendMatrices)
+            {
+                AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
+                m_cb->routeAudio(oDone, 2, dt, smx.m_busId, scratch16Pre.data(), scratch16Post.data());
+                mtx.second.mixStereoSampleData(m_root.m_mixInfo, scratch16Post.data(), smx._getMergeBuf16(oDone), oDone);
+            }
+        }
+        else
+        {
+            AudioSubmix& smx = reinterpret_cast<AudioSubmix&>(m_root.m_mainSubmix);
+            m_cb->routeAudio(oDone, 2, dt, m_root.m_mainSubmix.m_busId, scratch16Pre.data(), scratch16Post.data());
+            DefaultStereoMtx.mixStereoSampleData(m_root.m_mixInfo, scratch16Post.data(), smx._getMergeBuf16(oDone), oDone);
         }
     }
 
@@ -337,11 +376,20 @@ size_t AudioVoiceStereo::pumpAndMix32(size_t frames)
 
     if (oDone)
     {
-        for (auto& mtx : m_sendMatrices)
+        if (m_sendMatrices.size())
         {
-            AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
-            m_cb->routeAudio(oDone, dt, smx.m_busId, scratch32Pre.data(), scratch32Post.data());
-            mtx.second.mixStereoSampleData(m_root.m_mixInfo, scratch32Post.data(), smx._getMergeBuf32(oDone), oDone);
+            for (auto& mtx : m_sendMatrices)
+            {
+                AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
+                m_cb->routeAudio(oDone, 2, dt, smx.m_busId, scratch32Pre.data(), scratch32Post.data());
+                mtx.second.mixStereoSampleData(m_root.m_mixInfo, scratch32Post.data(), smx._getMergeBuf32(oDone), oDone);
+            }
+        }
+        else
+        {
+            AudioSubmix& smx = reinterpret_cast<AudioSubmix&>(m_root.m_mainSubmix);
+            m_cb->routeAudio(oDone, 2, dt, m_root.m_mainSubmix.m_busId, scratch32Pre.data(), scratch32Post.data());
+            DefaultStereoMtx.mixStereoSampleData(m_root.m_mixInfo, scratch32Post.data(), smx._getMergeBuf32(oDone), oDone);
         }
     }
 
@@ -367,11 +415,20 @@ size_t AudioVoiceStereo::pumpAndMixFlt(size_t frames)
 
     if (oDone)
     {
-        for (auto& mtx : m_sendMatrices)
+        if (m_sendMatrices.size())
         {
-            AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
-            m_cb->routeAudio(oDone, dt, smx.m_busId, scratchFltPre.data(), scratchFltPost.data());
-            mtx.second.mixStereoSampleData(m_root.m_mixInfo, scratchFltPost.data(), smx._getMergeBufFlt(oDone), oDone);
+            for (auto& mtx : m_sendMatrices)
+            {
+                AudioSubmix& smx = *reinterpret_cast<AudioSubmix*>(mtx.first);
+                m_cb->routeAudio(oDone, 2, dt, smx.m_busId, scratchFltPre.data(), scratchFltPost.data());
+                mtx.second.mixStereoSampleData(m_root.m_mixInfo, scratchFltPost.data(), smx._getMergeBufFlt(oDone), oDone);
+            }
+        }
+        else
+        {
+            AudioSubmix& smx = reinterpret_cast<AudioSubmix&>(m_root.m_mainSubmix);
+            m_cb->routeAudio(oDone, 2, dt, m_root.m_mainSubmix.m_busId, scratchFltPre.data(), scratchFltPost.data());
+            DefaultStereoMtx.mixStereoSampleData(m_root.m_mixInfo, scratchFltPost.data(), smx._getMergeBufFlt(oDone), oDone);
         }
     }
 

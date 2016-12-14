@@ -95,19 +95,19 @@ struct IAudioVoiceCallback
 
     /** after resampling, boo calls this for each submix that this voice targets;
      *  client performs volume processing and bus-routing this way */
-    virtual void routeAudio(size_t frames, double dt, int busId, int16_t* in, int16_t* out)
+    virtual void routeAudio(size_t frames, size_t channels, double dt, int busId, int16_t* in, int16_t* out)
     {
-        memmove(out, in, frames * 2);
+        memmove(out, in, frames * channels * 2);
     }
 
-    virtual void routeAudio(size_t frames, double dt, int busId, int32_t* in, int32_t* out)
+    virtual void routeAudio(size_t frames, size_t channels, double dt, int busId, int32_t* in, int32_t* out)
     {
-        memmove(out, in, frames * 4);
+        memmove(out, in, frames * channels * 4);
     }
 
-    virtual void routeAudio(size_t frames, double dt, int busId, float* in, float* out)
+    virtual void routeAudio(size_t frames, size_t channels, double dt, int busId, float* in, float* out)
     {
-        memmove(out, in, frames * 4);
+        memmove(out, in, frames * channels * 4);
     }
 };
 
