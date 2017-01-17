@@ -113,6 +113,8 @@ public:
         /* Spawn client thread */
         m_clientThread = std::thread([&]()
         {
+            logvisor::RegisterThreadName("Boo Client Thread");
+
             /* Run app */
             m_clientReturn = m_callback.appMain(this);
 
@@ -177,6 +179,7 @@ int ApplicationRun(IApplication::EPlatformType platform,
                    const std::vector<SystemString>& args,
                    bool singleInstance)
 {
+    logvisor::RegisterThreadName("Boo Main Thread");
     @autoreleasepool
     {
         if (!APP)
