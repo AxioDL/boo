@@ -467,7 +467,14 @@ static const MTLBlendFactor BLEND_FACTOR_TABLE[] =
     MTLBlendFactorSourceAlpha,
     MTLBlendFactorOneMinusSourceAlpha,
     MTLBlendFactorDestinationAlpha,
-    MTLBlendFactorOneMinusDestinationAlpha
+    MTLBlendFactorOneMinusDestinationAlpha,
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101200
+    MTLBlendFactorSource1Color,
+    MTLBlendFactorOneMinusSource1Color,
+#else
+    MTLBlendFactorSourceColor,
+    MTLBlendFactorOneMinusSourceColor,
+#endif
 };
 
 static const MTLPrimitiveType PRIMITIVE_TABLE[] =

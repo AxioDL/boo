@@ -48,9 +48,13 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
     std::condition_variable m_engineEnterCv;
     std::condition_variable m_engineLeaveCv;
     bool m_cbWaiting = false;
+    bool m_cbRunning = true;
 
     static void Callback(AQSAudioVoiceEngine* engine, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer)
     {
+        if (!engine->m_cbRunning)
+            return;
+
         std::unique_lock<std::mutex> lk(engine->m_engineMutex);
         engine->m_cbWaiting = true;
         engine->m_engineEnterCv.wait(lk);
@@ -712,7 +716,10 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
     ~AQSAudioVoiceEngine()
     {
-        AudioQueueDispose(m_queue, false);
+        m_cbRunning = false;
+        if (m_cbWaiting)
+            m_engineEnterCv.notify_one();
+        AudioQueueDispose(m_queue, true);
         if (m_midiClient)
             MIDIClientDispose(m_midiClient);
     }
