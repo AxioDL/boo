@@ -8,6 +8,7 @@
 #include <SPIRV/GlslangToSpv.h>
 #include <SPIRV/disassemble.h>
 #include "boo/graphicsdev/GLSLMacros.hpp"
+#include "Common.hpp"
 
 #include "logvisor/logvisor.hpp"
 
@@ -652,7 +653,7 @@ void VulkanContext::resizeSwapChain(VulkanContext::Window& windowCtx, VkSurfaceK
     }
 }
 
-struct VulkanData : IGraphicsData
+struct VulkanData : IGraphicsDataPriv<VulkanData>
 {
     VulkanContext* m_ctx;
     VkDeviceMemory m_bufMem = VK_NULL_HANDLE;
@@ -1947,7 +1948,7 @@ static const VkDescriptorImageInfo* GetTextureGPUResource(const ITexture* tex, i
     return nullptr;
 }
 
-struct VulkanShaderDataBinding : IShaderDataBinding
+struct VulkanShaderDataBinding : IShaderDataBindingPriv<VulkanData>
 {
     VulkanContext* m_ctx;
     VulkanShaderPipeline* m_pipeline;
@@ -1977,14 +1978,16 @@ struct VulkanShaderDataBinding : IShaderDataBinding
     bool m_committed = false;
 #endif
 
-    VulkanShaderDataBinding(VulkanContext* ctx,
+    VulkanShaderDataBinding(VulkanData* d,
+                            VulkanContext* ctx,
                             IShaderPipeline* pipeline,
                             IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbuf, IGraphicsBuffer* ibuf,
                             size_t ubufCount, IGraphicsBuffer** ubufs,
                             const size_t* ubufOffs, const size_t* ubufSizes,
                             size_t texCount, ITexture** texs,
                             size_t baseVert, size_t baseInst)
-    : m_ctx(ctx),
+    : IShaderDataBindingPriv(d),
+      m_ctx(ctx),
       m_pipeline(static_cast<VulkanShaderPipeline*>(pipeline)),
       m_vbuf(vbuf),
       m_instVbuf(instVbuf),
@@ -2812,7 +2815,7 @@ void VulkanDataFactory::destroyAllData()
 {
     std::unique_lock<std::mutex> lk(m_committedMutex);
     for (IGraphicsData* data : m_committedData)
-        delete static_cast<VulkanData*>(data);
+        data->decrement();
     for (IGraphicsBufferPool* pool : m_committedPools)
         delete static_cast<VulkanPool*>(pool);
     m_committedData.clear();
@@ -3062,11 +3065,12 @@ IShaderDataBinding* VulkanDataFactory::Context::newShaderDataBinding(IShaderPipe
         size_t texCount, ITexture** texs,
         size_t baseVert, size_t baseInst)
 {
+    VulkanData* d = static_cast<VulkanData*>(m_deferredData.get());
     VulkanShaderDataBinding* retval =
-        new VulkanShaderDataBinding(m_parent.m_ctx, pipeline, vbuf, instVbuf, ibuf,
+        new VulkanShaderDataBinding(d, m_parent.m_ctx, pipeline, vbuf, instVbuf, ibuf,
                                     ubufCount, ubufs, ubufOffs, ubufSizes, texCount, texs,
                                     baseVert, baseInst);
-    static_cast<VulkanData*>(m_deferredData.get())->m_SBinds.emplace_back(retval);
+    d->m_SBinds.emplace_back(retval);
     return retval;
 }
 
@@ -3301,7 +3305,7 @@ void VulkanCommandQueue::execute()
     {
         if ((*it)->m_dead)
         {
-            delete *it;
+            it->decrement();
             it = gfxF->m_committedData.erase(it);
             continue;
         }

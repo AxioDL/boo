@@ -3,6 +3,7 @@
 #include "logvisor/logvisor.hpp"
 #include "boo/graphicsdev/D3D.hpp"
 #include "boo/IGraphicsContext.hpp"
+#include "Common.hpp"
 #include <vector>
 #include "d3dx12.h"
 #include <d3dcompiler.h>
@@ -40,7 +41,7 @@ static inline UINT64 NextHeapOffset(UINT64 offset, const D3D12_RESOURCE_ALLOCATI
     return (offset + info.Alignment - 1) & ~(info.Alignment - 1);
 }
 
-struct D3D12Data : IGraphicsData
+struct D3D12Data : IGraphicsDataPriv<D3D12Data>
 {
     std::vector<std::unique_ptr<class D3D12ShaderPipeline>> m_SPs;
     std::vector<std::unique_ptr<struct D3D12ShaderDataBinding>> m_SBinds;
@@ -909,7 +910,7 @@ static ID3D12Resource* GetTextureGPUResource(const ITexture* tex, int idx,
     return nullptr;
 }
 
-struct D3D12ShaderDataBinding : IShaderDataBinding
+struct D3D12ShaderDataBinding : IShaderDataBindingPriv<D3D12Data>
 {
     D3D12ShaderPipeline* m_pipeline;
     ComPtr<ID3D12Heap> m_gpuHeap;
@@ -927,14 +928,16 @@ struct D3D12ShaderDataBinding : IShaderDataBinding
     D3D12_INDEX_BUFFER_VIEW m_iboView[2];
     size_t m_vertOffset, m_instOffset;
 
-    D3D12ShaderDataBinding(D3D12Context* ctx,
+    D3D12ShaderDataBinding(D3D12Data* d,
+                           D3D12Context* ctx,
                            IShaderPipeline* pipeline,
                            IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbuf, IGraphicsBuffer* ibuf,
                            size_t ubufCount, IGraphicsBuffer** ubufs,
                            const size_t* ubufOffs, const size_t* ubufSizes,
                            size_t texCount, ITexture** texs,
                            size_t baseVert, size_t baseInst)
-    : m_pipeline(static_cast<D3D12ShaderPipeline*>(pipeline)),
+    : IShaderDataBindingPriv(d),
+      m_pipeline(static_cast<D3D12ShaderPipeline*>(pipeline)),
       m_vbuf(vbuf),
       m_instVbuf(instVbuf),
       m_ibuf(ibuf),
@@ -1541,14 +1544,14 @@ class D3D12DataFactory : public ID3DDataFactory
         std::unique_lock<std::mutex> lk(m_committedMutex);
         D3D12Data* data = static_cast<D3D12Data*>(d);
         m_committedData.erase(data);
-        delete data;
+        data->decrement();
     }
 
     void destroyAllData()
     {
         std::unique_lock<std::mutex> lk(m_committedMutex);
-        for (IGraphicsData* data : m_committedData)
-            delete static_cast<D3D12Data*>(data);
+        for (D3D12Data* data : m_committedData)
+            data->decrement();
         for (IGraphicsBufferPool* pool : m_committedPools)
             delete static_cast<D3D12Pool*>(pool);
         m_committedData.clear();
@@ -1745,7 +1748,7 @@ public:
                 size_t baseVert, size_t baseInst)
         {
             D3D12ShaderDataBinding* retval =
-                new D3D12ShaderDataBinding(m_parent.m_ctx, pipeline, vbuf, instVbuf, ibuf,
+                new D3D12ShaderDataBinding(m_deferredData.get(), m_parent.m_ctx, pipeline, vbuf, instVbuf, ibuf,
                                            ubufCount, ubufs, ubufOffs, ubufSizes, texCount, texs,
                                            baseVert, baseInst);
             static_cast<D3D12Data*>(m_deferredData)->m_SBinds.emplace_back(retval);

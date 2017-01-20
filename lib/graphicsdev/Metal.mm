@@ -3,6 +3,7 @@
 #include "logvisor/logvisor.hpp"
 #include "boo/graphicsdev/Metal.hpp"
 #include "boo/IGraphicsContext.hpp"
+#include "Common.hpp"
 #include <vector>
 
 #if !__has_feature(objc_arc)
@@ -18,7 +19,7 @@ static logvisor::Module Log("boo::Metal");
 struct MetalCommandQueue;
 
 ThreadLocalPtr<struct MetalData> MetalDataFactory::m_deferredData;
-struct MetalData : IGraphicsData
+struct MetalData : IGraphicsDataPriv<MetalData>
 {
     std::vector<std::unique_ptr<class MetalShaderPipeline>> m_SPs;
     std::vector<std::unique_ptr<struct MetalShaderDataBinding>> m_SBinds;
@@ -582,7 +583,7 @@ static id<MTLTexture> GetTextureGPUResource(const ITexture* tex, int idx)
     return nullptr;
 }
 
-struct MetalShaderDataBinding : IShaderDataBinding
+struct MetalShaderDataBinding : IShaderDataBindingPriv<MetalData>
 {
     MetalShaderPipeline* m_pipeline;
     IGraphicsBuffer* m_vbuf;
@@ -597,13 +598,15 @@ struct MetalShaderDataBinding : IShaderDataBinding
     size_t m_baseVert;
     size_t m_baseInst;
 
-    MetalShaderDataBinding(MetalContext* ctx,
+    MetalShaderDataBinding(MetalData* d,
+                           MetalContext* ctx,
                            IShaderPipeline* pipeline,
                            IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibuf,
                            size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                            const size_t* ubufOffs, const size_t* ubufSizes,
                            size_t texCount, ITexture** texs, size_t baseVert, size_t baseInst)
-    : m_pipeline(static_cast<MetalShaderPipeline*>(pipeline)),
+    : IShaderDataBindingPriv(d),
+    m_pipeline(static_cast<MetalShaderPipeline*>(pipeline)),
     m_vbuf(vbuf),
     m_instVbo(instVbo),
     m_ibuf(ibuf),
@@ -1122,7 +1125,8 @@ MetalDataFactory::Context::newShaderDataBinding(IShaderPipeline* pipeline,
                                                 size_t texCount, ITexture** texs, size_t baseVert, size_t baseInst)
 {
     MetalShaderDataBinding* retval =
-    new MetalShaderDataBinding(m_parent.m_ctx, pipeline, vbuf, instVbo, ibuf,
+    new MetalShaderDataBinding(m_deferredData.get(),
+                               m_parent.m_ctx, pipeline, vbuf, instVbo, ibuf,
                                ubufCount, ubufs, ubufStages, ubufOffs,
                                ubufSizes, texCount, texs, baseVert, baseInst);
     m_deferredData->m_SBinds.emplace_back(retval);
@@ -1163,14 +1167,14 @@ void MetalDataFactory::destroyData(IGraphicsData* d)
     std::unique_lock<std::mutex> lk(m_committedMutex);
     MetalData* data = static_cast<MetalData*>(d);
     m_committedData.erase(data);
-    delete data;
+    data->decrement();
 }
 
 void MetalDataFactory::destroyAllData()
 {
     std::unique_lock<std::mutex> lk(m_committedMutex);
-    for (IGraphicsData* data : m_committedData)
-        delete static_cast<MetalData*>(data);
+    for (MetalData* data : m_committedData)
+        data->decrement();
     for (IGraphicsBufferPool* pool : m_committedPools)
         delete static_cast<MetalPool*>(pool);
     m_committedData.clear();

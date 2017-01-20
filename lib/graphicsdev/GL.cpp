@@ -1,12 +1,14 @@
 #include "boo/graphicsdev/GL.hpp"
 #include "boo/graphicsdev/glew.h"
 #include "boo/IGraphicsContext.hpp"
+#include "Common.hpp"
 #include <vector>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <array>
 #include <unordered_map>
+#include <atomic>
 
 #include "logvisor/logvisor.hpp"
 
@@ -18,7 +20,7 @@ namespace boo
 static logvisor::Module Log("boo::GL");
 
 ThreadLocalPtr<struct GLData> GLDataFactory::m_deferredData;
-struct GLData : IGraphicsData
+struct GLData : IGraphicsDataPriv<GLData>
 {
     std::vector<std::unique_ptr<class GLShaderPipeline>> m_SPs;
     std::vector<std::unique_ptr<struct GLShaderDataBinding>> m_SBinds;
@@ -548,7 +550,7 @@ struct GLVertexFormat : IVertexFormat
     void bind(int idx) const {glBindVertexArray(m_vao[idx]);}
 };
 
-struct GLShaderDataBinding : IShaderDataBinding
+struct GLShaderDataBinding : IShaderDataBindingPriv<GLData>
 {
     const GLShaderPipeline* m_pipeline;
     const GLVertexFormat* m_vtxFormat;
@@ -558,12 +560,14 @@ struct GLShaderDataBinding : IShaderDataBinding
     size_t m_texCount;
     std::unique_ptr<ITexture*[]> m_texs;
 
-    GLShaderDataBinding(IShaderPipeline* pipeline,
+    GLShaderDataBinding(GLData* d,
+                        IShaderPipeline* pipeline,
                         IVertexFormat* vtxFormat,
                         size_t ubufCount, IGraphicsBuffer** ubufs,
                         const size_t* ubufOffs, const size_t* ubufSizes,
                         size_t texCount, ITexture** texs)
-    : m_pipeline(static_cast<GLShaderPipeline*>(pipeline)),
+    : IShaderDataBindingPriv(d),
+      m_pipeline(static_cast<GLShaderPipeline*>(pipeline)),
       m_vtxFormat(static_cast<GLVertexFormat*>(vtxFormat)),
       m_ubufCount(ubufCount),
       m_ubufs(new IGraphicsBuffer*[ubufCount]),
@@ -663,7 +667,7 @@ GLDataFactory::Context::newShaderDataBinding(IShaderPipeline* pipeline,
                                              size_t texCount, ITexture** texs, size_t baseVert, size_t baseInst)
 {
     GLShaderDataBinding* retval =
-    new GLShaderDataBinding(pipeline, vtxFormat, ubufCount, ubufs,
+    new GLShaderDataBinding(m_deferredData.get(), pipeline, vtxFormat, ubufCount, ubufs,
                             ubufOffs, ubufSizes, texCount, texs);
     m_deferredData->m_SBinds.emplace_back(retval);
     return retval;
@@ -691,6 +695,7 @@ GraphicsDataToken GLDataFactory::commitTransaction(const FactoryCommitFunc& tran
     GLData* retval = m_deferredData.get();
     m_deferredData.reset();
     m_committedData.insert(retval);
+
     lk.unlock();
     /* Let's go ahead and flush to ensure our data gets to the GPU
        While this isn't strictly required, some drivers might behave
@@ -712,14 +717,14 @@ void GLDataFactory::destroyData(IGraphicsData* d)
     std::unique_lock<std::mutex> lk(m_committedMutex);
     GLData* data = static_cast<GLData*>(d);
     m_committedData.erase(data);
-    delete data;
+    data->decrement();
 }
 
 void GLDataFactory::destroyAllData()
 {
     std::unique_lock<std::mutex> lk(m_committedMutex);
-    for (IGraphicsData* data : m_committedData)
-        delete static_cast<GLData*>(data);
+    for (GLData* data : m_committedData)
+        data->decrement();
     for (IGraphicsBufferPool* pool : m_committedPools)
         delete static_cast<GLPool*>(pool);
     m_committedData.clear();
@@ -836,10 +841,15 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 size_t instCount;
             };
         };
+        IShaderDataBindingPriv<GLData>::Token resToken;
         const ITextureR* resolveTex;
         bool resolveColor : 1;
         bool resolveDepth : 1;
         Command(Op op) : m_op(op) {}
+        Command(const Command&) = delete;
+        Command& operator=(const Command&) = delete;
+        Command(Command&&) = default;
+        Command& operator=(Command&&) = default;
     };
     std::vector<Command> m_cmdBufs[3];
     size_t m_fillBuf = 0;
@@ -1129,6 +1139,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::Op::SetShaderDataBinding);
         cmds.back().binding = binding;
+        cmds.back().resToken = static_cast<IShaderDataBindingPriv<GLData>*>(binding)->lock();
     }
 
     void setRenderTarget(ITextureR* target)

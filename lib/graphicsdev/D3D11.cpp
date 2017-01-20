@@ -2,6 +2,7 @@
 #include "logvisor/logvisor.hpp"
 #include "boo/graphicsdev/D3D.hpp"
 #include "boo/IGraphicsContext.hpp"
+#include "Common.hpp"
 #include <vector>
 #include <thread>
 #include <mutex>
@@ -32,7 +33,7 @@ static inline void ThrowIfFailed(HRESULT hr)
     }
 }
 
-struct D3D11Data : IGraphicsData
+struct D3D11Data : IGraphicsDataPriv<D3D11Data>
 {
     std::vector<std::shared_ptr<class D3D11ShaderPipeline>> m_SPs;
     std::vector<std::shared_ptr<struct D3D11ShaderDataBinding>> m_SBinds;
@@ -576,9 +577,8 @@ public:
     }
 };
 
-struct D3D11ShaderDataBinding : IShaderDataBinding
+struct D3D11ShaderDataBinding : IShaderDataBindingPriv<D3D11Data>
 {
-    std::weak_ptr<D3D11ShaderDataBinding> m_selfPtr;
     std::shared_ptr<D3D11ShaderPipeline> m_pipeline;
     std::shared_ptr<IGraphicsBuffer> m_vbuf;
     std::shared_ptr<IGraphicsBuffer> m_instVbuf;
@@ -590,13 +590,15 @@ struct D3D11ShaderDataBinding : IShaderDataBinding
     std::vector<std::shared_ptr<ITexture>> m_texs;
     UINT m_baseOffsets[2];
 
-    D3D11ShaderDataBinding(D3D11Context* ctx,
+    D3D11ShaderDataBinding(D3D11Data* d,
+                           D3D11Context* ctx,
                            IShaderPipeline* pipeline,
                            IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbuf, IGraphicsBuffer* ibuf,
                            size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                            const size_t* ubufOffs, const size_t* ubufSizes,
                            size_t texCount, ITexture** texs, size_t baseVert, size_t baseInst)
-    : m_pipeline(static_cast<D3D11ShaderPipeline*>(pipeline)->m_selfPtr),
+    : IShaderDataBindingPriv(d),
+      m_pipeline(static_cast<D3D11ShaderPipeline*>(pipeline)->m_selfPtr),
       m_vbuf(D3D11GraphicsBuffer::getPtr(vbuf)),
       m_instVbuf(D3D11GraphicsBuffer::getPtr(instVbuf)),
       m_ibuf(D3D11GraphicsBuffer::getPtr(ibuf))
@@ -849,13 +851,13 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
     struct CommandList
     {
         ComPtr<ID3D11CommandList> list;
-        std::vector<std::shared_ptr<D3D11ShaderDataBinding>> bindings;
+        std::vector<IShaderDataBindingPriv::Token> resTokens;
         std::shared_ptr<D3D11TextureR> workDoPresent;
 
         void reset()
         {
             list.Reset();
-            bindings.clear();
+            resTokens.clear();
             workDoPresent.reset();
         }
     };
@@ -965,7 +967,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
     {
         D3D11ShaderDataBinding* cbind = static_cast<D3D11ShaderDataBinding*>(binding);
         cbind->bind(m_deferredCtx.Get(), m_fillBuf);
-        m_cmdLists[m_fillBuf].bindings.push_back(cbind->m_selfPtr.lock());
+        m_cmdLists[m_fillBuf].resTokens.push_back(cbind->lock());
 
         ID3D11SamplerState* samp[] = {m_ctx->m_ss.Get()};
         m_deferredCtx->PSSetSamplers(0, 1, samp);
@@ -1174,14 +1176,14 @@ class D3D11DataFactory : public ID3DDataFactory
         std::unique_lock<std::mutex> lk(m_committedMutex);
         D3D11Data* data = static_cast<D3D11Data*>(d);
         m_committedData.erase(data);
-        delete data;
+        data->decrement();
     }
 
     void destroyAllData()
     {
         std::unique_lock<std::mutex> lk(m_committedMutex);
-        for (IGraphicsData* data : m_committedData)
-            delete static_cast<D3D11Data*>(data);
+        for (D3D11Data* data : m_committedData)
+            data->decrement();
         for (IGraphicsBufferPool* pool : m_committedPools)
             delete static_cast<D3D11Pool*>(pool);
         m_committedData.clear();
@@ -1356,11 +1358,10 @@ public:
         {
             D3D11Data* d = static_cast<D3D11Data*>(m_deferredData);
             D3D11ShaderDataBinding* retval =
-                new D3D11ShaderDataBinding(m_parent.m_ctx, pipeline, vbuf, instVbo, ibuf,
+                new D3D11ShaderDataBinding(d, m_parent.m_ctx, pipeline, vbuf, instVbo, ibuf,
                                            ubufCount, ubufs, ubufStages, ubufOffs, ubufSizes, texCount, texs,
                                            baseVert, baseInst);
             d->m_SBinds.emplace_back(retval);
-            retval->m_selfPtr = d->m_SBinds.back();
             return retval;
         }
     };
