@@ -4,6 +4,7 @@
 /* Private header for managing shader data
  * binding lifetimes through rendering cycle */
 
+#include <atomic>
 #include "boo/graphicsdev/IGraphicsDataFactory.hpp"
 
 namespace boo

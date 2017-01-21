@@ -1747,11 +1747,12 @@ public:
                 size_t texCount, ITexture** texs,
                 size_t baseVert, size_t baseInst)
         {
+            D3D12Data* d = static_cast<D3D12Data*>(m_deferredData);
             D3D12ShaderDataBinding* retval =
-                new D3D12ShaderDataBinding(m_deferredData.get(), m_parent.m_ctx, pipeline, vbuf, instVbuf, ibuf,
+                new D3D12ShaderDataBinding(d, m_parent.m_ctx, pipeline, vbuf, instVbuf, ibuf,
                                            ubufCount, ubufs, ubufOffs, ubufSizes, texCount, texs,
                                            baseVert, baseInst);
-            static_cast<D3D12Data*>(m_deferredData)->m_SBinds.emplace_back(retval);
+            d->m_SBinds.emplace_back(retval);
             return retval;
         }
     };

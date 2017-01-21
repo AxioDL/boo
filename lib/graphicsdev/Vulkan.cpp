@@ -2814,7 +2814,7 @@ void VulkanDataFactory::destroyPool(IGraphicsBufferPool* p)
 void VulkanDataFactory::destroyAllData()
 {
     std::unique_lock<std::mutex> lk(m_committedMutex);
-    for (IGraphicsData* data : m_committedData)
+    for (VulkanData* data : m_committedData)
         data->decrement();
     for (IGraphicsBufferPool* pool : m_committedPools)
         delete static_cast<VulkanPool*>(pool);
@@ -3305,7 +3305,7 @@ void VulkanCommandQueue::execute()
     {
         if ((*it)->m_dead)
         {
-            it->decrement();
+            (*it)->decrement();
             it = gfxF->m_committedData.erase(it);
             continue;
         }
