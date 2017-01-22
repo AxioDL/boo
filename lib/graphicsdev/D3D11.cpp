@@ -236,27 +236,27 @@ class D3D11TextureD : public ITextureD
     D3D11CommandQueue* m_q;
     std::unique_ptr<uint8_t[]> m_cpuBuf;
     size_t m_cpuSz;
+    size_t m_pxPitch;
     int m_validSlots = 0;
     D3D11TextureD(D3D11CommandQueue* q, D3D11Context* ctx, size_t width, size_t height, TextureFormat fmt)
-    : m_q(q)
+    : m_width(width), m_height(height), m_q(q)
     {
         DXGI_FORMAT pixelFmt;
-        size_t pxPitch;
         switch (fmt)
         {
         case TextureFormat::RGBA8:
             pixelFmt = DXGI_FORMAT_R8G8B8A8_UNORM;
-            pxPitch = 4;
+            m_pxPitch = 4;
             break;
         case TextureFormat::I8:
             pixelFmt = DXGI_FORMAT_R8_UNORM;
-            pxPitch = 1;
+            m_pxPitch = 1;
             break;
         default:
             Log.report(logvisor::Fatal, "unsupported tex format");
         }
 
-        m_cpuSz = width * height * pxPitch;
+        m_cpuSz = width * height * m_pxPitch;
         m_cpuBuf.reset(new uint8_t[m_cpuSz]);
 
         CD3D11_TEXTURE2D_DESC desc(pixelFmt, width, height, 1, 1,
@@ -1093,7 +1093,9 @@ void D3D11TextureD::update(ID3D11DeviceContext* ctx, int b)
         ID3D11Texture2D* res = m_texs[b].Get();
         D3D11_MAPPED_SUBRESOURCE d;
         ctx->Map(res, 0, D3D11_MAP_WRITE_DISCARD, 0, &d);
-        memcpy(d.pData, m_cpuBuf.get(), m_cpuSz);
+        size_t rowSz = m_pxPitch * m_width;
+        for (size_t i=0 ; i<m_cpuSz ; i+=rowSz, reinterpret_cast<uint8_t*&>(d.pData)+=d.RowPitch)
+            memmove(d.pData, m_cpuBuf.get() + i, rowSz);
         ctx->Unmap(res, 0);
         m_validSlots |= slot;
     }
