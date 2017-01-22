@@ -161,6 +161,7 @@ void BaseAudioVoiceEngine::_unbindFrom(std::list<AudioVoice*>::iterator it)
 void BaseAudioVoiceEngine::_unbindFrom(std::list<AudioSubmix*>::iterator it)
 {
     m_activeSubmixes.erase(it);
+    m_submixesDirty = true;
 }
 
 std::unique_ptr<IAudioVoice>
