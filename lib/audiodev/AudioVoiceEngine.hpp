@@ -69,6 +69,7 @@ public:
     std::unique_ptr<IAudioSubmix> allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb, int busId);
 
     void register5MsCallback(std::function<void(double dt)>&& callback);
+    void unregister5MsCallback();
 
     void setVolume(float vol);
     const AudioVoiceEngineMixInfo& mixInfo() const;

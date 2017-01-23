@@ -202,6 +202,11 @@ void BaseAudioVoiceEngine::register5MsCallback(std::function<void(double dt)>&& 
     m_5msCallback = std::move(callback);
 }
 
+void BaseAudioVoiceEngine::unregister5MsCallback()
+{
+    m_5msCallback = {};
+}
+
 void BaseAudioVoiceEngine::setVolume(float vol)
 {
     m_totalVol = vol;

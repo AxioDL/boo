@@ -38,6 +38,9 @@ struct IAudioVoiceEngine
     /** Client may optionally register a 200-virtual-updates each second callback for the stream */
     virtual void register5MsCallback(std::function<void(double dt)>&& callback)=0;
 
+    /** Unregister callback for stable cleanup */
+    virtual void unregister5MsCallback()=0;
+
     /** Client may use this to determine current speaker-setup */
     virtual AudioChannelSet getAvailableSet()=0;
 
