@@ -218,8 +218,10 @@ class D3D12TextureS : public ITextureS
             upData[i].RowPitch = width * pxPitchNum / pxPitchDenom;
             upData[i].SlicePitch = upData[i].RowPitch * height;
             dataIt += upData[i].SlicePitch;
-            width /= 2;
-            height /= 2;
+            if (width > 1)
+                width /= 2;
+            if (height > 1)
+                height /= 2;
         }
 
         if (!PrepSubresources<16>(ctx->m_dev.Get(), &m_gpuDesc, m_tex.Get(), 0, 0, m_gpuDesc.MipLevels, upData))
@@ -256,7 +258,7 @@ class D3D12TextureSA : public ITextureSA
     size_t m_sz;
     D3D12_RESOURCE_DESC m_gpuDesc;
     D3D12TextureSA(D3D12Context* ctx, size_t width, size_t height, size_t layers,
-                   TextureFormat fmt, const void* data, size_t sz)
+                   size_t mips, TextureFormat fmt, const void* data, size_t sz)
     : m_fmt(fmt), m_layers(layers), m_sz(sz)
     {
         size_t pxPitch;
@@ -275,41 +277,33 @@ class D3D12TextureSA : public ITextureSA
             Log.report(logvisor::Fatal, "unsupported tex format");
         }
 
-        m_gpuDesc = CD3DX12_RESOURCE_DESC::Tex2D(pixelFmt, width, height, layers, 1);
-        size_t reqSz = GetRequiredIntermediateSize(ctx->m_dev.Get(), &m_gpuDesc, 0, layers);
+        m_gpuDesc = CD3DX12_RESOURCE_DESC::Tex2D(pixelFmt, width, height, layers, mips);
+        size_t reqSz = GetRequiredIntermediateSize(ctx->m_dev.Get(), &m_gpuDesc, 0, layers * mips);
         ThrowIfFailed(ctx->m_dev->CreateCommittedResource(
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
             D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(reqSz),
             D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, __uuidof(ID3D12Resource), &m_tex));
 
         const uint8_t* dataIt = static_cast<const uint8_t*>(data);
-
-        if (layers > 16)
+        std::unique_ptr<D3D12_SUBRESOURCE_DATA[]> upData(new D3D12_SUBRESOURCE_DATA[layers * mips]);
+        D3D12_SUBRESOURCE_DATA* outIt = upData.get();
+        for (size_t i=0 ; i<mips ; ++i)
         {
-            std::unique_ptr<D3D12_SUBRESOURCE_DATA[]> upData(new D3D12_SUBRESOURCE_DATA[layers]);
-            for (size_t i=0 ; i<layers ; ++i)
+            for (size_t j=0 ; j<layers ; ++j)
             {
-                upData[i].pData = dataIt;
-                upData[i].RowPitch = width * pxPitch;
-                upData[i].SlicePitch = upData[i].RowPitch * height;
-                dataIt += upData[i].SlicePitch;
+                outIt->pData = dataIt;
+                outIt->RowPitch = width * pxPitch;
+                outIt->SlicePitch = outIt->RowPitch * height;
+                dataIt += outIt->SlicePitch;
+                ++outIt;
             }
-            if (!PrepSubresources(ctx->m_dev.Get(), &m_gpuDesc, m_tex.Get(), 0, 0, layers, upData.get()))
-                Log.report(logvisor::Fatal, "error preparing resource for upload");
+            if (width > 1)
+                width /= 2;
+            if (height > 1)
+                height /= 2;
         }
-        else
-        {
-            D3D12_SUBRESOURCE_DATA upData[16] = {};
-            for (size_t i=0 ; i<layers ; ++i)
-            {
-                upData[i].pData = dataIt;
-                upData[i].RowPitch = width * pxPitch;
-                upData[i].SlicePitch = upData[i].RowPitch * height;
-                dataIt += upData[i].SlicePitch;
-            }
-            if (!PrepSubresources<16>(ctx->m_dev.Get(), &m_gpuDesc, m_tex.Get(), 0, 0, layers, upData))
-                Log.report(logvisor::Fatal, "error preparing resource for upload");
-        }
+        if (!PrepSubresources(ctx->m_dev.Get(), &m_gpuDesc, m_tex.Get(), 0, 0, layers * mips, upData.get()))
+            Log.report(logvisor::Fatal, "error preparing resource for upload");
     }
 public:
     ComPtr<ID3D12Resource> m_tex;
@@ -322,18 +316,10 @@ public:
             D3D12_RESOURCE_STATE_COPY_DEST,
             nullptr, __uuidof(ID3D12Resource), &m_gpuTex));
 
-        if (m_gpuDesc.DepthOrArraySize > 16)
-        {
-            CommandSubresourcesTransfer(ctx->m_dev.Get(), ctx->m_loadlist.Get(), m_gpuTex.Get(), m_tex.Get(), 0, 0, m_gpuDesc.DepthOrArraySize);
-            ctx->m_loadlist->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_gpuTex.Get(),
-                D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
-        }
-        else
-        {
-            CommandSubresourcesTransfer<16>(ctx->m_dev.Get(), ctx->m_loadlist.Get(), m_gpuTex.Get(), m_tex.Get(), 0, 0, m_gpuDesc.DepthOrArraySize);
-            ctx->m_loadlist->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_gpuTex.Get(),
-                D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
-        }
+        CommandSubresourcesTransfer(ctx->m_dev.Get(), ctx->m_loadlist.Get(), m_gpuTex.Get(),
+                                    m_tex.Get(), 0, 0, m_gpuDesc.DepthOrArraySize * m_gpuDesc.MipLevels);
+        ctx->m_loadlist->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_gpuTex.Get(),
+            D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
 
         return NextHeapOffset(offset, ctx->m_dev->GetResourceAllocationInfo(0, 1, &m_gpuDesc));
     }
@@ -1658,10 +1644,10 @@ public:
             return retval;
         }
 
-        ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
-                                          const void* data, size_t sz)
+        ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
+                                          TextureFormat fmt, const void* data, size_t sz)
         {
-            D3D12TextureSA* retval = new D3D12TextureSA(m_parent.m_ctx, width, height, layers, fmt, data, sz);
+            D3D12TextureSA* retval = new D3D12TextureSA(m_parent.m_ctx, width, height, layers, mips, fmt, data, sz);
             static_cast<D3D12Data*>(m_deferredData)->m_SATexs.emplace_back(retval);
             return retval;
         }

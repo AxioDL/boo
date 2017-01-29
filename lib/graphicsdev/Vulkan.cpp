@@ -1050,14 +1050,14 @@ class VulkanTextureSA : public ITextureSA
     VulkanContext* m_ctx;
     TextureFormat m_fmt;
     size_t m_sz;
-    size_t m_width, m_height, m_layers;
+    size_t m_width, m_height, m_layers, m_mips;
     VkFormat m_vkFmt;
     int m_pixelPitchNum = 1;
     int m_pixelPitchDenom = 1;
 
     VulkanTextureSA(VulkanContext* ctx, size_t width, size_t height, size_t layers,
-                   TextureFormat fmt, const void* data, size_t sz)
-    : m_ctx(ctx), m_fmt(fmt), m_width(width), m_height(height), m_layers(layers), m_sz(sz)
+                    size_t mips, TextureFormat fmt, const void* data, size_t sz)
+    : m_ctx(ctx), m_fmt(fmt), m_width(width), m_height(height), m_layers(layers), m_mips(mips), m_sz(sz)
     {
         VkFormat pfmt;
         switch (fmt)
@@ -1111,7 +1111,7 @@ class VulkanTextureSA : public ITextureSA
         texCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         texCreateInfo.imageType = VK_IMAGE_TYPE_2D;
         texCreateInfo.format = pfmt;
-        texCreateInfo.mipLevels = 1;
+        texCreateInfo.mipLevels = mips;
         texCreateInfo.arrayLayers = layers;
         texCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         texCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
@@ -1181,7 +1181,7 @@ public:
         viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
         viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.levelCount = m_mips;
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = m_layers;
 
@@ -1192,31 +1192,46 @@ public:
          * DESTINATION_OPTIMAL */
         SetImageLayout(ctx->m_loadCmdBuf, m_gpuTex, VK_IMAGE_ASPECT_COLOR_BIT,
                        VK_IMAGE_LAYOUT_UNDEFINED,
-                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, m_layers);
+                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, m_mips, m_layers);
 
-        VkBufferImageCopy copyRegion = {};
-        copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copyRegion.imageSubresource.mipLevel = 0;
-        copyRegion.imageSubresource.baseArrayLayer = 0;
-        copyRegion.imageSubresource.layerCount = m_layers;
-        copyRegion.imageExtent.width = m_width;
-        copyRegion.imageExtent.height = m_height;
-        copyRegion.imageExtent.depth = 1;
-        copyRegion.bufferOffset = 0;
+        VkBufferImageCopy copyRegions[16] = {};
+        size_t width = m_width;
+        size_t height = m_height;
+        size_t regionCount = std::min(size_t(16), m_mips);
+        size_t offset = 0;
+        for (int i=0 ; i<regionCount ; ++i)
+        {
+            size_t srcRowPitch = width * m_layers * m_pixelPitchNum / m_pixelPitchDenom;
+
+            copyRegions[i].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyRegions[i].imageSubresource.mipLevel = i;
+            copyRegions[i].imageSubresource.baseArrayLayer = 0;
+            copyRegions[i].imageSubresource.layerCount = m_layers;
+            copyRegions[i].imageExtent.width = width;
+            copyRegions[i].imageExtent.height = height;
+            copyRegions[i].imageExtent.depth = 1;
+            copyRegions[i].bufferOffset = offset;
+
+            if (width > 1)
+                width /= 2;
+            if (height > 1)
+                height /= 2;
+            offset += srcRowPitch;
+        }
 
         /* Put the copy command into the command buffer */
         vk::CmdCopyBufferToImage(ctx->m_loadCmdBuf,
                                  m_cpuBuf,
                                  m_gpuTex,
                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                 1,
-                                 &copyRegion);
+                                 regionCount,
+                                 copyRegions);
 
         /* Set the layout for the texture image from DESTINATION_OPTIMAL to
          * SHADER_READ_ONLY */
         SetImageLayout(ctx->m_loadCmdBuf, m_gpuTex, VK_IMAGE_ASPECT_COLOR_BIT,
                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, m_layers);
+                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, m_mips, m_layers);
     }
 
     TextureFormat format() const {return m_fmt;}
@@ -3022,10 +3037,10 @@ ITextureS* VulkanDataFactory::Context::newStaticTexture(size_t width, size_t hei
     return retval;
 }
 
-ITextureSA* VulkanDataFactory::Context::newStaticArrayTexture(size_t width, size_t height, size_t layers,
+ITextureSA* VulkanDataFactory::Context::newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
                                                               TextureFormat fmt, const void* data, size_t sz)
 {
-    VulkanTextureSA* retval = new VulkanTextureSA(m_parent.m_ctx, width, height, layers, fmt, data, sz);
+    VulkanTextureSA* retval = new VulkanTextureSA(m_parent.m_ctx, width, height, layers, mips, fmt, data, sz);
     static_cast<VulkanData*>(m_deferredData.get())->m_SATexs.emplace_back(retval);
     return retval;
 }

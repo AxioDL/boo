@@ -152,8 +152,10 @@ class D3D11TextureS : public ITextureS
             upData[i].SysMemPitch = width * pxPitchNum / pxPitchDenom;
             upData[i].SysMemSlicePitch = upData[i].SysMemPitch * height;
             dataIt += upData[i].SysMemSlicePitch;
-            width /= 2;
-            height /= 2;
+            if (width > 1)
+                width /= 2;
+            if (height > 1)
+                height /= 2;
         }
 
         ThrowIfFailed(ctx->m_dev->CreateTexture2D(&desc, upData, &m_tex));
@@ -172,7 +174,7 @@ class D3D11TextureSA : public ITextureSA
 
     size_t m_sz;
     D3D11TextureSA(D3D11Context* ctx, size_t width, size_t height, size_t layers,
-                  TextureFormat fmt, const void* data, size_t sz)
+                   size_t mips, TextureFormat fmt, const void* data, size_t sz)
     : m_sz(sz)
     {
         size_t pixelPitch;
@@ -188,34 +190,28 @@ class D3D11TextureSA : public ITextureSA
             pixelFmt = DXGI_FORMAT_R8_UNORM;
         }
 
-        CD3D11_TEXTURE2D_DESC desc(pixelFmt, width, height, layers, 1,
+        CD3D11_TEXTURE2D_DESC desc(pixelFmt, width, height, layers, mips,
                                    D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_IMMUTABLE);
 
         const uint8_t* dataIt = static_cast<const uint8_t*>(data);
-        if (layers > 16)
+        std::unique_ptr<D3D11_SUBRESOURCE_DATA[]> upData(new D3D11_SUBRESOURCE_DATA[layers * mips]);
+        D3D11_SUBRESOURCE_DATA* outIt = upData.get();
+        for (size_t i=0 ; i<mips ; ++i)
         {
-            std::unique_ptr<D3D11_SUBRESOURCE_DATA[]> upData(new D3D11_SUBRESOURCE_DATA[layers]);
-            for (size_t i=0 ; i<layers ; ++i)
+            for (size_t j=0 ; j<layers ; ++j)
             {
-                upData[i].pSysMem = dataIt;
-                upData[i].SysMemPitch = width * pixelPitch;
-                upData[i].SysMemSlicePitch = upData[i].SysMemPitch * height;
-                dataIt += upData[i].SysMemSlicePitch;
+                outIt->pSysMem = dataIt;
+                outIt->SysMemPitch = width * pixelPitch;
+                outIt->SysMemSlicePitch = outIt->SysMemPitch * height;
+                dataIt += outIt->SysMemSlicePitch;
+                ++outIt;
             }
-            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&desc, upData.get(), &m_tex));
+            if (width > 1)
+                width /= 2;
+            if (height > 1)
+                height /= 2;
         }
-        else
-        {
-            D3D11_SUBRESOURCE_DATA upData[16] = {};
-            for (size_t i=0 ; i<layers ; ++i)
-            {
-                upData[i].pSysMem = dataIt;
-                upData[i].SysMemPitch = width * pixelPitch;
-                upData[i].SysMemSlicePitch = upData[i].SysMemPitch * height;
-                dataIt += upData[i].SysMemSlicePitch;
-            }
-            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&desc, upData, &m_tex));
-        }
+        ThrowIfFailed(ctx->m_dev->CreateTexture2D(&desc, upData.get(), &m_tex));
 
         ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_tex.Get(),
             &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_tex.Get(), D3D_SRV_DIMENSION_TEXTURE2DARRAY, pixelFmt), &m_srv));
@@ -1218,11 +1214,11 @@ public:
             return retval;
         }
 
-        ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
-                                          const void* data, size_t sz)
+        ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
+                                          TextureFormat fmt, const void* data, size_t sz)
         {
             D3D11Data* d = static_cast<D3D11Data*>(m_deferredData);
-            D3D11TextureSA* retval = new D3D11TextureSA(m_parent.m_ctx, width, height, layers, fmt, data, sz);
+            D3D11TextureSA* retval = new D3D11TextureSA(m_parent.m_ctx, width, height, layers, mips, fmt, data, sz);
             d->m_SATexs.emplace_back(retval);
             return retval;
         }
