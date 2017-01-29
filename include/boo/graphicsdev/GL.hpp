@@ -49,8 +49,8 @@ public:
 
         ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                                     const void* data, size_t sz);
-        ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
-                                          const void* data, size_t sz);
+        ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
+                                          TextureFormat fmt, const void* data, size_t sz);
         ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
         ITextureR* newRenderTexture(size_t width, size_t height,
                                     bool enableShaderColorBinding, bool enableShaderDepthBinding);

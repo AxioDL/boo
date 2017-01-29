@@ -138,7 +138,7 @@ class GLTextureS : public ITextureS
         switch (fmt)
         {
         case TextureFormat::RGBA8:
-            intFormat = GL_RGBA;
+            intFormat = GL_RGBA8;
             format = GL_RGBA;
             pxPitch = 4;
             break;
@@ -162,8 +162,10 @@ class GLTextureS : public ITextureS
                 size_t dataSz = width * height / 2;
                 glCompressedTexImage2D(GL_TEXTURE_2D, i, intFormat, width, height, 0, dataSz, dataIt);
                 dataIt += dataSz;
-                width /= 2;
-                height /= 2;
+                if (width > 1)
+                    width /= 2;
+                if (height > 1)
+                    height /= 2;
             }
         }
         else
@@ -172,8 +174,10 @@ class GLTextureS : public ITextureS
             {
                 glTexImage2D(GL_TEXTURE_2D, i, intFormat, width, height, 0, format, GL_UNSIGNED_BYTE, dataIt);
                 dataIt += width * height * pxPitch;
-                width /= 2;
-                height /= 2;
+                if (width > 1)
+                    width /= 2;
+                if (height > 1)
+                    height /= 2;
             }
         }
     }
@@ -191,17 +195,45 @@ class GLTextureSA : public ITextureSA
 {
     friend class GLDataFactory;
     GLuint m_tex;
-    GLTextureSA(size_t width, size_t height, size_t layers,
+    GLTextureSA(size_t width, size_t height, size_t layers, size_t mips,
                 TextureFormat fmt, const void* data, size_t sz)
     {
+        const uint8_t* dataIt = static_cast<const uint8_t*>(data);
         glGenTextures(1, &m_tex);
         glBindTexture(GL_TEXTURE_2D_ARRAY, m_tex);
         glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        if (mips > 1)
+        {
+            glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAX_LEVEL, mips-1);
+        }
+        else
+            glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+        GLenum intFormat, format;
+        int pxPitch;
         if (fmt == TextureFormat::RGBA8)
-            glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA, width, height, layers, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        {
+            intFormat = GL_RGBA8;
+            format = GL_RGBA;
+            pxPitch = 4;
+        }
         else if (fmt == TextureFormat::I8)
-            glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_R8, width, height, layers, 0, GL_RED, GL_UNSIGNED_BYTE, data);
+        {
+            intFormat = GL_R8;
+            format = GL_RED;
+            pxPitch = 1;
+        }
+
+        for (size_t i=0 ; i<mips ; ++i)
+        {
+            glTexImage3D(GL_TEXTURE_2D_ARRAY, i, intFormat, width, height, layers, 0, format, GL_UNSIGNED_BYTE, dataIt);
+            dataIt += width * height * layers * pxPitch;
+            if (width > 1)
+                width /= 2;
+            if (height > 1)
+                height /= 2;
+        }
     }
 public:
     ~GLTextureSA() {glDeleteTextures(1, &m_tex);}
@@ -317,10 +349,10 @@ GLDataFactory::Context::newStaticTexture(size_t width, size_t height, size_t mip
 }
 
 ITextureSA*
-GLDataFactory::Context::newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
-                                              const void *data, size_t sz)
+GLDataFactory::Context::newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
+                                              TextureFormat fmt, const void *data, size_t sz)
 {
-    GLTextureSA* retval = new GLTextureSA(width, height, layers, fmt, data, sz);
+    GLTextureSA* retval = new GLTextureSA(width, height, layers, mips, fmt, data, sz);
     m_deferredData->m_SATexs.emplace_back(retval);
     return retval;
 }
@@ -1382,7 +1414,7 @@ GLTextureD::GLTextureD(size_t width, size_t height, TextureFormat fmt)
     switch (fmt)
     {
     case TextureFormat::RGBA8:
-        m_intFormat = GL_RGBA;
+        m_intFormat = GL_RGBA8;
         m_format = GL_RGBA;
         pxPitch = 4;
         break;

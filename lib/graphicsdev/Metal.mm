@@ -123,8 +123,10 @@ class MetalTextureS : public ITextureS
                            withBytes:dataIt
                          bytesPerRow:width * ppitchNum / ppitchDenom];
                 dataIt += width * height * ppitchNum / ppitchDenom;
-                width /= 2;
-                height /= 2;
+                if (width > 1)
+                    width /= 2;
+                if (height > 1)
+                    height /= 2;
             }
         }
     }
@@ -136,7 +138,7 @@ public:
 class MetalTextureSA : public ITextureSA
 {
     friend class MetalDataFactory;
-    MetalTextureSA(MetalContext* ctx, size_t width, size_t height, size_t layers,
+    MetalTextureSA(MetalContext* ctx, size_t width, size_t height, size_t layers, size_t mips,
                    TextureFormat fmt, const void* data, size_t sz)
     {
         MTLPixelFormat pfmt = MTLPixelFormatRGBA8Unorm;
@@ -155,21 +157,29 @@ class MetalTextureSA : public ITextureSA
             MTLTextureDescriptor* desc =
             [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:pfmt
                                                                width:width height:height
-                                                           mipmapped:NO];
+                                                           mipmapped:(mips>1)?YES:NO];
             desc.textureType = MTLTextureType2DArray;
             desc.arrayLength = layers;
+            desc.mipmapLevelCount = mips;
             desc.usage = MTLTextureUsageShaderRead;
             m_tex = [ctx->m_dev newTextureWithDescriptor:desc];
             const uint8_t* dataIt = reinterpret_cast<const uint8_t*>(data);
-            for (size_t i=0 ; i<layers ; ++i)
+            for (size_t i=0 ; i<mips ; ++i)
             {
-                [m_tex replaceRegion:MTLRegionMake2D(0, 0, width, height)
-                         mipmapLevel:0
-                               slice:i
-                           withBytes:dataIt
-                         bytesPerRow:width * ppitch
-                       bytesPerImage:width * height * ppitch];
-                dataIt += width * height * ppitch;
+                for (size_t j=0 ; j<layers ; ++j)
+                {
+                    [m_tex replaceRegion:MTLRegionMake2D(0, 0, width, height)
+                             mipmapLevel:i
+                                   slice:j
+                               withBytes:dataIt
+                             bytesPerRow:width * ppitch
+                           bytesPerImage:width * height * ppitch];
+                    dataIt += width * height * ppitch;
+                }
+                if (width > 1)
+                    width /= 2;
+                if (height > 1)
+                    height /= 2;
             }
         }
     }
@@ -1056,10 +1066,10 @@ ITextureS* MetalDataFactory::Context::newStaticTexture(size_t width, size_t heig
     m_deferredData->m_STexs.emplace_back(retval);
     return retval;
 }
-ITextureSA* MetalDataFactory::Context::newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
-                                                             const void* data, size_t sz)
+ITextureSA* MetalDataFactory::Context::newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
+                                                             TextureFormat fmt, const void* data, size_t sz)
 {
-    MetalTextureSA* retval = new MetalTextureSA(m_parent.m_ctx, width, height, layers, fmt, data, sz);
+    MetalTextureSA* retval = new MetalTextureSA(m_parent.m_ctx, width, height, layers, mips, fmt, data, sz);
     m_deferredData->m_SATexs.emplace_back(retval);
     return retval;
 }

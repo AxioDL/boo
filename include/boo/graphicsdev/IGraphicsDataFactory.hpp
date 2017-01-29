@@ -220,8 +220,8 @@ struct IGraphicsDataFactory
         newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                          const void* data, size_t sz)=0;
         virtual ITextureSA*
-        newStaticArrayTexture(size_t width, size_t height, size_t layers, TextureFormat fmt,
-                              const void* data, size_t sz)=0;
+        newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
+                              TextureFormat fmt, const void* data, size_t sz)=0;
         virtual ITextureD*
         newDynamicTexture(size_t width, size_t height, TextureFormat fmt)=0;
         virtual ITextureR*
@@ -367,12 +367,15 @@ public:
     IGraphicsBufferD* newPoolBuffer(BufferUse use,
                                     size_t stride, size_t count)
     {
-        return m_factory->newPoolBuffer(m_pool, use, stride, count);
+        if (m_factory)
+            return m_factory->newPoolBuffer(m_pool, use, stride, count);
+        return nullptr;
     }
 
     void deletePoolBuffer(IGraphicsBufferD* buf)
     {
-        m_factory->deletePoolBuffer(m_pool, buf);
+        if (m_factory)
+            m_factory->deletePoolBuffer(m_pool, buf);
     }
 };
 
