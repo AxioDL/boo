@@ -1307,10 +1307,13 @@ public:
 
     void setTitle(const std::string& title)
     {
-        dispatch_sync(dispatch_get_main_queue(),
-        ^{
-            [m_nsWindow setTitle:[NSString stringWithUTF8String:title.c_str()]];
-        });
+        if (!m_closed)
+        {
+            dispatch_sync(dispatch_get_main_queue(),
+            ^{
+                [m_nsWindow setTitle:[NSString stringWithUTF8String:title.c_str()]];
+            });
+        }
     }
 
     void setCursor(EMouseCursor cursor)
