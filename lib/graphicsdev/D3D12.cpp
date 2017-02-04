@@ -86,7 +86,8 @@ class D3D12GraphicsBufferS : public IGraphicsBufferS
     D3D12GraphicsBufferS(BufferUse use, D3D12Context* ctx, const void* data, size_t stride, size_t count)
     : m_state(USE_TABLE[int(use)]), m_stride(stride), m_count(count), m_sz(stride * count)
     {
-        m_gpuDesc = CD3DX12_RESOURCE_DESC::Buffer(m_sz);
+        size_t gpuSz = use == BufferUse::Uniform ? ((m_sz + 255) & ~255) : m_sz;
+        m_gpuDesc = CD3DX12_RESOURCE_DESC::Buffer(gpuSz);
         size_t reqSz = GetRequiredIntermediateSize(ctx->m_dev.Get(), &m_gpuDesc, 0, 1);
         m_gpuDesc = CD3DX12_RESOURCE_DESC::Buffer(reqSz);
         ThrowIfFailed(ctx->m_dev->CreateCommittedResource(
@@ -111,9 +112,11 @@ public:
             nullptr, __uuidof(ID3D12Resource), &m_gpuBuf));
 
         /* Stage resource upload */
+        ctx->m_loadlist->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_gpuBuf.Get(),
+            m_state, D3D12_RESOURCE_STATE_COPY_DEST));
         CommandSubresourcesTransfer<1>(ctx->m_dev.Get(), ctx->m_loadlist.Get(), m_gpuBuf.Get(), m_buf.Get(), 0, 0, 1);
         ctx->m_loadlist->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_gpuBuf.Get(),
-            D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
+            D3D12_RESOURCE_STATE_COPY_DEST, m_state));
 
         return NextHeapOffset(offset, ctx->m_dev->GetResourceAllocationInfo(0, 1, &m_gpuDesc));
     }
@@ -133,7 +136,8 @@ class D3D12GraphicsBufferD : public IGraphicsBufferD
     {
         m_cpuSz = stride * count;
         m_cpuBuf.reset(new uint8_t[m_cpuSz]);
-        D3D12_RESOURCE_DESC desc = CD3DX12_RESOURCE_DESC::Buffer(m_cpuSz);
+        size_t gpuSz = use == BufferUse::Uniform ? ((m_cpuSz + 255) & ~255) : m_cpuSz;
+        D3D12_RESOURCE_DESC desc = CD3DX12_RESOURCE_DESC::Buffer(gpuSz);
         size_t reqSz = GetRequiredIntermediateSize(ctx->m_dev.Get(), &desc, 0, 1);
         desc = CD3DX12_RESOURCE_DESC::Buffer(reqSz);
         for (int i=0 ; i<2 ; ++i)
@@ -432,35 +436,40 @@ class D3D12TextureR : public ITextureR
         {
             rtvDim = D3D12_RTV_DIMENSION_TEXTURE2DMS;
             dsvDim = D3D12_DSV_DIMENSION_TEXTURE2DMS;
-            rtvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, 0, samples,
+            rtvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, 1, samples,
                 0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT);
-            dsvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D24_UNORM_S8_UINT, width, height, 1, 0, samples,
+            dsvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D24_UNORM_S8_UINT, width, height, 1, 1, samples,
                 0, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT);
-            cbindresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, 0, samples,
+            cbindresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, 1, samples,
                 0, D3D12_RESOURCE_FLAG_NONE, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT);
-            dbindresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D24_UNORM_S8_UINT, width, height, 1, 0, samples,
+            dbindresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D24_UNORM_S8_UINT, width, height, 1, 1, samples,
                 0, D3D12_RESOURCE_FLAG_NONE, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT);
         }
         else
         {
             rtvDim = D3D12_RTV_DIMENSION_TEXTURE2D;
             dsvDim = D3D12_DSV_DIMENSION_TEXTURE2D;
-            rtvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, 0, 1,
+            rtvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, 1, 1,
                 0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
-            dsvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D24_UNORM_S8_UINT, width, height, 1, 0, 1,
+            dsvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D24_UNORM_S8_UINT, width, height, 1, 1, 1,
                 0, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
-            cbindresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, 0, 1,
+            cbindresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, 1, 1,
                 0, D3D12_RESOURCE_FLAG_NONE);
-            dbindresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D24_UNORM_S8_UINT, width, height, 1, 0, 1,
+            dbindresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D24_UNORM_S8_UINT, width, height, 1, 1, 1,
                 0, D3D12_RESOURCE_FLAG_NONE);
         }
 
+        D3D12_CLEAR_VALUE colorClear = {};
+        colorClear.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        colorClear.Color[3] = 1.f;
         ThrowIfFailed(ctx->m_dev->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE,
-            &rtvresdesc, D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr,
+            &rtvresdesc, D3D12_RESOURCE_STATE_RENDER_TARGET, &colorClear,
             __uuidof(ID3D12Resource), &m_colorTex));
 
+        D3D12_CLEAR_VALUE depthClear = {};
+        depthClear.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
         ThrowIfFailed(ctx->m_dev->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE,
-            &dsvresdesc, D3D12_RESOURCE_STATE_DEPTH_WRITE, nullptr,
+            &dsvresdesc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &depthClear,
             __uuidof(ID3D12Resource), &m_depthTex));
 
         D3D12_RENDER_TARGET_VIEW_DESC rtvvdesc = {DXGI_FORMAT_R8G8B8A8_UNORM, rtvDim};
