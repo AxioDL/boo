@@ -18,10 +18,12 @@ namespace boo {class WindowCocoa; class GraphicsContextCocoa;}
 @interface WindowCocoaInternal : NSWindow
 {
     boo::WindowCocoa* booWindow;
+    id touchBarProvider;
 }
 - (id)initWithBooWindow:(boo::WindowCocoa*)bw title:(const std::string&)title;
 - (void)setFrameDefault;
 - (NSRect)genFrameDefault;
+- (void)setTouchBarProvider:(id)provider;
 @end
 
 /* AppKit applies OpenGL much differently than other platforms
@@ -1490,6 +1492,14 @@ public:
         return retval;
     }
 
+    void setTouchBarProvider(void* provider)
+    {
+        dispatch_sync(dispatch_get_main_queue(),
+        ^{
+            [m_nsWindow setTouchBarProvider:(__bridge_transfer id)provider];
+        });
+    }
+
     void waitForRetrace()
     {
         static_cast<GraphicsContextCocoa*>(m_gfxCtx)->waitForRetrace();
@@ -1559,6 +1569,15 @@ IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx,
     return NSMakeRect((scrFrame.size.width - width) / 2.0,
                       (scrFrame.size.height - height) / 2.0,
                       width, height);
+}
+- (void)setTouchBarProvider:(id<NSTouchBarProvider>)provider
+{
+    touchBarProvider = provider;
+    self.touchBar = nil;
+}
+- (NSTouchBar*)makeTouchBar
+{
+    return [touchBarProvider makeTouchBar];
 }
 - (void)close
 {

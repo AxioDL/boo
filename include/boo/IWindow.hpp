@@ -304,6 +304,8 @@ public:
     virtual void setStyle(EWindowStyle style)=0;
     virtual EWindowStyle getStyle() const=0;
 
+    virtual void setTouchBarProvider(void*) {}
+
     virtual IGraphicsCommandQueue* getCommandQueue()=0;
     virtual IGraphicsDataFactory* getDataFactory()=0;
 
