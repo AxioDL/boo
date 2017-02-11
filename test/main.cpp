@@ -17,18 +17,18 @@ class DolphinSmashAdapterCallback : public IDolphinSmashAdapterCallback
 {
     void controllerConnected(unsigned idx, EDolphinControllerType)
     {
-        printf("CONTROLLER %u CONNECTED\n", idx);
+//        printf("CONTROLLER %u CONNECTED\n", idx);
     }
     void controllerDisconnected(unsigned idx, EDolphinControllerType)
     {
-        printf("CONTROLLER %u DISCONNECTED\n", idx);
+//        printf("CONTROLLER %u DISCONNECTED\n", idx);
     }
     void controllerUpdate(unsigned idx, EDolphinControllerType,
                           const DolphinControllerState& state)
     {
-        printf("CONTROLLER %u UPDATE %d %d\n", idx, state.m_leftStick[0], state.m_leftStick[1]);
-        printf("                     %d %d\n", state.m_rightStick[0], state.m_rightStick[1]);
-        printf("                     %d %d\n", state.m_analogTriggers[0], state.m_analogTriggers[1]);
+//        printf("CONTROLLER %u UPDATE %d %d\n", idx, state.m_leftStick[0], state.m_leftStick[1]);
+//        printf("                     %d %d\n", state.m_rightStick[0], state.m_rightStick[1]);
+//        printf("                     %d %d\n", state.m_analogTriggers[0], state.m_analogTriggers[1]);
     }
 };
 

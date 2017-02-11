@@ -4,7 +4,6 @@
 
 namespace boo
 {
-
 /*
  * Reference: https://github.com/ToadKing/wii-u-gc-adapter/blob/master/wii-u-gc-adapter.c
  */
@@ -37,10 +36,10 @@ static inline EDolphinControllerType parseState(DolphinControllerState* stateOut
 
     stateOut->m_btns = (uint16_t)payload[1] << 8 | (uint16_t)payload[2];
 
-    stateOut->m_leftStick[0] = payload[4];
-    stateOut->m_leftStick[1] = payload[3];
-    stateOut->m_rightStick[0] = payload[6];
-    stateOut->m_rightStick[1] = payload[5];
+    stateOut->m_leftStick[0] = int8_t(payload[3]);
+    stateOut->m_leftStick[1] = int8_t(payload[4]);
+    stateOut->m_rightStick[0] = int8_t(payload[5]);
+    stateOut->m_rightStick[1] = int8_t(payload[6]);
     stateOut->m_analogTriggers[0] = payload[7];
     stateOut->m_analogTriggers[1] = payload[8];
 
@@ -59,6 +58,7 @@ void DolphinSmashAdapter::transferCycle()
     size_t recvSz = receiveUSBInterruptTransfer(payload, sizeof(payload));
     if (recvSz != 37 || payload[0] != 0x21)
         return;
+
     // printf("RECEIVED DATA %zu %02X\n", recvSz, payload[0]);
 
     if (!m_callback)
@@ -67,7 +67,7 @@ void DolphinSmashAdapter::transferCycle()
     /* Parse controller states */
     uint8_t* controller = &payload[1];
     uint8_t rumbleMask = 0;
-    for (int i = 0; i < 4; i++, controller += 9)
+    for (uint32_t i = 0; i < 4; i++, controller += 9)
     {
         DolphinControllerState state;
         bool rumble = false;
@@ -117,7 +117,7 @@ void DolphinSmashAdapter::deviceDisconnected()
 {
     if (!m_callback)
         return;
-    for (int i = 0; i < 4; i++)
+    for (uint32_t i = 0; i < 4; i++)
     {
         if (m_knownControllers & 1 << i)
         {
@@ -242,8 +242,8 @@ static void pad_clamptrigger(uint8_t& trigger)
 
 void DolphinControllerState::clamp()
 {
-    pad_clampstick(m_leftStick[0], m_leftStick[1], pad_clampregion[3], pad_clampregion[4], pad_clampregion[2]);
-    pad_clampstick(m_rightStick[0], m_rightStick[1], pad_clampregion[6], pad_clampregion[7], pad_clampregion[5]);
+    pad_clampstick(m_leftStick[0], m_leftStick[1], int8_t(pad_clampregion[3]), int8_t(pad_clampregion[4]), int8_t(pad_clampregion[2]));
+    pad_clampstick(m_rightStick[0], m_rightStick[1], int8_t(pad_clampregion[6]), int8_t(pad_clampregion[7]), int8_t(pad_clampregion[5]));
     pad_clamptrigger(m_analogTriggers[0]);
     pad_clamptrigger(m_analogTriggers[1]);
 }
