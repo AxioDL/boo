@@ -1098,7 +1098,7 @@ public:
             DEVICE_SCALE_FACTOR Factor;
             HMONITOR mon = MonitorFromWindow(m_hwnd, MONITOR_DEFAULTTOPRIMARY);
             MyGetScaleFactorForMonitor(mon, &Factor);
-            if (Factor == DEVICE_SCALE_FACTOR_INVALID)
+            if (Factor == 0)
                 return 1.f;
             return Factor / 100.f;
         }
