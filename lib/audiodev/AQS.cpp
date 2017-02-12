@@ -57,7 +57,17 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
         std::unique_lock<std::mutex> lk(engine->m_engineMutex);
         engine->m_cbWaiting = true;
-        engine->m_engineEnterCv.wait(lk);
+        if (engine->m_engineEnterCv.wait_for(lk,
+        std::chrono::nanoseconds(engine->m_mixInfo.m_periodFrames * 750000000 /
+                                 size_t(engine->m_mixInfo.m_sampleRate))) == std::cv_status::timeout)
+        {
+            inBuffer->mAudioDataByteSize = engine->m_frameBytes;
+            memset(inBuffer->mAudioData, 0, engine->m_frameBytes);
+            AudioQueueEnqueueBuffer(inAQ, inBuffer, 0, nullptr);
+            engine->m_cbWaiting = false;
+            engine->m_engineLeaveCv.notify_one();
+            return;
+        }
         engine->m_cbWaiting = false;
 
         engine->_pumpAndMixVoices(engine->m_mixInfo.m_periodFrames, reinterpret_cast<float*>(inBuffer->mAudioData));
@@ -240,7 +250,6 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         for (int i=0 ; i<pktlist->numPackets ; ++i)
         {
             std::vector<uint8_t> bytes(std::cbegin(packet->data), std::cbegin(packet->data) + packet->length);
-            ;
             readProcRefCon->m_receiver(std::move(bytes), AudioConvertHostTimeToNanos(packet->timeStamp) / 1.0e9);
             packet = MIDIPacketNext(packet);
         }
@@ -689,7 +698,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         while (chMapOut.m_channelCount < chCount)
             chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::Unknown;
 
-        m_mixInfo.m_periodFrames = 2400;
+        m_mixInfo.m_periodFrames = 2400 * size_t(actualSampleRate) / 48000;
         for (int i=0 ; i<3 ; ++i)
             if (AudioQueueAllocateBuffer(m_queue, m_mixInfo.m_periodFrames * chCount * 4, &m_buffers[i]))
             {
