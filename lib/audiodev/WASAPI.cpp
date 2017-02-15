@@ -220,7 +220,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         if (FAILED(m_audClient->Initialize(
                    AUDCLNT_SHAREMODE_SHARED,
                    0,
-                   1000000,
+                   450000, /* 45ms */
                    0,
                    (WAVEFORMATEX*)pwfx,
                    nullptr)))
