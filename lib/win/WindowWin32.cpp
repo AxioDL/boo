@@ -450,7 +450,8 @@ public:
         if (m_vsyncRunning)
         {
             m_vsyncRunning = false;
-            m_vsyncThread.join();
+            if (m_vsyncThread.joinable())
+                m_vsyncThread.join();
         }
 
         m_ctx->m_windows.erase(m_parentWindow);

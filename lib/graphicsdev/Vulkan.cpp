@@ -101,59 +101,53 @@ static void SetImageLayout(VkCommandBuffer cmd, VkImage image,
     imageMemoryBarrier.subresourceRange.levelCount = mipCount;
     imageMemoryBarrier.subresourceRange.layerCount = layerCount;
 
-    if (old_image_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+    switch (old_image_layout)
+    {
+    case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
         imageMemoryBarrier.srcAccessMask =
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+        break;
+    case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+        imageMemoryBarrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        break;
+    case VK_IMAGE_LAYOUT_PREINITIALIZED:
+        imageMemoryBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+        break;
+    case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+        imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        break;
+    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+        imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        break;
+    case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+        imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        break;
+    default: break;
     }
 
-    if (old_image_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
-        imageMemoryBarrier.srcAccessMask =
-            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    }
-
-    if (old_image_layout == VK_IMAGE_LAYOUT_PREINITIALIZED) {
-        imageMemoryBarrier.srcAccessMask =
-            VK_ACCESS_HOST_WRITE_BIT;
-    }
-
-    if (old_image_layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
-        imageMemoryBarrier.srcAccessMask =
-            VK_ACCESS_TRANSFER_READ_BIT;
-    }
-
-    if (old_image_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-        imageMemoryBarrier.srcAccessMask =
-            VK_ACCESS_TRANSFER_WRITE_BIT;
-    }
-
-    if (old_image_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-        imageMemoryBarrier.srcAccessMask =
-            VK_ACCESS_SHADER_READ_BIT;
-    }
-
-    if (new_image_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-        /* Make sure anything that was copying from this image has completed */
+    switch (new_image_layout)
+    {
+    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
         imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    }
-
-    if (new_image_layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
-        /* Make sure anything that was copying from this image has completed */
+        break;
+    case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
         imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    }
-
-    if (new_image_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-        /* Make sure any Copy or CPU writes to image are flushed */
+        break;
+    case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
         imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    }
-
-    if (new_image_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+        break;
+    case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
         imageMemoryBarrier.dstAccessMask =
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
-    }
-
-    if (new_image_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+        break;
+    case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
         imageMemoryBarrier.dstAccessMask =
             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        break;
+    case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
+        imageMemoryBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+        break;
+    default: break;
     }
 
     VkPipelineStageFlags src_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
@@ -410,7 +404,7 @@ void VulkanContext::initDevice()
 
 void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR surface, VkFormat format, VkColorSpaceKHR colorspace)
 {
-    m_displayFormat = VK_FORMAT_B8G8R8A8_UNORM;
+    m_displayFormat = format;
     VkSurfaceCapabilitiesKHR surfCapabilities;
     ThrowIfFailed(vk::GetPhysicalDeviceSurfaceCapabilitiesKHR(m_gpus[0], surface, &surfCapabilities));
 
@@ -2373,7 +2367,8 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
     {
         if (m_boundTarget)
         {
-            VkViewport vp = {float(rect.location[0]), float(m_boundTarget->m_height - rect.location[1] - rect.size[1]),
+            VkViewport vp = {float(rect.location[0]),
+                             float(std::max(0, int(m_boundTarget->m_height) - rect.location[1] - rect.size[1])),
                              float(rect.size[0]), float(rect.size[1]), znear, zfar};
             vk::CmdSetViewport(m_cmdBufs[m_fillBuf], 0, 1, &vp);
         }
@@ -2385,7 +2380,8 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         {
             VkRect2D vkrect =
             {
-                {int32_t(rect.location[0]), int32_t(m_boundTarget->m_height - rect.location[1] - rect.size[1])},
+                {int32_t(rect.location[0]),
+                 int32_t(std::max(0, int(m_boundTarget->m_height) - rect.location[1] - rect.size[1]))},
                 {uint32_t(rect.size[0]), uint32_t(rect.size[1])}
             };
             vk::CmdSetScissor(m_cmdBufs[m_fillBuf], 0, 1, &vkrect);
@@ -2820,10 +2816,8 @@ void VulkanDataFactory::destroyData(IGraphicsData* d)
 
 void VulkanDataFactory::destroyPool(IGraphicsBufferPool* p)
 {
-    std::unique_lock<std::mutex> lk(m_committedMutex);
     VulkanPool* pool = static_cast<VulkanPool*>(p);
-    m_committedPools.erase(pool);
-    delete pool;
+    pool->m_dead = true;
 }
 
 void VulkanDataFactory::destroyAllData()
@@ -3322,6 +3316,17 @@ void VulkanCommandQueue::execute()
         {
             (*it)->decrement();
             it = gfxF->m_committedData.erase(it);
+            continue;
+        }
+        ++it;
+    }
+    for (auto it = gfxF->m_committedPools.begin() ; it != gfxF->m_committedPools.end() ;)
+    {
+        if ((*it)->m_dead)
+        {
+            VulkanPool* p = *it;
+            it = gfxF->m_committedPools.erase(it);
+            delete p;
             continue;
         }
         ++it;
