@@ -1,5 +1,6 @@
 #include "boo/IWindow.hpp"
 #include "boo/IGraphicsContext.hpp"
+#include "boo/audiodev/IAudioVoiceEngine.hpp"
 
 #include <X11/Xlib.h>
 #undef None
@@ -199,8 +200,10 @@ struct WindowWayland : IWindow
         return std::unique_ptr<uint8_t[]>();
     }
 
-    void waitForRetrace()
+    void waitForRetrace(IAudioVoiceEngine* engine)
     {
+        if (engine)
+            engine->pumpAndMixVoices();
     }
 
     uintptr_t getPlatformHandle() const

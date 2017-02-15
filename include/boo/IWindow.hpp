@@ -13,6 +13,7 @@ namespace boo
 {
 struct IGraphicsCommandQueue;
 struct IGraphicsDataFactory;
+struct IAudioVoiceEngine;
 
 enum class EMouseButton
 {
@@ -294,7 +295,7 @@ public:
     virtual bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz)=0;
     virtual std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz)=0;
 
-    virtual void waitForRetrace()=0;
+    virtual void waitForRetrace(IAudioVoiceEngine* voxEngine=nullptr)=0;
     
     virtual uintptr_t getPlatformHandle() const=0;
     virtual void _incomingEvent(void* event) {(void)event;}

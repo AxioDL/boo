@@ -33,7 +33,7 @@ protected:
     std::list<AudioVoice*> m_activeVoices;
     std::list<AudioSubmix*> m_activeSubmixes;
     size_t m_5msFrames = 0;
-    std::function<void(double dt)> m_5msCallback;
+    IAudioVoiceEngineCallback* m_engineCallback = nullptr;
 
     /* Shared scratch buffers for accumulating audio data for resampling */
     std::vector<int16_t> m_scratchIn;
@@ -68,8 +68,7 @@ public:
 
     std::unique_ptr<IAudioSubmix> allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb, int busId);
 
-    void register5MsCallback(std::function<void(double dt)>&& callback);
-    void unregister5MsCallback();
+    void setCallbackInterface(IAudioVoiceEngineCallback* cb);
 
     void setVolume(float vol);
     const AudioVoiceEngineMixInfo& mixInfo() const;

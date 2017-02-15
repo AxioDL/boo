@@ -47,7 +47,8 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
     std::mutex m_engineMutex;
     std::condition_variable m_engineEnterCv;
     std::condition_variable m_engineLeaveCv;
-    bool m_cbWaiting = false;
+    bool m_inRetrace = false;
+    bool m_inCb = false;
     bool m_cbRunning = true;
 
     static void Callback(AQSAudioVoiceEngine* engine, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer)
@@ -56,25 +57,30 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
             return;
 
         std::unique_lock<std::mutex> lk(engine->m_engineMutex);
-        engine->m_cbWaiting = true;
-        if (engine->m_engineEnterCv.wait_for(lk,
-        std::chrono::nanoseconds(engine->m_mixInfo.m_periodFrames * 750000000 /
-                                 size_t(engine->m_mixInfo.m_sampleRate))) == std::cv_status::timeout)
+        engine->m_inCb = true;
+        if (!engine->m_inRetrace)
         {
-            inBuffer->mAudioDataByteSize = engine->m_frameBytes;
-            memset(inBuffer->mAudioData, 0, engine->m_frameBytes);
-            AudioQueueEnqueueBuffer(inAQ, inBuffer, 0, nullptr);
-            engine->m_cbWaiting = false;
-            engine->m_engineLeaveCv.notify_one();
-            return;
+            if (engine->m_engineEnterCv.wait_for(lk,
+            std::chrono::nanoseconds(engine->m_mixInfo.m_periodFrames * 1000000000 /
+                                     size_t(engine->m_mixInfo.m_sampleRate))) == std::cv_status::timeout ||
+                                     !engine->m_inRetrace)
+            {
+                inBuffer->mAudioDataByteSize = engine->m_frameBytes;
+                memset(inBuffer->mAudioData, 0, engine->m_frameBytes);
+                AudioQueueEnqueueBuffer(inAQ, inBuffer, 0, nullptr);
+                engine->m_engineLeaveCv.notify_one();
+                engine->m_inCb = false;
+                return;
+            }
         }
-        engine->m_cbWaiting = false;
 
-        engine->_pumpAndMixVoices(engine->m_mixInfo.m_periodFrames, reinterpret_cast<float*>(inBuffer->mAudioData));
+        engine->_pumpAndMixVoices(engine->m_mixInfo.m_periodFrames,
+                                  reinterpret_cast<float*>(inBuffer->mAudioData));
         inBuffer->mAudioDataByteSize = engine->m_frameBytes;
         AudioQueueEnqueueBuffer(inAQ, inBuffer, 0, nullptr);
 
         engine->m_engineLeaveCv.notify_one();
+        engine->m_inCb = false;
     }
 
     static void DummyCallback(AQSAudioVoiceEngine* engine, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer) {}
@@ -698,7 +704,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         while (chMapOut.m_channelCount < chCount)
             chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::Unknown;
 
-        m_mixInfo.m_periodFrames = 2400 * size_t(actualSampleRate) / 48000;
+        m_mixInfo.m_periodFrames = 1200 * size_t(actualSampleRate) / 48000;
         for (int i=0 ; i<3 ; ++i)
             if (AudioQueueAllocateBuffer(m_queue, m_mixInfo.m_periodFrames * chCount * 4, &m_buffers[i]))
             {
@@ -726,21 +732,49 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
     ~AQSAudioVoiceEngine()
     {
         m_cbRunning = false;
-        if (m_cbWaiting)
+        if (m_inCb)
             m_engineEnterCv.notify_one();
         AudioQueueDispose(m_queue, true);
         if (m_midiClient)
             MIDIClientDispose(m_midiClient);
     }
 
+    /* This is temperamental for AudioQueueServices
+     * (which has unpredictable buffering windows).
+     * _pumpAndMixVoicesRetrace() is highly recommended. */
     void pumpAndMixVoices()
     {
         std::unique_lock<std::mutex> lk(m_engineMutex);
-        if (m_cbWaiting)
+        if (m_inCb)
         {
+            /* Wake up callback */
             m_engineEnterCv.notify_one();
+            /* Wait for callback completion */
             m_engineLeaveCv.wait(lk);
         }
+    }
+
+    void _pumpAndMixVoicesRetrace()
+    {
+        std::unique_lock<std::mutex> lk(m_engineMutex);
+        m_inRetrace = true;
+        while (m_inRetrace)
+        {
+            if (m_inCb) /* Wake up callback */
+                m_engineEnterCv.notify_one();
+            /* Wait for callback completion */
+            m_engineLeaveCv.wait(lk);
+        }
+    }
+
+    void _retraceBreak()
+    {
+        std::unique_lock<std::mutex> lk(m_engineMutex);
+        m_inRetrace = false;
+        if (m_inCb) /* Break out of callback */
+            m_engineEnterCv.notify_one();
+        else /* Break out of client */
+            m_engineLeaveCv.notify_one();
     }
 };
 

@@ -9,6 +9,7 @@
 #include "boo/graphicsdev/GL.hpp"
 #include "boo/graphicsdev/glew.h"
 #include "boo/graphicsdev/wglew.h"
+#include "boo/audiodev/IAudioVoiceEngine.hpp"
 
 #if BOO_HAS_VULKAN
 #include "boo/graphicsdev/Vulkan.hpp"
@@ -1215,8 +1216,10 @@ public:
         return std::unique_ptr<uint8_t[]>();
     }
 
-    void waitForRetrace()
+    void waitForRetrace(IAudioVoiceEngine* engine)
     {
+        if (engine)
+            engine->pumpAndMixVoices();
         m_gfxCtx->m_output->WaitForVBlank();
     }
 

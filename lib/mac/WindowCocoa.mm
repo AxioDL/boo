@@ -7,6 +7,7 @@
 #include "boo/IApplication.hpp"
 #include "boo/IWindow.hpp"
 #include "boo/IGraphicsContext.hpp"
+#include "boo/audiodev/IAudioVoiceEngine.hpp"
 
 #include <LogVisor/LogVisor.hpp>
 
@@ -112,6 +113,7 @@ protected:
 
     std::mutex m_dlmt;
     std::condition_variable m_dlcv;
+    IAudioVoiceEngine* m_voxEngine = nullptr;
 
     static CVReturn DLCallback(CVDisplayLinkRef displayLink,
                                const CVTimeStamp * inNow,
@@ -120,7 +122,11 @@ protected:
                                CVOptionFlags * flagsOut,
                                GraphicsContextCocoa* ctx)
     {
-        ctx->m_dlcv.notify_one();
+        std::unique_lock<std::mutex> lk(ctx->m_dlmt);
+        if (ctx->m_voxEngine)
+            ctx->m_voxEngine->_retraceBreak();
+        else
+            ctx->m_dlcv.notify_one();
         return kCVReturnSuccess;
     }
 
@@ -135,10 +141,21 @@ public:
     }
 
     IWindowCallback* m_callback = nullptr;
-    void waitForRetrace()
+    void waitForRetrace(IAudioVoiceEngine* voxEngine)
     {
         std::unique_lock<std::mutex> lk(m_dlmt);
-        m_dlcv.wait(lk);
+        if (voxEngine)
+        {
+            m_voxEngine = voxEngine;
+            lk.unlock();
+            voxEngine->_pumpAndMixVoicesRetrace();
+            lk.lock();
+            m_voxEngine = nullptr;
+        }
+        else
+        {
+            m_dlcv.wait(lk);
+        }
     }
     virtual BooCocoaResponder* responder() const=0;
 };
@@ -1500,9 +1517,9 @@ public:
         });
     }
 
-    void waitForRetrace()
+    void waitForRetrace(IAudioVoiceEngine* voxEngine)
     {
-        static_cast<GraphicsContextCocoa*>(m_gfxCtx)->waitForRetrace();
+        static_cast<GraphicsContextCocoa*>(m_gfxCtx)->waitForRetrace(voxEngine);
     }
 
     uintptr_t getPlatformHandle() const

@@ -9,6 +9,19 @@
 
 namespace boo
 {
+struct IAudioVoiceEngine;
+
+/** Time-sensitive event callback for synchronizing the client with rendered audio waveform */
+struct IAudioVoiceEngineCallback
+{
+    /** All mixing occurs in virtual 5ms intervals;
+     *  this is called at the start of each interval for all mixable entities */
+    virtual void on5MsInterval(IAudioVoiceEngine& engine, double dt) {}
+
+    /** When a pumping cycle is complete this is called to allow the client to
+     *  perform periodic cleanup tasks */
+    virtual void onPumpCycleComplete(IAudioVoiceEngine& engine) {}
+};
 
 /** Mixing and sample-rate-conversion system. Allocates voices and mixes them
  *  before sending the final samples to an OS-supplied audio-queue */
@@ -35,11 +48,8 @@ struct IAudioVoiceEngine
     /** Client calls this to allocate a Submix for gathering audio together for effects processing */
     virtual std::unique_ptr<IAudioSubmix> allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb, int busId)=0;
 
-    /** Client may optionally register a 200-virtual-updates each second callback for the stream */
-    virtual void register5MsCallback(std::function<void(double dt)>&& callback)=0;
-
-    /** Unregister callback for stable cleanup */
-    virtual void unregister5MsCallback()=0;
+    /** Client can register for key callback events from the mixing engine this way */
+    virtual void setCallbackInterface(IAudioVoiceEngineCallback* cb)=0;
 
     /** Client may use this to determine current speaker-setup */
     virtual AudioChannelSet getAvailableSet()=0;
@@ -76,6 +86,12 @@ struct IAudioVoiceEngine
 
     /** Get canonical count of frames for each 5ms output block */
     virtual size_t get5MsFrames() const=0;
+
+    /** IWindow::waitForRetrace() enter - for platforms that spend v-sync waits synchronously pumping audio */
+    virtual void _pumpAndMixVoicesRetrace() { pumpAndMixVoices(); }
+
+    /** IWindow::waitForRetrace() break - signal retrace event to break out of pumping cycles */
+    virtual void _retraceBreak() {}
 };
 
 /** Construct host platform's voice engine */

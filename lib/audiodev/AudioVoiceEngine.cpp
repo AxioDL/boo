@@ -30,14 +30,14 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int16_t* dataOut)
         if (remFrames < m_5msFrames)
         {
             thisFrames = remFrames;
-            if (m_5msCallback)
-                m_5msCallback(thisFrames / double(m_5msFrames) * 5.0 / 1000.0);
+            if (m_engineCallback)
+                m_engineCallback->on5MsInterval(*this, thisFrames / double(m_5msFrames) * 5.0 / 1000.0);
         }
         else
         {
             thisFrames = m_5msFrames;
-            if (m_5msCallback)
-                m_5msCallback(5.0 / 1000.0);
+            if (m_engineCallback)
+                m_engineCallback->on5MsInterval(*this, 5.0 / 1000.0);
         }
 
         for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
@@ -57,6 +57,9 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int16_t* dataOut)
         remFrames -= thisFrames;
         dataOut += sampleCount;
     }
+
+    if (m_engineCallback)
+        m_engineCallback->onPumpCycleComplete(*this);
 }
 
 void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int32_t* dataOut)
@@ -77,14 +80,14 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int32_t* dataOut)
         if (remFrames < m_5msFrames)
         {
             thisFrames = remFrames;
-            if (m_5msCallback)
-                m_5msCallback(thisFrames / double(m_5msFrames) * 5.0 / 1000.0);
+            if (m_engineCallback)
+                m_engineCallback->on5MsInterval(*this, thisFrames / double(m_5msFrames) * 5.0 / 1000.0);
         }
         else
         {
             thisFrames = m_5msFrames;
-            if (m_5msCallback)
-                m_5msCallback(5.0 / 1000.0);
+            if (m_engineCallback)
+                m_engineCallback->on5MsInterval(*this, 5.0 / 1000.0);
         }
 
         for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
@@ -104,6 +107,9 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int32_t* dataOut)
         remFrames -= thisFrames;
         dataOut += sampleCount;
     }
+
+    if (m_engineCallback)
+        m_engineCallback->onPumpCycleComplete(*this);
 }
 
 void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, float* dataOut)
@@ -124,14 +130,14 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, float* dataOut)
         if (remFrames < m_5msFrames)
         {
             thisFrames = remFrames;
-            if (m_5msCallback)
-                m_5msCallback(thisFrames / double(m_5msFrames) * 5.0 / 1000.0);
+            if (m_engineCallback)
+                m_engineCallback->on5MsInterval(*this, thisFrames / double(m_5msFrames) * 5.0 / 1000.0);
         }
         else
         {
             thisFrames = m_5msFrames;
-            if (m_5msCallback)
-                m_5msCallback(5.0 / 1000.0);
+            if (m_engineCallback)
+                m_engineCallback->on5MsInterval(*this, 5.0 / 1000.0);
         }
 
         for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
@@ -151,6 +157,9 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, float* dataOut)
         remFrames -= thisFrames;
         dataOut += sampleCount;
     }
+
+    if (m_engineCallback)
+        m_engineCallback->onPumpCycleComplete(*this);
 }
 
 void BaseAudioVoiceEngine::_unbindFrom(std::list<AudioVoice*>::iterator it)
@@ -197,14 +206,9 @@ BaseAudioVoiceEngine::allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb, 
     return ret;
 }
 
-void BaseAudioVoiceEngine::register5MsCallback(std::function<void(double dt)>&& callback)
+void BaseAudioVoiceEngine::setCallbackInterface(IAudioVoiceEngineCallback* cb)
 {
-    m_5msCallback = std::move(callback);
-}
-
-void BaseAudioVoiceEngine::unregister5MsCallback()
-{
-    m_5msCallback = {};
+    m_engineCallback = cb;
 }
 
 void BaseAudioVoiceEngine::setVolume(float vol)

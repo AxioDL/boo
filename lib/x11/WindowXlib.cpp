@@ -2,6 +2,7 @@
 #include "boo/IGraphicsContext.hpp"
 #include "boo/IApplication.hpp"
 #include "boo/graphicsdev/GL.hpp"
+#include "boo/audiodev/IAudioVoiceEngine.hpp"
 
 #if BOO_HAS_VULKAN
 #include "boo/graphicsdev/Vulkan.hpp"
@@ -1418,8 +1419,10 @@ public:
         XSendEvent(m_xDisp, se->requestor, False, 0, &reply);
     }
 
-    void waitForRetrace()
+    void waitForRetrace(IAudioVoiceEngine* engine)
     {
+        if (engine)
+            engine->pumpAndMixVoices();
         std::unique_lock<std::mutex> lk(m_gfxCtx->m_vsyncmt);
         m_gfxCtx->m_vsynccv.wait(lk);
     }
