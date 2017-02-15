@@ -911,6 +911,8 @@ class WindowXlib : public IWindow
         return X_CURSORS.m_pointer;
     }
 
+    bool m_openGL = false;
+
 public:
     WindowXlib(const std::string& title,
                Display* display, void* xcbConn,
@@ -936,6 +938,7 @@ public:
                 i = 0;
                 m_gfxCtx.reset(new GraphicsContextXlibGLX(IGraphicsContext::EGraphicsAPI::OpenGL3_3,
                                                           this, display, defaultScreen, lastCtx, m_visualId, drawSamples));
+                m_openGL = true;
             }
 
             /* Default screen */
@@ -1601,7 +1604,7 @@ public:
             {
                 XUnlockDisplay(m_xDisp);
                 m_gfxCtx->resized(m_wrect);
-                m_callback->resized(m_wrect);
+                m_callback->resized(m_wrect, m_openGL);
                 XLockDisplay(m_xDisp);
             }
             return;

@@ -934,6 +934,7 @@ class WindowWin32 : public IWindow
     IWindowCallback* m_callback = nullptr;
     EMouseCursor m_cursor = EMouseCursor::None;
     bool m_cursorWait = false;
+    bool m_openGL = false;
     static HCURSOR GetWin32Cursor(EMouseCursor cur)
     {
         switch (cur)
@@ -971,6 +972,7 @@ public:
         {
             m_gfxCtx.reset(new GraphicsContextWin32GL(IGraphicsContext::EGraphicsAPI::OpenGL3_3,
                                                       this, m_hwnd, b3dCtx, sampleCount));
+            m_openGL = true;
             return;
         }
 #if BOO_HAS_VULKAN
@@ -1289,7 +1291,7 @@ public:
                 return;
             m_gfxCtx->m_3dCtx.resize(this, rect.size[0], rect.size[1]);
             if (m_callback)
-                m_callback->resized(rect);
+                m_callback->resized(rect, m_openGL);
             return;
         }
         case WM_MOVING:

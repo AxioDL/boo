@@ -173,7 +173,7 @@ struct ITextInputCallback
 class IWindowCallback
 {
 public:
-    virtual void resized(const SWindowRect& rect)
+    virtual void resized(const SWindowRect& rect, bool sync)
     {(void)rect;}
     virtual void mouseDown(const SWindowCoord& coord, EMouseButton button, EModifierKey mods)
     {(void)coord;(void)button;(void)mods;}

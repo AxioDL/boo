@@ -8,8 +8,7 @@
 #include "boo/IWindow.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include "boo/audiodev/IAudioVoiceEngine.hpp"
-
-#include <LogVisor/LogVisor.hpp>
+#include "logvisor/logvisor.hpp"
 
 #if !__has_feature(objc_arc)
 #error ARC Required
@@ -1146,7 +1145,7 @@ static boo::ESpecialKey translateKeycode(short code)
     boo::SWindowRect rect = {int(frame.origin.x), int(frame.origin.y),
                              int(frame.size.width), int(frame.size.height)};
     if (resp->booContext->m_callback)
-        resp->booContext->m_callback->resized(rect);
+        resp->booContext->m_callback->resized(rect, true);
     [super reshape];
 }
 
@@ -1224,7 +1223,7 @@ static boo::ESpecialKey translateKeycode(short code)
     boo::MetalContext::Window& w = m_ctx->m_windows[m_window];
     std::unique_lock<std::mutex> lk(w.m_resizeLock);
     if (resp->booContext->m_callback)
-        resp->booContext->m_callback->resized(rect);
+        resp->booContext->m_callback->resized(rect, false);
     w.m_size = CGSizeMake(rect.size[0], rect.size[1]);
     w.m_needsResize = YES;
 }

@@ -24,12 +24,13 @@ struct DeferredWindowEvents : public IWindowCallback
 
     bool m_hasResize = false;
     SWindowRect m_latestResize;
-    void resized(const SWindowRect& rect)
+    void resized(const SWindowRect& rect, bool sync)
     {
         std::unique_lock<std::mutex> lk(m_mt);
         m_latestResize = rect;
         m_hasResize = true;
-        m_resizeCv.wait_for(lk, std::chrono::milliseconds(500));
+        if (sync)
+            m_resizeCv.wait_for(lk, std::chrono::milliseconds(500));
     }
 
     struct Command
