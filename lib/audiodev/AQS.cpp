@@ -704,7 +704,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         while (chMapOut.m_channelCount < chCount)
             chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::Unknown;
 
-        m_mixInfo.m_periodFrames = 1200 * size_t(actualSampleRate) / 48000;
+        m_mixInfo.m_periodFrames = m_5msFrames * 3;
         for (int i=0 ; i<3 ; ++i)
             if (AudioQueueAllocateBuffer(m_queue, m_mixInfo.m_periodFrames * chCount * 4, &m_buffers[i]))
             {
@@ -718,7 +718,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
         for (unsigned i=0 ; i<3 ; ++i)
         {
-            _pumpAndMixVoices(m_mixInfo.m_periodFrames, reinterpret_cast<float*>(m_buffers[i]->mAudioData));
+            memset(m_buffers[i]->mAudioData, 0, m_frameBytes);
             m_buffers[i]->mAudioDataByteSize = m_frameBytes;
             AudioQueueEnqueueBuffer(m_queue, m_buffers[i], 0, nullptr);
         }
