@@ -10,6 +10,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <mutex>
+#include <queue>
 #include "boo/graphicsdev/VulkanDispatchTable.hpp"
 
 namespace boo
@@ -77,7 +78,26 @@ struct VulkanContext
     bool enumerateDevices();
     void initDevice();
     void initSwapChain(Window& windowCtx, VkSurfaceKHR surface, VkFormat format, VkColorSpaceKHR colorspace);
-    void resizeSwapChain(Window& windowCtx, VkSurfaceKHR surface, VkFormat format, VkColorSpaceKHR colorspace);
+
+    struct SwapChainResize
+    {
+        Window& m_windowCtx;
+        VkSurfaceKHR m_surface;
+        VkFormat m_format;
+        VkColorSpaceKHR m_colorspace;
+        SWindowRect m_rect;
+        SwapChainResize(Window& windowCtx, VkSurfaceKHR surface,
+                        VkFormat format, VkColorSpaceKHR colorspace,
+                        const SWindowRect& rect)
+        : m_windowCtx(windowCtx), m_surface(surface),
+          m_format(format), m_colorspace(colorspace), m_rect(rect) {}
+    };
+    std::queue<SwapChainResize> m_deferredResizes;
+    std::mutex m_resizeLock;
+    void resizeSwapChain(Window& windowCtx, VkSurfaceKHR surface,
+                         VkFormat format, VkColorSpaceKHR colorspace,
+                         const SWindowRect& rect);
+    bool _resizeSwapChains();
 };
 extern VulkanContext g_VulkanContext;
 

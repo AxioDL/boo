@@ -297,7 +297,7 @@ struct GraphicsContextXlib : IGraphicsContext
       m_parentWindow(parentWindow),
       m_xDisp(disp) {}
     virtual void destroy()=0;
-    virtual void resized(SWindowRect& rect)=0;
+    virtual void resized(const SWindowRect& rect)=0;
 };
     
 struct GraphicsContextXlibGLX : GraphicsContextXlib
@@ -414,7 +414,7 @@ public:
 
     ~GraphicsContextXlibGLX() {destroy();}
 
-    void resized(SWindowRect& rect)
+    void resized(const SWindowRect& rect)
     {
     }
 
@@ -650,10 +650,10 @@ public:
 
     VulkanContext::Window* m_windowCtx = nullptr;
 
-    void resized(SWindowRect& rect)
+    void resized(const SWindowRect& rect)
     {
         if (m_windowCtx)
-            m_ctx->resizeSwapChain(*m_windowCtx, m_surface, m_format, m_colorspace);
+            m_ctx->resizeSwapChain(*m_windowCtx, m_surface, m_format, m_colorspace, rect);
     }
 
     void _setCallback(IWindowCallback* cb)

@@ -54,6 +54,11 @@ struct GraphicsContextWin32 : IGraphicsContext
       m_pf(EPixelFormat::RGBA8),
       m_parentWindow(parentWindow),
       m_3dCtx(b3dCtx) {}
+
+    virtual void resized(const SWindowRect& rect)
+    {
+        m_3dCtx.resize(m_parentWindow, rect.size[0], rect.size[1]);
+    }
 };
 
 struct GraphicsContextWin32D3D : GraphicsContextWin32
@@ -461,10 +466,10 @@ public:
 
     VulkanContext::Window* m_windowCtx = nullptr;
 
-    void resized(SWindowRect& rect)
+    void resized(const SWindowRect& rect)
     {
         if (m_windowCtx)
-            m_ctx->resizeSwapChain(*m_windowCtx, m_surface, m_format, m_colorspace);
+            m_ctx->resizeSwapChain(*m_windowCtx, m_surface, m_format, m_colorspace, rect);
     }
 
     void _setCallback(IWindowCallback* cb)
@@ -1290,7 +1295,7 @@ public:
             getWindowFrame(rect.location[0], rect.location[1], rect.size[0], rect.size[1]);
             if (!rect.size[0] || !rect.size[1])
                 return;
-            m_gfxCtx->m_3dCtx.resize(this, rect.size[0], rect.size[1]);
+            m_gfxCtx->resized(rect);
             if (m_callback)
                 m_callback->resized(rect, m_openGL);
             return;
