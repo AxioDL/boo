@@ -584,8 +584,8 @@ public:
                 {
                     m_format = surfFormats[i].format;
                     m_colorspace = surfFormats[i].colorSpace;
+                    break;
                 }
-                break;
             }
         }
         else
