@@ -600,7 +600,7 @@ struct GraphicsContextXlibVulkan : GraphicsContextXlib
     xcb_connection_t* m_xcbConn;
     VulkanContext* m_ctx;
     VkSurfaceKHR m_surface = VK_NULL_HANDLE;
-    VkFormat m_format;
+    VkFormat m_format = VK_FORMAT_UNDEFINED;
     VkColorSpaceKHR m_colorspace;
 
     GLXFBConfig m_fbconfig = 0;
