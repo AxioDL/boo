@@ -393,7 +393,7 @@ struct GraphicsContextWin32Vulkan : GraphicsContextWin32
     HWND m_hwnd;
     VulkanContext* m_ctx;
     VkSurfaceKHR m_surface = VK_NULL_HANDLE;
-    VkFormat m_format;
+    VkFormat m_format = VK_FORMAT_UNDEFINED;
     VkColorSpaceKHR m_colorspace;
     uint32_t m_sampleCount;
 
@@ -577,14 +577,22 @@ public:
          * supported format will be returned. */
         if (formatCount >= 1)
         {
-            if (surfFormats[0].format == VK_FORMAT_UNDEFINED)
-                m_format = VK_FORMAT_B8G8R8A8_UNORM;
-            else
-                m_format = surfFormats[0].format;
-            m_colorspace = surfFormats[0].colorSpace;
+            for (int i=0 ; i<formatCount ; ++i)
+            {
+                if (surfFormats[i].format == VK_FORMAT_B8G8R8A8_UNORM ||
+                    surfFormats[i].format == VK_FORMAT_R8G8B8A8_UNORM)
+                {
+                    m_format = surfFormats[i].format;
+                    m_colorspace = surfFormats[i].colorSpace;
+                }
+                break;
+            }
         }
         else
             Log.report(logvisor::Fatal, "no surface formats available for Vulkan swapchain");
+
+        if (m_format == VK_FORMAT_UNDEFINED)
+            Log.report(logvisor::Fatal, "no UNORM formats available for Vulkan swapchain");
 
         m_ctx->initSwapChain(*m_windowCtx, m_surface, m_format, m_colorspace);
 

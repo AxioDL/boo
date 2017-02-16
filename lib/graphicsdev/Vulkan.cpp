@@ -702,6 +702,7 @@ struct VulkanPool : IGraphicsBufferPool
     {
         VkDeviceMemory m_bufMem = VK_NULL_HANDLE;
         std::unique_ptr<class VulkanGraphicsBufferD> m_buffer;
+        bool m_dead = false;
         Buffer(VkDeviceMemory mem, class VulkanGraphicsBufferD* buf)
         : m_bufMem(mem), m_buffer(buf) {}
     };
@@ -713,6 +714,21 @@ struct VulkanPool : IGraphicsBufferPool
         for (auto& buf : m_DBufs)
             if (buf.second.m_bufMem)
                 vk::FreeMemory(m_ctx->m_dev, buf.second.m_bufMem, nullptr);
+    }
+
+    void clearDeadBuffers()
+    {
+        for (auto it = m_DBufs.begin() ; it != m_DBufs.end() ;)
+        {
+            if (it->second.m_dead)
+            {
+                if (it->second.m_bufMem)
+                    vk::FreeMemory(m_ctx->m_dev, it->second.m_bufMem, nullptr);
+                it = m_DBufs.erase(it);
+                continue;
+            }
+            ++it;
+        }
     }
 };
 
@@ -3264,7 +3280,9 @@ IGraphicsBufferD* VulkanDataFactory::newPoolBuffer(IGraphicsBufferPool* p, Buffe
 void VulkanDataFactory::deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf)
 {
     VulkanPool* pool = static_cast<VulkanPool*>(p);
-    pool->m_DBufs.erase(static_cast<VulkanGraphicsBufferD*>(buf));
+    auto search = pool->m_DBufs.find(static_cast<VulkanGraphicsBufferD*>(buf));
+    if (search != pool->m_DBufs.end())
+        search->second.m_dead = true;
 }
 
 GraphicsBufferPoolToken VulkanDataFactory::newBufferPool()
@@ -3356,6 +3374,10 @@ void VulkanCommandQueue::execute()
             it = gfxF->m_committedPools.erase(it);
             delete p;
             continue;
+        }
+        else
+        {
+            (*it)->clearDeadBuffers();
         }
         ++it;
     }
