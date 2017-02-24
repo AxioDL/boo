@@ -30,6 +30,8 @@ list(APPEND PLAT_HDRS
      include/boo/graphicsdev/GL.hpp
      include/boo/graphicsdev/Vulkan.hpp
      include/boo/graphicsdev/VulkanDispatchTable.hpp)
+
+add_library(glew lib/graphicsdev/glew.c)
 endif()
 
 if(WIN32)

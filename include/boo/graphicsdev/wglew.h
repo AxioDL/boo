@@ -71,8 +71,6 @@
 #  undef WIN32_LEAN_AND_MEAN
 #endif
 
-#define GLEW_STATIC 1
-
 /*
  * GLEW_STATIC needs to be set when using the static version.
  * GLEW_BUILD is set when building the DLL version.
@@ -1199,18 +1197,8 @@ typedef BOOL (WINAPI * PFNWGLWAITFORSBCOMLPROC) (HDC hdc, INT64 target_sbc, INT6
 
 /* ------------------------------------------------------------------------- */
 
-#ifdef GLEW_MX
-#define WGLEW_FUN_EXPORT
-#define WGLEW_VAR_EXPORT
-#else
 #define WGLEW_FUN_EXPORT GLEW_FUN_EXPORT
 #define WGLEW_VAR_EXPORT GLEW_VAR_EXPORT
-#endif /* GLEW_MX */
-
-#ifdef GLEW_MX
-struct WGLEWContextStruct
-{
-#endif /* GLEW_MX */
 
 WGLEW_FUN_EXPORT PFNWGLSETSTEREOEMITTERSTATE3DLPROC __wglewSetStereoEmitterState3DL;
 
@@ -1415,34 +1403,18 @@ WGLEW_VAR_EXPORT GLboolean __WGLEW_NV_vertex_array_range;
 WGLEW_VAR_EXPORT GLboolean __WGLEW_NV_video_capture;
 WGLEW_VAR_EXPORT GLboolean __WGLEW_NV_video_output;
 WGLEW_VAR_EXPORT GLboolean __WGLEW_OML_sync_control;
-
-#ifdef GLEW_MX
-}; /* WGLEWContextStruct */
-#endif /* GLEW_MX */
-
 /* ------------------------------------------------------------------------- */
-
-#ifdef GLEW_MX
-
-typedef struct WGLEWContextStruct WGLEWContext;
-GLEWAPI GLenum GLEWAPIENTRY wglewContextInit (WGLEWContext *ctx);
-GLEWAPI GLboolean GLEWAPIENTRY wglewContextIsSupported (const WGLEWContext *ctx, const char *name);
-
-#define wglewInit() wglewContextInit(wglewGetContext())
-#define wglewIsSupported(x) wglewContextIsSupported(wglewGetContext(), x)
-
-#define WGLEW_GET_VAR(x) (*(const GLboolean*)&(wglewGetContext()->x))
-#define WGLEW_GET_FUN(x) wglewGetContext()->x
-
-#else /* GLEW_MX */
 
 GLEWAPI GLenum GLEWAPIENTRY wglewInit ();
 GLEWAPI GLboolean GLEWAPIENTRY wglewIsSupported (const char *name);
 
+#ifndef WGLEW_GET_VAR
 #define WGLEW_GET_VAR(x) (*(const GLboolean*)&x)
-#define WGLEW_GET_FUN(x) x
+#endif
 
-#endif /* GLEW_MX */
+#ifndef WGLEW_GET_FUN
+#define WGLEW_GET_FUN(x) x
+#endif
 
 GLEWAPI GLboolean GLEWAPIENTRY wglewGetExtension (const char *name);
 

@@ -1563,7 +1563,6 @@ IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx,
                            styleMask:NSWindowStyleMaskTitled|
                                      NSWindowStyleMaskClosable|
                                      NSWindowStyleMaskMiniaturizable|
-                                     NSWindowStyleMaskTitled|
                                      NSWindowStyleMaskResizable
                              backing:NSBackingStoreBuffered
                                defer:YES];
