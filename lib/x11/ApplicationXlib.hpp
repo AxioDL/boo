@@ -433,6 +433,7 @@ public:
             std::unique_lock<std::mutex> innerLk(initmt);
             innerLk.unlock();
             initcv.notify_one();
+            logvisor::RegisterThreadName("Boo Client Thread");
             clientReturn = m_callback.appMain(this);
             pthread_kill(mainThread, SIGUSR2);
         });

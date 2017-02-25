@@ -362,6 +362,7 @@ public:
         int clientReturn = 0;
         std::thread clientThread([&]()
         {
+            logvisor::RegisterThreadName("Boo Client Thread");
             CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE);
             clientReturn = m_callback.appMain(this);
             PostThreadMessage(g_mainThreadId, WM_USER+1, 0, 0);
