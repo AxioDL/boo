@@ -6,42 +6,16 @@
 #include "IGraphicsDataFactory.hpp"
 #include "IGraphicsCommandQueue.hpp"
 #include "boo/IGraphicsContext.hpp"
-#include <vector>
-#include <mutex>
-#include <unordered_set>
-#include <unordered_map>
 
 namespace boo
 {
-struct MetalContext;
 
 class MetalDataFactory : public IGraphicsDataFactory
 {
-    friend struct MetalCommandQueue;
-    IGraphicsContext* m_parent;
-    static ThreadLocalPtr<struct MetalData> m_deferredData;
-    std::unordered_set<struct MetalData*> m_committedData;
-    std::unordered_set<struct MetalPool*> m_committedPools;
-    std::mutex m_committedMutex;
-    struct MetalContext* m_ctx;
-    uint32_t m_sampleCount;
-
-    void destroyData(IGraphicsData*);
-    void destroyAllData();
-    void destroyPool(IGraphicsBufferPool*);
-    IGraphicsBufferD* newPoolBuffer(IGraphicsBufferPool* pool, BufferUse use,
-                                    size_t stride, size_t count);
-    void deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf);
 public:
-    MetalDataFactory(IGraphicsContext* parent, MetalContext* ctx, uint32_t sampleCount);
-    ~MetalDataFactory() {}
-
-    Platform platform() const {return Platform::Metal;}
-    const char* platformName() const {return "Metal";}
-
     class Context : public IGraphicsDataFactory::Context
     {
-        friend class MetalDataFactory;
+        friend class MetalDataFactoryImpl;
         MetalDataFactory& m_parent;
         Context(MetalDataFactory& parent) : m_parent(parent) {}
     public:
@@ -76,9 +50,6 @@ public:
                              const size_t* ubufOffs, const size_t* ubufSizes,
                              size_t texCount, ITexture** texs, size_t baseVert = 0, size_t baseInst = 0);
     };
-
-    GraphicsDataToken commitTransaction(const std::function<bool(IGraphicsDataFactory::Context& ctx)>&);
-    GraphicsBufferPoolToken newBufferPool();
 };
 
 }

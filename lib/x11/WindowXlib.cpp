@@ -114,6 +114,7 @@ namespace boo
 {
 static logvisor::Module Log("boo::WindowXlib");
 IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent);
+IGraphicsDataFactory* _NewGLDataFactory(IGraphicsContext* parent, uint32_t drawSamples);
 #if BOO_HAS_VULKAN
 IGraphicsCommandQueue* _NewVulkanCommandQueue(VulkanContext* ctx,
                                               VulkanContext::Window* windowCtx,
@@ -327,7 +328,7 @@ public:
     : GraphicsContextXlib(api, EPixelFormat::RGBA8, parentWindow, display, drawSamples),
       m_lastCtx(lastCtx)
     {
-        m_dataFactory = new class GLDataFactory(this, drawSamples);
+        m_dataFactory = _NewGLDataFactory(this, drawSamples);
 
         /* Query framebuffer configurations */
         GLXFBConfig* fbConfigs = nullptr;

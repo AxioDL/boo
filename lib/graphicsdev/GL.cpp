@@ -8,7 +8,10 @@
 #include <condition_variable>
 #include <array>
 #include <unordered_map>
+#include <unordered_set>
 #include <atomic>
+#include <functional>
+#include "xxhash.h"
 
 #include "logvisor/logvisor.hpp"
 
@@ -18,8 +21,47 @@
 namespace boo
 {
 static logvisor::Module Log("boo::GL");
+class GLDataFactoryImpl;
 
-ThreadLocalPtr<struct GLData> GLDataFactory::m_deferredData;
+struct GLShareableShader : IShareableShader<GLDataFactoryImpl, GLShareableShader>
+{
+    GLuint m_shader = 0;
+    GLShareableShader(GLDataFactoryImpl& fac, uint64_t key, GLuint s)
+    : IShareableShader(fac, key), m_shader(s) {}
+    ~GLShareableShader() { glDeleteShader(m_shader); }
+};
+
+class GLDataFactoryImpl : public GLDataFactory
+{
+    friend struct GLCommandQueue;
+    friend class GLDataFactory::Context;
+    IGraphicsContext* m_parent;
+    uint32_t m_drawSamples;
+    static ThreadLocalPtr<struct GLData> m_deferredData;
+    std::unordered_set<struct GLData*> m_committedData;
+    std::unordered_set<struct GLPool*> m_committedPools;
+    std::mutex m_committedMutex;
+    std::unordered_map<uint64_t, std::unique_ptr<GLShareableShader>> m_sharedShaders;
+    void destroyData(IGraphicsData*);
+    void destroyAllData();
+    void destroyPool(IGraphicsBufferPool*);
+    IGraphicsBufferD* newPoolBuffer(IGraphicsBufferPool* pool, BufferUse use,
+                                    size_t stride, size_t count);
+    void deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf);
+public:
+    GLDataFactoryImpl(IGraphicsContext* parent, uint32_t drawSamples);
+    ~GLDataFactoryImpl() {destroyAllData();}
+
+    Platform platform() const {return Platform::OpenGL;}
+    const SystemChar* platformName() const {return _S("OpenGL");}
+
+    GraphicsDataToken commitTransaction(const FactoryCommitFunc&);
+    GraphicsBufferPoolToken newBufferPool();
+
+    void _unregisterShareableShader(uint64_t key) { m_sharedShaders.erase(key); }
+};
+
+ThreadLocalPtr<struct GLData> GLDataFactoryImpl::m_deferredData;
 struct GLData : IGraphicsDataPriv<GLData>
 {
     std::vector<std::unique_ptr<class GLShaderPipeline>> m_SPs;
@@ -75,6 +117,7 @@ public:
 class GLGraphicsBufferD : public IGraphicsBufferD
 {
     friend class GLDataFactory;
+    friend class GLDataFactoryImpl;
     friend struct GLCommandQueue;
     GLuint m_bufs[3];
     GLenum m_target;
@@ -109,7 +152,7 @@ IGraphicsBufferS*
 GLDataFactory::Context::newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
 {
     GLGraphicsBufferS* retval = new GLGraphicsBufferS(use, data, stride * count);
-    m_deferredData->m_SBufs.emplace_back(retval);
+    GLDataFactoryImpl::m_deferredData->m_SBufs.emplace_back(retval);
     return retval;
 }
 
@@ -344,7 +387,7 @@ GLDataFactory::Context::newStaticTexture(size_t width, size_t height, size_t mip
                                          const void* data, size_t sz)
 {
     GLTextureS* retval = new GLTextureS(width, height, mips, fmt, data, sz);
-    m_deferredData->m_STexs.emplace_back(retval);
+    GLDataFactoryImpl::m_deferredData->m_STexs.emplace_back(retval);
     return retval;
 }
 
@@ -353,7 +396,7 @@ GLDataFactory::Context::newStaticArrayTexture(size_t width, size_t height, size_
                                               TextureFormat fmt, const void *data, size_t sz)
 {
     GLTextureSA* retval = new GLTextureSA(width, height, layers, mips, fmt, data, sz);
-    m_deferredData->m_SATexs.emplace_back(retval);
+    GLDataFactoryImpl::m_deferredData->m_SATexs.emplace_back(retval);
     return retval;
 }
 
@@ -362,8 +405,8 @@ class GLShaderPipeline : public IShaderPipeline
     friend class GLDataFactory;
     friend struct GLCommandQueue;
     friend struct GLShaderDataBinding;
-    GLuint m_vert = 0;
-    GLuint m_frag = 0;
+    GLShareableShader::Token m_vert;
+    GLShareableShader::Token m_frag;
     GLuint m_prog = 0;
     GLenum m_sfactor = GL_ONE;
     GLenum m_dfactor = GL_ZERO;
@@ -372,48 +415,17 @@ class GLShaderPipeline : public IShaderPipeline
     bool m_depthWrite = true;
     bool m_backfaceCulling = true;
     std::vector<GLint> m_uniLocs;
-    bool initObjects()
-    {
-        m_vert = glCreateShader(GL_VERTEX_SHADER);
-        m_frag = glCreateShader(GL_FRAGMENT_SHADER);
-        m_prog = glCreateProgram();
-        if (!m_vert || !m_frag || !m_prog)
-        {
-            glDeleteShader(m_vert);
-            m_vert = 0;
-            glDeleteShader(m_frag);
-            m_frag = 0;
-            glDeleteProgram(m_prog);
-            m_prog = 0;
-            return false;
-        }
-        glAttachShader(m_prog, m_vert);
-        glAttachShader(m_prog, m_frag);
-        return true;
-    }
-    void clearObjects()
-    {
-        if (m_vert)
-            glDeleteShader(m_vert);
-        if (m_frag)
-            glDeleteShader(m_frag);
-        if (m_prog)
-            glDeleteProgram(m_prog);
-    }
     GLShaderPipeline() = default;
 public:
     operator bool() const {return m_prog != 0;}
-    ~GLShaderPipeline() {clearObjects();}
+    ~GLShaderPipeline() { glDeleteProgram(m_prog); }
     GLShaderPipeline& operator=(const GLShaderPipeline&) = delete;
     GLShaderPipeline(const GLShaderPipeline&) = delete;
     GLShaderPipeline& operator=(GLShaderPipeline&& other)
     {
-        m_vert = other.m_vert;
-        other.m_vert = 0;
-        m_frag = other.m_frag;
-        other.m_frag = 0;
-        m_prog = other.m_prog;
-        other.m_prog = 0;
+        m_vert = std::move(other.m_vert);
+        m_frag = std::move(other.m_frag);
+        m_prog = std::move(other.m_prog);
         m_sfactor = other.m_sfactor;
         m_dfactor = other.m_dfactor;
         m_depthTest = other.m_depthTest;
@@ -482,47 +494,95 @@ IShaderPipeline* GLDataFactory::Context::newShaderPipeline
  BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
  bool depthTest, bool depthWrite, bool backfaceCulling)
 {
+    GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
     GLShaderPipeline shader;
-    if (!shader.initObjects())
-    {
-        Log.report(logvisor::Error, "unable to create shader objects\n");
-        return nullptr;
-    }
-    shader.m_sfactor = BLEND_FACTOR_TABLE[int(srcFac)];
-    shader.m_dfactor = BLEND_FACTOR_TABLE[int(dstFac)];
-    shader.m_depthTest = depthTest;
-    shader.m_depthWrite = depthWrite;
-    shader.m_backfaceCulling = backfaceCulling;
-    shader.m_drawPrim = PRIMITIVE_TABLE[int(prim)];
 
-    glShaderSource(shader.m_vert, 1, &vertSource, nullptr);
-    glCompileShader(shader.m_vert);
+    XXH64_state_t hashState;
+    uint64_t hashes[2];
+    XXH64_reset(&hashState, 0);
+    XXH64_update(&hashState, vertSource, strlen(vertSource));
+    hashes[0] = XXH64_digest(&hashState);
+    XXH64_reset(&hashState, 0);
+    XXH64_update(&hashState, fragSource, strlen(fragSource));
+    hashes[1] = XXH64_digest(&hashState);
+
     GLint status;
-    glGetShaderiv(shader.m_vert, GL_COMPILE_STATUS, &status);
-    if (status != GL_TRUE)
+    auto vertFind = factory.m_sharedShaders.find(hashes[0]);
+    if (vertFind != factory.m_sharedShaders.end())
     {
-        GLint logLen;
-        glGetShaderiv(shader.m_vert, GL_INFO_LOG_LENGTH, &logLen);
-        char* log = (char*)malloc(logLen);
-        glGetShaderInfoLog(shader.m_vert, logLen, nullptr, log);
-        Log.report(logvisor::Error, "unable to compile vert source\n%s\n%s\n", log, vertSource);
-        free(log);
+        shader.m_vert = vertFind->second->lock();
+    }
+    else
+    {
+        GLuint sobj = glCreateShader(GL_VERTEX_SHADER);
+        if (!sobj)
+        {
+            Log.report(logvisor::Error, "unable to create vert shader");
+            return nullptr;
+        }
+
+        glShaderSource(sobj, 1, &vertSource, nullptr);
+        glCompileShader(sobj);
+        glGetShaderiv(sobj, GL_COMPILE_STATUS, &status);
+        if (status != GL_TRUE)
+        {
+            GLint logLen;
+            glGetShaderiv(sobj, GL_INFO_LOG_LENGTH, &logLen);
+            char* log = (char*)malloc(logLen);
+            glGetShaderInfoLog(sobj, logLen, nullptr, log);
+            Log.report(logvisor::Error, "unable to compile vert source\n%s\n%s\n", log, vertSource);
+            free(log);
+            return nullptr;
+        }
+
+        auto it =
+        factory.m_sharedShaders.emplace(std::make_pair(hashes[0],
+            std::make_unique<GLShareableShader>(factory, hashes[0], sobj))).first;
+        shader.m_vert = it->second->lock();
+    }
+    auto fragFind = factory.m_sharedShaders.find(hashes[1]);
+    if (fragFind != factory.m_sharedShaders.end())
+    {
+        shader.m_frag = fragFind->second->lock();
+    }
+    else
+    {
+        GLuint sobj = glCreateShader(GL_FRAGMENT_SHADER);
+        if (!sobj)
+        {
+            Log.report(logvisor::Error, "unable to create frag shader");
+            return nullptr;
+        }
+
+        glShaderSource(sobj, 1, &fragSource, nullptr);
+        glCompileShader(sobj);
+        glGetShaderiv(sobj, GL_COMPILE_STATUS, &status);
+        if (status != GL_TRUE)
+        {
+            GLint logLen;
+            glGetShaderiv(sobj, GL_INFO_LOG_LENGTH, &logLen);
+            char* log = (char*)malloc(logLen);
+            glGetShaderInfoLog(sobj, logLen, nullptr, log);
+            Log.report(logvisor::Error, "unable to compile frag source\n%s\n%s\n", log, fragSource);
+            free(log);
+            return nullptr;
+        }
+
+        auto it =
+        factory.m_sharedShaders.emplace(std::make_pair(hashes[1],
+            std::make_unique<GLShareableShader>(factory, hashes[1], sobj))).first;
+        shader.m_frag = it->second->lock();
+    }
+
+    shader.m_prog = glCreateProgram();
+    if (!shader.m_prog)
+    {
+        Log.report(logvisor::Error, "unable to create shader program");
         return nullptr;
     }
 
-    glShaderSource(shader.m_frag, 1, &fragSource, nullptr);
-    glCompileShader(shader.m_frag);
-    glGetShaderiv(shader.m_frag, GL_COMPILE_STATUS, &status);
-    if (status != GL_TRUE)
-    {
-        GLint logLen;
-        glGetShaderiv(shader.m_frag, GL_INFO_LOG_LENGTH, &logLen);
-        char* log = (char*)malloc(logLen);
-        glGetShaderInfoLog(shader.m_frag, logLen, nullptr, log);
-        Log.report(logvisor::Error, "unable to compile frag source\n%s\n%s\n", log, fragSource);
-        free(log);
-        return nullptr;
-    }
+    glAttachShader(shader.m_prog, shader.m_vert.get().m_shader);
+    glAttachShader(shader.m_prog, shader.m_frag.get().m_shader);
 
     glLinkProgram(shader.m_prog);
     glGetProgramiv(shader.m_prog, GL_LINK_STATUS, &status);
@@ -563,8 +623,15 @@ IShaderPipeline* GLDataFactory::Context::newShaderPipeline
         }
     }
 
+    shader.m_sfactor = BLEND_FACTOR_TABLE[int(srcFac)];
+    shader.m_dfactor = BLEND_FACTOR_TABLE[int(dstFac)];
+    shader.m_depthTest = depthTest;
+    shader.m_depthWrite = depthWrite;
+    shader.m_backfaceCulling = backfaceCulling;
+    shader.m_drawPrim = PRIMITIVE_TABLE[int(prim)];
+
     GLShaderPipeline* retval = new GLShaderPipeline(std::move(shader));
-    m_deferredData->m_SPs.emplace_back(retval);
+    GLDataFactoryImpl::m_deferredData->m_SPs.emplace_back(retval);
     return retval;
 }
 
@@ -699,17 +766,17 @@ GLDataFactory::Context::newShaderDataBinding(IShaderPipeline* pipeline,
                                              size_t texCount, ITexture** texs, size_t baseVert, size_t baseInst)
 {
     GLShaderDataBinding* retval =
-    new GLShaderDataBinding(m_deferredData.get(), pipeline, vtxFormat, ubufCount, ubufs,
+    new GLShaderDataBinding(GLDataFactoryImpl::m_deferredData.get(), pipeline, vtxFormat, ubufCount, ubufs,
                             ubufOffs, ubufSizes, texCount, texs);
-    m_deferredData->m_SBinds.emplace_back(retval);
+    GLDataFactoryImpl::m_deferredData->m_SBinds.emplace_back(retval);
     return retval;
 }
 
-GLDataFactory::GLDataFactory(IGraphicsContext* parent, uint32_t drawSamples)
+GLDataFactoryImpl::GLDataFactoryImpl(IGraphicsContext* parent, uint32_t drawSamples)
 : m_parent(parent), m_drawSamples(drawSamples) {}
 
 
-GraphicsDataToken GLDataFactory::commitTransaction(const FactoryCommitFunc& trans)
+GraphicsDataToken GLDataFactoryImpl::commitTransaction(const FactoryCommitFunc& trans)
 {
     if (m_deferredData.get())
         Log.report(logvisor::Fatal, "nested commitTransaction usage detected");
@@ -736,7 +803,7 @@ GraphicsDataToken GLDataFactory::commitTransaction(const FactoryCommitFunc& tran
     return GraphicsDataToken(this, retval);
 }
 
-GraphicsBufferPoolToken GLDataFactory::newBufferPool()
+GraphicsBufferPoolToken GLDataFactoryImpl::newBufferPool()
 {
     std::unique_lock<std::mutex> lk(m_committedMutex);
     GLPool* retval = new GLPool;
@@ -744,7 +811,7 @@ GraphicsBufferPoolToken GLDataFactory::newBufferPool()
     return GraphicsBufferPoolToken(this, retval);
 }
 
-void GLDataFactory::destroyData(IGraphicsData* d)
+void GLDataFactoryImpl::destroyData(IGraphicsData* d)
 {
     std::unique_lock<std::mutex> lk(m_committedMutex);
     GLData* data = static_cast<GLData*>(d);
@@ -752,7 +819,7 @@ void GLDataFactory::destroyData(IGraphicsData* d)
     data->decrement();
 }
 
-void GLDataFactory::destroyAllData()
+void GLDataFactoryImpl::destroyAllData()
 {
     std::unique_lock<std::mutex> lk(m_committedMutex);
     for (GLData* data : m_committedData)
@@ -763,7 +830,7 @@ void GLDataFactory::destroyAllData()
     m_committedPools.clear();
 }
 
-void GLDataFactory::destroyPool(IGraphicsBufferPool* p)
+void GLDataFactoryImpl::destroyPool(IGraphicsBufferPool* p)
 {
     std::unique_lock<std::mutex> lk(m_committedMutex);
     GLPool* pool = static_cast<GLPool*>(p);
@@ -771,8 +838,8 @@ void GLDataFactory::destroyPool(IGraphicsBufferPool* p)
     delete pool;
 }
 
-IGraphicsBufferD* GLDataFactory::newPoolBuffer(IGraphicsBufferPool* p, BufferUse use,
-                                               size_t stride, size_t count)
+IGraphicsBufferD* GLDataFactoryImpl::newPoolBuffer(IGraphicsBufferPool* p, BufferUse use,
+                                                   size_t stride, size_t count)
 {
     GLPool* pool = static_cast<GLPool*>(p);
     GLGraphicsBufferD* retval = new GLGraphicsBufferD(use, stride * count);
@@ -780,7 +847,7 @@ IGraphicsBufferD* GLDataFactory::newPoolBuffer(IGraphicsBufferPool* p, BufferUse
     return retval;
 }
 
-void GLDataFactory::deletePoolBuffer(IGraphicsBufferPool *p, IGraphicsBufferD *buf)
+void GLDataFactoryImpl::deletePoolBuffer(IGraphicsBufferPool *p, IGraphicsBufferD *buf)
 {
     GLPool* pool = static_cast<GLPool*>(p);
     pool->m_DBufs.erase(static_cast<GLGraphicsBufferD*>(buf));
@@ -1336,7 +1403,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
         }
 
         /* Update dynamic data here */
-        GLDataFactory* gfxF = static_cast<GLDataFactory*>(m_parent->getDataFactory());
+        GLDataFactoryImpl* gfxF = static_cast<GLDataFactoryImpl*>(m_parent->getDataFactory());
         std::unique_lock<std::mutex> datalk(gfxF->m_committedMutex);
         for (GLData* d : gfxF->m_committedData)
         {
@@ -1403,7 +1470,7 @@ IGraphicsBufferD*
 GLDataFactory::Context::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
 {
     GLGraphicsBufferD* retval = new GLGraphicsBufferD(use, stride * count);
-    m_deferredData->m_DBufs.emplace_back(retval);
+    GLDataFactoryImpl::m_deferredData->m_DBufs.emplace_back(retval);
     return retval;
 }
 
@@ -1478,7 +1545,7 @@ ITextureD*
 GLDataFactory::Context::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
 {
     GLTextureD* retval = new GLTextureD(width, height, fmt);
-    m_deferredData->m_DTexs.emplace_back(retval);
+    GLDataFactoryImpl::m_deferredData->m_DTexs.emplace_back(retval);
     return retval;
 }
 
@@ -1546,11 +1613,12 @@ ITextureR*
 GLDataFactory::Context::newRenderTexture(size_t width, size_t height,
                                          bool enableShaderColorBinding, bool enableShaderDepthBinding)
 {
-    GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent.m_parent->getCommandQueue());
-    GLTextureR* retval = new GLTextureR(q, width, height, m_parent.m_drawSamples,
+    GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
+    GLCommandQueue* q = static_cast<GLCommandQueue*>(factory.m_parent->getCommandQueue());
+    GLTextureR* retval = new GLTextureR(q, width, height, factory.m_drawSamples,
                                         enableShaderColorBinding, enableShaderDepthBinding);
     q->resizeRenderTexture(retval, width, height);
-    m_deferredData->m_RTexs.emplace_back(retval);
+    GLDataFactoryImpl::m_deferredData->m_RTexs.emplace_back(retval);
     return retval;
 }
 
@@ -1572,15 +1640,21 @@ IVertexFormat* GLDataFactory::Context::newVertexFormat
 (size_t elementCount, const VertexElementDescriptor* elements,
  size_t baseVert, size_t baseInst)
 {
-    GLCommandQueue* q = static_cast<GLCommandQueue*>(m_parent.m_parent->getCommandQueue());
+    GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
+    GLCommandQueue* q = static_cast<GLCommandQueue*>(factory.m_parent->getCommandQueue());
     GLVertexFormat* retval = new struct GLVertexFormat(q, elementCount, elements, baseVert, baseInst);
-    m_deferredData->m_VFmts.emplace_back(retval);
+    GLDataFactoryImpl::m_deferredData->m_VFmts.emplace_back(retval);
     return retval;
 }
 
 IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent)
 {
     return new struct GLCommandQueue(parent);
+}
+
+IGraphicsDataFactory* _NewGLDataFactory(IGraphicsContext* parent, uint32_t drawSamples)
+{
+    return new class GLDataFactoryImpl(parent, drawSamples);
 }
 
 }

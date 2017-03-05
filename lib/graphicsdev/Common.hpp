@@ -50,6 +50,44 @@ public:
     Token lock() const { return Token(this); }
 };
 
+template <class FactoryImpl, class ShaderImpl>
+class IShareableShader
+{
+    std::atomic_int m_refCount = {0};
+    FactoryImpl& m_factory;
+    uint64_t m_key;
+public:
+    IShareableShader(FactoryImpl& factory, uint64_t key)
+    : m_factory(factory), m_key(key) {}
+    void increment() { m_refCount++; }
+    void decrement()
+    {
+        if (m_refCount.fetch_sub(1) == 1)
+            m_factory._unregisterShareableShader(m_key);
+    }
+
+    class Token
+    {
+        IShareableShader<FactoryImpl, ShaderImpl>* m_parent = nullptr;
+    public:
+        Token() = default;
+        Token(IShareableShader* p)
+        : m_parent(p)
+        { m_parent->increment(); }
+        Token& operator=(const Token&) = delete;
+        Token(const Token&) = delete;
+        Token& operator=(Token&& other)
+        { m_parent = other.m_parent; other.m_parent = nullptr; return *this; }
+        Token(Token&& other)
+        { m_parent = other.m_parent; other.m_parent = nullptr; }
+        ~Token() { if (m_parent) m_parent->decrement(); }
+        operator bool() const { return m_parent != nullptr; }
+        ShaderImpl& get() const { return static_cast<ShaderImpl&>(*m_parent); }
+    };
+
+    Token lock() { return Token(this); }
+};
+
 }
 
 #endif // BOO_GRAPHICSDEV_COMMON_HPP

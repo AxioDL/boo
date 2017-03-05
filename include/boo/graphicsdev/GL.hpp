@@ -5,39 +5,16 @@
 #include "IGraphicsCommandQueue.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include "GLSLMacros.hpp"
-#include <vector>
-#include <unordered_set>
-#include <unordered_map>
-#include <mutex>
 
 namespace boo
 {
 
 class GLDataFactory : public IGraphicsDataFactory
 {
-    friend struct GLCommandQueue;
-    IGraphicsContext* m_parent;
-    uint32_t m_drawSamples;
-    static ThreadLocalPtr<struct GLData> m_deferredData;
-    std::unordered_set<struct GLData*> m_committedData;
-    std::unordered_set<struct GLPool*> m_committedPools;
-    std::mutex m_committedMutex;
-    void destroyData(IGraphicsData*);
-    void destroyAllData();
-    void destroyPool(IGraphicsBufferPool*);
-    IGraphicsBufferD* newPoolBuffer(IGraphicsBufferPool* pool, BufferUse use,
-                                    size_t stride, size_t count);
-    void deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf);
 public:
-    GLDataFactory(IGraphicsContext* parent, uint32_t drawSamples);
-    ~GLDataFactory() {destroyAllData();}
-
-    Platform platform() const {return Platform::OpenGL;}
-    const SystemChar* platformName() const {return _S("OpenGL");}
-
     class Context : public IGraphicsDataFactory::Context
     {
-        friend class GLDataFactory;
+        friend class GLDataFactoryImpl;
         GLDataFactory& m_parent;
         Context(GLDataFactory& parent) : m_parent(parent) {}
     public:
@@ -73,9 +50,6 @@ public:
                              const size_t* ubufOffs, const size_t* ubufSizes,
                              size_t texCount, ITexture** texs, size_t baseVert = 0, size_t baseInst = 0);
     };
-
-    GraphicsDataToken commitTransaction(const FactoryCommitFunc&);
-    GraphicsBufferPoolToken newBufferPool();
 };
 
 }

@@ -185,8 +185,11 @@ namespace boo
 {
 static logvisor::Module Log("boo::WindowCocoa");
 IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent);
+IGraphicsDataFactory* _NewGLDataFactory(IGraphicsContext* parent, uint32_t drawSamples);
 IGraphicsCommandQueue* _NewMetalCommandQueue(MetalContext* ctx, IWindow* parentWindow,
                                              IGraphicsContext* parent);
+IGraphicsDataFactory* _NewMetalDataFactory(IGraphicsContext* parent,
+                                           MetalContext* ctx, uint32_t sampleCount);
 void _CocoaUpdateLastGLCtx(NSOpenGLContext* lastGLCtx);
 
 class GraphicsContextCocoaGL : public GraphicsContextCocoa
@@ -206,7 +209,7 @@ public:
     : GraphicsContextCocoa(api, EPixelFormat::RGBA8, parentWindow),
       m_lastCtx(lastGLCtx)
     {
-        m_dataFactory = new GLDataFactory(this, sampleCount);
+        m_dataFactory = _NewGLDataFactory(this, sampleCount);
     }
 
     ~GraphicsContextCocoaGL()
@@ -362,7 +365,7 @@ public:
     : GraphicsContextCocoa(api, EPixelFormat::RGBA8, parentWindow),
       m_parentWindow(parentWindow), m_metalCtx(metalCtx)
     {
-        m_dataFactory = new MetalDataFactory(this, metalCtx, sampleCount);
+        m_dataFactory = _NewMetalDataFactory(this, metalCtx, sampleCount);
     }
 
     ~GraphicsContextCocoaMetal()

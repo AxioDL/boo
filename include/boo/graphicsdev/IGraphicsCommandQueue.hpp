@@ -10,7 +10,7 @@ namespace boo
 
 struct IGraphicsCommandQueue
 {
-    virtual ~IGraphicsCommandQueue() {}
+    virtual ~IGraphicsCommandQueue() = default;
 
     using Platform = IGraphicsDataFactory::Platform;
     virtual Platform platform() const=0;

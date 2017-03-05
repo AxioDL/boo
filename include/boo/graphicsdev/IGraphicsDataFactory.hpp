@@ -17,7 +17,7 @@ struct IGraphicsBuffer
 protected:
     bool m_dynamic;
     IGraphicsBuffer(bool dynamic) : m_dynamic(dynamic) {}
-    virtual ~IGraphicsBuffer() {}
+    virtual ~IGraphicsBuffer() = default;
 };
 
 /** Static resource buffer for verts, indices, uniform constants */
@@ -190,7 +190,7 @@ enum class BlendFactor
 /** Factory object for creating batches of resources as an IGraphicsData token */
 struct IGraphicsDataFactory
 {
-    virtual ~IGraphicsDataFactory() {}
+    virtual ~IGraphicsDataFactory() = default;
 
     enum class Platform
     {
@@ -276,10 +276,10 @@ using FactoryCommitFunc = std::function<bool(IGraphicsDataFactory::Context& ctx)
  *  IGraphicsData (please don't delete and draw contained resources in the same frame). */
 class GraphicsDataToken
 {
-    friend class GLDataFactory;
+    friend class GLDataFactoryImpl;
     friend class D3D12DataFactory;
     friend class D3D11DataFactory;
-    friend class MetalDataFactory;
+    friend class MetalDataFactoryImpl;
     friend class VulkanDataFactory;
     IGraphicsDataFactory* m_factory = nullptr;
     IGraphicsData* m_data = nullptr;
@@ -323,10 +323,10 @@ public:
  *  (please don't delete and draw contained resources in the same frame). */
 class GraphicsBufferPoolToken
 {
-    friend class GLDataFactory;
+    friend class GLDataFactoryImpl;
     friend class D3D12DataFactory;
     friend class D3D11DataFactory;
-    friend class MetalDataFactory;
+    friend class MetalDataFactoryImpl;
     friend class VulkanDataFactory;
     IGraphicsDataFactory* m_factory = nullptr;
     IGraphicsBufferPool* m_pool = nullptr;

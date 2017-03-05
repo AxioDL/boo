@@ -9,6 +9,8 @@ if (NOT TARGET logvisor)
     add_subdirectory(logvisor)
 endif()
 
+add_subdirectory(xxhash)
+
 set(WITH_LSR_BINDINGS OFF)
 set(BUILD_TESTS OFF)
 set(BUILD_SHARED_LIBS OFF)
@@ -18,7 +20,7 @@ add_subdirectory(soxr)
 
 set(BOO_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE PATH "boo include path" FORCE)
 
-include_directories(include ${LOGVISOR_INCLUDE_DIR})
+include_directories(include xxhash ${LOGVISOR_INCLUDE_DIR})
 
 if(NOT GEKKO AND NOT CAFE)
 list(APPEND PLAT_SRCS
@@ -195,7 +197,7 @@ target_include_directories(glslang-default-resource-limits
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/glslang
 )
 
-list(APPEND _BOO_SYS_LIBS glslang HLSL soxr OSDependent OGLCompiler SPIRV glslang-default-resource-limits)
+list(APPEND _BOO_SYS_LIBS glslang HLSL soxr xxhash OSDependent OGLCompiler SPIRV glslang-default-resource-limits)
 
 set(BOO_SYS_LIBS ${_BOO_SYS_LIBS} CACHE PATH "boo system libraries" FORCE)
 set(BOO_SYS_DEFINES ${_BOO_SYS_DEFINES} CACHE PATH "boo system defines" FORCE)
