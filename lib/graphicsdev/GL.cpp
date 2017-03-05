@@ -421,11 +421,25 @@ class GLShaderPipeline : public IShaderPipeline
     GLShaderPipeline() = default;
 public:
     operator bool() const {return m_prog != 0;}
-    ~GLShaderPipeline() { glDeleteProgram(m_prog); }
+    ~GLShaderPipeline() { if (m_prog) glDeleteProgram(m_prog); }
     GLShaderPipeline& operator=(const GLShaderPipeline&) = delete;
     GLShaderPipeline(const GLShaderPipeline&) = delete;
-    GLShaderPipeline& operator=(GLShaderPipeline&& other) = default;
-    GLShaderPipeline(GLShaderPipeline&& other) = default;
+    GLShaderPipeline& operator=(GLShaderPipeline&& other)
+    {
+        m_vert = std::move(other.m_vert);
+        m_frag = std::move(other.m_frag);
+        m_prog = other.m_prog;
+        other.m_prog = 0;
+        m_sfactor = other.m_sfactor;
+        m_dfactor = other.m_dfactor;
+        m_drawPrim = other.m_drawPrim;
+        m_depthTest = other.m_depthTest;
+        m_depthWrite = other.m_depthWrite;
+        m_backfaceCulling = other.m_backfaceCulling;
+        m_uniLocs = std::move(other.m_uniLocs);
+        return *this;
+    }
+    GLShaderPipeline(GLShaderPipeline&& other) { *this = std::move(other); }
 
     GLuint bind() const
     {

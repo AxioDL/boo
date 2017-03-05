@@ -25,8 +25,8 @@ class MetalDataFactoryImpl;
 struct MetalShareableShader : IShareableShader<MetalDataFactoryImpl, MetalShareableShader>
 {
     id<MTLFunction> m_shader;
-    MetalShareableShader(MetalDataFactoryImpl& fac, uint64_t key, id<MTLFunction> s)
-    : IShareableShader(fac, key), m_shader(s) {}
+    MetalShareableShader(MetalDataFactoryImpl& fac, uint64_t srcKey, id<MTLFunction> s)
+    : IShareableShader(fac, srcKey, 0), m_shader(s) {}
 };
 
 class MetalDataFactoryImpl : public MetalDataFactory
@@ -58,7 +58,7 @@ public:
     GraphicsDataToken commitTransaction(const std::function<bool(IGraphicsDataFactory::Context& ctx)>&);
     GraphicsBufferPoolToken newBufferPool();
 
-    void _unregisterShareableShader(uint64_t key) { m_sharedShaders.erase(key); }
+    void _unregisterShareableShader(uint64_t srcKey, uint64_t binKey) { m_sharedShaders.erase(srcKey); }
 };
 
 ThreadLocalPtr<struct MetalData> MetalDataFactoryImpl::m_deferredData;
