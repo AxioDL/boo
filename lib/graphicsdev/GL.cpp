@@ -26,8 +26,8 @@ class GLDataFactoryImpl;
 struct GLShareableShader : IShareableShader<GLDataFactoryImpl, GLShareableShader>
 {
     GLuint m_shader = 0;
-    GLShareableShader(GLDataFactoryImpl& fac, uint64_t key, GLuint s)
-    : IShareableShader(fac, key), m_shader(s) {}
+    GLShareableShader(GLDataFactoryImpl& fac, uint64_t srcKey, GLuint s)
+    : IShareableShader(fac, srcKey, 0), m_shader(s) {}
     ~GLShareableShader() { glDeleteShader(m_shader); }
 };
 
@@ -58,7 +58,10 @@ public:
     GraphicsDataToken commitTransaction(const FactoryCommitFunc&);
     GraphicsBufferPoolToken newBufferPool();
 
-    void _unregisterShareableShader(uint64_t key) { m_sharedShaders.erase(key); }
+    void _unregisterShareableShader(uint64_t srcKey, uint64_t binKey)
+    {
+        m_sharedShaders.erase(srcKey);
+    }
 };
 
 ThreadLocalPtr<struct GLData> GLDataFactoryImpl::m_deferredData;
@@ -421,21 +424,8 @@ public:
     ~GLShaderPipeline() { glDeleteProgram(m_prog); }
     GLShaderPipeline& operator=(const GLShaderPipeline&) = delete;
     GLShaderPipeline(const GLShaderPipeline&) = delete;
-    GLShaderPipeline& operator=(GLShaderPipeline&& other)
-    {
-        m_vert = std::move(other.m_vert);
-        m_frag = std::move(other.m_frag);
-        m_prog = std::move(other.m_prog);
-        m_sfactor = other.m_sfactor;
-        m_dfactor = other.m_dfactor;
-        m_depthTest = other.m_depthTest;
-        m_depthWrite = other.m_depthWrite;
-        m_backfaceCulling = other.m_backfaceCulling;
-        m_uniLocs = std::move(other.m_uniLocs);
-        m_drawPrim = other.m_drawPrim;
-        return *this;
-    }
-    GLShaderPipeline(GLShaderPipeline&& other) {*this = std::move(other);}
+    GLShaderPipeline& operator=(GLShaderPipeline&& other) = default;
+    GLShaderPipeline(GLShaderPipeline&& other) = default;
 
     GLuint bind() const
     {

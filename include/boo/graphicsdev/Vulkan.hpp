@@ -103,31 +103,10 @@ extern VulkanContext g_VulkanContext;
 
 class VulkanDataFactory : public IGraphicsDataFactory
 {
-    friend struct VulkanCommandQueue;
-    IGraphicsContext* m_parent;
-    VulkanContext* m_ctx;
-    uint32_t m_drawSamples;
-    static ThreadLocalPtr<struct VulkanData> m_deferredData;
-    std::unordered_set<struct VulkanData*> m_committedData;
-    std::unordered_set<struct VulkanPool*> m_committedPools;
-    std::mutex m_committedMutex;
-    std::vector<int> m_texUnis;
-    void destroyData(IGraphicsData*);
-    void destroyPool(IGraphicsBufferPool*);
-    void destroyAllData();
-    IGraphicsBufferD* newPoolBuffer(IGraphicsBufferPool *pool, BufferUse use,
-                                    size_t stride, size_t count);
-    void deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf);
 public:
-    VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx, uint32_t drawSamples);
-    ~VulkanDataFactory() {destroyAllData();}
-
-    Platform platform() const {return Platform::Vulkan;}
-    const SystemChar* platformName() const {return _S("Vulkan");}
-
     class Context : public IGraphicsDataFactory::Context
     {
-        friend class VulkanDataFactory;
+        friend class VulkanDataFactoryImpl;
         VulkanDataFactory& m_parent;
         Context(VulkanDataFactory& parent) : m_parent(parent) {}
     public:
@@ -150,8 +129,8 @@ public:
                                        size_t baseVert = 0, size_t baseInst = 0);
 
         IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
-                                           std::vector<unsigned int>& vertBlobOut, std::vector<unsigned int>& fragBlobOut,
-                                           std::vector<unsigned char>& pipelineBlob, IVertexFormat* vtxFmt,
+                                           std::vector<unsigned int>* vertBlobOut, std::vector<unsigned int>* fragBlobOut,
+                                           std::vector<unsigned char>* pipelineBlob, IVertexFormat* vtxFmt,
                                            BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                                            bool depthTest, bool depthWrite, bool backfaceCulling);
 
@@ -159,10 +138,7 @@ public:
                                            BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                                            bool depthTest, bool depthWrite, bool backfaceCulling)
         {
-            std::vector<unsigned int> vertBlob;
-            std::vector<unsigned int> fragBlob;
-            std::vector<unsigned char> pipelineBlob;
-            return newShaderPipeline(vertSource, fragSource, vertBlob, fragBlob, pipelineBlob,
+            return newShaderPipeline(vertSource, fragSource, nullptr, nullptr, nullptr,
                                      vtxFmt, srcFac, dstFac, prim, depthTest, depthWrite, backfaceCulling);
         }
 
@@ -175,9 +151,6 @@ public:
                              size_t texCount, ITexture** texs,
                              size_t baseVert = 0, size_t baseInst = 0);
     };
-
-    GraphicsDataToken commitTransaction(const FactoryCommitFunc&);
-    GraphicsBufferPoolToken newBufferPool();
 };
 
 }

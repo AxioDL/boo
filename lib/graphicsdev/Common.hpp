@@ -55,15 +55,15 @@ class IShareableShader
 {
     std::atomic_int m_refCount = {0};
     FactoryImpl& m_factory;
-    uint64_t m_key;
+    uint64_t m_srckey, m_binKey;
 public:
-    IShareableShader(FactoryImpl& factory, uint64_t key)
-    : m_factory(factory), m_key(key) {}
+    IShareableShader(FactoryImpl& factory, uint64_t srcKey, uint64_t binKey)
+    : m_factory(factory), m_srckey(srcKey), m_binKey(binKey) {}
     void increment() { m_refCount++; }
     void decrement()
     {
         if (m_refCount.fetch_sub(1) == 1)
-            m_factory._unregisterShareableShader(m_key);
+            m_factory._unregisterShareableShader(m_srckey, m_binKey);
     }
 
     class Token

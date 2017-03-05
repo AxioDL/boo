@@ -119,6 +119,8 @@ IGraphicsDataFactory* _NewGLDataFactory(IGraphicsContext* parent, uint32_t drawS
 IGraphicsCommandQueue* _NewVulkanCommandQueue(VulkanContext* ctx,
                                               VulkanContext::Window* windowCtx,
                                               IGraphicsContext* parent);
+IGraphicsDataFactory* _NewVulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx,
+                                            uint32_t drawSamples);
 #endif
 void _XlibUpdateLastGlxCtx(GLXContext lastGlxCtx);
 void GLXExtensionCheck();
@@ -828,7 +830,7 @@ public:
         });
         initcv.wait(outerLk);
 
-        m_dataFactory = new class VulkanDataFactory(this, m_ctx, m_drawSamples);
+        m_dataFactory = _NewVulkanDataFactory(Sthis, m_ctx, m_drawSamples);
         m_commandQueue = _NewVulkanCommandQueue(m_ctx, m_ctx->m_windows[m_parentWindow].get(), this);
 
         return true;

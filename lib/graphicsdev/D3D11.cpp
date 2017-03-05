@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <atomic>
 #include <forward_list>
+#include "xxhash.h"
 
 #undef min
 #undef max
@@ -21,6 +22,19 @@ extern pD3DCompile D3DCompilePROC;
 namespace boo
 {
 static logvisor::Module Log("boo::D3D11");
+class D3D11DataFactory;
+
+struct D3D11ShareableShader : IShareableShader<D3D11DataFactory, D3D11ShareableShader>
+{
+    ComPtr<ID3D11DeviceChild> m_shader;
+    ComPtr<ID3DBlob> m_vtxBlob;
+    D3D11ShareableShader(D3D11DataFactory& fac, uint64_t srcKey, uint64_t binKey,
+                         ComPtr<ID3D11DeviceChild>&& s, ComPtr<ID3DBlob>&& vb)
+    : IShareableShader(fac, srcKey, binKey), m_shader(std::move(s)), m_vtxBlob(std::move(vb)) {}
+    D3D11ShareableShader(D3D11DataFactory& fac, uint64_t srcKey, uint64_t binKey,
+                         ComPtr<ID3D11DeviceChild>&& s)
+    : IShareableShader(fac, srcKey, binKey), m_shader(std::move(s)) {}
+};
 
 static inline void ThrowIfFailed(HRESULT hr)
 {
@@ -479,15 +493,20 @@ class D3D11ShaderPipeline : public IShaderPipeline
     friend class D3D11DataFactory;
     friend struct D3D11ShaderDataBinding;
     const D3D11VertexFormat* m_vtxFmt;
+    D3D11ShareableShader::Token m_vert;
+    D3D11ShareableShader::Token m_pixel;
 
-    D3D11ShaderPipeline(D3D11Context* ctx, ID3DBlob* vert, ID3DBlob* pixel,
+    D3D11ShaderPipeline(D3D11Context* ctx,
+        D3D11ShareableShader::Token&& vert,
+        D3D11ShareableShader::Token&& pixel,
         const D3D11VertexFormat* vtxFmt,
         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
         bool depthTest, bool depthWrite, bool backfaceCulling)
-    : m_vtxFmt(vtxFmt), m_topology(PRIMITIVE_TABLE[int(prim)])
+    : m_vtxFmt(vtxFmt), m_vert(std::move(vert)), m_pixel(std::move(pixel)),
+      m_topology(PRIMITIVE_TABLE[int(prim)])
     {
-        ThrowIfFailed(ctx->m_dev->CreateVertexShader(vert->GetBufferPointer(), vert->GetBufferSize(), nullptr, &m_vShader));
-        ThrowIfFailed(ctx->m_dev->CreatePixelShader(pixel->GetBufferPointer(), pixel->GetBufferSize(), nullptr, &m_pShader));
+        m_vert.get().m_shader.As<ID3D11VertexShader>(&m_vShader);
+        m_pixel.get().m_shader.As<ID3D11PixelShader>(&m_pShader);
 
         CD3D11_RASTERIZER_DESC rasDesc(D3D11_FILL_SOLID, backfaceCulling ? D3D11_CULL_BACK : D3D11_CULL_NONE, true,
             D3D11_DEFAULT_DEPTH_BIAS, D3D11_DEFAULT_DEPTH_BIAS_CLAMP, D3D11_DEFAULT_SLOPE_SCALED_DEPTH_BIAS,
@@ -506,8 +525,9 @@ class D3D11ShaderPipeline : public IShaderPipeline
         blDesc.RenderTarget[0].DestBlend = BLEND_FACTOR_TABLE[int(dstFac)];
         ThrowIfFailed(ctx->m_dev->CreateBlendState(&blDesc, &m_blState));
 
+        const auto& vertBuf = m_vert.get().m_vtxBlob;
         ThrowIfFailed(ctx->m_dev->CreateInputLayout(vtxFmt->m_elements.get(), vtxFmt->m_elementCount,
-            vert->GetBufferPointer(), vert->GetBufferSize(), &m_inLayout));
+            vertBuf->GetBufferPointer(), vertBuf->GetBufferSize(), &m_inLayout));
     }
 public:
     ComPtr<ID3D11VertexShader> m_vShader;
@@ -1125,6 +1145,8 @@ class D3D11DataFactory : public ID3DDataFactory
     std::unordered_set<D3D11Data*> m_committedData;
     std::unordered_set<D3D11Pool*> m_committedPools;
     std::mutex m_committedMutex;
+    std::unordered_map<uint64_t, std::unique_ptr<D3D11ShareableShader>> m_sharedShaders;
+    std::unordered_map<uint64_t, uint64_t> m_sourceToBinary;
     uint32_t m_sampleCount;
 
     void destroyData(IGraphicsData* d)
@@ -1258,37 +1280,149 @@ public:
 #define BOO_D3DCOMPILE_FLAG D3DCOMPILE_OPTIMIZATION_LEVEL3
 #endif
 
+        static uint64_t CompileVert(ComPtr<ID3DBlob>& vertBlobOut, const char* vertSource, uint64_t srcKey,
+                                    D3D11DataFactory& factory)
+        {
+            ComPtr<ID3DBlob> errBlob;
+            if (FAILED(D3DCompilePROC(vertSource, strlen(vertSource), "HECL Vert Source", nullptr, nullptr, "main",
+                "vs_5_0", BOO_D3DCOMPILE_FLAG, 0, &vertBlobOut, &errBlob)))
+            {
+                Log.report(logvisor::Fatal, "error compiling vert shader: %s", errBlob->GetBufferPointer());
+            }
+
+            XXH64_state_t hashState;
+            XXH64_reset(&hashState, 0);
+            XXH64_update(&hashState, vertBlobOut->GetBufferPointer(), vertBlobOut->GetBufferSize());
+            uint64_t binKey = XXH64_digest(&hashState);
+            factory.m_sourceToBinary[srcKey] = binKey;
+            return binKey;
+        }
+
+        static uint64_t CompileFrag(ComPtr<ID3DBlob>& fragBlobOut, const char* fragSource, uint64_t srcKey,
+                                    D3D11DataFactory& factory)
+        {
+            ComPtr<ID3DBlob> errBlob;
+            if (FAILED(D3DCompilePROC(fragSource, strlen(fragSource), "HECL Pixel Source", nullptr, nullptr, "main",
+                "ps_5_0", BOO_D3DCOMPILE_FLAG, 0, &fragBlobOut, &errBlob)))
+            {
+                Log.report(logvisor::Fatal, "error compiling pixel shader: %s", errBlob->GetBufferPointer());
+            }
+
+            XXH64_state_t hashState;
+            XXH64_reset(&hashState, 0);
+            XXH64_update(&hashState, fragBlobOut->GetBufferPointer(), fragBlobOut->GetBufferSize());
+            uint64_t binKey = XXH64_digest(&hashState);
+            factory.m_sourceToBinary[srcKey] = binKey;
+            return binKey;
+        }
+
         IShaderPipeline* newShaderPipeline
             (const char* vertSource, const char* fragSource,
-             ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,
-             ComPtr<ID3DBlob>& pipelineBlob, IVertexFormat* vtxFmt,
+             ComPtr<ID3DBlob>* vertBlobOut, ComPtr<ID3DBlob>* fragBlobOut,
+             ComPtr<ID3DBlob>* pipelineBlob, IVertexFormat* vtxFmt,
              BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
              bool depthTest, bool depthWrite, bool backfaceCulling)
         {
-            ComPtr<ID3DBlob> errBlob;
-
-            if (!vertBlobOut)
+            XXH64_state_t hashState;
+            uint64_t srcHashes[2] = {};
+            uint64_t binHashes[2] = {};
+            XXH64_reset(&hashState, 0);
+            if (vertSource)
             {
-                if (FAILED(D3DCompilePROC(vertSource, strlen(vertSource), "HECL Vert Source", nullptr, nullptr, "main",
-                    "vs_5_0", BOO_D3DCOMPILE_FLAG, 0, &vertBlobOut, &errBlob)))
-                {
-                    Log.report(logvisor::Fatal, "error compiling vert shader: %s", errBlob->GetBufferPointer());
-                    return nullptr;
-                }
+                XXH64_update(&hashState, vertSource, strlen(vertSource));
+                srcHashes[0] = XXH64_digest(&hashState);
+                auto binSearch = m_parent.m_sourceToBinary.find(srcHashes[0]);
+                if (binSearch != m_parent.m_sourceToBinary.cend())
+                    binHashes[0] = binSearch->second;
+            }
+            else if (vertBlobOut && *vertBlobOut)
+            {
+                XXH64_update(&hashState, (*vertBlobOut)->GetBufferPointer(), (*vertBlobOut)->GetBufferSize());
+                binHashes[0] = XXH64_digest(&hashState);
+            }
+            XXH64_reset(&hashState, 0);
+            if (fragSource)
+            {
+                XXH64_update(&hashState, fragSource, strlen(fragSource));
+                srcHashes[1] = XXH64_digest(&hashState);
+                auto binSearch = m_parent.m_sourceToBinary.find(srcHashes[1]);
+                if (binSearch != m_parent.m_sourceToBinary.cend())
+                    binHashes[1] = binSearch->second;
+            }
+            else if (fragBlobOut && *fragBlobOut)
+            {
+                XXH64_update(&hashState, (*fragBlobOut)->GetBufferPointer(), (*fragBlobOut)->GetBufferSize());
+                binHashes[1] = XXH64_digest(&hashState);
             }
 
-            if (!fragBlobOut)
+            if (vertBlobOut && !*vertBlobOut)
+                binHashes[0] = CompileVert(*vertBlobOut, vertSource, srcHashes[0], m_parent);
+
+            if (fragBlobOut && !*fragBlobOut)
+                binHashes[1] = CompileFrag(*fragBlobOut, fragSource, srcHashes[1], m_parent);
+
+
+            struct D3D11Context* ctx = m_parent.m_ctx;
+            D3D11ShareableShader::Token vertShader;
+            D3D11ShareableShader::Token fragShader;
+            auto vertFind = binHashes[0] ? m_parent.m_sharedShaders.find(binHashes[0]) :
+                                           m_parent.m_sharedShaders.end();
+            if (vertFind != m_parent.m_sharedShaders.end())
             {
-                if (FAILED(D3DCompilePROC(fragSource, strlen(fragSource), "HECL Pixel Source", nullptr, nullptr, "main",
-                    "ps_5_0", BOO_D3DCOMPILE_FLAG, 0, &fragBlobOut, &errBlob)))
+                vertShader = vertFind->second->lock();
+            }
+            else
+            {
+                ComPtr<ID3DBlob> vertBlob;
+                if (vertBlobOut)
+                    vertBlob = *vertBlobOut;
+                else
+                    binHashes[0] = CompileVert(vertBlob, vertSource, srcHashes[0], m_parent);
+
+                ComPtr<ID3D11VertexShader> vShader;
+                ThrowIfFailed(ctx->m_dev->CreateVertexShader(vertBlob->GetBufferPointer(),
+                                                             vertBlob->GetBufferSize(), nullptr, &vShader));
+
+                auto it =
+                m_parent.m_sharedShaders.emplace(std::make_pair(binHashes[0],
+                    std::make_unique<D3D11ShareableShader>(m_parent, srcHashes[0], binHashes[0],
+                                                           std::move(vShader), std::move(vertBlob)))).first;
+                vertShader = it->second->lock();
+            }
+            auto fragFind = binHashes[1] ? m_parent.m_sharedShaders.find(binHashes[1]) :
+                                           m_parent.m_sharedShaders.end();
+            if (fragFind != m_parent.m_sharedShaders.end())
+            {
+                fragShader = fragFind->second->lock();
+            }
+            else
+            {
+                ComPtr<ID3DBlob> fragBlob;
+                ComPtr<ID3DBlob>* useFragBlob;
+                if (fragBlobOut)
                 {
-                    Log.report(logvisor::Fatal, "error compiling pixel shader: %s", errBlob->GetBufferPointer());
-                    return nullptr;
+                    useFragBlob = fragBlobOut;
                 }
+                else
+                {
+                    useFragBlob = &fragBlob;
+                    binHashes[1] = CompileFrag(fragBlob, fragSource, srcHashes[1], m_parent);
+                }
+
+                ComPtr<ID3D11PixelShader> pShader;
+                ThrowIfFailed(ctx->m_dev->CreatePixelShader((*useFragBlob)->GetBufferPointer(),
+                                                            (*useFragBlob)->GetBufferSize(), nullptr, &pShader));
+
+                auto it =
+                m_parent.m_sharedShaders.emplace(std::make_pair(binHashes[1],
+                    std::make_unique<D3D11ShareableShader>(m_parent, srcHashes[1], binHashes[1],
+                                                           std::move(pShader)))).first;
+                fragShader = it->second->lock();
             }
 
             D3D11Data* d = static_cast<D3D11Data*>(m_deferredData);
-            D3D11ShaderPipeline* retval = new D3D11ShaderPipeline(m_parent.m_ctx, vertBlobOut.Get(), fragBlobOut.Get(),
+            D3D11ShaderPipeline* retval = new D3D11ShaderPipeline(ctx,
+                std::move(vertShader), std::move(fragShader),
                 static_cast<const D3D11VertexFormat*>(vtxFmt),
                 srcFac, dstFac, prim, depthTest, depthWrite, backfaceCulling);
             d->m_SPs.emplace_back(retval);
@@ -1341,6 +1475,13 @@ public:
         D3D11Pool* retval = new D3D11Pool;
         m_committedPools.insert(retval);
         return GraphicsBufferPoolToken(this, retval);
+    }
+
+    void _unregisterShareableShader(uint64_t srcKey, uint64_t binKey)
+    {
+        if (srcKey)
+            m_sourceToBinary.erase(srcKey);
+        m_sharedShaders.erase(binKey);
     }
 };
 

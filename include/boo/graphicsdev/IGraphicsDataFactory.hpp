@@ -280,7 +280,7 @@ class GraphicsDataToken
     friend class D3D12DataFactory;
     friend class D3D11DataFactory;
     friend class MetalDataFactoryImpl;
-    friend class VulkanDataFactory;
+    friend class VulkanDataFactoryImpl;
     IGraphicsDataFactory* m_factory = nullptr;
     IGraphicsData* m_data = nullptr;
     GraphicsDataToken(IGraphicsDataFactory* factory, IGraphicsData* data)
@@ -327,7 +327,7 @@ class GraphicsBufferPoolToken
     friend class D3D12DataFactory;
     friend class D3D11DataFactory;
     friend class MetalDataFactoryImpl;
-    friend class VulkanDataFactory;
+    friend class VulkanDataFactoryImpl;
     IGraphicsDataFactory* m_factory = nullptr;
     IGraphicsBufferPool* m_pool = nullptr;
     GraphicsBufferPoolToken(IGraphicsDataFactory* factory, IGraphicsBufferPool* pool)

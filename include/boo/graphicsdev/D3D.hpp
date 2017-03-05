@@ -28,8 +28,8 @@ public:
     public:
         bool bindingNeedsVertexFormat() const {return false;}
         virtual IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
-                                                   ComPtr<ID3DBlob>& vertBlobOut, ComPtr<ID3DBlob>& fragBlobOut,
-                                                   ComPtr<ID3DBlob>& pipelineBlob, IVertexFormat* vtxFmt,
+                                                   ComPtr<ID3DBlob>* vertBlobOut, ComPtr<ID3DBlob>* fragBlobOut,
+                                                   ComPtr<ID3DBlob>* pipelineBlob, IVertexFormat* vtxFmt,
                                                    BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                                                    bool depthTest, bool depthWrite, bool backfaceCulling)=0;
     };

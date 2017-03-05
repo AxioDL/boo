@@ -7,6 +7,9 @@
 #include <wrl/client.h>
 template <class T>
 using ComPtr = Microsoft::WRL::ComPtr<T>;
+template <class T>
+static inline ComPtr<T>* ReferenceComPtr(ComPtr<T>& ptr)
+{ return reinterpret_cast<ComPtr<T>*>(ptr.GetAddressOf()); }
 #endif
 
 #include <string>

@@ -41,6 +41,8 @@ IGraphicsDataFactory* _NewGLDataFactory(IGraphicsContext* parent, uint32_t drawS
 IGraphicsCommandQueue* _NewVulkanCommandQueue(VulkanContext* ctx,
                                               VulkanContext::Window* windowCtx,
                                               IGraphicsContext* parent);
+IGraphicsDataFactory* _NewVulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx,
+                                            uint32_t drawSamples);
 #endif
 
 struct GraphicsContextWin32 : IGraphicsContext
@@ -597,7 +599,7 @@ public:
 
         m_ctx->initSwapChain(*m_windowCtx, m_surface, m_format, m_colorspace);
 
-        m_dataFactory = new class VulkanDataFactory(this, m_ctx, m_sampleCount);
+        m_dataFactory = _NewVulkanDataFactory(this, m_ctx, m_sampleCount);
         m_commandQueue = _NewVulkanCommandQueue(m_ctx, m_ctx->m_windows[m_parentWindow].get(), this);
         return true;
     }

@@ -369,10 +369,7 @@ struct TestApplicationCallback : IApplicationCallback
                     "    return tex.Sample(samp, d.out_uv);\n"
                     "}\n";
 
-                ComPtr<ID3DBlob> vsCompile;
-                ComPtr<ID3DBlob> psCompile;
-                ComPtr<ID3DBlob> cachedPipeline;
-                pipeline = d3dF.newShaderPipeline(VS, PS, vsCompile, psCompile, cachedPipeline, vfmt,
+                pipeline = d3dF.newShaderPipeline(VS, PS, nullptr, nullptr, nullptr, vfmt,
                                                   BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
                                                   true, true, false);
             }

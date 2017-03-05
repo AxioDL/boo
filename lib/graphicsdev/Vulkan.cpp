@@ -9,6 +9,7 @@
 #include <SPIRV/disassemble.h>
 #include "boo/graphicsdev/GLSLMacros.hpp"
 #include "Common.hpp"
+#include "xxhash.h"
 
 #include "logvisor/logvisor.hpp"
 
@@ -20,6 +21,55 @@ namespace boo
 {
 static logvisor::Module Log("boo::Vulkan");
 VulkanContext g_VulkanContext;
+class VulkanDataFactoryImpl;
+
+struct VulkanShareableShader : IShareableShader<VulkanDataFactoryImpl, VulkanShareableShader>
+{
+    VkDevice m_dev;
+    VkShaderModule m_shader;
+    VulkanShareableShader(VulkanDataFactoryImpl& fac, uint64_t srcKey, uint64_t binKey,
+                          VkDevice dev, VkShaderModule s)
+    : IShareableShader(fac, srcKey, binKey), m_dev(dev), m_shader(s) {}
+    ~VulkanShareableShader() { vk::DestroyShaderModule(m_dev, m_shader, nullptr); }
+};
+
+class VulkanDataFactoryImpl : public VulkanDataFactory
+{
+    friend struct VulkanCommandQueue;
+    friend class VulkanDataFactory::Context;
+    IGraphicsContext* m_parent;
+    VulkanContext* m_ctx;
+    uint32_t m_drawSamples;
+    static ThreadLocalPtr<struct VulkanData> m_deferredData;
+    std::unordered_set<struct VulkanData*> m_committedData;
+    std::unordered_set<struct VulkanPool*> m_committedPools;
+    std::mutex m_committedMutex;
+    std::unordered_map<uint64_t, std::unique_ptr<VulkanShareableShader>> m_sharedShaders;
+    std::vector<int> m_texUnis;
+    void destroyData(IGraphicsData*);
+    void destroyPool(IGraphicsBufferPool*);
+    void destroyAllData();
+    IGraphicsBufferD* newPoolBuffer(IGraphicsBufferPool *pool, BufferUse use,
+                                    size_t stride, size_t count);
+    void deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf);
+public:
+    std::unordered_map<uint64_t, uint64_t> m_sourceToBinary;
+    VulkanDataFactoryImpl(IGraphicsContext* parent, VulkanContext* ctx, uint32_t drawSamples);
+    ~VulkanDataFactoryImpl() {destroyAllData();}
+
+    Platform platform() const {return Platform::Vulkan;}
+    const SystemChar* platformName() const {return _S("Vulkan");}
+
+    GraphicsDataToken commitTransaction(const FactoryCommitFunc&);
+    GraphicsBufferPoolToken newBufferPool();
+
+    void _unregisterShareableShader(uint64_t srcKey, uint64_t binKey)
+    {
+        if (srcKey)
+            m_sourceToBinary.erase(srcKey);
+        m_sharedShaders.erase(binKey);
+    }
+};
 
 static inline void ThrowIfFailed(VkResult res)
 {
@@ -809,6 +859,7 @@ public:
 class VulkanGraphicsBufferD : public IGraphicsBufferD
 {
     friend class VulkanDataFactory;
+    friend class VulkanDataFactoryImpl;
     friend struct VulkanCommandQueue;
     struct VulkanCommandQueue* m_q;
     size_t m_cpuSz;
@@ -1782,14 +1833,17 @@ class VulkanShaderPipeline : public IShaderPipeline
     VulkanContext* m_ctx;
     VkPipelineCache m_pipelineCache;
     const VulkanVertexFormat* m_vtxFmt;
+    VulkanShareableShader::Token m_vert;
+    VulkanShareableShader::Token m_frag;
     VulkanShaderPipeline(VulkanContext* ctx,
-                         VkShaderModule vert,
-                         VkShaderModule frag,
+                         VulkanShareableShader::Token&& vert,
+                         VulkanShareableShader::Token&& frag,
                          VkPipelineCache pipelineCache,
                          const VulkanVertexFormat* vtxFmt,
                          BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                          bool depthTest, bool depthWrite, bool backfaceCulling)
-    : m_ctx(ctx), m_pipelineCache(pipelineCache), m_vtxFmt(vtxFmt)
+    : m_ctx(ctx), m_pipelineCache(pipelineCache), m_vtxFmt(vtxFmt),
+      m_vert(std::move(vert)), m_frag(std::move(frag))
     {
         VkDynamicState dynamicStateEnables[VK_DYNAMIC_STATE_RANGE_SIZE] = {};
         VkPipelineDynamicStateCreateInfo dynamicState = {};
@@ -1804,7 +1858,7 @@ class VulkanShaderPipeline : public IShaderPipeline
         stages[0].pNext = nullptr;
         stages[0].flags = 0;
         stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-        stages[0].module = vert;
+        stages[0].module = m_vert.get().m_shader;
         stages[0].pName = "main";
         stages[0].pSpecializationInfo = nullptr;
 
@@ -1812,7 +1866,7 @@ class VulkanShaderPipeline : public IShaderPipeline
         stages[1].pNext = nullptr;
         stages[1].flags = 0;
         stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        stages[1].module = frag;
+        stages[1].module = m_frag.get().m_shader;
         stages[1].pName = "main";
         stages[1].pSpecializationInfo = nullptr;
 
@@ -1905,7 +1959,8 @@ public:
     ~VulkanShaderPipeline()
     {
         vk::DestroyPipeline(m_ctx->m_dev, m_pipeline, nullptr);
-        vk::DestroyPipelineCache(m_ctx->m_dev, m_pipelineCache, nullptr);
+        if (m_pipelineCache)
+            vk::DestroyPipelineCache(m_ctx->m_dev, m_pipelineCache, nullptr);
     }
     VulkanShaderPipeline& operator=(const VulkanShaderPipeline&) = delete;
     VulkanShaderPipeline(const VulkanShaderPipeline&) = delete;
@@ -2847,19 +2902,19 @@ void VulkanTextureD::unmap()
     m_validSlots = 0;
 }
 
-void VulkanDataFactory::destroyData(IGraphicsData* d)
+void VulkanDataFactoryImpl::destroyData(IGraphicsData* d)
 {
     VulkanData* data = static_cast<VulkanData*>(d);
     data->m_dead = true;
 }
 
-void VulkanDataFactory::destroyPool(IGraphicsBufferPool* p)
+void VulkanDataFactoryImpl::destroyPool(IGraphicsBufferPool* p)
 {
     VulkanPool* pool = static_cast<VulkanPool*>(p);
     pool->m_dead = true;
 }
 
-void VulkanDataFactory::destroyAllData()
+void VulkanDataFactoryImpl::destroyAllData()
 {
     std::unique_lock<std::mutex> lk(m_committedMutex);
     for (VulkanData* data : m_committedData)
@@ -2870,7 +2925,8 @@ void VulkanDataFactory::destroyAllData()
     m_committedPools.clear();
 }
 
-VulkanDataFactory::VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx, uint32_t drawSamples)
+VulkanDataFactoryImpl::VulkanDataFactoryImpl(IGraphicsContext* parent,
+                                             VulkanContext* ctx, uint32_t drawSamples)
 : m_parent(parent), m_ctx(ctx), m_drawSamples(drawSamples)
 {
     VkDescriptorSetLayoutBinding layoutBindings[BOO_GLSL_MAX_UNIFORM_COUNT + BOO_GLSL_MAX_TEXTURE_COUNT];
@@ -2947,152 +3003,268 @@ VulkanDataFactory::VulkanDataFactory(IGraphicsContext* parent, VulkanContext* ct
     ThrowIfFailed(vk::CreateRenderPass(ctx->m_dev, &renderPass, nullptr, &ctx->m_pass));
 }
 
+static uint64_t CompileVert(std::vector<unsigned int>& out, const char* vertSource, uint64_t srcKey,
+                            VulkanDataFactoryImpl& factory)
+{
+    const EShMessages messages = EShMessages(EShMsgSpvRules | EShMsgVulkanRules);
+    glslang::TShader vs(EShLangVertex);
+    vs.setStrings(&vertSource, 1);
+    if (!vs.parse(&glslang::DefaultTBuiltInResource, 110, false, messages))
+    {
+        printf("%s\n", vertSource);
+        Log.report(logvisor::Fatal, "unable to compile vertex shader\n%s", vs.getInfoLog());
+    }
+
+    glslang::TProgram prog;
+    prog.addShader(&vs);
+    if (!prog.link(messages))
+    {
+        Log.report(logvisor::Fatal, "unable to link shader program\n%s", prog.getInfoLog());
+    }
+    glslang::GlslangToSpv(*prog.getIntermediate(EShLangVertex), out);
+    //spv::Disassemble(std::cerr, out);
+
+    XXH64_state_t hashState;
+    XXH64_reset(&hashState, 0);
+    XXH64_update(&hashState, out.data(), out.size() * sizeof(unsigned int));
+    uint64_t binKey = XXH64_digest(&hashState);
+    factory.m_sourceToBinary[srcKey] = binKey;
+    return binKey;
+}
+
+static uint64_t CompileFrag(std::vector<unsigned int>& out, const char* fragSource, uint64_t srcKey,
+                            VulkanDataFactoryImpl& factory)
+{
+    const EShMessages messages = EShMessages(EShMsgSpvRules | EShMsgVulkanRules);
+    glslang::TShader fs(EShLangFragment);
+    fs.setStrings(&fragSource, 1);
+    if (!fs.parse(&glslang::DefaultTBuiltInResource, 110, false, messages))
+    {
+        printf("%s\n", fragSource);
+        Log.report(logvisor::Fatal, "unable to compile fragment shader\n%s", fs.getInfoLog());
+    }
+
+    glslang::TProgram prog;
+    prog.addShader(&fs);
+    if (!prog.link(messages))
+    {
+        Log.report(logvisor::Fatal, "unable to link shader program\n%s", prog.getInfoLog());
+    }
+    glslang::GlslangToSpv(*prog.getIntermediate(EShLangFragment), out);
+    //spv::Disassemble(std::cerr, out);
+
+    XXH64_state_t hashState;
+    XXH64_reset(&hashState, 0);
+    XXH64_update(&hashState, out.data(), out.size() * sizeof(unsigned int));
+    uint64_t binKey = XXH64_digest(&hashState);
+    factory.m_sourceToBinary[srcKey] = binKey;
+    return binKey;
+}
+
 IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
 (const char* vertSource, const char* fragSource,
- std::vector<unsigned int>& vertBlobOut, std::vector<unsigned int>& fragBlobOut,
- std::vector<unsigned char>& pipelineBlob, IVertexFormat* vtxFmt,
+ std::vector<unsigned int>* vertBlobOut, std::vector<unsigned int>* fragBlobOut,
+ std::vector<unsigned char>* pipelineBlob, IVertexFormat* vtxFmt,
  BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
  bool depthTest, bool depthWrite, bool backfaceCulling)
 {
-    if (vertBlobOut.empty() || fragBlobOut.empty())
+    VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
+
+    XXH64_state_t hashState;
+    uint64_t srcHashes[2] = {};
+    uint64_t binHashes[2] = {};
+    XXH64_reset(&hashState, 0);
+    if (vertSource)
     {
-        const EShMessages messages = EShMessages(EShMsgSpvRules | EShMsgVulkanRules);
-
-        //printf("%s\n", vertSource);
-        //printf("%s\n", fragSource);
-
-        glslang::TShader vs(EShLangVertex);
-        vs.setStrings(&vertSource, 1);
-        if (!vs.parse(&glslang::DefaultTBuiltInResource, 110, false, messages))
-        {
-            printf("%s\n", vertSource);
-            Log.report(logvisor::Fatal, "unable to compile vertex shader\n%s", vs.getInfoLog());
-            return nullptr;
-        }
-
-        glslang::TShader fs(EShLangFragment);
-        fs.setStrings(&fragSource, 1);
-        if (!fs.parse(&glslang::DefaultTBuiltInResource, 110, false, messages))
-        {
-            printf("%s\n", fragSource);
-            Log.report(logvisor::Fatal, "unable to compile fragment shader\n%s", fs.getInfoLog());
-            return nullptr;
-        }
-
-        glslang::TProgram prog;
-        prog.addShader(&vs);
-        prog.addShader(&fs);
-        if (!prog.link(messages))
-        {
-            Log.report(logvisor::Fatal, "unable to link shader program\n%s", prog.getInfoLog());
-            return nullptr;
-        }
-        if (vertBlobOut.empty())
-        {
-            glslang::GlslangToSpv(*prog.getIntermediate(EShLangVertex), vertBlobOut);
-            //spv::Disassemble(std::cerr, vertBlobOut);
-        }
-        if (fragBlobOut.empty())
-        {
-            glslang::GlslangToSpv(*prog.getIntermediate(EShLangFragment), fragBlobOut);
-            //spv::Disassemble(std::cerr, fragBlobOut);
-        }
+        XXH64_update(&hashState, vertSource, strlen(vertSource));
+        srcHashes[0] = XXH64_digest(&hashState);
+        auto binSearch = factory.m_sourceToBinary.find(srcHashes[0]);
+        if (binSearch != factory.m_sourceToBinary.cend())
+            binHashes[0] = binSearch->second;
     }
+    else if (vertBlobOut && vertBlobOut->size())
+    {
+        XXH64_update(&hashState, vertBlobOut->data(), vertBlobOut->size() * sizeof(unsigned int));
+        binHashes[0] = XXH64_digest(&hashState);
+    }
+    XXH64_reset(&hashState, 0);
+    if (fragSource)
+    {
+        XXH64_update(&hashState, fragSource, strlen(fragSource));
+        srcHashes[1] = XXH64_digest(&hashState);
+        auto binSearch = factory.m_sourceToBinary.find(srcHashes[1]);
+        if (binSearch != factory.m_sourceToBinary.cend())
+            binHashes[1] = binSearch->second;
+    }
+    else if (fragBlobOut && fragBlobOut->size())
+    {
+        XXH64_update(&hashState, fragBlobOut->data(), fragBlobOut->size() * sizeof(unsigned int));
+        binHashes[1] = XXH64_digest(&hashState);
+    }
+
+    if (vertBlobOut && vertBlobOut->empty())
+        binHashes[0] = CompileVert(*vertBlobOut, vertSource, srcHashes[0], factory);
+
+    if (fragBlobOut && fragBlobOut->empty())
+        binHashes[1] = CompileFrag(*fragBlobOut, fragSource, srcHashes[1], factory);
 
     VkShaderModuleCreateInfo smCreateInfo = {};
     smCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     smCreateInfo.pNext = nullptr;
     smCreateInfo.flags = 0;
 
-    smCreateInfo.codeSize = vertBlobOut.size() * sizeof(unsigned int);
-    smCreateInfo.pCode = vertBlobOut.data();
-    VkShaderModule vertModule;
-    ThrowIfFailed(vk::CreateShaderModule(m_parent.m_ctx->m_dev, &smCreateInfo, nullptr, &vertModule));
+    VulkanShareableShader::Token vertShader;
+    VulkanShareableShader::Token fragShader;
+    auto vertFind = binHashes[0] ? factory.m_sharedShaders.find(binHashes[0]) :
+                                   factory.m_sharedShaders.end();
+    if (vertFind != factory.m_sharedShaders.end())
+    {
+        vertShader = vertFind->second->lock();
+    }
+    else
+    {
+        std::vector<unsigned int> vertBlob;
+        const std::vector<unsigned int>* useVertBlob;
+        if (vertBlobOut)
+        {
+            useVertBlob = vertBlobOut;
+        }
+        else
+        {
+            useVertBlob = &vertBlob;
+            binHashes[0] = CompileVert(vertBlob, vertSource, srcHashes[0], factory);
+        }
 
-    smCreateInfo.codeSize = fragBlobOut.size() * sizeof(unsigned int);
-    smCreateInfo.pCode = fragBlobOut.data();
-    VkShaderModule fragModule;
-    ThrowIfFailed(vk::CreateShaderModule(m_parent.m_ctx->m_dev, &smCreateInfo, nullptr, &fragModule));
+        smCreateInfo.codeSize = useVertBlob->size() * sizeof(unsigned int);
+        smCreateInfo.pCode = useVertBlob->data();
+        VkShaderModule vertModule;
+        ThrowIfFailed(vk::CreateShaderModule(factory.m_ctx->m_dev, &smCreateInfo, nullptr, &vertModule));
 
-    VkPipelineCacheCreateInfo cacheDataInfo = {};
-    cacheDataInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-    cacheDataInfo.pNext = nullptr;
-    cacheDataInfo.initialDataSize = pipelineBlob.size();
-    if (cacheDataInfo.initialDataSize)
-        cacheDataInfo.pInitialData = pipelineBlob.data();
+        auto it =
+        factory.m_sharedShaders.emplace(std::make_pair(binHashes[0],
+            std::make_unique<VulkanShareableShader>(factory, srcHashes[0], binHashes[0],
+                                                    factory.m_ctx->m_dev, vertModule))).first;
+        vertShader = it->second->lock();
+    }
+    auto fragFind = binHashes[1] ? factory.m_sharedShaders.find(binHashes[1]) :
+                                   factory.m_sharedShaders.end();
+    if (fragFind != factory.m_sharedShaders.end())
+    {
+        fragShader = fragFind->second->lock();
+    }
+    else
+    {
+        std::vector<unsigned int> fragBlob;
+        const std::vector<unsigned int>* useFragBlob;
+        if (fragBlobOut)
+        {
+            useFragBlob = fragBlobOut;
+        }
+        else
+        {
+            useFragBlob = &fragBlob;
+            binHashes[1] = CompileFrag(fragBlob, fragSource, srcHashes[1], factory);
+        }
 
-    VkPipelineCache pipelineCache;
-    ThrowIfFailed(vk::CreatePipelineCache(m_parent.m_ctx->m_dev, &cacheDataInfo, nullptr, &pipelineCache));
+        smCreateInfo.codeSize = useFragBlob->size() * sizeof(unsigned int);
+        smCreateInfo.pCode = useFragBlob->data();
+        VkShaderModule fragModule;
+        ThrowIfFailed(vk::CreateShaderModule(factory.m_ctx->m_dev, &smCreateInfo, nullptr, &fragModule));
 
-    VulkanShaderPipeline* retval = new VulkanShaderPipeline(m_parent.m_ctx, vertModule, fragModule, pipelineCache,
-                                                            static_cast<const VulkanVertexFormat*>(vtxFmt),
+        auto it =
+        factory.m_sharedShaders.emplace(std::make_pair(binHashes[1],
+            std::make_unique<VulkanShareableShader>(factory, srcHashes[1], binHashes[1],
+                                                    factory.m_ctx->m_dev, fragModule))).first;
+        fragShader = it->second->lock();
+    }
+
+
+    VkPipelineCache pipelineCache = VK_NULL_HANDLE;
+    if (pipelineBlob)
+    {
+        VkPipelineCacheCreateInfo cacheDataInfo = {};
+        cacheDataInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+        cacheDataInfo.pNext = nullptr;
+
+        cacheDataInfo.initialDataSize = pipelineBlob->size();
+        if (cacheDataInfo.initialDataSize)
+            cacheDataInfo.pInitialData = pipelineBlob->data();
+
+        ThrowIfFailed(vk::CreatePipelineCache(factory.m_ctx->m_dev, &cacheDataInfo, nullptr, &pipelineCache));
+    }
+
+    VulkanShaderPipeline* retval = new VulkanShaderPipeline(factory.m_ctx, std::move(vertShader), std::move(fragShader),
+                                                            pipelineCache, static_cast<const VulkanVertexFormat*>(vtxFmt),
                                                             srcFac, dstFac, prim, depthTest, depthWrite, backfaceCulling);
 
-    if (pipelineBlob.empty())
+    if (pipelineBlob && pipelineBlob->empty())
     {
         size_t cacheSz = 0;
-        ThrowIfFailed(vk::GetPipelineCacheData(m_parent.m_ctx->m_dev, pipelineCache, &cacheSz, nullptr));
+        ThrowIfFailed(vk::GetPipelineCacheData(factory.m_ctx->m_dev, pipelineCache, &cacheSz, nullptr));
         if (cacheSz)
         {
-            pipelineBlob.resize(cacheSz);
-            ThrowIfFailed(vk::GetPipelineCacheData(m_parent.m_ctx->m_dev, pipelineCache, &cacheSz, pipelineBlob.data()));
-            pipelineBlob.resize(cacheSz);
+            pipelineBlob->resize(cacheSz);
+            ThrowIfFailed(vk::GetPipelineCacheData(factory.m_ctx->m_dev, pipelineCache, &cacheSz, pipelineBlob->data()));
+            pipelineBlob->resize(cacheSz);
         }
     }
 
-    vk::DestroyShaderModule(m_parent.m_ctx->m_dev, fragModule, nullptr);
-    vk::DestroyShaderModule(m_parent.m_ctx->m_dev, vertModule, nullptr);
-
-    static_cast<VulkanData*>(m_deferredData.get())->m_SPs.emplace_back(retval);
+    static_cast<VulkanData*>(VulkanDataFactoryImpl::m_deferredData.get())->m_SPs.emplace_back(retval);
     return retval;
 }
 
 IGraphicsBufferS* VulkanDataFactory::Context::newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
 {
-    VulkanGraphicsBufferS* retval = new VulkanGraphicsBufferS(use, m_parent.m_ctx, data, stride, count);
-    static_cast<VulkanData*>(m_deferredData.get())->m_SBufs.emplace_back(retval);
+    VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
+    VulkanGraphicsBufferS* retval = new VulkanGraphicsBufferS(use, factory.m_ctx, data, stride, count);
+    static_cast<VulkanData*>(VulkanDataFactoryImpl::m_deferredData.get())->m_SBufs.emplace_back(retval);
     return retval;
 }
 
 IGraphicsBufferD* VulkanDataFactory::Context::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
 {
-    VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(m_parent.m_parent->getCommandQueue());
-    VulkanGraphicsBufferD* retval = new VulkanGraphicsBufferD(q, use, m_parent.m_ctx, stride, count);
-    static_cast<VulkanData*>(m_deferredData.get())->m_DBufs.emplace_back(retval);
+    VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
+    VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(factory.m_parent->getCommandQueue());
+    VulkanGraphicsBufferD* retval = new VulkanGraphicsBufferD(q, use, factory.m_ctx, stride, count);
+    static_cast<VulkanData*>(VulkanDataFactoryImpl::m_deferredData.get())->m_DBufs.emplace_back(retval);
     return retval;
 }
 
 ITextureS* VulkanDataFactory::Context::newStaticTexture(size_t width, size_t height, size_t mips,
                                                         TextureFormat fmt, const void* data, size_t sz)
 {
-    VulkanTextureS* retval = new VulkanTextureS(m_parent.m_ctx, width, height, mips, fmt, data, sz);
-    static_cast<VulkanData*>(m_deferredData.get())->m_STexs.emplace_back(retval);
+    VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
+    VulkanTextureS* retval = new VulkanTextureS(factory.m_ctx, width, height, mips, fmt, data, sz);
+    static_cast<VulkanData*>(VulkanDataFactoryImpl::m_deferredData.get())->m_STexs.emplace_back(retval);
     return retval;
 }
 
 ITextureSA* VulkanDataFactory::Context::newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
                                                               TextureFormat fmt, const void* data, size_t sz)
 {
-    VulkanTextureSA* retval = new VulkanTextureSA(m_parent.m_ctx, width, height, layers, mips, fmt, data, sz);
-    static_cast<VulkanData*>(m_deferredData.get())->m_SATexs.emplace_back(retval);
+    VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
+    VulkanTextureSA* retval = new VulkanTextureSA(factory.m_ctx, width, height, layers, mips, fmt, data, sz);
+    static_cast<VulkanData*>(VulkanDataFactoryImpl::m_deferredData.get())->m_SATexs.emplace_back(retval);
     return retval;
 }
 
 ITextureD* VulkanDataFactory::Context::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
 {
-    VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(m_parent.m_parent->getCommandQueue());
-    VulkanTextureD* retval = new VulkanTextureD(q, m_parent.m_ctx, width, height, fmt);
-    static_cast<VulkanData*>(m_deferredData.get())->m_DTexs.emplace_back(retval);
+    VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
+    VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(factory.m_parent->getCommandQueue());
+    VulkanTextureD* retval = new VulkanTextureD(q, factory.m_ctx, width, height, fmt);
+    static_cast<VulkanData*>(VulkanDataFactoryImpl::m_deferredData.get())->m_DTexs.emplace_back(retval);
     return retval;
 }
 
 ITextureR* VulkanDataFactory::Context::newRenderTexture(size_t width, size_t height,
                                                         bool enableShaderColorBinding, bool enableShaderDepthBinding)
 {
-    VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(m_parent.m_parent->getCommandQueue());
-    VulkanTextureR* retval = new VulkanTextureR(m_parent.m_ctx, q, width, height, m_parent.m_drawSamples,
+    VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
+    VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(factory.m_parent->getCommandQueue());
+    VulkanTextureR* retval = new VulkanTextureR(factory.m_ctx, q, width, height, factory.m_drawSamples,
                                                 enableShaderColorBinding, enableShaderDepthBinding);
-    static_cast<VulkanData*>(m_deferredData.get())->m_RTexs.emplace_back(retval);
+    static_cast<VulkanData*>(VulkanDataFactoryImpl::m_deferredData.get())->m_RTexs.emplace_back(retval);
     return retval;
 }
 
@@ -3101,7 +3273,7 @@ IVertexFormat* VulkanDataFactory::Context::newVertexFormat(size_t elementCount,
                                                            size_t baseVert, size_t baseInst)
 {
     VulkanVertexFormat* retval = new struct VulkanVertexFormat(elementCount, elements);
-    static_cast<VulkanData*>(m_deferredData.get())->m_VFmts.emplace_back(retval);
+    static_cast<VulkanData*>(VulkanDataFactoryImpl::m_deferredData.get())->m_VFmts.emplace_back(retval);
     return retval;
 }
 
@@ -3113,16 +3285,17 @@ IShaderDataBinding* VulkanDataFactory::Context::newShaderDataBinding(IShaderPipe
         size_t texCount, ITexture** texs,
         size_t baseVert, size_t baseInst)
 {
-    VulkanData* d = static_cast<VulkanData*>(m_deferredData.get());
+    VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
+    VulkanData* d = static_cast<VulkanData*>(VulkanDataFactoryImpl::m_deferredData.get());
     VulkanShaderDataBinding* retval =
-        new VulkanShaderDataBinding(d, m_parent.m_ctx, pipeline, vbuf, instVbuf, ibuf,
+        new VulkanShaderDataBinding(d, factory.m_ctx, pipeline, vbuf, instVbuf, ibuf,
                                     ubufCount, ubufs, ubufOffs, ubufSizes, texCount, texs,
                                     baseVert, baseInst);
     d->m_SBinds.emplace_back(retval);
     return retval;
 }
 
-GraphicsDataToken VulkanDataFactory::commitTransaction
+GraphicsDataToken VulkanDataFactoryImpl::commitTransaction
     (const std::function<bool(IGraphicsDataFactory::Context&)>& trans)
 {
     if (m_deferredData.get())
@@ -3245,8 +3418,8 @@ GraphicsDataToken VulkanDataFactory::commitTransaction
     return GraphicsDataToken(this, retval);
 }
 
-IGraphicsBufferD* VulkanDataFactory::newPoolBuffer(IGraphicsBufferPool* p, BufferUse use,
-                                                   size_t stride, size_t count)
+IGraphicsBufferD* VulkanDataFactoryImpl::newPoolBuffer(IGraphicsBufferPool* p, BufferUse use,
+                                                       size_t stride, size_t count)
 {
     VulkanPool* pool = static_cast<VulkanPool*>(p);
     VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(m_parent->getCommandQueue());
@@ -3277,7 +3450,7 @@ IGraphicsBufferD* VulkanDataFactory::newPoolBuffer(IGraphicsBufferPool* p, Buffe
     return retval;
 }
 
-void VulkanDataFactory::deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf)
+void VulkanDataFactoryImpl::deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf)
 {
     VulkanPool* pool = static_cast<VulkanPool*>(p);
     auto search = pool->m_DBufs.find(static_cast<VulkanGraphicsBufferD*>(buf));
@@ -3285,7 +3458,7 @@ void VulkanDataFactory::deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBuffer
         search->second.m_dead = true;
 }
 
-GraphicsBufferPoolToken VulkanDataFactory::newBufferPool()
+GraphicsBufferPoolToken VulkanDataFactoryImpl::newBufferPool()
 {
     std::unique_lock<std::mutex> lk(m_committedMutex);
     VulkanPool* retval = new VulkanPool(m_ctx);
@@ -3293,7 +3466,7 @@ GraphicsBufferPoolToken VulkanDataFactory::newBufferPool()
     return GraphicsBufferPoolToken(this, retval);
 }
 
-ThreadLocalPtr<struct VulkanData> VulkanDataFactory::m_deferredData;
+ThreadLocalPtr<struct VulkanData> VulkanDataFactoryImpl::m_deferredData;
 
 void VulkanCommandQueue::execute()
 {
@@ -3301,7 +3474,7 @@ void VulkanCommandQueue::execute()
         return;
 
     /* Stage dynamic uploads */
-    VulkanDataFactory* gfxF = static_cast<VulkanDataFactory*>(m_parent->getDataFactory());
+    VulkanDataFactoryImpl* gfxF = static_cast<VulkanDataFactoryImpl*>(m_parent->getDataFactory());
     std::unique_lock<std::mutex> datalk(gfxF->m_committedMutex);
     for (VulkanData* d : gfxF->m_committedData)
     {
@@ -3452,5 +3625,10 @@ IGraphicsCommandQueue* _NewVulkanCommandQueue(VulkanContext* ctx, VulkanContext:
     return new struct VulkanCommandQueue(ctx, windowCtx, parent);
 }
 
+IGraphicsDataFactory* _NewVulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx,
+                                            uint32_t drawSamples)
+{
+    return new class VulkanDataFactoryImpl(parent, ctx, drawSamples);
+}
 
 }
