@@ -403,7 +403,7 @@ struct TestApplicationCallback : IApplicationCallback
 
                 pipeline = metalF.newShaderPipeline(VS, FS, vfmt, 1,
                                                     BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
-                                                    true, true, false);
+                                                    true, true, boo::CullMode::None);
             }
 #endif
 

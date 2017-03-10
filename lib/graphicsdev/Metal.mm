@@ -554,12 +554,23 @@ class MetalShaderPipeline : public IShaderPipeline
                         MetalShareableShader::Token&& frag,
                         const MetalVertexFormat* vtxFmt, NSUInteger targetSamples,
                         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                        bool depthTest, bool depthWrite, bool backfaceCulling)
+                        bool depthTest, bool depthWrite, CullMode culling)
     : m_drawPrim(PRIMITIVE_TABLE[int(prim)]), m_vtxFmt(vtxFmt),
       m_vert(std::move(vert)), m_frag(std::move(frag))
     {
-        if (backfaceCulling)
+        switch (culling)
+        {
+        case CullMode::None:
+        default:
+            m_cullMode = MTLCullModeNone;
+            break;
+        case CullMode::Backface:
             m_cullMode = MTLCullModeBack;
+            break;
+        case CullMode::Frontface:
+            m_cullMode = MTLCullModeFront;
+            break;
+        }
 
         MTLRenderPipelineDescriptor* desc = [MTLRenderPipelineDescriptor new];
         desc.vertexFunction = m_vert.get().m_shader;
@@ -1219,7 +1230,7 @@ IShaderPipeline* MetalDataFactory::Context::newShaderPipeline(const char* vertSo
 
     MetalShaderPipeline* retval = new MetalShaderPipeline(factory.m_ctx, std::move(vertShader), std::move(fragShader),
                                                           static_cast<const MetalVertexFormat*>(vtxFmt), targetSamples,
-                                                          srcFac, dstFac, prim, depthTest, depthWrite, backfaceCulling);
+                                                          srcFac, dstFac, prim, depthTest, depthWrite, culling);
     MetalDataFactoryImpl::m_deferredData->m_SPs.emplace_back(retval);
     return retval;
 }
