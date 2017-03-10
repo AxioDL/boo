@@ -1841,10 +1841,25 @@ class VulkanShaderPipeline : public IShaderPipeline
                          VkPipelineCache pipelineCache,
                          const VulkanVertexFormat* vtxFmt,
                          BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                         bool depthTest, bool depthWrite, bool backfaceCulling)
+                         bool depthTest, bool depthWrite, CullMode culling)
     : m_ctx(ctx), m_pipelineCache(pipelineCache), m_vtxFmt(vtxFmt),
       m_vert(std::move(vert)), m_frag(std::move(frag))
     {
+        VkCullModeFlagBits cullMode;
+        switch (culling)
+        {
+        case CullMode::None:
+        default:
+            cullMode = VK_CULL_MODE_NONE;
+            break;
+        case CullMode::Backface:
+            cullMode = VK_CULL_MODE_BACK_BIT;
+            break;
+        case CullMode::Frontface:
+            cullMode = VK_CULL_MODE_FRONT_BIT;
+            break;
+        }
+
         VkDynamicState dynamicStateEnables[VK_DYNAMIC_STATE_RANGE_SIZE] = {};
         VkPipelineDynamicStateCreateInfo dynamicState = {};
         dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -1895,7 +1910,7 @@ class VulkanShaderPipeline : public IShaderPipeline
         rasterizationInfo.depthClampEnable = VK_FALSE;
         rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
         rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterizationInfo.cullMode = backfaceCulling ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE;
+        rasterizationInfo.cullMode = cullMode;
         rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rasterizationInfo.depthBiasEnable = VK_FALSE;
         rasterizationInfo.lineWidth = 1.f;
@@ -3066,7 +3081,7 @@ IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
  std::vector<unsigned int>* vertBlobOut, std::vector<unsigned int>* fragBlobOut,
  std::vector<unsigned char>* pipelineBlob, IVertexFormat* vtxFmt,
  BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
- bool depthTest, bool depthWrite, bool backfaceCulling)
+ bool depthTest, bool depthWrite, CullMode culling)
 {
     VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
 
@@ -3195,7 +3210,7 @@ IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
 
     VulkanShaderPipeline* retval = new VulkanShaderPipeline(factory.m_ctx, std::move(vertShader), std::move(fragShader),
                                                             pipelineCache, static_cast<const VulkanVertexFormat*>(vtxFmt),
-                                                            srcFac, dstFac, prim, depthTest, depthWrite, backfaceCulling);
+                                                            srcFac, dstFac, prim, depthTest, depthWrite, culling);
 
     if (pipelineBlob && pipelineBlob->empty())
     {

@@ -40,7 +40,7 @@ public:
                                            size_t texCount, const char** texNames,
                                            size_t uniformBlockCount, const char** uniformBlockNames,
                                            BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                                           bool depthTest, bool depthWrite, bool backfaceCulling);
+                                           bool depthTest, bool depthWrite, CullMode culling);
 
         IShaderDataBinding*
         newShaderDataBinding(IShaderPipeline* pipeline,

@@ -308,7 +308,7 @@ struct TestApplicationCallback : IApplicationCallback
 
                 pipeline = glF.newShaderPipeline(VS, FS, 1, &texName, 0, nullptr,
                                                  BlendFactor::One, BlendFactor::Zero,
-                                                 Primitive::TriStrips, true, true, false);
+                                                 Primitive::TriStrips, true, true, CullMode::None);
             }
 #if BOO_HAS_VULKAN
             else if (plat == IGraphicsDataFactory::Platform::Vulkan)
@@ -340,7 +340,7 @@ struct TestApplicationCallback : IApplicationCallback
                 "}\n";
 
                 pipeline = vkF.newShaderPipeline(VS, FS, vfmt, BlendFactor::One, BlendFactor::Zero,
-                                                 Primitive::TriStrips, true, true, false);
+                                                 Primitive::TriStrips, true, true, CullMode::None);
             }
 #endif
 #if _WIN32
@@ -371,7 +371,7 @@ struct TestApplicationCallback : IApplicationCallback
 
                 pipeline = d3dF.newShaderPipeline(VS, PS, nullptr, nullptr, nullptr, vfmt,
                                                   BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
-                                                  true, true, false);
+                                                  true, true, CullMode::None);
             }
 #elif BOO_HAS_METAL
             else if (plat == IGraphicsDataFactory::Platform::Metal)

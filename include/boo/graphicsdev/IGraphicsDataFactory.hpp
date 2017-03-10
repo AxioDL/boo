@@ -171,6 +171,14 @@ enum class Primitive
 };
 
 /** Used by platform shader pipeline constructors */
+enum class CullMode
+{
+    None,
+    Backface,
+    Frontface
+};
+
+/** Used by platform shader pipeline constructors */
 enum class BlendFactor
 {
     Zero,

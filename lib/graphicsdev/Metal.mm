@@ -1154,7 +1154,7 @@ IVertexFormat* MetalDataFactory::Context::newVertexFormat(size_t elementCount, c
 IShaderPipeline* MetalDataFactory::Context::newShaderPipeline(const char* vertSource, const char* fragSource,
                                                               IVertexFormat* vtxFmt, unsigned targetSamples,
                                                               BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                                                              bool depthTest, bool depthWrite, bool backfaceCulling)
+                                                              bool depthTest, bool depthWrite, CullMode culling)
 {
     MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
     MTLCompileOptions* compOpts = [MTLCompileOptions new];

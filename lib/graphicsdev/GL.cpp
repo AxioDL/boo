@@ -416,7 +416,7 @@ class GLShaderPipeline : public IShaderPipeline
     GLenum m_drawPrim = GL_TRIANGLES;
     bool m_depthTest = true;
     bool m_depthWrite = true;
-    bool m_backfaceCulling = true;
+    CullMode m_culling;
     std::vector<GLint> m_uniLocs;
     GLShaderPipeline() = default;
 public:
@@ -435,7 +435,7 @@ public:
         m_drawPrim = other.m_drawPrim;
         m_depthTest = other.m_depthTest;
         m_depthWrite = other.m_depthWrite;
-        m_backfaceCulling = other.m_backfaceCulling;
+        m_culling = other.m_culling;
         m_uniLocs = std::move(other.m_uniLocs);
         return *this;
     }
@@ -460,8 +460,11 @@ public:
         glDepthMask(m_depthWrite);
         glDepthFunc(GL_LEQUAL);
 
-        if (m_backfaceCulling)
+        if (m_culling != CullMode::None)
+        {
             glEnable(GL_CULL_FACE);
+            glCullFace(m_culling == CullMode::Backface ? GL_BACK : GL_FRONT);
+        }
         else
             glDisable(GL_CULL_FACE);
 
@@ -496,7 +499,7 @@ IShaderPipeline* GLDataFactory::Context::newShaderPipeline
  size_t texCount, const char** texNames,
  size_t uniformBlockCount, const char** uniformBlockNames,
  BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
- bool depthTest, bool depthWrite, bool backfaceCulling)
+ bool depthTest, bool depthWrite, CullMode culling)
 {
     GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
     GLShaderPipeline shader;
@@ -631,7 +634,7 @@ IShaderPipeline* GLDataFactory::Context::newShaderPipeline
     shader.m_dfactor = BLEND_FACTOR_TABLE[int(dstFac)];
     shader.m_depthTest = depthTest;
     shader.m_depthWrite = depthWrite;
-    shader.m_backfaceCulling = backfaceCulling;
+    shader.m_culling = culling;
     shader.m_drawPrim = PRIMITIVE_TABLE[int(prim)];
 
     GLShaderPipeline* retval = new GLShaderPipeline(std::move(shader));

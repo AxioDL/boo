@@ -501,14 +501,29 @@ class D3D11ShaderPipeline : public IShaderPipeline
         D3D11ShareableShader::Token&& pixel,
         const D3D11VertexFormat* vtxFmt,
         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-        bool depthTest, bool depthWrite, bool backfaceCulling)
+        bool depthTest, bool depthWrite, CullMode culling)
     : m_vtxFmt(vtxFmt), m_vert(std::move(vert)), m_pixel(std::move(pixel)),
       m_topology(PRIMITIVE_TABLE[int(prim)])
     {
         m_vert.get().m_shader.As<ID3D11VertexShader>(&m_vShader);
         m_pixel.get().m_shader.As<ID3D11PixelShader>(&m_pShader);
 
-        CD3D11_RASTERIZER_DESC rasDesc(D3D11_FILL_SOLID, backfaceCulling ? D3D11_CULL_BACK : D3D11_CULL_NONE, true,
+        D3D11_CULL_MODE cullMode;
+        switch (culling)
+        {
+        case CullMode::None:
+        default:
+            cullMode = D3D11_CULL_NONE;
+            break;
+        case CullMode::Backface:
+            cullMode = D3D11_CULL_BACK;
+            break;
+        case CullMode::Frontface:
+            cullMode = D3D11_CULL_FRONT;
+            break;
+        }
+
+        CD3D11_RASTERIZER_DESC rasDesc(D3D11_FILL_SOLID, cullMode, true,
             D3D11_DEFAULT_DEPTH_BIAS, D3D11_DEFAULT_DEPTH_BIAS_CLAMP, D3D11_DEFAULT_SLOPE_SCALED_DEPTH_BIAS,
             true, true, false, false);
         ThrowIfFailed(ctx->m_dev->CreateRasterizerState(&rasDesc, &m_rasState));
@@ -1321,7 +1336,7 @@ public:
              ComPtr<ID3DBlob>* vertBlobOut, ComPtr<ID3DBlob>* fragBlobOut,
              ComPtr<ID3DBlob>* pipelineBlob, IVertexFormat* vtxFmt,
              BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-             bool depthTest, bool depthWrite, bool backfaceCulling)
+             bool depthTest, bool depthWrite, CullMode culling)
         {
             XXH64_state_t hashState;
             uint64_t srcHashes[2] = {};
@@ -1424,7 +1439,7 @@ public:
             D3D11ShaderPipeline* retval = new D3D11ShaderPipeline(ctx,
                 std::move(vertShader), std::move(fragShader),
                 static_cast<const D3D11VertexFormat*>(vtxFmt),
-                srcFac, dstFac, prim, depthTest, depthWrite, backfaceCulling);
+                srcFac, dstFac, prim, depthTest, depthWrite, culling);
             d->m_SPs.emplace_back(retval);
             return retval;
         }

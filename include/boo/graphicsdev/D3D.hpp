@@ -31,7 +31,7 @@ public:
                                                    ComPtr<ID3DBlob>* vertBlobOut, ComPtr<ID3DBlob>* fragBlobOut,
                                                    ComPtr<ID3DBlob>* pipelineBlob, IVertexFormat* vtxFmt,
                                                    BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                                                   bool depthTest, bool depthWrite, bool backfaceCulling)=0;
+                                                   bool depthTest, bool depthWrite, CullMode culling)=0;
     };
 };
 

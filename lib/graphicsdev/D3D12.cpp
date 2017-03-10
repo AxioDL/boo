@@ -654,10 +654,25 @@ class D3D12ShaderPipeline : public IShaderPipeline
                         D3D12ShareableShader::Token&& pixel, ID3DBlob* pipeline,
                         const D3D12VertexFormat* vtxFmt,
                         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                        bool depthTest, bool depthWrite, bool backfaceCulling)
+                        bool depthTest, bool depthWrite, CullMode culling)
     : m_vtxFmt(vtxFmt), m_vert(std::move(vert)), m_pixel(std::move(pixel)),
       m_topology(PRIMITIVE_TABLE[int(prim)])
     {
+        D3D12_CULL_MODE cullMode;
+        switch (culling)
+        {
+        case CullMode::None:
+        default:
+            cullMode = D3D12_CULL_MODE_NONE;
+            break;
+        case CullMode::Backface:
+            cullMode = D3D12_CULL_MODE_BACK;
+            break;
+        case CullMode::Frontface:
+            cullMode = D3D12_CULL_MODE_FRONT;
+            break;
+        }
+
         D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
         desc.pRootSignature = ctx->m_rs.Get();
         const auto& vBlob = m_vert.get().m_shader;
@@ -673,8 +688,7 @@ class D3D12ShaderPipeline : public IShaderPipeline
         }
         desc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
         desc.RasterizerState.FrontCounterClockwise = TRUE;
-        if (!backfaceCulling)
-            desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+        desc.RasterizerState.CullMode = cullMode;
         desc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
         desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
         if (!depthTest)
@@ -1753,7 +1767,7 @@ public:
              ComPtr<ID3DBlob>* vertBlobOut, ComPtr<ID3DBlob>* fragBlobOut,
              ComPtr<ID3DBlob>* pipelineBlob, IVertexFormat* vtxFmt,
              BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-             bool depthTest, bool depthWrite, bool backfaceCulling)
+             bool depthTest, bool depthWrite, CullMode culling)
         {
             XXH64_state_t hashState;
             uint64_t srcHashes[2] = {};
@@ -1839,7 +1853,7 @@ public:
             ID3DBlob* pipeline = pipelineBlob ? pipelineBlob->Get() : nullptr;
             D3D12ShaderPipeline* retval = new D3D12ShaderPipeline(m_parent.m_ctx, std::move(vertShader), std::move(fragShader),
                                                                   pipeline, static_cast<const D3D12VertexFormat*>(vtxFmt),
-                                                                  srcFac, dstFac, prim, depthTest, depthWrite, backfaceCulling);
+                                                                  srcFac, dstFac, prim, depthTest, depthWrite, culling);
             if (pipelineBlob && !*pipelineBlob)
                 retval->m_state->GetCachedBlob(&*pipelineBlob);
             static_cast<D3D12Data*>(m_deferredData)->m_SPs.emplace_back(retval);
