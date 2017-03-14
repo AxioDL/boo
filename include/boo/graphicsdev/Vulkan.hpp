@@ -132,11 +132,12 @@ public:
                                            std::vector<unsigned int>* vertBlobOut, std::vector<unsigned int>* fragBlobOut,
                                            std::vector<unsigned char>* pipelineBlob, IVertexFormat* vtxFmt,
                                            BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                                           bool depthTest, bool depthWrite, CullMode culling);
+                                           ZTest depthTest, bool depthWrite, CullMode culling);
 
         IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource, IVertexFormat* vtxFmt,
                                            BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                                           bool depthTest, bool depthWrite, CullMode culling)
+                                           ZTest depthTest, bool depthWrite, bool colorWrite,
+                                           bool alphaWrite, CullMode culling)
         {
             return newShaderPipeline(vertSource, fragSource, nullptr, nullptr, nullptr,
                                      vtxFmt, srcFac, dstFac, prim, depthTest, depthWrite, culling);

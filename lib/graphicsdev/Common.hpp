@@ -5,12 +5,12 @@
  * binding lifetimes through rendering cycle */
 
 #include <atomic>
+#include <vector>
 #include "boo/graphicsdev/IGraphicsDataFactory.hpp"
 
 namespace boo
 {
 
-template <class DataImpl>
 class IGraphicsDataPriv : public IGraphicsData
 {
     std::atomic_int m_refCount = {1};
@@ -19,35 +19,50 @@ public:
     void decrement()
     {
         if (m_refCount.fetch_sub(1) == 1)
-            delete static_cast<DataImpl*>(this);
+            delete this;
     }
 };
 
-template <class DataImpl>
 class IShaderDataBindingPriv : public IShaderDataBinding
 {
-    IGraphicsDataPriv<DataImpl>* m_parent;
+    IGraphicsDataPriv* m_parent;
+    std::vector<IGraphicsDataPriv*> m_depDatas;
 
 public:
-    IShaderDataBindingPriv(IGraphicsDataPriv<DataImpl>* p) : m_parent(p) {}
+    IShaderDataBindingPriv(IGraphicsDataPriv* p) : m_parent(p) {}
     class Token
     {
-        IGraphicsDataPriv<DataImpl>* m_data = nullptr;
+        IGraphicsDataPriv* m_data = nullptr;
     public:
         Token() = default;
         Token(const IShaderDataBindingPriv* p)
-        : m_data(p->m_parent)
-        { m_data->increment(); }
+        : m_data(p->m_parent) { m_data->increment(); }
         Token& operator=(const Token&) = delete;
         Token(const Token&) = delete;
         Token& operator=(Token&& other)
         { m_data = other.m_data; other.m_data = nullptr; return *this; }
         Token(Token&& other)
         { m_data = other.m_data; other.m_data = nullptr; }
-        ~Token() { if (m_data) m_data->decrement(); }
+        ~Token() { if (m_data) { m_data->decrement(); } }
     };
 
     Token lock() const { return Token(this); }
+    ~IShaderDataBindingPriv()
+    {
+        for (IGraphicsDataPriv* dep : m_depDatas)
+            dep->decrement();
+    }
+    
+protected:
+    void addDepData(IGraphicsData* data)
+    {
+        IGraphicsDataPriv* d = static_cast<IGraphicsDataPriv*>(data);
+        if (d != m_parent)
+        {
+            m_depDatas.push_back(d);
+            d->increment();
+        }
+    }
 };
 
 template <class FactoryImpl, class ShaderImpl>

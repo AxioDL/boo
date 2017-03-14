@@ -11,12 +11,22 @@ namespace boo
 {
 struct IGraphicsCommandQueue;
 
+/** Opaque object for maintaining ownership of factory-created resources */
+struct IGraphicsData { virtual ~IGraphicsData() = default; };
+class GraphicsDataToken;
+
+/** Opaque object for maintaining ownership of factory-created pool buffers */
+struct IGraphicsBufferPool {};
+class GraphicsBufferPoolToken;
+
 struct IGraphicsBuffer
 {
     bool dynamic() const {return m_dynamic;}
+    IGraphicsData* m_parentData;
 protected:
     bool m_dynamic;
-    IGraphicsBuffer(bool dynamic) : m_dynamic(dynamic) {}
+    IGraphicsBuffer(IGraphicsData* parent, bool dynamic)
+    : m_parentData(parent), m_dynamic(dynamic) {}
     virtual ~IGraphicsBuffer() = default;
 };
 
@@ -24,7 +34,7 @@ protected:
 struct IGraphicsBufferS : IGraphicsBuffer
 {
 protected:
-    IGraphicsBufferS() : IGraphicsBuffer(false) {}
+    IGraphicsBufferS(IGraphicsData* parent) : IGraphicsBuffer(parent, false) {}
 };
 
 /** Dynamic resource buffer for verts, indices, uniform constants */
@@ -34,7 +44,7 @@ struct IGraphicsBufferD : IGraphicsBuffer
     virtual void* map(size_t sz)=0;
     virtual void unmap()=0;
 protected:
-    IGraphicsBufferD() : IGraphicsBuffer(true) {}
+    IGraphicsBufferD(IGraphicsData* parent) : IGraphicsBuffer(parent, true) {}
 };
 
 /** Supported buffer uses */
@@ -57,9 +67,11 @@ enum class TextureType
 struct ITexture
 {
     TextureType type() const {return m_type;}
+    IGraphicsData* m_parentData;
 protected:
     TextureType m_type;
-    ITexture(TextureType type) : m_type(type) {}
+    ITexture(IGraphicsData* parent, TextureType type)
+    : m_parentData(parent), m_type(type) {}
     virtual ~ITexture() {}
 };
 
@@ -67,14 +79,14 @@ protected:
 struct ITextureS : ITexture
 {
 protected:
-    ITextureS() : ITexture(TextureType::Static) {}
+    ITextureS(IGraphicsData* parent) : ITexture(parent, TextureType::Static) {}
 };
 
 /** Static-array resource buffer for array textures */
 struct ITextureSA : ITexture
 {
 protected:
-    ITextureSA() : ITexture(TextureType::StaticArray) {}
+    ITextureSA(IGraphicsData* parent) : ITexture(parent, TextureType::StaticArray) {}
 };
 
 /** Dynamic resource buffer for textures */
@@ -84,14 +96,14 @@ struct ITextureD : ITexture
     virtual void* map(size_t sz)=0;
     virtual void unmap()=0;
 protected:
-    ITextureD() : ITexture(TextureType::Dynamic) {}
+    ITextureD(IGraphicsData* parent) : ITexture(parent, TextureType::Dynamic) {}
 };
 
 /** Resource buffer for render-target textures */
 struct ITextureR : ITexture
 {
 protected:
-    ITextureR() : ITexture(TextureType::Render) {}
+    ITextureR(IGraphicsData* parent) : ITexture(parent, TextureType::Render) {}
 };
 
 /** Supported texture formats */
@@ -106,7 +118,12 @@ enum class TextureFormat
 /** Opaque token for representing the data layout of a vertex
  *  in a VBO. Also able to reference buffers for platforms like
  *  OpenGL that cache object refs */
-struct IVertexFormat {};
+struct IVertexFormat
+{
+    IGraphicsData* m_parentData;
+protected:
+    IVertexFormat(IGraphicsData* parent) : m_parentData(parent) {}
+};
 
 /** Types of vertex attributes */
 enum class VertexSemantic
@@ -141,20 +158,17 @@ struct VertexElementDescriptor
 
 /** Opaque token for referencing a complete graphics pipeline state necessary
  *  to rasterize geometry (shaders and blending modes mainly) */
-struct IShaderPipeline {};
+struct IShaderPipeline
+{
+    IGraphicsData* m_parentData;
+protected:
+    IShaderPipeline(IGraphicsData* parent) : m_parentData(parent) {}
+};
 
 /** Opaque token serving as indirection table for shader resources
  *  and IShaderPipeline reference. Each renderable surface-material holds one
  *  as a reference */
 struct IShaderDataBinding {};
-
-/** Opaque object for maintaining ownership of factory-created resources */
-struct IGraphicsData {};
-class GraphicsDataToken;
-
-/** Opaque object for maintaining ownership of factory-created pool buffers */
-struct IGraphicsBufferPool {};
-class GraphicsBufferPoolToken;
 
 /** Used wherever distinction of pipeline stages is needed */
 enum class PipelineStage
@@ -176,6 +190,15 @@ enum class CullMode
     None,
     Backface,
     Frontface
+};
+
+/** Used by platform shader pipeline constructors */
+enum class ZTest
+{
+    None,
+    LEqual, /* Flipped on Vulkan, D3D, Metal */
+    Greater,
+    Equal
 };
 
 /** Used by platform shader pipeline constructors */
@@ -234,7 +257,7 @@ struct IGraphicsDataFactory
         newDynamicTexture(size_t width, size_t height, TextureFormat fmt)=0;
         virtual ITextureR*
         newRenderTexture(size_t width, size_t height,
-                         bool enableShaderColorBinding, bool enableShaderDepthBinding)=0;
+                         size_t colorBindingCount, size_t depthBindingCount)=0;
 
         virtual bool bindingNeedsVertexFormat() const=0;
         virtual IVertexFormat*
@@ -247,28 +270,33 @@ struct IGraphicsDataFactory
                              IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
                              size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                              const size_t* ubufOffs, const size_t* ubufSizes,
-                             size_t texCount, ITexture** texs, size_t baseVert = 0, size_t baseInst = 0)=0;
+                             size_t texCount, ITexture** texs,
+                             const int* texBindIdx, const bool* depthBind,
+                             size_t baseVert = 0, size_t baseInst = 0)=0;
 
         IShaderDataBinding*
         newShaderDataBinding(IShaderPipeline* pipeline,
                              IVertexFormat* vtxFormat,
                              IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
                              size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
-                             size_t texCount, ITexture** texs, size_t baseVert = 0, size_t baseInst = 0)
+                             size_t texCount, ITexture** texs,
+                             const int* texBindIdx, const bool* depthBind,
+                             size_t baseVert = 0, size_t baseInst = 0)
         {
             return newShaderDataBinding(pipeline, vtxFormat, vbo, instVbo, ibo,
                                         ubufCount, ubufs, ubufStages, nullptr,
-                                        nullptr, texCount, texs, baseVert, baseInst);
+                                        nullptr, texCount, texs, texBindIdx, depthBind,
+                                        baseVert, baseInst);
         }
     };
 
     virtual GraphicsDataToken commitTransaction(const std::function<bool(Context& ctx)>&)=0;
     virtual GraphicsBufferPoolToken newBufferPool()=0;
 
+    virtual void destroyAllData()=0;
 private:
     friend class GraphicsDataToken;
     virtual void destroyData(IGraphicsData*)=0;
-    virtual void destroyAllData()=0;
 
     friend class GraphicsBufferPoolToken;
     virtual void destroyPool(IGraphicsBufferPool*)=0;

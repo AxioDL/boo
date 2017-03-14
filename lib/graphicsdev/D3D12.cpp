@@ -470,7 +470,6 @@ class D3D12TextureR : public ITextureR
 
         D3D12_CLEAR_VALUE colorClear = {};
         colorClear.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        colorClear.Color[3] = 1.f;
         ThrowIfFailed(ctx->m_dev->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE,
             &rtvresdesc, D3D12_RESOURCE_STATE_RENDER_TARGET, &colorClear,
             __uuidof(ID3D12Resource), &m_colorTex));
@@ -654,7 +653,7 @@ class D3D12ShaderPipeline : public IShaderPipeline
                         D3D12ShareableShader::Token&& pixel, ID3DBlob* pipeline,
                         const D3D12VertexFormat* vtxFmt,
                         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                        bool depthTest, bool depthWrite, CullMode culling)
+                        ZTest depthTest, bool depthWrite, CullMode culling)
     : m_vtxFmt(vtxFmt), m_vert(std::move(vert)), m_pixel(std::move(pixel)),
       m_topology(PRIMITIVE_TABLE[int(prim)])
     {
@@ -685,6 +684,8 @@ class D3D12ShaderPipeline : public IShaderPipeline
             desc.BlendState.RenderTarget[0].BlendEnable = true;
             desc.BlendState.RenderTarget[0].SrcBlend = BLEND_FACTOR_TABLE[int(srcFac)];
             desc.BlendState.RenderTarget[0].DestBlend = BLEND_FACTOR_TABLE[int(dstFac)];
+            desc.BlendState.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+            desc.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
         }
         desc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
         desc.RasterizerState.FrontCounterClockwise = TRUE;
@@ -1260,7 +1261,7 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         func();
     }
 
-    float m_clearColor[4] = {0.0,0.0,0.0,1.0};
+    float m_clearColor[4] = {0.0,0.0,0.0,0.0};
     void setClearColor(const float rgba[4])
     {
         m_clearColor[0] = rgba[0];
@@ -1767,7 +1768,7 @@ public:
              ComPtr<ID3DBlob>* vertBlobOut, ComPtr<ID3DBlob>* fragBlobOut,
              ComPtr<ID3DBlob>* pipelineBlob, IVertexFormat* vtxFmt,
              BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-             bool depthTest, bool depthWrite, CullMode culling)
+             ZTest depthTest, bool depthWrite, CullMode culling)
         {
             XXH64_state_t hashState;
             uint64_t srcHashes[2] = {};

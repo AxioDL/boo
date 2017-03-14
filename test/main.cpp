@@ -308,7 +308,7 @@ struct TestApplicationCallback : IApplicationCallback
 
                 pipeline = glF.newShaderPipeline(VS, FS, 1, &texName, 0, nullptr,
                                                  BlendFactor::One, BlendFactor::Zero,
-                                                 Primitive::TriStrips, true, true, CullMode::None);
+                                                 Primitive::TriStrips, boo::ZTest::LEqual, true, true, false, CullMode::None);
             }
 #if BOO_HAS_VULKAN
             else if (plat == IGraphicsDataFactory::Platform::Vulkan)
@@ -403,13 +403,14 @@ struct TestApplicationCallback : IApplicationCallback
 
                 pipeline = metalF.newShaderPipeline(VS, FS, vfmt, 1,
                                                     BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
-                                                    true, true, boo::CullMode::None);
+                                                    boo::ZTest::LEqual, true, true, true, boo::CullMode::None);
             }
 #endif
 
             /* Make shader data binding */
             self->m_binding =
-            ctx.newShaderDataBinding(pipeline, vfmt, vbo, nullptr, nullptr, 0, nullptr, nullptr, 1, &texture);
+            ctx.newShaderDataBinding(pipeline, vfmt, vbo, nullptr, nullptr, 0, nullptr, nullptr,
+                                     1, &texture, nullptr, nullptr);
 
             return true;
         });

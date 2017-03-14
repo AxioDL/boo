@@ -501,7 +501,7 @@ class D3D11ShaderPipeline : public IShaderPipeline
         D3D11ShareableShader::Token&& pixel,
         const D3D11VertexFormat* vtxFmt,
         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-        bool depthTest, bool depthWrite, CullMode culling)
+        ZTest depthTest, bool depthWrite, CullMode culling)
     : m_vtxFmt(vtxFmt), m_vert(std::move(vert)), m_pixel(std::move(pixel)),
       m_topology(PRIMITIVE_TABLE[int(prim)])
     {
@@ -538,6 +538,8 @@ class D3D11ShaderPipeline : public IShaderPipeline
         blDesc.RenderTarget[0].BlendEnable = (dstFac != BlendFactor::Zero);
         blDesc.RenderTarget[0].SrcBlend = BLEND_FACTOR_TABLE[int(srcFac)];
         blDesc.RenderTarget[0].DestBlend = BLEND_FACTOR_TABLE[int(dstFac)];
+        blDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+        blDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
         ThrowIfFailed(ctx->m_dev->CreateBlendState(&blDesc, &m_blState));
 
         const auto& vertBuf = m_vert.get().m_vtxBlob;
@@ -1008,7 +1010,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         func();
     }
 
-    float m_clearColor[4] = {0.0,0.0,0.0,1.0};
+    float m_clearColor[4] = {0.0,0.0,0.0,0.0};
     void setClearColor(const float rgba[4])
     {
         m_clearColor[0] = rgba[0];
@@ -1336,7 +1338,7 @@ public:
              ComPtr<ID3DBlob>* vertBlobOut, ComPtr<ID3DBlob>* fragBlobOut,
              ComPtr<ID3DBlob>* pipelineBlob, IVertexFormat* vtxFmt,
              BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-             bool depthTest, bool depthWrite, CullMode culling)
+             ZTest depthTest, bool depthWrite, CullMode culling)
         {
             XXH64_state_t hashState;
             uint64_t srcHashes[2] = {};

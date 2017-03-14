@@ -1841,7 +1841,7 @@ class VulkanShaderPipeline : public IShaderPipeline
                          VkPipelineCache pipelineCache,
                          const VulkanVertexFormat* vtxFmt,
                          BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                         bool depthTest, bool depthWrite, CullMode culling)
+                         ZTest depthTest, bool depthWrite, CullMode culling)
     : m_ctx(ctx), m_pipelineCache(pipelineCache), m_vtxFmt(vtxFmt),
       m_vert(std::move(vert)), m_frag(std::move(frag))
     {
@@ -2509,7 +2509,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         func();
     }
 
-    float m_clearColor[4] = {0.0,0.0,0.0,1.0};
+    float m_clearColor[4] = {0.0,0.0,0.0,0.0};
     void setClearColor(const float rgba[4])
     {
         m_clearColor[0] = rgba[0];
@@ -3081,7 +3081,7 @@ IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
  std::vector<unsigned int>* vertBlobOut, std::vector<unsigned int>* fragBlobOut,
  std::vector<unsigned char>* pipelineBlob, IVertexFormat* vtxFmt,
  BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
- bool depthTest, bool depthWrite, CullMode culling)
+ ZTest depthTest, bool depthWrite, CullMode culling)
 {
     VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
 

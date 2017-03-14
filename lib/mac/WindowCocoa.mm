@@ -214,8 +214,10 @@ public:
 
     ~GraphicsContextCocoaGL()
     {
-        delete m_dataFactory;
+        m_commandQueue->stopRenderer();
+        m_dataFactory->destroyAllData();
         delete m_commandQueue;
+        delete m_dataFactory;
     }
 
     void _setCallback(IWindowCallback* cb)
@@ -370,8 +372,10 @@ public:
 
     ~GraphicsContextCocoaMetal()
     {
-        delete m_dataFactory;
+        m_commandQueue->stopRenderer();
+        m_dataFactory->destroyAllData();
         delete m_commandQueue;
+        delete m_dataFactory;
         m_metalCtx->m_windows.erase(m_parentWindow);
     }
 

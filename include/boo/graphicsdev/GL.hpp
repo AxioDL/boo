@@ -30,7 +30,7 @@ public:
                                           TextureFormat fmt, const void* data, size_t sz);
         ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
         ITextureR* newRenderTexture(size_t width, size_t height,
-                                    bool enableShaderColorBinding, bool enableShaderDepthBinding);
+                                    size_t colorBindingCount, size_t depthBindingCount);
 
         bool bindingNeedsVertexFormat() const {return true;}
         IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
@@ -40,7 +40,8 @@ public:
                                            size_t texCount, const char** texNames,
                                            size_t uniformBlockCount, const char** uniformBlockNames,
                                            BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                                           bool depthTest, bool depthWrite, CullMode culling);
+                                           ZTest depthTest, bool depthWrite, bool colorWrite,
+                                           bool alphaWrite, CullMode culling);
 
         IShaderDataBinding*
         newShaderDataBinding(IShaderPipeline* pipeline,
@@ -48,7 +49,9 @@ public:
                              IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
                              size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                              const size_t* ubufOffs, const size_t* ubufSizes,
-                             size_t texCount, ITexture** texs, size_t baseVert = 0, size_t baseInst = 0);
+                             size_t texCount, ITexture** texs,
+                             const int* texBindIdx, const bool* depthBind,
+                             size_t baseVert = 0, size_t baseInst = 0);
     };
 };
 
