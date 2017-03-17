@@ -122,7 +122,7 @@ public:
                                           TextureFormat fmt, const void* data, size_t sz);
         ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
         ITextureR* newRenderTexture(size_t width, size_t height,
-                                    bool enableShaderColorBinding, bool enableShaderDepthBinding);
+                                    size_t colorBindCount, size_t depthBindCount);
 
         bool bindingNeedsVertexFormat() const {return false;}
         IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
@@ -132,7 +132,8 @@ public:
                                            std::vector<unsigned int>* vertBlobOut, std::vector<unsigned int>* fragBlobOut,
                                            std::vector<unsigned char>* pipelineBlob, IVertexFormat* vtxFmt,
                                            BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                                           ZTest depthTest, bool depthWrite, CullMode culling);
+                                           ZTest depthTest, bool depthWrite, bool colorWrite,
+                                           bool alphaWrite, CullMode culling);
 
         IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource, IVertexFormat* vtxFmt,
                                            BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
@@ -140,7 +141,8 @@ public:
                                            bool alphaWrite, CullMode culling)
         {
             return newShaderPipeline(vertSource, fragSource, nullptr, nullptr, nullptr,
-                                     vtxFmt, srcFac, dstFac, prim, depthTest, depthWrite, culling);
+                                     vtxFmt, srcFac, dstFac, prim, depthTest, depthWrite,
+                                     colorWrite, alphaWrite, culling);
         }
 
         IShaderDataBinding*
@@ -150,6 +152,7 @@ public:
                              size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
                              const size_t* ubufOffs, const size_t* ubufSizes,
                              size_t texCount, ITexture** texs,
+                             const int* bindIdxs, const bool* bindDepth,
                              size_t baseVert = 0, size_t baseInst = 0);
     };
 };
