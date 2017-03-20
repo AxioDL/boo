@@ -1294,74 +1294,77 @@ IShaderPipeline* MetalDataFactory::Context::newShaderPipeline(const char* vertSo
                                                               ZTest depthTest, bool depthWrite, bool colorWrite,
                                                               bool alphaWrite, CullMode culling)
 {
-    MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
-    MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
-    MTLCompileOptions* compOpts = [MTLCompileOptions new];
-    compOpts.languageVersion = MTLLanguageVersion1_1;
-    NSError* err = nullptr;
-
-    XXH64_state_t hashState;
-    uint64_t hashes[2];
-    XXH64_reset(&hashState, 0);
-    XXH64_update(&hashState, vertSource, strlen(vertSource));
-    hashes[0] = XXH64_digest(&hashState);
-    XXH64_reset(&hashState, 0);
-    XXH64_update(&hashState, fragSource, strlen(fragSource));
-    hashes[1] = XXH64_digest(&hashState);
-
-    MetalShareableShader::Token vertShader;
-    MetalShareableShader::Token fragShader;
-    auto vertFind = factory.m_sharedShaders.find(hashes[0]);
-    if (vertFind != factory.m_sharedShaders.end())
+    @autoreleasepool
     {
-        vertShader = vertFind->second->lock();
-    }
-    else
-    {
-        id<MTLLibrary> vertShaderLib = [factory.m_ctx->m_dev newLibraryWithSource:@(vertSource)
-                                                                          options:compOpts
-                                                                            error:&err];
-        if (!vertShaderLib)
+        MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
+        MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
+        MTLCompileOptions* compOpts = [MTLCompileOptions new];
+        compOpts.languageVersion = MTLLanguageVersion1_1;
+        NSError* err = nullptr;
+
+        XXH64_state_t hashState;
+        uint64_t hashes[2];
+        XXH64_reset(&hashState, 0);
+        XXH64_update(&hashState, vertSource, strlen(vertSource));
+        hashes[0] = XXH64_digest(&hashState);
+        XXH64_reset(&hashState, 0);
+        XXH64_update(&hashState, fragSource, strlen(fragSource));
+        hashes[1] = XXH64_digest(&hashState);
+
+        MetalShareableShader::Token vertShader;
+        MetalShareableShader::Token fragShader;
+        auto vertFind = factory.m_sharedShaders.find(hashes[0]);
+        if (vertFind != factory.m_sharedShaders.end())
         {
-            printf("%s\n", vertSource);
-            Log.report(logvisor::Fatal, "error compiling vert shader: %s", [[err localizedDescription] UTF8String]);
+            vertShader = vertFind->second->lock();
         }
-        id<MTLFunction> vertFunc = [vertShaderLib newFunctionWithName:@"vmain"];
-
-        auto it =
-        factory.m_sharedShaders.emplace(std::make_pair(hashes[0],
-            std::make_unique<MetalShareableShader>(factory, hashes[0], vertFunc))).first;
-        vertShader = it->second->lock();
-    }
-    auto fragFind = factory.m_sharedShaders.find(hashes[1]);
-    if (fragFind != factory.m_sharedShaders.end())
-    {
-        fragShader = fragFind->second->lock();
-    }
-    else
-    {
-        id<MTLLibrary> fragShaderLib = [factory.m_ctx->m_dev newLibraryWithSource:@(fragSource)
-                                                                          options:compOpts
-                                                                            error:&err];
-        if (!fragShaderLib)
+        else
         {
-            printf("%s\n", fragSource);
-            Log.report(logvisor::Fatal, "error compiling frag shader: %s", [[err localizedDescription] UTF8String]);
+            id<MTLLibrary> vertShaderLib = [factory.m_ctx->m_dev newLibraryWithSource:@(vertSource)
+                                                                              options:compOpts
+                                                                                error:&err];
+            if (!vertShaderLib)
+            {
+                printf("%s\n", vertSource);
+                Log.report(logvisor::Fatal, "error compiling vert shader: %s", [[err localizedDescription] UTF8String]);
+            }
+            id<MTLFunction> vertFunc = [vertShaderLib newFunctionWithName:@"vmain"];
+
+            auto it =
+            factory.m_sharedShaders.emplace(std::make_pair(hashes[0],
+                std::make_unique<MetalShareableShader>(factory, hashes[0], vertFunc))).first;
+            vertShader = it->second->lock();
         }
-        id<MTLFunction> fragFunc = [fragShaderLib newFunctionWithName:@"fmain"];
+        auto fragFind = factory.m_sharedShaders.find(hashes[1]);
+        if (fragFind != factory.m_sharedShaders.end())
+        {
+            fragShader = fragFind->second->lock();
+        }
+        else
+        {
+            id<MTLLibrary> fragShaderLib = [factory.m_ctx->m_dev newLibraryWithSource:@(fragSource)
+                                                                              options:compOpts
+                                                                                error:&err];
+            if (!fragShaderLib)
+            {
+                printf("%s\n", fragSource);
+                Log.report(logvisor::Fatal, "error compiling frag shader: %s", [[err localizedDescription] UTF8String]);
+            }
+            id<MTLFunction> fragFunc = [fragShaderLib newFunctionWithName:@"fmain"];
 
-        auto it =
-        factory.m_sharedShaders.emplace(std::make_pair(hashes[1],
-            std::make_unique<MetalShareableShader>(factory, hashes[1], fragFunc))).first;
-        fragShader = it->second->lock();
+            auto it =
+            factory.m_sharedShaders.emplace(std::make_pair(hashes[1],
+                std::make_unique<MetalShareableShader>(factory, hashes[1], fragFunc))).first;
+            fragShader = it->second->lock();
+        }
+
+        MetalShaderPipeline* retval = new MetalShaderPipeline(d, factory.m_ctx, std::move(vertShader), std::move(fragShader),
+                                                              static_cast<const MetalVertexFormat*>(vtxFmt), targetSamples,
+                                                              srcFac, dstFac, prim, depthTest, depthWrite,
+                                                              colorWrite, alphaWrite, culling);
+        d->m_SPs.emplace_back(retval);
+        return retval;
     }
-
-    MetalShaderPipeline* retval = new MetalShaderPipeline(d, factory.m_ctx, std::move(vertShader), std::move(fragShader),
-                                                          static_cast<const MetalVertexFormat*>(vtxFmt), targetSamples,
-                                                          srcFac, dstFac, prim, depthTest, depthWrite,
-                                                          colorWrite, alphaWrite, culling);
-    d->m_SPs.emplace_back(retval);
-    return retval;
 }
 
 IShaderDataBinding*
