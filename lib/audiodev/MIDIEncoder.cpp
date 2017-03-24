@@ -20,8 +20,8 @@ void MIDIEncoder<Sender>::_sendMessage(const uint8_t* data, size_t len)
 template <class Sender>
 void MIDIEncoder<Sender>::_sendContinuedValue(uint32_t val)
 {
-    uint32_t send[3] = {};
-    uint32_t* ptr = nullptr;
+    uint8_t send[3] = {};
+    uint8_t* ptr = nullptr;
     if (val >= 0x4000)
     {
         ptr = &send[0];
