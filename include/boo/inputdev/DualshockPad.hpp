@@ -3,37 +3,7 @@
 #include <stdint.h>
 #include <type_traits>
 #include "DeviceBase.hpp"
-
-#ifndef ENABLE_BITWISE_ENUM
-#define ENABLE_BITWISE_ENUM(type)\
-constexpr type operator|(type a, type b)\
-{\
-    using T = std::underlying_type_t<type>;\
-    return type(static_cast<T>(a) | static_cast<T>(b));\
-}\
-constexpr type operator&(type a, type b)\
-{\
-    using T = std::underlying_type_t<type>;\
-    return type(static_cast<T>(a) & static_cast<T>(b));\
-}\
-inline type& operator|=(type& a, const type& b)\
-{\
-    using T = std::underlying_type_t<type>;\
-    a = type(static_cast<T>(a) | static_cast<T>(b));\
-    return a;\
-}\
-inline type& operator&=(type& a, const type& b)\
-{\
-    using T = std::underlying_type_t<type>;\
-    a = type(static_cast<T>(a) & static_cast<T>(b));\
-    return a;\
-}\
-inline type operator~(const type& key)\
-{\
-    using T = std::underlying_type_t<type>;\
-    return type(~static_cast<T>(key));\
-}
-#endif
+#include "../System.hpp"
 
 namespace boo
 {

@@ -31,10 +31,19 @@ public:
         }
     }
 
-    static inline CFPointer<T> adopt(T CF_RELEASES_ARGUMENT ptr);
+    static inline CFPointer<T> adopt(T CF_RELEASES_ARGUMENT ptr) {
+        return CFPointer<T>(ptr, CFPointer<T>::Adopt);
+    }
 
-    T get() const;
-    CFPointer &operator=(CFPointer);
+    T get() const {
+        return fromStorageType(storage);
+    }
+
+    CFPointer &operator=(CFPointer other) {
+        swap(other);
+        return *this;
+    }
+
     CFTypeRef* operator&()
     {
         if (CFTypeRef pointer = storage) {
@@ -58,29 +67,10 @@ private:
         return (T)pointer;
     }
 
-    void swap(CFPointer &);
+    void swap(CFPointer &other) {
+        std::swap(storage, other.storage);
+    }
 };
-
-template<typename T>
-CFPointer<T> CFPointer<T>::adopt(T CF_RELEASES_ARGUMENT ptr) {
-    return CFPointer<T>(ptr, CFPointer<T>::Adopt);
-}
-
-template<typename T>
-T CFPointer<T>::get() const {
-    return fromStorageType(storage);
-}
-
-template<typename T>
-inline CFPointer<T>& CFPointer<T>::operator=(CFPointer other) {
-    swap(other);
-    return *this;
-}
-
-template<typename T>
-inline void CFPointer<T>::swap(CFPointer &other) {
-    std::swap(storage, other.storage);
-}
 
 /// A smart pointer that can manage the lifecycle of CoreFoundation IUnknown objects.
 template<typename T>
@@ -118,13 +108,17 @@ public:
         }
     }
 
-    static inline IUnknownPointer<T> adopt(T** ptr);
+    static inline IUnknownPointer<T> adopt(T** ptr) {
+        return IUnknownPointer<T>(ptr, IUnknownPointer<T>::Adopt);
+    }
 
-    T* get() const;
+    T* get() const {
+        return fromStorageType(_storage);
+    }
+
     T* operator->() const { return get(); }
     T** storage() const { return (T**)_storage; }
-    LPVOID* operator&()
-    {
+    LPVOID* operator&() {
         if (IUnknownVTbl** pointer = _storage) {
             printf("%p RELEASE %d\n", pointer, (*pointer)->Release(pointer));
         }
@@ -146,22 +140,9 @@ private:
         return *(T**)pointer;
     }
 
-    void swap(IUnknownPointer &);
+    void swap(IUnknownPointer &other) {
+        std::swap(_storage, other._storage);
+    }
 };
-
-template<typename T>
-IUnknownPointer<T> IUnknownPointer<T>::adopt(T** ptr) {
-    return IUnknownPointer<T>(ptr, IUnknownPointer<T>::Adopt);
-}
-
-template<typename T>
-T* IUnknownPointer<T>::get() const {
-    return fromStorageType(_storage);
-}
-
-template<typename T>
-inline void IUnknownPointer<T>::swap(IUnknownPointer &other) {
-    std::swap(_storage, other._storage);
-}
 
 #endif // __CFPOINTER_HPP__

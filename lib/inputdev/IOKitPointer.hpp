@@ -43,9 +43,13 @@ public:
         }
     }
 
-    static inline IOObjectPointer<T> adopt(T ptr);
+    static inline IOObjectPointer<T> adopt(T ptr) {
+        return IOObjectPointer<T>(ptr, IOObjectPointer<T>::Adopt);
+    }
 
-    T get() const;
+    T get() const {
+        return fromStorageType(storage);
+    }
     io_object_t* operator&()
     {
         if (io_object_t pointer = storage) {
@@ -69,23 +73,10 @@ private:
         return (T)pointer;
     }
 
-    void swap(IOObjectPointer &);
+    void swap(IOObjectPointer &other) {
+        std::swap(storage, other.storage);
+    }
 };
-
-template<typename T>
-IOObjectPointer<T> IOObjectPointer<T>::adopt(T ptr) {
-    return IOObjectPointer<T>(ptr, IOObjectPointer<T>::Adopt);
-}
-
-template<typename T>
-T IOObjectPointer<T>::get() const {
-    return fromStorageType(storage);
-}
-
-template<typename T>
-inline void IOObjectPointer<T>::swap(IOObjectPointer &other) {
-    std::swap(storage, other.storage);
-}
 
 /// A smart pointer that can manage the lifecycle of IOKit plugin objects.
 class IOCFPluginPointer {
@@ -122,11 +113,9 @@ public:
 
 private:
     IOCFPlugInInterface** _storage;
-    void swap(IOCFPluginPointer &);
+    void swap(IOCFPluginPointer &other) {
+        std::swap(_storage, other._storage);
+    }
 };
-
-inline void IOCFPluginPointer::swap(IOCFPluginPointer &other) {
-    std::swap(_storage, other._storage);
-}
 
 #endif // __IOKITPOINTER_HPP__
