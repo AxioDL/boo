@@ -4,39 +4,50 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include "../System.hpp"
+#include <memory>
 
 namespace boo
 {
+class DeviceToken;
+class IHIDDevice;
 
-class DeviceBase
+enum class HIDReportType
+{
+    Input,
+    Output,
+    Feature
+};
+
+class DeviceBase : public std::enable_shared_from_this<DeviceBase>
 {
     friend class DeviceToken;
-    friend class HIDDeviceIOKit;
-    friend class HIDDeviceUdev;
-    friend class HIDDeviceWinUSB;
+    friend struct DeviceSignature;
 
     class DeviceToken* m_token;
-    class IHIDDevice* m_hidDev;
+    std::unique_ptr<IHIDDevice> m_hidDev;
     void _deviceDisconnected();
     
 public:
     DeviceBase(DeviceToken* token);
     virtual ~DeviceBase();
     void closeDevice();
+    
+    /* Callbacks */
     virtual void deviceDisconnected()=0;
     virtual void deviceError(const char* error, ...);
-    
-    /* Low-Level API */
-    bool sendUSBInterruptTransfer(const uint8_t* data, size_t length);
-    size_t receiveUSBInterruptTransfer(uint8_t* data, size_t length);
     virtual void initialCycle() {}
     virtual void transferCycle() {}
     virtual void finalCycle() {}
+    virtual size_t getInputBufferSize() const { return 0; }
+
+    /* Low-Level API */
+    bool sendUSBInterruptTransfer(const uint8_t* data, size_t length);
+    size_t receiveUSBInterruptTransfer(uint8_t* data, size_t length);
 
     /* High-Level API */
-    bool sendHIDReport(const uint8_t* data, size_t length, uint16_t message=0);
-    virtual size_t receiveReport(uint8_t* data, size_t length, uint16_t message=0);
+    bool sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message=0);
+    size_t receiveHIDReport(uint8_t* data, size_t length, HIDReportType tp, uint32_t message=0); // Prefer callback version
+    virtual void receivedHIDReport(const uint8_t* /*data*/, size_t /*length*/, HIDReportType /*tp*/, uint32_t /*message*/) {}
 };
 
 }

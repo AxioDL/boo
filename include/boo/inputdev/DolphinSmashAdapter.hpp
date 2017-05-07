@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "DeviceBase.hpp"
+#include "../System.hpp"
 
 namespace boo
 {

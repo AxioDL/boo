@@ -76,9 +76,8 @@ class DualshockPadCallback : public IDualshockPadCallback
 
 class TestDeviceFinder : public DeviceFinder
 {
-
-    DolphinSmashAdapter* smashAdapter = NULL;
-    DualshockPad* ds3 = nullptr;
+    std::shared_ptr<DolphinSmashAdapter> smashAdapter;
+    std::shared_ptr<DualshockPad> ds3;
     DolphinSmashAdapterCallback m_cb;
     DualshockPadCallback m_ds3CB;
 public:
@@ -87,14 +86,14 @@ public:
     {}
     void deviceConnected(DeviceToken& tok)
     {
-        smashAdapter = dynamic_cast<DolphinSmashAdapter*>(tok.openAndGetDevice());
+        smashAdapter = std::dynamic_pointer_cast<DolphinSmashAdapter>(tok.openAndGetDevice());
         if (smashAdapter)
         {
             smashAdapter->setCallback(&m_cb);
             smashAdapter->startRumble(0);
             return;
         }
-        ds3 = dynamic_cast<DualshockPad*>(tok.openAndGetDevice());
+        ds3 = std::dynamic_pointer_cast<DualshockPad>(tok.openAndGetDevice());
         if (ds3)
         {
             ds3->setCallback(&m_ds3CB);
@@ -103,16 +102,10 @@ public:
     }
     void deviceDisconnected(DeviceToken&, DeviceBase* device)
     {
-        if (smashAdapter == device)
-        {
-            delete smashAdapter;
-            smashAdapter = NULL;
-        }
-        if (ds3 == device)
-        {
-            delete ds3;
-            ds3 = nullptr;
-        }
+        if (smashAdapter.get() == device)
+            smashAdapter.reset();
+        if (ds3.get() == device)
+            ds3.reset();
     }
 };
 

@@ -11,8 +11,16 @@ extern const DeviceSignature BOO_DEVICE_SIGS[];
 
 bool DeviceSignature::DeviceMatchToken(const DeviceToken& token, const TDeviceSignatureSet& sigSet)
 {
-    if (token.getDeviceType() == DeviceToken::DeviceType::GenericHID)
+    if (token.getDeviceType() == DeviceType::HID)
+    {
+        for (const DeviceSignature* sig : sigSet)
+        {
+            if (sig->m_vid == token.getVendorId() && sig->m_pid == token.getProductId() &&
+                sig->m_type != DeviceType::HID)
+                return false;
+        }
         return true;
+    }
     for (const DeviceSignature* sig : sigSet)
     {
         if (sig->m_vid == token.getVendorId() && sig->m_pid == token.getProductId())
@@ -21,30 +29,13 @@ bool DeviceSignature::DeviceMatchToken(const DeviceToken& token, const TDeviceSi
     return false;
 }
 
-IHIDDevice* IHIDDeviceNew(DeviceToken& token, DeviceBase& devImp);
-DeviceBase* DeviceSignature::DeviceNew(DeviceToken& token)
+std::unique_ptr<IHIDDevice> IHIDDeviceNew(DeviceToken& token, DeviceBase& devImp);
+std::shared_ptr<DeviceBase> DeviceSignature::DeviceNew(DeviceToken& token)
 {
-    DeviceBase* retval = NULL;
+    std::shared_ptr<DeviceBase> retval;
 
-    /* Early-return for generic HID devices */
-    if (token.getDeviceType() == DeviceToken::DeviceType::GenericHID)
-    {
-        retval = new GenericPad(&token);
-        if (!retval)
-            return NULL;
-
-        IHIDDevice* newDev = IHIDDeviceNew(token, *retval);
-        if (!newDev)
-        {
-            delete retval;
-            return NULL;
-        }
-
-        return retval;
-    }
-
-    /* Otherwise perform signature-matching to find the appropriate device-factory */
-    const DeviceSignature* foundSig = NULL;
+    /* Perform signature-matching to find the appropriate device-factory */
+    const DeviceSignature* foundSig = nullptr;
     const DeviceSignature* sigIter = BOO_DEVICE_SIGS;
     unsigned targetVid = token.getVendorId();
     unsigned targetPid = token.getProductId();
@@ -58,21 +49,35 @@ DeviceBase* DeviceSignature::DeviceNew(DeviceToken& token)
         ++sigIter;
     }
     if (!foundSig)
-        return NULL;
+    {
+        /* Try Generic HID devices */
+        if (token.getDeviceType() == DeviceType::HID)
+        {
+            retval = std::make_shared<GenericPad>(&token);
+            if (!retval)
+                return nullptr;
+
+            retval->m_hidDev = IHIDDeviceNew(token, *retval);
+            if (!retval->m_hidDev)
+                return nullptr;
+
+            return retval;
+        }
+
+        return nullptr;
+    }
+    if (foundSig->m_type != DeviceType::None && foundSig->m_type != token.getDeviceType())
+        return nullptr;
 
     retval = foundSig->m_factory(&token);
     if (!retval)
-        return NULL;
+        return nullptr;
     
-    IHIDDevice* newDev = IHIDDeviceNew(token, *retval);
-    if (!newDev)
-    {
-        delete retval;
-        return NULL;
-    }
+    retval->m_hidDev = IHIDDeviceNew(token, *retval);
+    if (!retval->m_hidDev)
+        return nullptr;
     
     return retval;
-    
 }
 
 }

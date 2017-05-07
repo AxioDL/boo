@@ -1,7 +1,39 @@
 #ifndef CDUALSHOCKPAD_HPP
 #define CDUALSHOCKPAD_HPP
 #include <stdint.h>
+#include <type_traits>
 #include "DeviceBase.hpp"
+
+#ifndef ENABLE_BITWISE_ENUM
+#define ENABLE_BITWISE_ENUM(type)\
+constexpr type operator|(type a, type b)\
+{\
+    using T = std::underlying_type_t<type>;\
+    return type(static_cast<T>(a) | static_cast<T>(b));\
+}\
+constexpr type operator&(type a, type b)\
+{\
+    using T = std::underlying_type_t<type>;\
+    return type(static_cast<T>(a) & static_cast<T>(b));\
+}\
+inline type& operator|=(type& a, const type& b)\
+{\
+    using T = std::underlying_type_t<type>;\
+    a = type(static_cast<T>(a) | static_cast<T>(b));\
+    return a;\
+}\
+inline type& operator&=(type& a, const type& b)\
+{\
+    using T = std::underlying_type_t<type>;\
+    a = type(static_cast<T>(a) & static_cast<T>(b));\
+    return a;\
+}\
+inline type operator~(const type& key)\
+{\
+    using T = std::underlying_type_t<type>;\
+    return type(~static_cast<T>(key));\
+}
+#endif
 
 namespace boo
 {
@@ -134,6 +166,7 @@ class DualshockPad final : public DeviceBase
     void initialCycle();
     void transferCycle();
     void finalCycle();
+    void receivedHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message);
 public:
     DualshockPad(DeviceToken* token);
     ~DualshockPad();
@@ -179,8 +212,10 @@ public:
     void setRawLED(int led)
     {
         m_report.leds = led;
-        sendHIDReport(m_report.buf, sizeof(m_report), 0x0201);
+        sendHIDReport(m_report.buf, sizeof(m_report), HIDReportType::Output, 0x0201);
     }
+
+    size_t getInputBufferSize() const { return 49; }
 };
 
 }

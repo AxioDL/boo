@@ -10,16 +10,7 @@ namespace boo
 
 class DeviceToken
 {
-public:
-    enum class DeviceType
-    {
-        None       = 0,
-        USB        = 1,
-        Bluetooth  = 2,
-        GenericHID = 3
-    };
-
-private:
+    friend struct DeviceSignature;
     DeviceType m_devType;
     unsigned m_vendorId;
     unsigned m_productId;
@@ -28,7 +19,7 @@ private:
     std::string m_devPath;
     
     friend class DeviceBase;
-    DeviceBase* m_connectedDev;
+    std::shared_ptr<DeviceBase> m_connectedDev;
     
     friend class DeviceFinder;
     inline void _deviceClose()
@@ -70,7 +61,7 @@ public:
     inline const std::string& getProductName() const {return m_productName;}
     inline const std::string& getDevicePath() const {return m_devPath;}
     inline bool isDeviceOpen() const {return (m_connectedDev != NULL);}
-    inline DeviceBase* openAndGetDevice()
+    inline std::shared_ptr<DeviceBase> openAndGetDevice()
     {
         if (!m_connectedDev)
             m_connectedDev = DeviceSignature::DeviceNew(*this);

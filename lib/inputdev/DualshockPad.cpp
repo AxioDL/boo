@@ -50,23 +50,31 @@ void DualshockPad::deviceDisconnected()
 void DualshockPad::initialCycle()
 {
     uint8_t setupCommand[4] = {0x42, 0x0c, 0x00, 0x00}; //Tells controller to start sending changes on in pipe
-    if (!sendHIDReport(setupCommand, sizeof(setupCommand), 0x03F4))
+    if (!sendHIDReport(setupCommand, sizeof(setupCommand), HIDReportType::Feature, 0xF4))
     {
         deviceError("Unable to send complete packet! Request size %x\n", sizeof(setupCommand));
         return;
     }
     uint8_t btAddr[8];
-    receiveReport(btAddr, sizeof(btAddr), 0x03F5);
+    receiveHIDReport(btAddr, sizeof(btAddr), HIDReportType::Feature, 0xF5);
     for (int i = 0; i < 6; i++)
         m_btAddress[5 - i] = btAddr[i + 2]; // Copy into buffer reversed, so it is LSB first
 }
 
 void DualshockPad::transferCycle()
 {
-    DualshockPadState state;
-    size_t recvSz = receiveUSBInterruptTransfer((uint8_t*)&state, 49);
-    if (recvSz != 49)
+}
+
+void DualshockPad::finalCycle()
+{
+
+}
+
+void DualshockPad::receivedHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message)
+{
+    if (message != 1 || length != 49 || tp != HIDReportType::Input)
         return;
+    DualshockPadState state = *reinterpret_cast<const DualshockPadState*>(data);
 
     for (int i = 0; i < 3; i++)
         state.m_accelerometer[i] = bswap16(state.m_accelerometer[i]);
@@ -98,7 +106,7 @@ void DualshockPad::transferCycle()
             m_report.rumble.rightDuration = 0;
             m_report.rumble.rightOn = false;
         }
-        sendHIDReport(m_report.buf, sizeof(m_report), 0x0201);
+        sendHIDReport(m_report.buf, sizeof(m_report), HIDReportType::Output, 0x01);
         m_rumbleState = m_rumbleRequest;
     }
     else
@@ -116,12 +124,6 @@ void DualshockPad::transferCycle()
         state.accYaw = (atan2(accXval, accZval) + M_PI) * RAD_TO_DEG;
         state.gyroZ = (state.m_gyrometerZ / 1023.f);
     }
-
-}
-
-void DualshockPad::finalCycle()
-{
-
 }
 
 } // boo

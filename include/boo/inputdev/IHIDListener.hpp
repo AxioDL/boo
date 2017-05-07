@@ -8,7 +8,7 @@
 namespace boo
 {
 
-typedef std::unordered_map<std::string, DeviceToken> TDeviceTokens;
+typedef std::unordered_map<std::string, std::unique_ptr<DeviceToken>> TDeviceTokens;
 typedef std::pair<TDeviceTokens::iterator, bool> TInsertedDeviceToken;
 class DeviceFinder;
 

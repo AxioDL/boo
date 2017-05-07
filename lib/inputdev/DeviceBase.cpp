@@ -7,24 +7,22 @@ namespace boo
 {
 
 DeviceBase::DeviceBase(DeviceToken* token)
-: m_token(token), m_hidDev(NULL)
+: m_token(token)
 {
 }
 
 DeviceBase::~DeviceBase()
 {
-    delete m_hidDev;
 }
 
 void DeviceBase::_deviceDisconnected()
 {
     deviceDisconnected();
-    m_token = NULL;
+    m_token = nullptr;
     if (m_hidDev)
     {
         m_hidDev->_deviceDisconnected();
-        delete m_hidDev;
-        m_hidDev = NULL;
+        m_hidDev.reset();
     }
 }
 
@@ -56,18 +54,18 @@ size_t DeviceBase::receiveUSBInterruptTransfer(uint8_t* data, size_t length)
     return false;
 }
 
-bool DeviceBase::sendHIDReport(const uint8_t* data, size_t length, uint16_t message)
+bool DeviceBase::sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message)
 {
     if (m_hidDev)
-        return m_hidDev->_sendHIDReport(data, length, message);
+        return m_hidDev->_sendHIDReport(data, length, tp, message);
     return false;
 }
 
-size_t DeviceBase::receiveReport(uint8_t* data, size_t length, uint16_t message)
+size_t DeviceBase::receiveHIDReport(uint8_t* data, size_t length, HIDReportType tp, uint32_t message)
 {
     if (m_hidDev)
-        return m_hidDev->_recieveReport(data, length, message);
-    return false;
+        return m_hidDev->_receiveHIDReport(data, length, tp, message);
+    return 0;
 }
 
 }

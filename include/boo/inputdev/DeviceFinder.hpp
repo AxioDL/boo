@@ -52,15 +52,15 @@ private:
             return true;
         return false;
     }
-    inline bool _insertToken(DeviceToken&& token)
+    inline bool _insertToken(std::unique_ptr<DeviceToken>&& token)
     {
-        if (DeviceSignature::DeviceMatchToken(token, m_types))
+        if (DeviceSignature::DeviceMatchToken(*token, m_types))
         {
             m_tokensLock.lock();
             TInsertedDeviceToken inseredTok =
-            m_tokens.insert(std::make_pair(token.getDevicePath(), std::move(token)));
+            m_tokens.insert(std::make_pair(token->getDevicePath(), std::move(token)));
             m_tokensLock.unlock();
-            deviceConnected(inseredTok.first->second);
+            deviceConnected(*inseredTok.first->second);
             return true;
         }
         return false;
@@ -70,10 +70,10 @@ private:
         auto preCheck = m_tokens.find(path);
         if (preCheck != m_tokens.end())
         {
-            DeviceToken& tok = preCheck->second;
-            DeviceBase* dev = tok.m_connectedDev;
+            DeviceToken& tok = *preCheck->second;
+            std::shared_ptr<DeviceBase> dev = tok.m_connectedDev;
             tok._deviceClose();
-            deviceDisconnected(tok, dev);
+            deviceDisconnected(tok, dev.get());
             m_tokensLock.lock();
             m_tokens.erase(preCheck);
             m_tokensLock.unlock();

@@ -7,8 +7,8 @@ namespace boo
 
 const DeviceSignature BOO_DEVICE_SIGS[] =
 {
-    DEVICE_SIG(DolphinSmashAdapter, 0x57e, 0x337),
-    DEVICE_SIG(DualshockPad, 0x54c, 0x268),
+    DEVICE_SIG(DolphinSmashAdapter, 0x57e, 0x337, DeviceType::USB),
+    DEVICE_SIG(DualshockPad, 0x54c, 0x268, DeviceType::HID),
     DEVICE_SIG_SENTINEL()
 };
 
