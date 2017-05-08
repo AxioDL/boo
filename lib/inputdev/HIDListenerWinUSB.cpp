@@ -1,6 +1,7 @@
 #define _CRT_SECURE_NO_WARNINGS 1 /* STFU MSVC */
 #include "boo/inputdev/IHIDListener.hpp"
 #include "boo/inputdev/DeviceFinder.hpp"
+#include "boo/inputdev/XInputPad.hpp"
 #include <string.h>
 #include <thread>
 
@@ -14,6 +15,8 @@
 #include <Cfgmgr32.h>
 #include <Usbiodef.h>
 #include <Devpkey.h>
+#include <hidclass.h>
+#include <Xinput.h>
 
 namespace boo
 {
@@ -28,9 +31,8 @@ class HIDListenerWinUSB final : public IHIDListener
      * Reference: https://github.com/pbatard/libwdi/blob/master/libwdi/libwdi.c
      */
 
-    void _pollDevices(const char* pathFilter)
+    void _enumerate(DeviceType type, CONST GUID* TypeGUID, const char* pathFilter)
     {
-
         /* Don't ask */
         static const LPCSTR arPrefix[3] = {"VID_", "PID_", "MI_"};
         unsigned i, j;
@@ -51,17 +53,16 @@ class HIDListenerWinUSB final : public IHIDListener
         LPSTR pszToken, pszNextToken;
         CHAR szVid[MAX_DEVICE_ID_LEN], szPid[MAX_DEVICE_ID_LEN], szMi[MAX_DEVICE_ID_LEN];
 
-        /* List all connected USB devices */
+        /* List all connected HID devices */
         hDevInfo = SetupDiGetClassDevs(NULL, 0, 0, DIGCF_PRESENT | DIGCF_ALLCLASSES | DIGCF_DEVICEINTERFACE);
         if (hDevInfo == INVALID_HANDLE_VALUE)
             return;
 
         for (i=0 ; ; ++i)
         {
-
             if (!SetupDiEnumDeviceInterfaces(hDevInfo,
                                              NULL,
-                                             &GUID_DEVINTERFACE_USB_DEVICE,
+                                             TypeGUID,
                                              i,
                                              &DeviceInterfaceData))
                 break;
@@ -75,7 +76,7 @@ class HIDListenerWinUSB final : public IHIDListener
                                                   &DeviceInfoData))
                 continue;
 
-            r = CM_Get_Device_IDA(DeviceInfoData.DevInst, szDeviceInstanceID , MAX_PATH, 0);
+            r = CM_Get_Device_IDA(DeviceInfoData.DevInst, szDeviceInstanceID, MAX_PATH, 0);
             if (r != CR_SUCCESS)
                 continue;
 
@@ -115,8 +116,8 @@ class HIDListenerWinUSB final : public IHIDListener
             unsigned vid = strtol(szVid+4, NULL, 16);
             unsigned pid = strtol(szPid+4, NULL, 16);
 
-            WCHAR productW[1024] = {0};
-            CHAR product[1024] = {0};
+            CHAR productW[1024] = {0};
+            //CHAR product[1024] = {0};
             DWORD productSz = 0;
             if (!SetupDiGetDevicePropertyW(hDevInfo, &DeviceInfoData, &DEVPKEY_Device_BusReportedDeviceDesc,
                                            &devpropType, (BYTE*)productW, 1024, &productSz, 0)) {
@@ -124,14 +125,15 @@ class HIDListenerWinUSB final : public IHIDListener
                 SetupDiGetDeviceRegistryPropertyA(hDevInfo, &DeviceInfoData, SPDRP_DEVICEDESC,
                                                   &reg_type, (BYTE*)productW, 1024, &productSz);
             }
-            wcstombs(product, productW, productSz / 2);
+            /* DAFUQ??? Why isn't this really WCHAR??? */
+            //WideCharToMultiByte(CP_UTF8, 0, productW, -1, product, 1024, nullptr, nullptr);
 
             WCHAR manufW[1024] = L"Someone"; /* Windows Vista and earlier will use this as the vendor */
             CHAR manuf[1024] = {0};
             DWORD manufSz = 0;
             SetupDiGetDevicePropertyW(hDevInfo, &DeviceInfoData, &DEVPKEY_Device_Manufacturer,
                                       &devpropType, (BYTE*)manufW, 1024, &manufSz, 0);
-            wcstombs(manuf, manufW, manufSz / 2);
+            WideCharToMultiByte(CP_UTF8, 0, manufW, -1, manuf, 1024, nullptr, nullptr);
 
             /* Store as a shouting string (to keep hash-lookups consistent) */
             CharUpperA(DeviceInterfaceDetailData.wtf.DevicePath);
@@ -140,16 +142,86 @@ class HIDListenerWinUSB final : public IHIDListener
             if (pathFilter && strcmp(pathFilter, DeviceInterfaceDetailData.wtf.DevicePath))
                 continue;
 
-            /* Whew!! that's a single device enumerated!! */
-            if (!m_finder._hasToken(DeviceInterfaceDetailData.wtf.DevicePath))
-                m_finder._insertToken(DeviceToken(DeviceToken::DeviceType::USB,
-                                                  vid, pid, manuf, product,
-                                                  DeviceInterfaceDetailData.wtf.DevicePath));
+            if (!m_scanningEnabled || m_finder._hasToken(DeviceInterfaceDetailData.wtf.DevicePath))
+                continue;
 
+            /* Whew!! that's a single device enumerated!! */
+            m_finder._insertToken(std::make_unique<DeviceToken>(
+                                  type, vid, pid, manuf, productW,
+                                  DeviceInterfaceDetailData.wtf.DevicePath));
         }
 
         SetupDiDestroyDeviceInfoList(hDevInfo);
+    }
 
+    void _pollDevices(const char* pathFilter)
+    {
+        _enumerate(DeviceType::HID, &GUID_DEVINTERFACE_HID, pathFilter);
+        _enumerate(DeviceType::USB, &GUID_DEVINTERFACE_USB_DEVICE, pathFilter);
+    }
+
+    static XInputPadState ConvertXInputState(const XINPUT_GAMEPAD& pad)
+    {
+        return {pad.wButtons, pad.bLeftTrigger, pad.bRightTrigger,
+                pad.sThumbLX, pad.sThumbLY, pad.sThumbLY, pad.sThumbRY};
+    }
+
+    std::thread m_xinputThread;
+    bool m_xinputRunning = true;
+    DWORD m_xinputPackets[4] = {DWORD(-1), DWORD(-1), DWORD(-1), DWORD(-1)};
+    std::vector<DeviceToken> m_xinputTokens;
+    void _xinputProc()
+    {
+        m_xinputTokens.reserve(4);
+        for (int i=0 ; i<4 ; ++i)
+            m_xinputTokens.emplace_back(DeviceType::XInput, 0, i, "", "", "");
+
+        while (m_xinputRunning)
+        {
+            for (int i=0 ; i<4 ; ++i)
+            {
+                DeviceToken& tok = m_xinputTokens[i];
+                XINPUT_STATE state;
+                if (XInputGetState(i, &state) == ERROR_SUCCESS)
+                {
+                    if (state.dwPacketNumber != m_xinputPackets[i])
+                    {
+                        if (m_xinputPackets[i] == -1)
+                            m_finder.deviceConnected(tok);
+                        m_xinputPackets[i] = state.dwPacketNumber;
+                        if (tok.m_connectedDev)
+                        {
+                            XInputPad& pad = static_cast<XInputPad&>(*tok.m_connectedDev);
+                            if (pad.m_callback)
+                                pad.m_callback->controllerUpdate(pad, ConvertXInputState(state.Gamepad));
+                        }
+                    }
+                    if (tok.m_connectedDev)
+                    {
+                        XInputPad& pad = static_cast<XInputPad&>(*tok.m_connectedDev);
+                        if (pad.m_rumbleRequest[0] != pad.m_rumbleState[0] ||
+                            pad.m_rumbleRequest[1] != pad.m_rumbleState[1])
+                        {
+                            pad.m_rumbleState[0] = pad.m_rumbleRequest[0];
+                            pad.m_rumbleState[1] = pad.m_rumbleRequest[1];
+                            XINPUT_VIBRATION vibe = {pad.m_rumbleRequest[0], pad.m_rumbleRequest[1]};
+                            XInputSetState(i, &vibe);
+                        }
+                    }
+                }
+                else if (m_xinputPackets[i] != -1)
+                {
+                    m_xinputPackets[i] = -1;
+                    if (tok.m_connectedDev)
+                    {
+                        XInputPad& pad = static_cast<XInputPad&>(*tok.m_connectedDev);
+                        pad.deviceDisconnected();
+                    }
+                    m_finder.deviceDisconnected(tok, tok.m_connectedDev.get());
+                }
+            }
+            Sleep(10);
+        }
     }
 
 public:
@@ -157,11 +229,25 @@ public:
     : m_finder(finder)
     {
         /* Initial HID Device Add */
-        _pollDevices(NULL);
+        _pollDevices(nullptr);
+
+        /* XInput arbitration thread */
+        for (const DeviceSignature* sig : m_finder.getTypes())
+        {
+            if (sig->m_type == DeviceType::XInput)
+            {
+                m_xinputThread = std::thread(std::bind(&HIDListenerWinUSB::_xinputProc, this));
+                break;
+            }
+        }
     }
 
     ~HIDListenerWinUSB()
-    {}
+    {
+        m_xinputRunning = false;
+        if (m_xinputThread.joinable())
+            m_xinputThread.join();
+    }
 
     /* Automatic device scanning */
     bool startScanning()
@@ -178,7 +264,7 @@ public:
     /* Manual device scanning */
     bool scanNow()
     {
-        _pollDevices(NULL);
+        _pollDevices(nullptr);
         return true;
     }
 
@@ -200,12 +286,11 @@ public:
         m_finder._removeToken(upperPath);
         return true;
     }
-
 };
 
-IHIDListener* IHIDListenerNew(DeviceFinder& finder)
+std::unique_ptr<IHIDListener> IHIDListenerNew(DeviceFinder& finder)
 {
-    return new HIDListenerWinUSB(finder);
+    return std::make_unique<HIDListenerWinUSB>(finder);
 }
 
 }

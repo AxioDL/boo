@@ -528,7 +528,7 @@ static const DEV_BROADCAST_DEVICEINTERFACE HOTPLUG_CONF =
     sizeof(DEV_BROADCAST_DEVICEINTERFACE),
     DBT_DEVTYP_DEVICEINTERFACE,
     0,
-    GUID_DEVINTERFACE_USB_DEVICE
+    0
 };
 static bool HOTPLUG_REGISTERED = false;
 static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -536,7 +536,8 @@ static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
     if (!HOTPLUG_REGISTERED && uMsg == WM_CREATE)
     {
         /* Register hotplug notification with windows */
-        RegisterDeviceNotification(hwnd, (LPVOID)&HOTPLUG_CONF, DEVICE_NOTIFY_WINDOW_HANDLE);
+        RegisterDeviceNotification(hwnd, (LPVOID)&HOTPLUG_CONF,
+                                   DEVICE_NOTIFY_WINDOW_HANDLE | DEVICE_NOTIFY_ALL_INTERFACE_CLASSES);
         HOTPLUG_REGISTERED = true;
     }
     return static_cast<boo::ApplicationWin32*>(boo::APP)->winHwndHandler(hwnd, uMsg, wParam, lParam);

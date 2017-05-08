@@ -37,7 +37,7 @@ private:
 
     /* Platform-specific USB event registration
      * (for auto-scanning, NULL if not registered) */
-    IHIDListener* m_listener;
+    std::unique_ptr<IHIDListener> m_listener;
 
     /* Set of presently-connected device tokens */
     TDeviceTokens m_tokens;
@@ -95,7 +95,6 @@ public:
 
     /* Application must specify its interested device-types */
     DeviceFinder(std::unordered_set<std::type_index> types)
-    : m_listener(NULL)
     {
         if (skDevFinder)
         {
@@ -118,7 +117,6 @@ public:
     {
         if (m_listener)
             m_listener->stopScanning();
-        delete m_listener;
         skDevFinder = NULL;
     }
 

@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <type_traits>
 #include "DeviceBase.hpp"
-#include "../System.hpp"
+#include "boo/System.hpp"
 
 namespace boo
 {
@@ -117,9 +117,8 @@ struct DualshockPadState
 class DualshockPad;
 struct IDualshockPadCallback
 {
-    DualshockPad* ctrl = nullptr;
     virtual void controllerDisconnected() {}
-    virtual void controllerUpdate(const DualshockPadState&) {}
+    virtual void controllerUpdate(DualshockPad&, const DualshockPadState&) {}
 };
 
 class DualshockPad final : public DeviceBase
@@ -141,8 +140,7 @@ public:
     DualshockPad(DeviceToken* token);
     ~DualshockPad();
 
-    void setCallback(IDualshockPadCallback* cb)
-    { m_callback = cb; if (m_callback) m_callback->ctrl = this; }
+    void setCallback(IDualshockPadCallback* cb) { m_callback = cb; }
 
     void startRumble(EDualshockMotor motor, uint8_t duration = 254, uint8_t intensity=255)
     {
@@ -159,9 +157,9 @@ public:
         }
     }
 
-    void stopRumble(int motor)
+    void stopRumble(EDualshockMotor motor)
     {
-        m_rumbleRequest &= ~EDualshockMotor(motor);
+        m_rumbleRequest &= ~motor;
     }
 
     EDualshockLED getLED()

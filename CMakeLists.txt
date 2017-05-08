@@ -65,7 +65,7 @@ if(WIN32)
 
   list(APPEND _BOO_SYS_DEFINES -DUNICODE -D_UNICODE)
 
-  list(APPEND _BOO_SYS_LIBS Winusb opengl32 Setupapi Imm32 Winmm Shlwapi)
+  list(APPEND _BOO_SYS_LIBS Winusb opengl32 Setupapi Imm32 Winmm Shlwapi Hid Xinput)
 elseif(APPLE)
   list(APPEND PLAT_SRCS
        lib/mac/ApplicationCocoa.mm
@@ -214,6 +214,7 @@ add_library(boo
             lib/inputdev/RevolutionPad.cpp include/boo/inputdev/RevolutionPad.hpp
             lib/inputdev/DolphinSmashAdapter.cpp include/boo/inputdev/DolphinSmashAdapter.hpp
             lib/inputdev/DualshockPad.cpp include/boo/inputdev/DualshockPad.hpp
+            include/boo/inputdev/XInputPad.hpp
             lib/inputdev/GenericPad.cpp include/boo/inputdev/GenericPad.hpp
             lib/inputdev/DeviceSignature.cpp include/boo/inputdev/DeviceSignature.hpp
             lib/inputdev/DeviceFinder.cpp include/boo/inputdev/DeviceFinder.hpp

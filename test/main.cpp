@@ -38,7 +38,7 @@ class DualshockPadCallback : public IDualshockPadCallback
     {
         printf("CONTROLLER DISCONNECTED\n");
     }
-    void controllerUpdate(const DualshockPadState& state)
+    void controllerUpdate(DualshockPad& pad, const DualshockPadState& state)
     {
         static time_t timeTotal;
         static time_t lastTime = 0;
@@ -59,8 +59,8 @@ class DualshockPadCallback : public IDualshockPadCallback
         {
             if (timeDif >= 1) // wait 30 seconds before issuing another rumble event
             {
-                ctrl->startRumble(EDualshockMotor::Left);
-                ctrl->startRumble(EDualshockMotor::Right, 100);
+                pad.startRumble(EDualshockMotor::Left);
+                pad.startRumble(EDualshockMotor::Right, 100);
                 lastTime = timeTotal;
             }
         }

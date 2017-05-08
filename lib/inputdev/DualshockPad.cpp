@@ -81,7 +81,7 @@ void DualshockPad::receivedHIDReport(const uint8_t* data, size_t length, HIDRepo
 
     state.m_gyrometerZ = bswap16(state.m_gyrometerZ);
     if (m_callback)
-        m_callback->controllerUpdate(state);
+        m_callback->controllerUpdate(*this, state);
 
     if (m_rumbleRequest != m_rumbleState)
     {

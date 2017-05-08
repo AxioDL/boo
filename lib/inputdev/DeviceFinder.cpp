@@ -2,6 +2,8 @@
 
 #if _WIN32
 #include <Dbt.h>
+#include <hidclass.h>
+#include <usbiodef.h>
 #endif
 
 namespace boo
@@ -21,26 +23,44 @@ LRESULT DeviceFinder::winDevChangedHandler(WPARAM wParam, LPARAM lParam)
     {
         if (dbh->dbch_devicetype == DBT_DEVTYP_DEVICEINTERFACE)
         {
+            DeviceType type = DeviceType::None;
+            if (dbhi->dbcc_classguid == GUID_DEVINTERFACE_USB_DEVICE)
+                type = DeviceType::USB;
+            else if (dbhi->dbcc_classguid == GUID_DEVINTERFACE_HID)
+                type = DeviceType::HID;
+
+            if (type != DeviceType::None)
+            {
 #ifdef UNICODE
-            char devPath[1024];
-            wcstombs(devPath, dbhi->dbcc_name, 1024);
-            finder->m_listener->_extDevConnect(devPath);
+                char devPath[1024];
+                wcstombs(devPath, dbhi->dbcc_name, 1024);
+                finder->m_listener->_extDevConnect(devPath);
 #else
-            finder->m_listener->_extDevConnect(dbhi->dbcc_name);
+                finder->m_listener->_extDevConnect(dbhi->dbcc_name);
 #endif
+            }
         }
     }
     else if (wParam == DBT_DEVICEREMOVECOMPLETE)
     {
         if (dbh->dbch_devicetype == DBT_DEVTYP_DEVICEINTERFACE)
         {
+            DeviceType type = DeviceType::None;
+            if (dbhi->dbcc_classguid == GUID_DEVINTERFACE_USB_DEVICE)
+                type = DeviceType::USB;
+            else if (dbhi->dbcc_classguid == GUID_DEVINTERFACE_HID)
+                type = DeviceType::HID;
+
+            if (type != DeviceType::None)
+            {
 #ifdef UNICODE
-            char devPath[1024];
-            wcstombs(devPath, dbhi->dbcc_name, 1024);
-            finder->m_listener->_extDevDisconnect(devPath);
+                char devPath[1024];
+                wcstombs(devPath, dbhi->dbcc_name, 1024);
+                finder->m_listener->_extDevDisconnect(devPath);
 #else
-            finder->m_listener->_extDevDisconnect(dbhi->dbcc_name);
+                finder->m_listener->_extDevDisconnect(dbhi->dbcc_name);
 #endif
+            }
         }
     }
 

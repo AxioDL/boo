@@ -33,7 +33,7 @@ public:
 };
 
 /* Platform-specific constructor */
-IHIDListener* IHIDListenerNew(DeviceFinder& finder);
+std::unique_ptr<IHIDListener> IHIDListenerNew(DeviceFinder& finder);
 
 }
 

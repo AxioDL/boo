@@ -4,6 +4,7 @@
 #include <vector>
 #include <functional>
 #include <typeindex>
+#include <memory>
 
 namespace boo
 {
@@ -13,7 +14,8 @@ enum class DeviceType
     None       = 0,
     USB        = 1,
     Bluetooth  = 2,
-    HID = 3
+    HID        = 3,
+    XInput     = 4
 };
 
 class DeviceToken;

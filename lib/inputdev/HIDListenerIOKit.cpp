@@ -329,9 +329,9 @@ public:
     
 };
 
-IHIDListener* IHIDListenerNew(DeviceFinder& finder)
+std::unique_ptr<IHIDListener> IHIDListenerNew(DeviceFinder& finder)
 {
-    return new HIDListenerIOKit(finder);
+    return std::make_unique<HIDListenerIOKit>(finder);
 }
 
 }

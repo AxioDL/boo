@@ -11,6 +11,7 @@ namespace boo
 class DeviceToken
 {
     friend struct DeviceSignature;
+    friend class HIDListenerWinUSB;
     DeviceType m_devType;
     unsigned m_vendorId;
     unsigned m_productId;
