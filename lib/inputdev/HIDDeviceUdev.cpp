@@ -10,6 +10,8 @@
 #include <stropts.h>
 #include <linux/usb/ch9.h>
 #include <linux/usbdevice_fs.h>
+#include <linux/input.h>
+#include <linux/hidraw.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -147,7 +149,6 @@ class HIDDeviceUdev final : public IHIDDevice
         close(fd);
         device->m_devFd = 0;
         udev_device_unref(udevDev);
-
     }
 
     static void _threadProcBTLL(HIDDeviceUdev* device)
@@ -171,20 +172,53 @@ class HIDDeviceUdev final : public IHIDDevice
 
     static void _threadProcHID(HIDDeviceUdev* device)
     {
+        char errStr[256];
         std::unique_lock<std::mutex> lk(device->m_initMutex);
         udev_device* udevDev = udev_device_new_from_syspath(GetUdev(), device->m_devPath.c_str());
+
+        /* Get device file */
+        const char* dp = udev_device_get_devnode(udevDev);
+        int fd = open(dp, O_RDWR | O_NONBLOCK);
+        if (fd < 0)
+        {
+            snprintf(errStr, 256, "Unable to open %s@%s: %s\n",
+                     device->m_token.getProductName().c_str(), dp, strerror(errno));
+            device->m_devImp.deviceError(errStr);
+            lk.unlock();
+            device->m_initCond.notify_one();
+            udev_device_unref(udevDev);
+            return;
+        }
+        device->m_devFd = fd;
 
         /* Return control to main thread */
         device->m_runningTransferLoop = true;
         lk.unlock();
         device->m_initCond.notify_one();
 
+        /* Report input size */
+        size_t readSz = device->m_devImp.getInputBufferSize();
+        std::unique_ptr<uint8_t[]> readBuf(new uint8_t[readSz]);
+
         /* Start transfer loop */
         device->m_devImp.initialCycle();
         while (device->m_runningTransferLoop)
+        {
+            while (true)
+            {
+                ssize_t sz = read(fd, readBuf.get(), readSz);
+                if (sz < 0)
+                    break;
+                device->m_devImp.receivedHIDReport(readBuf.get(), sz,
+                                                   HIDReportType::Input, readBuf[0]);
+            }
             device->m_devImp.transferCycle();
+        }
         device->m_devImp.finalCycle();
 
+        /* Cleanup */
+        close(fd);
+        device->m_devFd = 0;
         udev_device_unref(udevDev);
     }
 
@@ -193,10 +227,26 @@ class HIDDeviceUdev final : public IHIDDevice
         m_runningTransferLoop = false;
     }
 
-    bool _sendHIDReport(const uint8_t* data, size_t length, uint16_t message)
+    bool _sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message)
     {
         if (m_devFd)
         {
+            if (tp == HIDReportType::Feature)
+            {
+                int ret = ioctl(m_devFd, HIDIOCSFEATURE(length), data);
+                if (ret < 0)
+                    return false;
+                return true;
+            }
+            else if (tp == HIDReportType::Output)
+            {
+                ssize_t ret = write(m_devFd, data, length);
+                if (ret < 0)
+                    return false;
+                return true;
+            }
+
+            /*
             usbdevfs_ctrltransfer xfer =
             {
                 USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
@@ -211,14 +261,25 @@ class HIDDeviceUdev final : public IHIDDevice
             if (ret != (int)length)
                 return false;
             return true;
+            */
         }
         return false;
     }
 
-    size_t _recieveReport(const uint8_t *data, size_t length, uint16_t message)
+    size_t _receiveHIDReport(uint8_t *data, size_t length, HIDReportType tp, uint32_t message)
     {
         if (m_devFd)
         {
+            if (tp == HIDReportType::Feature)
+            {
+                data[0] = message;
+                int ret = ioctl(m_devFd, HIDIOCGFEATURE(length), data);
+                if (ret < 0)
+                    return 0;
+                return length;
+            }
+
+            /*
             usbdevfs_ctrltransfer xfer =
             {
                 USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
@@ -230,6 +291,7 @@ class HIDDeviceUdev final : public IHIDDevice
                 (void*)data
             };
             return ioctl(m_devFd, USBDEVFS_CONTROL, &xfer);
+            */
         }
         return 0;
     }
@@ -241,14 +303,17 @@ public:
       m_devImp(devImp),
       m_devPath(token.getDevicePath())
     {
-        devImp.m_hidDev = this;
+    }
+
+    void _startThread()
+    {
         std::unique_lock<std::mutex> lk(m_initMutex);
-        DeviceToken::DeviceType dType = token.getDeviceType();
-        if (dType == DeviceToken::DeviceType::USB)
+        DeviceType dType = m_token.getDeviceType();
+        if (dType == DeviceType::USB)
             m_thread = std::thread(_threadProcUSBLL, this);
-        else if (dType == DeviceToken::DeviceType::Bluetooth)
+        else if (dType == DeviceType::Bluetooth)
             m_thread = std::thread(_threadProcBTLL, this);
-        else if (dType == DeviceToken::DeviceType::GenericHID)
+        else if (dType == DeviceType::HID)
             m_thread = std::thread(_threadProcHID, this);
         else
         {
@@ -268,9 +333,9 @@ public:
 
 };
 
-IHIDDevice* IHIDDeviceNew(DeviceToken& token, DeviceBase& devImp)
+std::unique_ptr<IHIDDevice> IHIDDeviceNew(DeviceToken& token, DeviceBase& devImp)
 {
-    return new HIDDeviceUdev(token, devImp);
+    return std::make_unique<HIDDeviceUdev>(token, devImp);
 }
 
 }

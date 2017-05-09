@@ -342,8 +342,12 @@ public:
       m_devImp(devImp),
       m_devPath(token.getDevicePath())
     {
+    }
+
+    void _startThread()
+    {
         std::unique_lock<std::mutex> lk(m_initMutex);
-        DeviceType dType = token.getDeviceType();
+        DeviceType dType = m_token.getDeviceType();
         if (dType == DeviceType::USB)
             m_thread = std::thread(_threadProcUSBLL, this);
         else if (dType == DeviceType::Bluetooth)

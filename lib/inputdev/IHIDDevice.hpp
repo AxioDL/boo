@@ -10,11 +10,13 @@ namespace boo
 class IHIDDevice
 {
     friend class DeviceBase;
+    friend struct DeviceSignature;
     virtual void _deviceDisconnected()=0;
     virtual bool _sendUSBInterruptTransfer(const uint8_t* data, size_t length)=0;
     virtual size_t _receiveUSBInterruptTransfer(uint8_t* data, size_t length)=0;
     virtual bool _sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message)=0;
     virtual size_t _receiveHIDReport(uint8_t* data, size_t length, HIDReportType tp, uint32_t message)=0;
+    virtual void _startThread()=0;
 public:
     inline virtual ~IHIDDevice() {}
 };

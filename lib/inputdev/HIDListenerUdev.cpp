@@ -20,12 +20,12 @@ udev* GetUdev()
 class HIDListenerUdev final : public IHIDListener
 {
     DeviceFinder& m_finder;
-    
+
     udev_monitor* m_udevMon;
     std::thread m_udevThread;
     bool m_udevRunning;
     bool m_scanningEnabled;
-    
+
     static void deviceConnected(HIDListenerUdev* listener,
                                 udev_device* device)
     {
@@ -34,11 +34,11 @@ class HIDListenerUdev final : public IHIDListener
 
         /* Filter to USB/BT */
         const char* dt = udev_device_get_devtype(device);
-        DeviceToken::DeviceType type;
+        DeviceType type;
         if (!strcmp(dt, "usb_device"))
-            type = DeviceToken::DeviceType::USB;
+            type = DeviceType::USB;
         else if (!strcmp(dt, "bluetooth_device"))
-            type = DeviceToken::DeviceType::Bluetooth;
+            type = DeviceType::Bluetooth;
         else
             return;
 
@@ -78,38 +78,38 @@ class HIDListenerUdev final : public IHIDListener
         if (producte)
             product = udev_list_entry_get_value(producte);
 
-        if (!listener->m_finder._insertToken(DeviceToken(type, vid, pid, manuf, product, devPath)))
+        if (!listener->m_finder._insertToken(
+            std::make_unique<DeviceToken>(type, vid, pid, manuf, product, devPath)))
         {
             /* Matched-insertion failed; see if generic HID interface is available */
             udev_list_entry* devInterfaces = nullptr;
-            if (type == DeviceToken::DeviceType::USB)
+            if (type == DeviceType::USB)
                 devInterfaces = udev_list_entry_get_by_name(attrs, "ID_USB_INTERFACES");
-            else if (type == DeviceToken::DeviceType::Bluetooth)
+            else if (type == DeviceType::Bluetooth)
                 devInterfaces = udev_list_entry_get_by_name(attrs, "ID_BLUETOOTH_INTERFACES");
             if (devInterfaces)
             {
                 const char* interfacesStr = udev_list_entry_get_value(devInterfaces);
-                if (strstr(interfacesStr, ":030104") || /* HID / GenericDesktop / Joystick */
-                    strstr(interfacesStr, ":030105"))   /* HID / GenericDesktop / Gamepad */
+                if (strstr(interfacesStr, ":03")) /* HID */
                 {
                     udev_enumerate* hidEnum = udev_enumerate_new(UDEV_INST);
                     udev_enumerate_add_match_parent(hidEnum, device);
-                    udev_enumerate_add_match_subsystem(hidEnum, "hid");
+                    udev_enumerate_add_match_subsystem(hidEnum, "hidraw");
                     udev_enumerate_scan_devices(hidEnum);
                     udev_list_entry* hidEnt = udev_enumerate_get_list_entry(hidEnum);
                     if (hidEnt)
                     {
                         const char* hidPath = udev_list_entry_get_name(hidEnt);
                         if (!listener->m_finder._hasToken(hidPath))
-                            listener->m_finder._insertToken(DeviceToken(DeviceToken::DeviceType::GenericHID,
-                                                                         vid, pid, manuf, product, hidPath));
+                            listener->m_finder._insertToken(std::make_unique<DeviceToken>(DeviceType::HID,
+                                                            vid, pid, manuf, product, hidPath));
                     }
                     udev_enumerate_unref(hidEnum);
                 }
             }
         }
     }
-    
+
     static void deviceDisconnected(HIDListenerUdev* listener,
                                    udev_device* device)
     {
@@ -184,7 +184,7 @@ public:
         m_udevRunning = true;
         m_udevThread = std::thread(_udevProc, this);
     }
-    
+
     ~HIDListenerUdev()
     {
         m_udevRunning = false;
@@ -192,7 +192,7 @@ public:
         m_udevThread.join();
         udev_monitor_unref(m_udevMon);
     }
-    
+
     /* Automatic device scanning */
     bool startScanning()
     {
@@ -204,7 +204,7 @@ public:
         m_scanningEnabled = false;
         return true;
     }
-    
+
     /* Manual device scanning */
     bool scanNow()
     {
@@ -227,12 +227,12 @@ public:
         udev_enumerate_unref(uenum);
         return true;
     }
-    
+
 };
 
-IHIDListener* IHIDListenerNew(DeviceFinder& finder)
+std::unique_ptr<IHIDListener> IHIDListenerNew(DeviceFinder& finder)
 {
-    return new HIDListenerUdev(finder);
+    return std::make_unique<HIDListenerUdev>(finder);
 }
 
 }
