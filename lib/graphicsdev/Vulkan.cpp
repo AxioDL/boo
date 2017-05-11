@@ -595,6 +595,7 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
     samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.maxAnisotropy = 1.f;
     ThrowIfFailed(vk::CreateSampler(m_dev, &samplerInfo, nullptr, &m_linearSampler));
 
     /* images */
