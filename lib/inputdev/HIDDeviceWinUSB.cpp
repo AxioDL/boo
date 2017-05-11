@@ -174,6 +174,7 @@ class HIDDeviceWinUSB final : public IHIDDevice
         std::unique_lock<std::mutex> lk(device->m_initMutex);
 
         /* POSIX.. who needs it?? -MS */
+        m_overlapped.hEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
         device->m_hidHandle = CreateFileA(device->m_devPath.c_str(),
                                           GENERIC_WRITE | GENERIC_READ,
                                           FILE_SHARE_WRITE | FILE_SHARE_READ,
@@ -230,6 +231,7 @@ class HIDDeviceWinUSB final : public IHIDDevice
         device->m_devImp.finalCycle();
 
         /* Cleanup */
+        CloseHandle(m_overlapped.hEvent);
         CloseHandle(device->m_hidHandle);
         device->m_hidHandle = nullptr;
     }
@@ -353,45 +355,37 @@ public:
 
     void ReadCycle(uint8_t* inBuffer, size_t inBufferSz)
     {
-        while (true)
+        ResetEvent(m_overlapped.hEvent);
+        ZeroMemory(inBuffer, inBufferSz);
+        DWORD BytesRead = 0;
+        BOOL Result = ReadFile(m_hidHandle, inBuffer, DWORD(inBufferSz), &BytesRead, &m_overlapped);
+        if (!Result)
         {
-            ZeroMemory(inBuffer, inBufferSz);
-            DWORD BytesRead = 0;
-            BOOL Result = ReadFile(m_hidHandle, inBuffer, DWORD(inBufferSz), &BytesRead, &m_overlapped);
-            if (!Result)
+            DWORD Error = GetLastError();
+            if (Error != ERROR_IO_PENDING)
             {
-                DWORD Error = GetLastError();
-                if (Error != ERROR_IO_PENDING)
+                fprintf(stderr, "Read Failed: %08X\n", Error);
+                return;
+            }
+            else
+            {
+                if (!GetOverlappedResult(m_hidHandle, &m_overlapped, &BytesRead, FALSE))
                 {
+                    Error = GetLastError();
+                    if (Error == ERROR_IO_INCOMPLETE)
+                        return;
                     fprintf(stderr, "Read Failed: %08X\n", Error);
                     return;
                 }
-                else
-                {
-                    if (!GetOverlappedResult(m_hidHandle, &m_overlapped, &BytesRead, TRUE))
-                    {
-                        Error = GetLastError();
-                        if (Error == ERROR_IO_INCOMPLETE)
-                            return;
-                        fprintf(stderr, "Read Failed: %08X\n", Error);
-                        return;
-                    }
 
-                    if (m_overlapped.Internal == STATUS_PENDING)
-                    {
-                        //std::cout << "Read Interrupted" << std::endl;
-                        if(!CancelIo(m_hidHandle))
-                        {
-                            Error = GetLastError();
-                            fprintf(stderr, "Cancel IO Failed: %08X\n", Error);
-                        }
-                        return;
-                    }
+                if (WaitForSingleObject(m_overlapped.hEvent, 10) != WAIT_OBJECT_0)
+                {
+                    return;
                 }
             }
-
-            m_devImp.receivedHIDReport(inBuffer, BytesRead, HIDReportType::Input, inBuffer[0]);
         }
+
+        m_devImp.receivedHIDReport(inBuffer, BytesRead, HIDReportType::Input, inBuffer[0]);
     }
 };
 

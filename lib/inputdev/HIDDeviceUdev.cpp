@@ -204,13 +204,20 @@ class HIDDeviceUdev final : public IHIDDevice
         device->m_devImp.initialCycle();
         while (device->m_runningTransferLoop)
         {
-            while (true)
+            fd_set readset;
+            FD_ZERO(&readset);
+            FD_SET(fd, &readset);
+            struct timeval timeout = {0, 10000};
+            if (select(fd + 1, &readset, nullptr, nullptr, &timeout) > 0)
             {
-                ssize_t sz = read(fd, readBuf.get(), readSz);
-                if (sz < 0)
-                    break;
-                device->m_devImp.receivedHIDReport(readBuf.get(), sz,
-                                                   HIDReportType::Input, readBuf[0]);
+                while (true)
+                {
+                    ssize_t sz = read(fd, readBuf.get(), readSz);
+                    if (sz < 0)
+                        break;
+                    device->m_devImp.receivedHIDReport(readBuf.get(), sz,
+                                                       HIDReportType::Input, readBuf[0]);
+                }
             }
             device->m_devImp.transferCycle();
         }
@@ -245,23 +252,6 @@ class HIDDeviceUdev final : public IHIDDevice
                     return false;
                 return true;
             }
-
-            /*
-            usbdevfs_ctrltransfer xfer =
-            {
-                USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
-                0x09, // HID_SET_REPORT
-                message,
-                0,
-                (uint16_t)length,
-                30,
-                (void*)data
-            };
-            int ret = ioctl(m_devFd, USBDEVFS_CONTROL, &xfer);
-            if (ret != (int)length)
-                return false;
-            return true;
-            */
         }
         return false;
     }
@@ -278,20 +268,6 @@ class HIDDeviceUdev final : public IHIDDevice
                     return 0;
                 return length;
             }
-
-            /*
-            usbdevfs_ctrltransfer xfer =
-            {
-                USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
-                0x01, // HID_GET_REPORT
-                message,
-                0,
-                (uint16_t)length,
-                0,
-                (void*)data
-            };
-            return ioctl(m_devFd, USBDEVFS_CONTROL, &xfer);
-            */
         }
         return 0;
     }

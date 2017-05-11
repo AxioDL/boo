@@ -20,8 +20,9 @@ class HIDDeviceIOKit : public IHIDDevice
     IUnknownPointer<IOUSBInterfaceInterface> m_usbIntf;
     uint8_t m_usbIntfInPipe = 0;
     uint8_t m_usbIntfOutPipe = 0;
-    IUnknownPointer<IOHIDDeviceDeviceInterface> m_hidIntf;
+    CFPointer<IOHIDDeviceRef> m_hidIntf;
     bool m_runningTransferLoop = false;
+    bool m_isBt = false;
 
     const std::string& m_devPath;
     std::mutex m_initMutex;
@@ -53,10 +54,11 @@ class HIDDeviceIOKit : public IHIDDevice
 
     bool _sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message)
     {
-        if (m_hidIntf)
+        /* HACK: A bug in IOBluetoothGamepadHIDDriver prevents raw output report transmission
+         * USB driver appears to work correctly */
+        if (m_hidIntf && !m_isBt)
         {
-            IOReturn res = m_hidIntf->setReport(m_hidIntf.storage(), IOHIDReportType(tp), message, data, length,
-                                                1000, nullptr, nullptr, 0);
+            IOReturn res = IOHIDDeviceSetReport(m_hidIntf.get(), IOHIDReportType(tp), message, data, length);
             return res == kIOReturnSuccess;
         }
         return false;
@@ -67,8 +69,7 @@ class HIDDeviceIOKit : public IHIDDevice
         if (m_hidIntf)
         {
             CFIndex readSize = length;
-            IOReturn res = m_hidIntf->getReport(m_hidIntf.storage(), IOHIDReportType(tp), message, data, &readSize,
-                                                1000, nullptr, nullptr, 0);
+            IOReturn res = IOHIDDeviceGetReport(m_hidIntf.get(), IOHIDReportType(tp), message, data, &readSize);
             if (res != kIOReturnSuccess)
                 return 0;
             return readSize;
@@ -231,7 +232,8 @@ class HIDDeviceIOKit : public IHIDDevice
         std::unique_lock<std::mutex> lk(device->m_initMutex);
 
         /* Get the HID element's object (HID device interface) */
-        IOObjectPointer<io_service_t> interfaceEntry = IORegistryEntryFromPath(kIOMasterPortDefault, device->m_devPath.c_str());
+        IOObjectPointer<io_service_t> interfaceEntry =
+            IORegistryEntryFromPath(kIOMasterPortDefault, device->m_devPath.c_str());
         if (!IOObjectConformsTo(interfaceEntry.get(), "IOHIDDevice"))
         {
             snprintf(errStr, 256, "Unable to find interface for %s@%s\n",
@@ -243,29 +245,8 @@ class HIDDeviceIOKit : public IHIDDevice
             return;
         }
 
-        /* IOKit Plugin COM interface (WTF Apple???) */
-        IOCFPluginPointer   iodev;
-        SInt32              score;
-        IOReturn            err;
-        err = IOCreatePlugInInterfaceForService(interfaceEntry.get(),
-                                                kIOHIDDeviceTypeID,
-                                                kIOCFPlugInInterfaceID,
-                                                &iodev,
-                                                &score);
-        if (err)
-        {
-            snprintf(errStr, 256, "Unable to open %s@%s\n",
-                     device->m_token.getProductName().c_str(), device->m_devPath.c_str());
-            device->m_devImp.deviceError(errStr);
-            lk.unlock();
-            device->m_initCond.notify_one();
-            return;
-        }
-
-        /* HID interface function-pointer table */
-        IUnknownPointer<IOHIDDeviceDeviceInterface> intf;
-        err = iodev.As(&intf, kIOHIDDeviceDeviceInterfaceID);
-        if (err)
+        device->m_hidIntf = IOHIDDeviceCreate(nullptr, interfaceEntry.get());
+        if (!device->m_hidIntf)
         {
             snprintf(errStr, 256, "Unable to open %s@%s\n",
                      device->m_token.getProductName().c_str(), device->m_devPath.c_str());
@@ -276,8 +257,7 @@ class HIDDeviceIOKit : public IHIDDevice
         }
 
         /* Open device */
-        device->m_hidIntf = intf;
-        err = intf->open(intf.storage(), kIOHIDOptionsTypeNone);
+        IOReturn err = IOHIDDeviceOpen(device->m_hidIntf.get(), kIOHIDOptionsTypeNone);
         if (err != kIOReturnSuccess)
         {
             if (err == kIOReturnExclusiveAccess)
@@ -297,18 +277,18 @@ class HIDDeviceIOKit : public IHIDDevice
             return;
         }
 
+        /* Make note if device uses bluetooth driver */
+        if (CFTypeRef transport = IOHIDDeviceGetProperty(device->m_hidIntf.get(), CFSTR(kIOHIDTransportKey)))
+            device->m_isBt = CFStringCompare(CFStringRef(transport), CFSTR(kIOHIDTransportBluetoothValue), 0) == kCFCompareEqualTo;
+
         /* Register input buffer */
         std::unique_ptr<uint8_t[]> buffer;
         if (size_t bufSize = device->m_devImp.getInputBufferSize())
         {
             buffer = std::unique_ptr<uint8_t[]>(new uint8_t[bufSize]);
-            CFTypeRef source;
-            device->m_hidIntf->getAsyncEventSource(device->m_hidIntf.storage(), &source);
-            device->m_hidIntf->setInputReportCallback(device->m_hidIntf.storage(), buffer.get(),
-                                                      bufSize, _hidReportCb, &device->m_devImp, 0);
-            CFRunLoopRef rl = CFRunLoopGetCurrent();
-            CFRunLoopAddSource(rl, CFRunLoopSourceRef(source), kCFRunLoopDefaultMode);
-            CFRunLoopWakeUp(rl);
+            IOHIDDeviceRegisterInputReportCallback(device->m_hidIntf.get(), buffer.get(), bufSize,
+                                                   _hidReportCb, &device->m_devImp);
+            IOHIDDeviceScheduleWithRunLoop(device->m_hidIntf.get(), CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
         }
 
         /* Return control to main thread */
@@ -320,14 +300,14 @@ class HIDDeviceIOKit : public IHIDDevice
         device->m_devImp.initialCycle();
         while (device->m_runningTransferLoop)
         {
-            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0, false);
+            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.010, true);
             device->m_devImp.transferCycle();
         }
         device->m_devImp.finalCycle();
 
         /* Cleanup */
-        intf->close(intf.storage(), kIOHIDOptionsTypeNone);
-        device->m_hidIntf = nullptr;
+        IOHIDDeviceClose(device->m_hidIntf.get(), kIOHIDOptionsTypeNone);
+        device->m_hidIntf.reset();
     }
 
     void _deviceDisconnected()
