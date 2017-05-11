@@ -174,7 +174,7 @@ class HIDDeviceWinUSB final : public IHIDDevice
         std::unique_lock<std::mutex> lk(device->m_initMutex);
 
         /* POSIX.. who needs it?? -MS */
-        m_overlapped.hEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+        device->m_overlapped.hEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
         device->m_hidHandle = CreateFileA(device->m_devPath.c_str(),
                                           GENERIC_WRITE | GENERIC_READ,
                                           FILE_SHARE_WRITE | FILE_SHARE_READ,
@@ -231,7 +231,7 @@ class HIDDeviceWinUSB final : public IHIDDevice
         device->m_devImp.finalCycle();
 
         /* Cleanup */
-        CloseHandle(m_overlapped.hEvent);
+        CloseHandle(device->m_overlapped.hEvent);
         CloseHandle(device->m_hidHandle);
         device->m_hidHandle = nullptr;
     }
@@ -367,21 +367,9 @@ public:
                 fprintf(stderr, "Read Failed: %08X\n", Error);
                 return;
             }
-            else
+            else if (!GetOverlappedResultEx(m_hidHandle, &m_overlapped, &BytesRead, 10, TRUE))
             {
-                if (!GetOverlappedResult(m_hidHandle, &m_overlapped, &BytesRead, FALSE))
-                {
-                    Error = GetLastError();
-                    if (Error == ERROR_IO_INCOMPLETE)
-                        return;
-                    fprintf(stderr, "Read Failed: %08X\n", Error);
-                    return;
-                }
-
-                if (WaitForSingleObject(m_overlapped.hEvent, 10) != WAIT_OBJECT_0)
-                {
-                    return;
-                }
+                return;
             }
         }
 
