@@ -32,23 +32,67 @@ class HIDListenerUdev final : public IHIDListener
         if (!listener->m_scanningEnabled)
             return;
 
-        /* Filter to USB/BT */
-        const char* dt = udev_device_get_devtype(device);
-        DeviceType type;
-        if (!strcmp(dt, "usb_device"))
-            type = DeviceType::USB;
-        else if (!strcmp(dt, "bluetooth_device"))
-            type = DeviceType::Bluetooth;
-        else
-            return;
-
         /* Prevent redundant registration */
         const char* devPath = udev_device_get_syspath(device);
         if (listener->m_finder._hasToken(devPath))
             return;
 
+        /* Filter to USB/BT */
+        const char* dt = udev_device_get_devtype(device);
+        DeviceType type;
         int vid = 0, pid = 0;
-        udev_list_entry* attrs = udev_device_get_properties_list_entry(device);
+        const char* manuf = nullptr;
+        const char* product = nullptr;
+        if (dt)
+        {
+            if (!strcmp(dt, "usb_device"))
+                type = DeviceType::USB;
+            else if (!strcmp(dt, "bluetooth_device"))
+                type = DeviceType::Bluetooth;
+            else
+                return;
+
+            udev_list_entry* attrs = udev_device_get_properties_list_entry(device);
+            udev_list_entry* vide = udev_list_entry_get_by_name(attrs, "ID_VENDOR_ID");
+            if (vide)
+                vid = strtol(udev_list_entry_get_value(vide), nullptr, 16);
+
+            udev_list_entry* pide = udev_list_entry_get_by_name(attrs, "ID_MODEL_ID");
+            if (pide)
+                pid = strtol(udev_list_entry_get_value(pide), nullptr, 16);
+
+            udev_list_entry* manufe = udev_list_entry_get_by_name(attrs, "ID_VENDOR");
+            if (manufe)
+                manuf = udev_list_entry_get_value(manufe);
+
+            udev_list_entry* producte = udev_list_entry_get_by_name(attrs, "ID_MODEL");
+            if (producte)
+                product = udev_list_entry_get_value(producte);
+        }
+        else if (!strcmp(udev_device_get_subsystem(device), "hidraw"))
+        {
+            type = DeviceType::HID;
+            udev_device* parent = udev_device_get_parent(device);
+            udev_list_entry* attrs = udev_device_get_properties_list_entry(parent);
+
+            udev_list_entry* hidide = udev_list_entry_get_by_name(attrs, "HID_ID");
+            if (hidide)
+            {
+                const char* hidid = udev_list_entry_get_value(hidide);
+                const char* vids = strchr(hidid, ':') + 1;
+                const char* pids = strchr(vids, ':') + 1;
+                vid = strtol(vids, nullptr, 16);
+                pid = strtol(pids, nullptr, 16);
+            }
+
+            udev_list_entry* hidnamee = udev_list_entry_get_by_name(attrs, "HID_NAME");
+            if (hidnamee)
+            {
+                product = udev_list_entry_get_value(hidnamee);
+                manuf = product;
+            }
+        }
+
 #if 0
         udev_list_entry* att = nullptr;
         udev_list_entry_foreach(att, attrs)
@@ -60,54 +104,8 @@ class HIDListenerUdev final : public IHIDListener
         fprintf(stderr, "\n\n");
 #endif
 
-        udev_list_entry* vide = udev_list_entry_get_by_name(attrs, "ID_VENDOR_ID");
-        if (vide)
-            vid = strtol(udev_list_entry_get_value(vide), nullptr, 16);
-
-        udev_list_entry* pide = udev_list_entry_get_by_name(attrs, "ID_MODEL_ID");
-        if (pide)
-            pid = strtol(udev_list_entry_get_value(pide), nullptr, 16);
-
-        const char* manuf = nullptr;
-        udev_list_entry* manufe = udev_list_entry_get_by_name(attrs, "ID_VENDOR");
-        if (manufe)
-            manuf = udev_list_entry_get_value(manufe);
-
-        const char* product = nullptr;
-        udev_list_entry* producte = udev_list_entry_get_by_name(attrs, "ID_MODEL");
-        if (producte)
-            product = udev_list_entry_get_value(producte);
-
-        if (!listener->m_finder._insertToken(
-            std::make_unique<DeviceToken>(type, vid, pid, manuf, product, devPath)))
-        {
-            /* Matched-insertion failed; see if generic HID interface is available */
-            udev_list_entry* devInterfaces = nullptr;
-            if (type == DeviceType::USB)
-                devInterfaces = udev_list_entry_get_by_name(attrs, "ID_USB_INTERFACES");
-            else if (type == DeviceType::Bluetooth)
-                devInterfaces = udev_list_entry_get_by_name(attrs, "ID_BLUETOOTH_INTERFACES");
-            if (devInterfaces)
-            {
-                const char* interfacesStr = udev_list_entry_get_value(devInterfaces);
-                if (strstr(interfacesStr, ":03")) /* HID */
-                {
-                    udev_enumerate* hidEnum = udev_enumerate_new(UDEV_INST);
-                    udev_enumerate_add_match_parent(hidEnum, device);
-                    udev_enumerate_add_match_subsystem(hidEnum, "hidraw");
-                    udev_enumerate_scan_devices(hidEnum);
-                    udev_list_entry* hidEnt = udev_enumerate_get_list_entry(hidEnum);
-                    if (hidEnt)
-                    {
-                        const char* hidPath = udev_list_entry_get_name(hidEnt);
-                        if (!listener->m_finder._hasToken(hidPath))
-                            listener->m_finder._insertToken(std::make_unique<DeviceToken>(DeviceType::HID,
-                                                            vid, pid, manuf, product, hidPath));
-                    }
-                    udev_enumerate_unref(hidEnum);
-                }
-            }
-        }
+        listener->m_finder._insertToken(
+            std::make_unique<DeviceToken>(type, vid, pid, manuf, product, devPath));
     }
 
     static void deviceDisconnected(HIDListenerUdev* listener,
@@ -210,9 +208,8 @@ public:
     {
         udev_enumerate* uenum = udev_enumerate_new(GetUdev());
         udev_enumerate_add_match_subsystem(uenum, "usb");
-        udev_enumerate_add_match_property(uenum, "DEVTYPE", "usb_device");
         udev_enumerate_add_match_subsystem(uenum, "bluetooth");
-        udev_enumerate_add_match_property(uenum, "DEVTYPE", "bluetooth_device");
+        udev_enumerate_add_match_subsystem(uenum, "hidraw");
         udev_enumerate_scan_devices(uenum);
         udev_list_entry* uenumList = udev_enumerate_get_list_entry(uenum);
         udev_list_entry* uenumItem;

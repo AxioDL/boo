@@ -78,7 +78,7 @@ class HIDDeviceUdev final : public IHIDDevice
 
     static void _threadProcUSBLL(HIDDeviceUdev* device)
     {
-        unsigned i;
+        int i;
         char errStr[256];
         std::unique_lock<std::mutex> lk(device->m_initMutex);
         udev_device* udevDev = udev_device_new_from_syspath(GetUdev(), device->m_devPath.c_str());
