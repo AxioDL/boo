@@ -130,7 +130,7 @@ make_exist (HAVE_SINGLE_PRECISION HAVE_DOUBLE_PRECISION HAVE_AVFFT)
 # Compiler configuration:
 
 if (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX)
-  set (PROJECT_CXX_FLAGS "-Wconversion -Wall -W -pedantic -Wundef -Wcast-align -Wpointer-arith -Wno-long-long")
+  set (PROJECT_CXX_FLAGS "-Wconversion -Wall -W -Wundef -Wcast-align -Wpointer-arith -Wno-long-long")
   set (PROJECT_C_FLAGS "${PROJECT_CXX_FLAGS} -Wnested-externs -Wmissing-prototypes -Wstrict-prototypes")
   if (CMAKE_BUILD_TYPE STREQUAL "Release")
     set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -s") # strip
