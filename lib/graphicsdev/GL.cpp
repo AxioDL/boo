@@ -1519,7 +1519,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 b->m_buf->update(m_completeBuf);
         }
         datalk.unlock();
-        //glFlush();
+        glFlush();
 
         for (auto& p : m_pendingPosts1)
             m_pendingPosts2.push_back(std::move(p));
