@@ -1014,6 +1014,12 @@ public:
         m_callback = cb;
     }
 
+    void closeWindow()
+    {
+        // TODO: Perform thread-coalesced deallocation
+        ShowWindow(m_hwnd, SW_HIDE);
+    }
+
     void showWindow()
     {
         ShowWindow(m_hwnd, SW_SHOW);
@@ -1579,10 +1585,10 @@ public:
 
 };
 
-IWindow* _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx,
-                         void* vulkanHandle, uint32_t sampleCount)
+std::shared_ptr<IWindow> _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx,
+                                         void* vulkanHandle, uint32_t sampleCount)
 {
-    return new WindowWin32(title, d3dCtx, vulkanHandle, sampleCount);
+    return std::make_shared<WindowWin32>(title, d3dCtx, vulkanHandle, sampleCount);
 }
 
 }

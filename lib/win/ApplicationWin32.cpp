@@ -69,8 +69,8 @@ namespace boo
 static logvisor::Module Log("boo::ApplicationWin32");
 Win32Cursors WIN32_CURSORS;
 
-IWindow* _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx,
-                         void* vulkanHandle, uint32_t sampleCount);
+std::shared_ptr<IWindow> _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx,
+                                         void* vulkanHandle, uint32_t sampleCount);
 
 class ApplicationWin32 final : public IApplication
 {
@@ -79,7 +79,7 @@ class ApplicationWin32 final : public IApplication
     const SystemString m_friendlyName;
     const SystemString m_pname;
     const std::vector<SystemString> m_args;
-    std::unordered_map<HWND, IWindow*> m_allWindows;
+    std::unordered_map<HWND, std::weak_ptr<IWindow>> m_allWindows;
     bool m_singleInstance;
 
     Boo3DAppContext m_3dCtx;
@@ -314,7 +314,14 @@ public:
     LRESULT winHwndHandler(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         /* Lookup boo window instance */
-        IWindow* window = m_allWindows[hwnd];
+        auto search = m_allWindows.find(hwnd);
+        if (search == m_allWindows.end())
+            return 0;
+
+        std::shared_ptr<IWindow> window = search->second.lock();
+        if (!window)
+            return 0;
+
         switch (uMsg)
         {
             case WM_CREATE:
@@ -347,7 +354,10 @@ public:
             case WM_MOUSEHWHEEL:
             case WM_CHAR:
             case WM_UNICHAR:
-                window->_incomingEvent(&HWNDEvent(uMsg, wParam, lParam));
+            {
+                HWNDEvent eventData(uMsg, wParam, lParam);
+                window->_incomingEvent(&eventData);
+            }
 
             default:
                 return DefWindowProc(hwnd, uMsg, wParam, lParam);
@@ -437,8 +447,8 @@ public:
 
     std::mutex m_nwmt;
     std::condition_variable m_nwcv;
-    IWindow* m_mwret = nullptr;
-    IWindow* newWindow(const SystemString& title, uint32_t sampleCount)
+    std::shared_ptr<IWindow> m_mwret;
+    std::shared_ptr<IWindow> newWindow(const SystemString& title, uint32_t sampleCount)
     {
         if (GetCurrentThreadId() != g_mainThreadId)
         {
@@ -446,13 +456,15 @@ public:
             if (!PostThreadMessage(g_mainThreadId, WM_USER, WPARAM(&title), 0))
                 Log.report(logvisor::Fatal, "PostThreadMessage error");
             m_nwcv.wait(lk);
-            return m_mwret;
+            std::shared_ptr<IWindow> ret = std::move(m_mwret);
+            m_mwret.reset();
+            return ret;
         }
 
 #if BOO_HAS_VULKAN
-        IWindow* window = _WindowWin32New(title, m_3dCtx, m_getVkProc, sampleCount);
+        std::shared_ptr<IWindow> window = _WindowWin32New(title, m_3dCtx, m_getVkProc, sampleCount);
 #else
-        IWindow* window = _WindowWin32New(title, m_3dCtx, nullptr, sampleCount);
+        std::shared_ptr<IWindow> window = _WindowWin32New(title, m_3dCtx, nullptr, sampleCount);
 #endif
 
         HWND hwnd = HWND(window->getPlatformHandle());
