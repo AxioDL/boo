@@ -1070,6 +1070,14 @@ public:
     {
         m_callback = cb;
     }
+
+    void closeWindow()
+    {
+        // TODO: Free window resources and prevent further access
+        XLockDisplay(m_xDisp);
+        XUnmapWindow(m_xDisp, m_windowId);
+        XUnlockDisplay(m_xDisp);
+    }
     
     void showWindow()
     {
@@ -1980,14 +1988,15 @@ public:
     }
 };
 
-IWindow* _WindowXlibNew(const std::string& title,
-                        Display* display, void* xcbConn,
-                        int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
-                        GLXContext lastCtx, void* vulkanHandle, uint32_t drawSamples)
+std::shared_ptr<IWindow> _WindowXlibNew(const std::string& title,
+                         Display* display, void* xcbConn,
+                         int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
+                         GLXContext lastCtx, void* vulkanHandle, uint32_t drawSamples)
 {
     XLockDisplay(display);
-    IWindow* ret = new WindowXlib(title, display, xcbConn, defaultScreen, xIM,
-                                  bestInputStyle, fontset, lastCtx, vulkanHandle, drawSamples);
+    std::shared_ptr<IWindow> ret = std::make_shared<WindowXlib>(title, display, xcbConn,
+                                   defaultScreen, xIM, bestInputStyle, fontset, lastCtx,
+                                   vulkanHandle, drawSamples);
     XUnlockDisplay(display);
     return ret;
 }

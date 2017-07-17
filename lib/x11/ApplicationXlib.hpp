@@ -114,10 +114,10 @@ static Window GetWindowOfEvent(XEvent* event, bool& windowEvent)
     return 0;
 }
     
-IWindow* _WindowXlibNew(const std::string& title,
-                        Display* display, void* xcbConn,
-                        int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
-                        GLXContext lastCtx, void* vulkanHandle, uint32_t drawSamples);
+std::shared_ptr<IWindow> _WindowXlibNew(const std::string& title,
+                         Display* display, void* xcbConn,
+                         int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
+                         GLXContext lastCtx, void* vulkanHandle, uint32_t drawSamples);
 
 static XIMStyle ChooseBetterStyle(XIMStyle style1, XIMStyle style2)
 {
@@ -168,7 +168,7 @@ class ApplicationXlib final : public IApplication
     DBusConnection* m_dbus = nullptr;
 
     /* All windows */
-    std::unordered_map<Window, IWindow*> m_windows;
+    std::unordered_map<Window, std::weak_ptr<IWindow>> m_windows;
 
     Display* m_xDisp = nullptr;
     XIM m_xIM = nullptr;
@@ -467,7 +467,8 @@ public:
                     {
                         auto window = m_windows.find(evWindow);
                         if (window != m_windows.end())
-                            window->second->_incomingEvent(&event);
+                            if (std::shared_ptr<IWindow> w = window->second.lock())
+                                w->_incomingEvent(&event);
                     }
                 }
                 XUnlockDisplay(m_xDisp);
@@ -525,14 +526,14 @@ public:
         return m_args;
     }
     
-    IWindow* newWindow(const std::string& title, uint32_t drawSamples)
+    std::shared_ptr<IWindow> newWindow(const std::string& title, uint32_t drawSamples)
     {
 #if BOO_HAS_VULKAN
-        IWindow* newWindow = _WindowXlibNew(title, m_xDisp, m_xcbConn, m_xDefaultScreen, m_xIM,
-                                            m_bestStyle, m_fontset, m_lastGlxCtx, (void*)m_getVkProc, drawSamples);
+        std::shared_ptr<IWindow> newWindow = _WindowXlibNew(title, m_xDisp, m_xcbConn, m_xDefaultScreen, m_xIM,
+                                             m_bestStyle, m_fontset, m_lastGlxCtx, (void*)m_getVkProc, drawSamples);
 #else
-        IWindow* newWindow = _WindowXlibNew(title, m_xDisp, nullptr, m_xDefaultScreen, m_xIM,
-                                            m_bestStyle, m_fontset, m_lastGlxCtx, nullptr, drawSamples);
+        std::shared_ptr<IWindow> newWindow = _WindowXlibNew(title, m_xDisp, nullptr, m_xDefaultScreen, m_xIM,
+                                             m_bestStyle, m_fontset, m_lastGlxCtx, nullptr, drawSamples);
 #endif
         m_windows[(Window)newWindow->getPlatformHandle()] = newWindow;
         return newWindow;

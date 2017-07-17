@@ -10,7 +10,7 @@ DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
 namespace boo
 {
     
-IWindow* _WindowWaylandNew(const std::string& title);
+std::shared_ptr<IWindow> _WindowWaylandNew(const std::string& title);
     
 class ApplicationWayland final : public IApplication
 {
@@ -71,7 +71,7 @@ public:
         return m_args;
     }
     
-    IWindow* newWindow(const std::string& title, uint32_t drawSamples)
+    std::shared_ptr<IWindow> newWindow(const std::string& title, uint32_t drawSamples)
     {
         return _WindowWaylandNew(title);
     }

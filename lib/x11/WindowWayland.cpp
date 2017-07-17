@@ -109,6 +109,11 @@ struct WindowWayland : IWindow
     {
         
     }
+
+    void closeWindow()
+    {
+
+    }
     
     void showWindow()
     {
@@ -239,9 +244,9 @@ struct WindowWayland : IWindow
 
 };
 
-IWindow* _WindowWaylandNew(const std::string& title)
+std::shared_ptr<IWindow> _WindowWaylandNew(const std::string& title)
 {
-    return new WindowWayland(title);
+    return std::make_shared<WindowWayland>(title);
 }
     
 }
