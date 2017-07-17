@@ -254,14 +254,15 @@ enum class EClipboardType
     PNGImage   = 3
 };
 
-class IWindow
+class IWindow : public std::enable_shared_from_this<IWindow>
 {
 public:
     
-    virtual ~IWindow() {}
+    virtual ~IWindow() = default;
     
     virtual void setCallback(IWindowCallback* cb)=0;
-    
+
+    virtual void closeWindow()=0;
     virtual void showWindow()=0;
     virtual void hideWindow()=0;
     

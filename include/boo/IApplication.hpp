@@ -51,7 +51,7 @@ public:
     virtual const std::vector<SystemString>& getArgs() const=0;
     
     /* Constructors/initializers for sub-objects */
-    virtual IWindow* newWindow(const SystemString& title, uint32_t drawSamples)=0;
+    virtual std::shared_ptr<IWindow> newWindow(const SystemString& title, uint32_t drawSamples)=0;
     
 };
 

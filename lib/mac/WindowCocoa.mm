@@ -17,10 +17,10 @@
 namespace boo {class WindowCocoa; class GraphicsContextCocoa;}
 @interface WindowCocoaInternal : NSWindow
 {
-    boo::WindowCocoa* booWindow;
+    std::shared_ptr<boo::WindowCocoa> booWindow;
     id touchBarProvider;
 }
-- (id)initWithBooWindow:(boo::WindowCocoa*)bw title:(const std::string&)title;
+- (id)initWithBooWindow:(std::shared_ptr<boo::WindowCocoa>&)bw title:(const std::string&)title;
 - (void)setFrameDefault;
 - (NSRect)genFrameDefault;
 - (void)setTouchBarProvider:(id)provider;
@@ -218,6 +218,7 @@ public:
         m_dataFactory->destroyAllData();
         delete m_commandQueue;
         delete m_dataFactory;
+        printf("CONTEXT DESTROYED\n");
     }
 
     void _setCallback(IWindowCallback* cb)
@@ -1266,19 +1267,19 @@ static NSString* ClipboardTypes[] =
 
 class WindowCocoa : public IWindow
 {
-
     WindowCocoaInternal* m_nsWindow;
     GraphicsContextCocoa* m_gfxCtx;
     EMouseCursor m_cursor = EMouseCursor::None;
-    bool m_closed = false;
 
 public:
 
-    WindowCocoa(const std::string& title, NSOpenGLContext* lastGLCtx, MetalContext* metalCtx, uint32_t sampleCount)
+    void setup(const std::string& title, NSOpenGLContext* lastGLCtx, MetalContext* metalCtx, uint32_t sampleCount)
     {
         dispatch_sync(dispatch_get_main_queue(),
         ^{
-            m_nsWindow = [[WindowCocoaInternal alloc] initWithBooWindow:this title:title];
+            std::shared_ptr<boo::WindowCocoa> windowPtr =
+                std::static_pointer_cast<boo::WindowCocoa>(shared_from_this());
+            m_nsWindow = [[WindowCocoaInternal alloc] initWithBooWindow:windowPtr title:title];
 #if BOO_HAS_METAL
             if (metalCtx->m_dev)
                 m_gfxCtx = static_cast<GraphicsContextCocoa*>(_GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI::Metal,
@@ -1293,20 +1294,25 @@ public:
 
     void _clearWindow()
     {
-        m_closed = true;
+        m_nsWindow = nullptr;
     }
 
     ~WindowCocoa()
     {
-        if (!m_closed)
-            [m_nsWindow orderOut:nil];
-        delete m_gfxCtx;
         APP->_deletedWindow(this);
     }
 
     void setCallback(IWindowCallback* cb)
     {
         m_gfxCtx->_setCallback(cb);
+    }
+
+    void closeWindow()
+    {
+        dispatch_sync(dispatch_get_main_queue(),
+        ^{
+            [m_nsWindow close];
+        });
     }
 
     void showWindow()
@@ -1332,13 +1338,10 @@ public:
 
     void setTitle(const std::string& title)
     {
-        if (!m_closed)
-        {
-            dispatch_sync(dispatch_get_main_queue(),
-            ^{
-                [m_nsWindow setTitle:[NSString stringWithUTF8String:title.c_str()]];
-            });
-        }
+        dispatch_sync(dispatch_get_main_queue(),
+        ^{
+            [m_nsWindow setTitle:[NSString stringWithUTF8String:title.c_str()]];
+        });
     }
 
     void setCursor(EMouseCursor cursor)
@@ -1555,16 +1558,18 @@ public:
 
 };
 
-IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx,
-                         MetalContext* metalCtx, uint32_t sampleCount)
+std::shared_ptr<IWindow> _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx,
+                                         MetalContext* metalCtx, uint32_t sampleCount)
 {
-    return new WindowCocoa(title, lastGLCtx, metalCtx, sampleCount);
+    auto ret = std::make_shared<WindowCocoa>();
+    ret->setup(title, lastGLCtx, metalCtx, sampleCount);
+    return ret;
 }
 
 }
 
 @implementation WindowCocoaInternal
-- (id)initWithBooWindow:(boo::WindowCocoa *)bw title:(const boo::SystemString&)title
+- (id)initWithBooWindow:(std::shared_ptr<boo::WindowCocoa>&)bw title:(const boo::SystemString&)title
 {
     self = [self initWithContentRect:[self genFrameDefault]
                            styleMask:NSWindowStyleMaskTitled|
@@ -1603,8 +1608,8 @@ IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx,
 }
 - (void)close
 {
-    booWindow->_clearWindow();
     [super close];
+    booWindow->_clearWindow();
 }
 - (BOOL)acceptsFirstResponder
 {

@@ -202,7 +202,7 @@ struct CTestWindowCallback : IWindowCallback
 
 struct TestApplicationCallback : IApplicationCallback
 {
-    IWindow* mainWindow;
+    std::shared_ptr<IWindow> mainWindow;
     boo::TestDeviceFinder devFinder;
     CTestWindowCallback windowCallback;
     bool running = true;

@@ -11,6 +11,12 @@
 #error ARC Required
 #endif
 
+/* If set, application will terminate once client thread reaches end;
+ * main() will not get back control. Otherwise, main will get back control
+ * but App will not terminate in the normal Cocoa manner (possibly resulting
+ * in CoreAnimation warnings). */
+#define COCOA_TERMINATE 1
+
 namespace boo {class ApplicationCocoa;}
 @interface AppDelegate : NSObject <NSApplicationDelegate>
 {
@@ -24,8 +30,8 @@ namespace boo
 {
 static logvisor::Module Log("boo::ApplicationCocoa");
 
-IWindow* _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx,
-                         MetalContext* metalCtx, uint32_t sampleCount);
+std::shared_ptr<IWindow> _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx,
+                                         MetalContext* metalCtx, uint32_t sampleCount);
 
 class ApplicationCocoa : public IApplication
 {
@@ -41,7 +47,7 @@ private:
     NSPanel* aboutPanel;
 
     /* All windows */
-    std::unordered_map<uintptr_t, IWindow*> m_windows;
+    std::unordered_map<uintptr_t, std::weak_ptr<IWindow>> m_windows;
 
     MetalContext m_metalCtx;
 
@@ -108,6 +114,7 @@ public:
 
     std::thread m_clientThread;
     int m_clientReturn = 0;
+    bool m_terminateNow = false;
     int run()
     {
         /* Spawn client thread */
@@ -118,11 +125,30 @@ public:
             /* Run app */
             m_clientReturn = m_callback.appMain(this);
 
-            /* Cleanup here */
-            std::vector<std::unique_ptr<IWindow>> toDelete;
-            toDelete.reserve(m_windows.size());
-            for (auto& window : m_windows)
-                toDelete.emplace_back(window.second);
+            /* Cleanup */
+            for (auto& w : m_windows)
+                if (std::shared_ptr<IWindow> window = w.second.lock())
+                    window->closeWindow();
+
+#if COCOA_TERMINATE
+            /* Continue termination */
+            dispatch_sync(dispatch_get_main_queue(),
+            ^{
+                /* Ends modal run loop and continues Cocoa termination */
+                [[NSApplication sharedApplication] replyToApplicationShouldTerminate:YES];
+
+                /* If this is reached, application didn't spawn any windows
+                 * and must be explicitly terminated */
+                m_terminateNow = true;
+                [[NSApplication sharedApplication] terminate:nil];
+            });
+#else
+            /* Return control to main() */
+            dispatch_sync(dispatch_get_main_queue(),
+            ^{
+                [[NSApplication sharedApplication] stop:nil];
+            });
+#endif
         });
 
         /* Already in Cocoa's event loop; return now */
@@ -154,9 +180,9 @@ public:
         return m_args;
     }
 
-    IWindow* newWindow(const std::string& title, uint32_t sampleCount)
+    std::shared_ptr<IWindow> newWindow(const std::string& title, uint32_t sampleCount)
     {
-        IWindow* newWindow = _WindowCocoaNew(title, m_lastGLCtx, &m_metalCtx, sampleCount);
+        auto newWindow = _WindowCocoaNew(title, m_lastGLCtx, &m_metalCtx, sampleCount);
         m_windows[newWindow->getPlatformHandle()] = newWindow;
         return newWindow;
     }
@@ -187,10 +213,14 @@ int ApplicationRun(IApplication::EPlatformType platform,
             if (platform != IApplication::EPlatformType::Cocoa &&
                 platform != IApplication::EPlatformType::Auto)
                 return 1;
+            /* Never deallocated to ensure window destructors have access */
             APP = new ApplicationCocoa(cb, uniqueName, friendlyName, pname, args);
         }
         [[NSApplication sharedApplication] run];
-        return static_cast<ApplicationCocoa*>(APP)->m_clientReturn;
+        ApplicationCocoa* appCocoa = static_cast<ApplicationCocoa*>(APP);
+        if (appCocoa->m_clientThread.joinable())
+            appCocoa->m_clientThread.join();
+        return appCocoa->m_clientReturn;
     }
 }
 
@@ -208,12 +238,23 @@ int ApplicationRun(IApplication::EPlatformType platform,
     (void)notification;
     m_app->run();
 }
-- (void)applicationWillTerminate:(NSNotification*)notification
+#if COCOA_TERMINATE
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication*)app
 {
-    (void)notification;
+    (void)app;
+    if (m_app->m_terminateNow)
+        return NSTerminateNow;
     m_app->m_callback.appQuitting(m_app);
-    m_app->m_clientThread.join();
+    return NSTerminateLater;
 }
+#else
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication*)app
+{
+    (void)app;
+    m_app->m_callback.appQuitting(m_app);
+    return NSTerminateCancel;
+}
+#endif
 - (BOOL)application:(NSApplication*)sender openFile:(NSString*)filename
 {
     std::vector<boo::SystemString> strVec;
