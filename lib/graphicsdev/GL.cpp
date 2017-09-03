@@ -503,6 +503,9 @@ public:
             case ZTest::Greater:
                 glDepthFunc(GL_GREATER);
                 break;
+            case ZTest::GEqual:
+                glDepthFunc(GL_GEQUAL);
+                break;
             case ZTest::Equal:
                 glDepthFunc(GL_EQUAL);
                 break;

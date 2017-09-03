@@ -720,6 +720,9 @@ class D3D12ShaderPipeline : public IShaderPipeline
         case ZTest::Greater:
             desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
             break;
+        case ZTest::GEqual:
+            desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+            break;
         case ZTest::Equal:
             desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_EQUAL;
             break;

@@ -656,6 +656,9 @@ class MetalShaderPipeline : public IShaderPipeline
         case ZTest::Greater:
             dsDesc.depthCompareFunction = MTLCompareFunctionLess;
             break;
+        case ZTest::GEqual:
+            dsDesc.depthCompareFunction = MTLCompareFunctionLessEqual;
+            break;
         case ZTest::Equal:
             dsDesc.depthCompareFunction = MTLCompareFunctionEqual;
             break;

@@ -564,6 +564,9 @@ class D3D11ShaderPipeline : public IShaderPipeline
         case ZTest::Greater:
             dsDesc.DepthFunc = D3D11_COMPARISON_LESS;
             break;
+        case ZTest::GEqual:
+            dsDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+            break;
         case ZTest::Equal:
             dsDesc.DepthFunc = D3D11_COMPARISON_EQUAL;
             break;

@@ -198,6 +198,7 @@ enum class ZTest
     None,
     LEqual, /* Flipped on Vulkan, D3D, Metal */
     Greater,
+    GEqual,
     Equal
 };
 
