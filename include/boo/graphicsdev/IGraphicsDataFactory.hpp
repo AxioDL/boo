@@ -216,7 +216,10 @@ enum class BlendFactor
     DstAlpha,
     InvDstAlpha,
     SrcColor1,
-    InvSrcColor1
+    InvSrcColor1,
+
+    /* Special value that activates DstColor - SrcColor blending */
+    Subtract
 };
 
 /** Factory object for creating batches of resources as an IGraphicsData token */

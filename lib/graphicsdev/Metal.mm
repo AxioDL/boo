@@ -631,8 +631,18 @@ class MetalShaderPipeline : public IShaderPipeline
         desc.colorAttachments[0].writeMask = (colorWrite ? COLOR_WRITE_MASK : 0) |
                                              (alphaWrite ? MTLColorWriteMaskAlpha : 0);
         desc.colorAttachments[0].blendingEnabled = dstFac != BlendFactor::Zero;
-        desc.colorAttachments[0].sourceRGBBlendFactor = BLEND_FACTOR_TABLE[int(srcFac)];
-        desc.colorAttachments[0].destinationRGBBlendFactor = BLEND_FACTOR_TABLE[int(dstFac)];
+        if (srcFac == BlendFactor::Subtract || dstFac == BlendFactor::Subtract)
+        {
+            desc.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorDestinationColor;
+            desc.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorSourceColor;
+            desc.colorAttachments[0].rgbBlendOperation = MTLBlendOperationSubtract;
+        }
+        else
+        {
+            desc.colorAttachments[0].sourceRGBBlendFactor = BLEND_FACTOR_TABLE[int(srcFac)];
+            desc.colorAttachments[0].destinationRGBBlendFactor = BLEND_FACTOR_TABLE[int(dstFac)];
+            desc.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+        }
         desc.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
         desc.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorZero;
         desc.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;

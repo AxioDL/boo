@@ -1988,8 +1988,18 @@ class VulkanShaderPipeline : public IShaderPipeline
 
         VkPipelineColorBlendAttachmentState colorAttachment = {};
         colorAttachment.blendEnable = dstFac != BlendFactor::Zero;
-        colorAttachment.srcColorBlendFactor = BLEND_FACTOR_TABLE[int(srcFac)];
-        colorAttachment.dstColorBlendFactor = BLEND_FACTOR_TABLE[int(dstFac)];
+        if (srcFac == BlendFactor::Subtract || dstFac == BlendFactor::Subtract)
+        {
+            colorAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_DST_COLOR;
+            colorAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_SRC_COLOR;
+            colorAttachment.colorBlendOp = VK_BLEND_OP_SUBTRACT;
+        }
+        else
+        {
+            colorAttachment.srcColorBlendFactor = BLEND_FACTOR_TABLE[int(srcFac)];
+            colorAttachment.dstColorBlendFactor = BLEND_FACTOR_TABLE[int(dstFac)];
+            colorAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+        }
         colorAttachment.colorBlendOp = VK_BLEND_OP_ADD;
         colorAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
         colorAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;

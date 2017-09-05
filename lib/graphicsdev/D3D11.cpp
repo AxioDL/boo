@@ -575,8 +575,18 @@ class D3D11ShaderPipeline : public IShaderPipeline
 
         CD3D11_BLEND_DESC blDesc(D3D11_DEFAULT);
         blDesc.RenderTarget[0].BlendEnable = (dstFac != BlendFactor::Zero);
-        blDesc.RenderTarget[0].SrcBlend = BLEND_FACTOR_TABLE[int(srcFac)];
-        blDesc.RenderTarget[0].DestBlend = BLEND_FACTOR_TABLE[int(dstFac)];
+        if (srcFac == BlendFactor::Subtract || dstFac == BlendFactor::Subtract)
+        {
+            blDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_DEST_COLOR;
+            blDesc.RenderTarget[0].DestBlend = D3D11_BLEND_SRC_COLOR;
+            blDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_SUBTRACT;
+        }
+        else
+        {
+            blDesc.RenderTarget[0].SrcBlend = BLEND_FACTOR_TABLE[int(srcFac)];
+            blDesc.RenderTarget[0].DestBlend = BLEND_FACTOR_TABLE[int(dstFac)];
+            blDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+        }
         blDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
         blDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
         blDesc.RenderTarget[0].RenderTargetWriteMask =

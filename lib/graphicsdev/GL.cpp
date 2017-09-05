@@ -451,6 +451,7 @@ class GLShaderPipeline : public IShaderPipeline
     bool m_depthWrite = true;
     bool m_colorWrite = true;
     bool m_alphaWrite = true;
+    bool m_subtractBlend = false;
     CullMode m_culling;
     std::vector<GLint> m_uniLocs;
     GLShaderPipeline(GLData* parent) : IShaderPipeline(parent) {}
@@ -472,6 +473,7 @@ public:
         m_depthWrite = other.m_depthWrite;
         m_colorWrite = other.m_colorWrite;
         m_alphaWrite = other.m_alphaWrite;
+        m_subtractBlend = other.m_subtractBlend;
         m_culling = other.m_culling;
         m_uniLocs = std::move(other.m_uniLocs);
         return *this;
@@ -487,6 +489,10 @@ public:
         {
             glEnable(GL_BLEND);
             glBlendFuncSeparate(m_sfactor, m_dfactor, GL_ONE, GL_ZERO);
+            if (m_subtractBlend)
+                glBlendEquation(GL_FUNC_SUBTRACT);
+            else
+                glBlendEquation(GL_FUNC_ADD);
         }
         else
             glDisable(GL_BLEND);
@@ -688,8 +694,19 @@ IShaderPipeline* GLDataFactory::Context::newShaderPipeline
         }
     }
 
-    shader.m_sfactor = BLEND_FACTOR_TABLE[int(srcFac)];
-    shader.m_dfactor = BLEND_FACTOR_TABLE[int(dstFac)];
+    if (srcFac == BlendFactor::Subtract || dstFac == BlendFactor::Subtract)
+    {
+        shader.m_sfactor = GL_DST_COLOR;
+        shader.m_dfactor = GL_SRC_COLOR;
+        shader.m_subtractBlend = true;
+    }
+    else
+    {
+        shader.m_sfactor = BLEND_FACTOR_TABLE[int(srcFac)];
+        shader.m_dfactor = BLEND_FACTOR_TABLE[int(dstFac)];
+        shader.m_subtractBlend = false;
+    }
+
     shader.m_depthTest = depthTest;
     shader.m_depthWrite = depthWrite;
     shader.m_colorWrite = colorWrite;
