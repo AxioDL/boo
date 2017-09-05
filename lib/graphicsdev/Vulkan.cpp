@@ -2000,7 +2000,6 @@ class VulkanShaderPipeline : public IShaderPipeline
             colorAttachment.dstColorBlendFactor = BLEND_FACTOR_TABLE[int(dstFac)];
             colorAttachment.colorBlendOp = VK_BLEND_OP_ADD;
         }
-        colorAttachment.colorBlendOp = VK_BLEND_OP_ADD;
         colorAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
         colorAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
         colorAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
