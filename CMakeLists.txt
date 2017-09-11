@@ -193,7 +193,6 @@ function(glslang_set_link_args TARGET)
 endfunction(glslang_set_link_args)
 
 add_subdirectory(glslang/glslang)
-add_subdirectory(glslang/hlsl)
 add_subdirectory(glslang/OGLCompilersDLL)
 add_subdirectory(glslang/SPIRV)
 add_subdirectory(glslang/StandAlone)
@@ -202,7 +201,7 @@ target_include_directories(glslang-default-resource-limits
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/glslang
 )
 
-list(APPEND _BOO_SYS_LIBS glslang HLSL soxr xxhash OSDependent OGLCompiler SPIRV glslang-default-resource-limits)
+list(APPEND _BOO_SYS_LIBS glslang soxr xxhash OSDependent OGLCompiler SPIRV glslang-default-resource-limits)
 
 set(BOO_SYS_LIBS ${_BOO_SYS_LIBS} CACHE PATH "boo system libraries" FORCE)
 set(BOO_SYS_DEFINES ${_BOO_SYS_DEFINES} CACHE PATH "boo system defines" FORCE)
