@@ -20,8 +20,6 @@
 namespace boo
 {
 
-static class DeviceFinder* skDevFinder = NULL;
-
 class DeviceFinder
 {
 public:
@@ -31,6 +29,7 @@ public:
     static inline DeviceFinder* instance() {return skDevFinder;}
 
 private:
+    static class DeviceFinder* skDevFinder;
 
     /* Types this finder is interested in (immutable) */
     DeviceSignature::TDeviceSignatureSet m_types;

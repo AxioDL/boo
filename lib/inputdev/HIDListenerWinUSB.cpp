@@ -135,6 +135,32 @@ class HIDListenerWinUSB final : public IHIDListener
                                       &devpropType, (BYTE*)manufW, 1024, &manufSz, 0);
             WideCharToMultiByte(CP_UTF8, 0, manufW, -1, manuf, 1024, nullptr, nullptr);
 
+            if (type == DeviceType::HID)
+            {
+                HANDLE devHnd = CreateFileA(DeviceInterfaceDetailData.wtf.DevicePath,
+                                            GENERIC_WRITE | GENERIC_READ,
+                                            FILE_SHARE_WRITE | FILE_SHARE_READ,
+                                            NULL,
+                                            OPEN_EXISTING,
+                                            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
+                                            NULL);
+                if (INVALID_HANDLE_VALUE == devHnd)
+                    continue;
+                PHIDP_PREPARSED_DATA preparsedData;
+                if (!HidD_GetPreparsedData(devHnd, &preparsedData))
+                {
+                    CloseHandle(devHnd);
+                    continue;
+                }
+                HIDP_CAPS caps;
+                HidP_GetCaps(preparsedData, &caps);
+                HidD_FreePreparsedData(preparsedData);
+                CloseHandle(devHnd);
+                /* Filter non joysticks and gamepads */
+                if (caps.UsagePage != 1 || (caps.Usage != 4 && caps.Usage != 5))
+                    continue;
+            }
+
             /* Store as a shouting string (to keep hash-lookups consistent) */
             CharUpperA(DeviceInterfaceDetailData.wtf.DevicePath);
 

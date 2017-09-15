@@ -29,7 +29,7 @@ public:
     void initialCycle();
     void receivedHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message);
 
-    void enumerateValues(std::function<bool(const HIDMainItem& item)>& valueCB) const;
+    void enumerateValues(const std::function<bool(const HIDMainItem& item)>& valueCB) const;
 };
 
 }

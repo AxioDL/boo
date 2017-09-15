@@ -5,6 +5,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <memory>
+#include <vector>
+#include "boo/System.hpp"
+
+#if _WIN32
+#include <hidsdi.h>
+#endif
 
 namespace boo
 {
@@ -45,7 +51,11 @@ public:
     size_t receiveUSBInterruptTransfer(uint8_t* data, size_t length);
 
     /* High-Level API */
+#if _WIN32
+    const PHIDP_PREPARSED_DATA getReportDescriptor();
+#else
     std::vector<uint8_t> getReportDescriptor();
+#endif
     bool sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message=0);
     size_t receiveHIDReport(uint8_t* data, size_t length, HIDReportType tp, uint32_t message=0); // Prefer callback version
     virtual void receivedHIDReport(const uint8_t* /*data*/, size_t /*length*/, HIDReportType /*tp*/, uint32_t /*message*/) {}

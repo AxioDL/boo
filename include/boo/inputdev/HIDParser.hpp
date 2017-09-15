@@ -5,6 +5,11 @@
 #include <vector>
 #include <stack>
 #include <functional>
+#include <memory>
+
+#if _WIN32
+#include <hidsdi.h>
+#endif
 
 namespace boo
 {
@@ -157,6 +162,8 @@ struct HIDMainItem
 
     HIDMainItem() = default;
     HIDMainItem(uint32_t flags, const HIDItemState& state, uint32_t reportIdx);
+    HIDMainItem(uint32_t flags, HIDUsagePage usagePage, HIDUsage usage,
+                HIDRange logicalRange, int32_t reportSize);
     const char* GetUsagePageName() const;
     const char* GetUsageName() const;
 };
@@ -171,22 +178,35 @@ public:
         Error
     };
 private:
+
+    ParserStatus m_status = ParserStatus::OK;
+#if _WIN32
+    std::vector<HIDMainItem> m_itemPool;
+    mutable std::vector<HIDP_DATA> m_dataList;
+    PHIDP_PREPARSED_DATA m_descriptorData = nullptr;
+#else
     std::unique_ptr<HIDMainItem[]> m_itemPool;
     using Report = std::pair<uint32_t, std::pair<uint32_t, uint32_t>>;
     std::unique_ptr<Report[]> m_reportPool;
     std::pair<uint32_t, uint32_t> m_inputReports = {};
     std::pair<uint32_t, uint32_t> m_outputReports = {};
     std::pair<uint32_t, uint32_t> m_featureReports = {};
-    ParserStatus m_status = ParserStatus::OK;
     bool m_multipleReports = false;
     ParserStatus ParseItem(HIDReports& reportsOut,
-                           std::stack<HIDItemState>& stateStack, std::stack<HIDCollectionItem>& collectionStack,
+                           std::stack<HIDItemState>& stateStack,
+                           std::stack<HIDCollectionItem>& collectionStack,
                            const uint8_t*& it, const uint8_t* end);
+#endif
+
 public:
+#if _WIN32
+    ParserStatus Parse(const PHIDP_PREPARSED_DATA descriptorData);
+#else
     ParserStatus Parse(const uint8_t* descriptorData, size_t len);
+#endif
     operator bool() const { return m_status == ParserStatus::Done; }
-    void EnumerateValues(std::function<bool(uint32_t rep, const HIDMainItem& item)>& valueCB) const;
-    void ScanValues(std::function<bool(const HIDMainItem& item, int32_t value)>& valueCB,
+    void EnumerateValues(const std::function<bool(const HIDMainItem& item)>& valueCB) const;
+    void ScanValues(const std::function<bool(const HIDMainItem& item, int32_t value)>& valueCB,
                     const uint8_t* data, size_t len) const;
 };
 

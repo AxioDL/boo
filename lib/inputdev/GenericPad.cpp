@@ -20,8 +20,13 @@ void GenericPad::deviceDisconnected()
 
 void GenericPad::initialCycle()
 {
+#if _WIN32
+    const PHIDP_PREPARSED_DATA reportDesc = getReportDescriptor();
+    m_parser.Parse(reportDesc);
+#else
     std::vector<uint8_t> reportDesc = getReportDescriptor();
     m_parser.Parse(reportDesc.data(), reportDesc.size());
+#endif
     if (m_cb)
         m_cb->controllerConnected();
 }
@@ -39,11 +44,9 @@ void GenericPad::receivedHIDReport(const uint8_t* data, size_t length, HIDReport
     m_parser.ScanValues(func, data, length);
 }
 
-void GenericPad::enumerateValues(std::function<bool(const HIDMainItem& item)>& valueCB) const
+void GenericPad::enumerateValues(const std::function<bool(const HIDMainItem& item)>& valueCB) const
 {
-    std::function<bool(uint32_t, const HIDMainItem&)> func =
-        [&](uint32_t rep, const HIDMainItem& item) { return valueCB(item); };
-    m_parser.EnumerateValues(func);
+    m_parser.EnumerateValues(valueCB);
 }
 
 }

@@ -316,11 +316,11 @@ public:
         /* Lookup boo window instance */
         auto search = m_allWindows.find(hwnd);
         if (search == m_allWindows.end())
-            return 0;
+            return DefWindowProc(hwnd, uMsg, wParam, lParam);;
 
         std::shared_ptr<IWindow> window = search->second.lock();
         if (!window)
-            return 0;
+            return DefWindowProc(hwnd, uMsg, wParam, lParam);
 
         switch (uMsg)
         {
@@ -527,7 +527,7 @@ int ApplicationRun(IApplication::EPlatformType platform,
     };
     wndClass.hIcon = LoadIconW(wndClass.hInstance, MAKEINTRESOURCEW(101));
     wndClass.hCursor = WIN32_CURSORS.m_arrow;
-    RegisterClassW(&wndClass);
+    ATOM a = RegisterClassW(&wndClass);
 
     APP = new ApplicationWin32(cb, uniqueName, friendlyName, pname, args, singleInstance);
     return APP->run();

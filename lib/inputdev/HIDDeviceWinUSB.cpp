@@ -27,7 +27,7 @@ namespace boo
 class HIDDeviceWinUSB final : public IHIDDevice
 {
     DeviceToken& m_token;
-    DeviceBase& m_devImp;
+    std::shared_ptr<DeviceBase> m_devImp;
 
     HANDLE m_devHandle = 0;
     HANDLE m_hidHandle = 0;
@@ -68,7 +68,7 @@ class HIDDeviceWinUSB final : public IHIDDevice
         return 0;
     }
 
-    static void _threadProcUSBLL(HIDDeviceWinUSB* device)
+    static void _threadProcUSBLL(std::shared_ptr<HIDDeviceWinUSB> device)
     {
         unsigned i;
         char errStr[256];
@@ -87,7 +87,7 @@ class HIDDeviceWinUSB final : public IHIDDevice
             _snprintf(errStr, 256, "Unable to open %s@%s: %d\n",
                       device->m_token.getProductName().c_str(),
                       device->m_devPath.c_str(), GetLastError());
-            device->m_devImp.deviceError(errStr);
+            device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
             return;
@@ -98,7 +98,7 @@ class HIDDeviceWinUSB final : public IHIDDevice
             _snprintf(errStr, 256, "Unable to open %s@%s: %d\n",
                       device->m_token.getProductName().c_str(),
                       device->m_devPath.c_str(), GetLastError());
-            device->m_devImp.deviceError(errStr);
+            device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
             CloseHandle(device->m_devHandle);
@@ -112,7 +112,7 @@ class HIDDeviceWinUSB final : public IHIDDevice
             _snprintf(errStr, 256, "Unable to open %s@%s: %d\n",
                       device->m_token.getProductName().c_str(),
                       device->m_devPath.c_str(), GetLastError());
-            device->m_devImp.deviceError(errStr);
+            device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
             CloseHandle(device->m_devHandle);
@@ -137,10 +137,10 @@ class HIDDeviceWinUSB final : public IHIDDevice
         device->m_initCond.notify_one();
 
         /* Start transfer loop */
-        device->m_devImp.initialCycle();
+        device->m_devImp->initialCycle();
         while (device->m_runningTransferLoop)
-            device->m_devImp.transferCycle();
-        device->m_devImp.finalCycle();
+            device->m_devImp->transferCycle();
+        device->m_devImp->finalCycle();
 
         /* Cleanup */
         WinUsb_Free(device->m_usbHandle);
@@ -148,7 +148,7 @@ class HIDDeviceWinUSB final : public IHIDDevice
         device->m_devHandle = 0;
     }
 
-    static void _threadProcBTLL(HIDDeviceWinUSB* device)
+    static void _threadProcBTLL(std::shared_ptr<HIDDeviceWinUSB> device)
     {
         std::unique_lock<std::mutex> lk(device->m_initMutex);
 
@@ -158,17 +158,19 @@ class HIDDeviceWinUSB final : public IHIDDevice
         device->m_initCond.notify_one();
 
         /* Start transfer loop */
-        device->m_devImp.initialCycle();
+        device->m_devImp->initialCycle();
         while (device->m_runningTransferLoop)
-            device->m_devImp.transferCycle();
-        device->m_devImp.finalCycle();
+            device->m_devImp->transferCycle();
+        device->m_devImp->finalCycle();
     }
 
     size_t m_minFeatureSz = 0;
     size_t m_minInputSz = 0;
     size_t m_minOutputSz = 0;
 
-    static void _threadProcHID(HIDDeviceWinUSB* device)
+    PHIDP_PREPARSED_DATA m_preparsedData = nullptr;
+
+    static void _threadProcHID(std::shared_ptr<HIDDeviceWinUSB> device)
     {
         char errStr[256];
         std::unique_lock<std::mutex> lk(device->m_initMutex);
@@ -187,30 +189,28 @@ class HIDDeviceWinUSB final : public IHIDDevice
             _snprintf(errStr, 256, "Unable to open %s@%s: %d\n",
                       device->m_token.getProductName().c_str(),
                       device->m_devPath.c_str(), GetLastError());
-            device->m_devImp.deviceError(errStr);
+            device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
             return;
         }
 
-        PHIDP_PREPARSED_DATA preparsedData;
-        if (!HidD_GetPreparsedData(device->m_hidHandle, &preparsedData))
+        if (!HidD_GetPreparsedData(device->m_hidHandle, &device->m_preparsedData))
         {
             _snprintf(errStr, 256, "Unable get preparsed data of %s@%s: %d\n",
                       device->m_token.getProductName().c_str(),
                       device->m_devPath.c_str(), GetLastError());
-            device->m_devImp.deviceError(errStr);
+            device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
             return;
         }
 
         HIDP_CAPS caps;
-        HidP_GetCaps(preparsedData, &caps);
+        HidP_GetCaps(device->m_preparsedData, &caps);
         device->m_minFeatureSz = caps.FeatureReportByteLength;
         device->m_minInputSz = caps.InputReportByteLength;
         device->m_minOutputSz = caps.OutputReportByteLength;
-        HidD_FreePreparsedData(preparsedData);
 
         /* Return control to main thread */
         device->m_runningTransferLoop = true;
@@ -218,21 +218,23 @@ class HIDDeviceWinUSB final : public IHIDDevice
         device->m_initCond.notify_one();
 
         /* Allocate read buffer */
-        size_t inBufferSz = std::max(device->m_minInputSz, device->m_devImp.getInputBufferSize());
+        size_t inBufferSz = device->m_minInputSz;
         std::unique_ptr<uint8_t[]> readBuf(new uint8_t[inBufferSz]);
 
         /* Start transfer loop */
-        device->m_devImp.initialCycle();
+        device->m_devImp->initialCycle();
         while (device->m_runningTransferLoop)
         {
             device->ReadCycle(readBuf.get(), inBufferSz);
-            device->m_devImp.transferCycle();
+            if (device->m_runningTransferLoop)
+                device->m_devImp->transferCycle();
         }
-        device->m_devImp.finalCycle();
+        device->m_devImp->finalCycle();
 
         /* Cleanup */
         CloseHandle(device->m_overlapped.hEvent);
         CloseHandle(device->m_hidHandle);
+        HidD_FreePreparsedData(device->m_preparsedData);
         device->m_hidHandle = nullptr;
     }
 
@@ -243,6 +245,11 @@ class HIDDeviceWinUSB final : public IHIDDevice
 
     std::vector<uint8_t> m_sendBuf;
     std::vector<uint8_t> m_recvBuf;
+
+    const PHIDP_PREPARSED_DATA _getReportDescriptor()
+    {
+        return m_preparsedData;
+    }
 
     bool _sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message)
     {
@@ -323,7 +330,7 @@ class HIDDeviceWinUSB final : public IHIDDevice
 
 public:
 
-    HIDDeviceWinUSB(DeviceToken& token, DeviceBase& devImp)
+    HIDDeviceWinUSB(DeviceToken& token, const std::shared_ptr<DeviceBase>& devImp)
     : m_token(token),
       m_devImp(devImp),
       m_devPath(token.getDevicePath())
@@ -335,11 +342,11 @@ public:
         std::unique_lock<std::mutex> lk(m_initMutex);
         DeviceType dType = m_token.getDeviceType();
         if (dType == DeviceType::USB)
-            m_thread = std::thread(_threadProcUSBLL, this);
+            m_thread = std::thread(_threadProcUSBLL, std::static_pointer_cast<HIDDeviceWinUSB>(shared_from_this()));
         else if (dType == DeviceType::Bluetooth)
-            m_thread = std::thread(_threadProcBTLL, this);
+            m_thread = std::thread(_threadProcBTLL, std::static_pointer_cast<HIDDeviceWinUSB>(shared_from_this()));
         else if (dType == DeviceType::HID)
-            m_thread = std::thread(_threadProcHID, this);
+            m_thread = std::thread(_threadProcHID, std::static_pointer_cast<HIDDeviceWinUSB>(shared_from_this()));
         else
             throw std::runtime_error("invalid token supplied to device constructor");
         m_initCond.wait(lk);
@@ -348,7 +355,8 @@ public:
     ~HIDDeviceWinUSB()
     {
         m_runningTransferLoop = false;
-        m_thread.join();
+        if (m_thread.joinable())
+            m_thread.detach();
     }
 
     OVERLAPPED m_overlapped = {};
@@ -362,7 +370,12 @@ public:
         if (!Result)
         {
             DWORD Error = GetLastError();
-            if (Error != ERROR_IO_PENDING)
+            if (Error == ERROR_DEVICE_NOT_CONNECTED)
+            {
+                m_runningTransferLoop = false;
+                return;
+            }
+            else if (Error != ERROR_IO_PENDING)
             {
                 fprintf(stderr, "Read Failed: %08X\n", Error);
                 return;
@@ -373,7 +386,7 @@ public:
             }
         }
 
-        m_devImp.receivedHIDReport(inBuffer, BytesRead, HIDReportType::Input, inBuffer[0]);
+        m_devImp->receivedHIDReport(inBuffer, BytesRead, HIDReportType::Input, inBuffer[0]);
     }
 };
 

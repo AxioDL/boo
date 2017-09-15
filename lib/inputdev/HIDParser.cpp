@@ -1,5 +1,9 @@
 #include "boo/inputdev/HIDParser.hpp"
 #include <map>
+#include <algorithm>
+
+#undef min
+#undef max
 
 namespace boo
 {
@@ -289,6 +293,12 @@ HIDMainItem::HIDMainItem(uint32_t flags, const HIDItemState& state, uint32_t rep
     m_reportSize = state.m_reportSize;
 }
 
+HIDMainItem::HIDMainItem(uint32_t flags, HIDUsagePage usagePage, HIDUsage usage,
+                         HIDRange logicalRange, int32_t reportSize)
+: m_flags(uint16_t(flags)), m_usagePage(usagePage), m_usage(usage),
+  m_logicalRange(logicalRange), m_reportSize(reportSize)
+{}
+
 const char* HIDMainItem::GetUsagePageName() const
 {
     if (int(m_usagePage) >= std::extent<decltype(UsagePageNames)>::value)
@@ -385,9 +395,92 @@ struct HIDReports
     void AddFeatureItem(uint32_t flags, const HIDItemState& state) { _AddItem(m_featureReports, flags, state); }
 };
 
+#if _WIN32
+HIDParser::ParserStatus HIDParser::Parse(const PHIDP_PREPARSED_DATA descriptorData)
+{
+    /* User mode HID report descriptor isn't available on Win32.
+     * Opaque preparsed data must be enumerated and sorted into
+     * iterable items.
+     *
+     * Wine's implementation has a good illustration of what's
+     * going on here:
+     * https://github.com/wine-mirror/wine/blob/master/dlls/hidclass.sys/descriptor.c
+     *
+     * (Thanks for this pointless pain-in-the-ass Microsoft)
+     */
+
+    m_descriptorData = descriptorData;
+    HIDP_CAPS caps;
+    HidP_GetCaps(descriptorData, &caps);
+    m_dataList.resize(HidP_MaxDataListLength(HidP_Input, descriptorData));
+
+    std::map<uint32_t, HIDMainItem> inputItems;
+
+    {
+        /* First enumerate buttons */
+        USHORT length = caps.NumberInputButtonCaps;
+        std::vector<HIDP_BUTTON_CAPS> bCaps(caps.NumberInputButtonCaps, HIDP_BUTTON_CAPS());
+        HidP_GetButtonCaps(HidP_Input, bCaps.data(), &length, descriptorData);
+        for (const HIDP_BUTTON_CAPS& caps : bCaps)
+        {
+            if (caps.IsRange)
+            {
+                int usage = caps.Range.UsageMin;
+                for (int i=caps.Range.DataIndexMin ; i<=caps.Range.DataIndexMax ; ++i, ++usage)
+                {
+                    inputItems.insert(std::make_pair(i,
+                        HIDMainItem(caps.BitField, HIDUsagePage(caps.UsagePage),
+                                    HIDUsage(usage), std::make_pair(0, 1), 1)));
+                }
+            }
+            else
+            {
+                inputItems.insert(std::make_pair(caps.NotRange.DataIndex,
+                    HIDMainItem(caps.BitField, HIDUsagePage(caps.UsagePage),
+                                HIDUsage(caps.NotRange.Usage), std::make_pair(0, 1), 1)));
+            }
+        }
+    }
+
+    {
+        /* Now enumerate values */
+        USHORT length = caps.NumberInputValueCaps;
+        std::vector<HIDP_VALUE_CAPS> vCaps(caps.NumberInputValueCaps, HIDP_VALUE_CAPS());
+        HidP_GetValueCaps(HidP_Input, vCaps.data(), &length, descriptorData);
+        for (const HIDP_VALUE_CAPS& caps : vCaps)
+        {
+            if (caps.IsRange)
+            {
+                int usage = caps.Range.UsageMin;
+                for (int i=caps.Range.DataIndexMin ; i<=caps.Range.DataIndexMax ; ++i, ++usage)
+                {
+                    inputItems.insert(std::make_pair(i,
+                        HIDMainItem(caps.BitField, HIDUsagePage(caps.UsagePage), HIDUsage(usage),
+                                    std::make_pair(caps.LogicalMin, caps.LogicalMax), caps.BitSize)));
+                }
+            }
+            else
+            {
+                inputItems.insert(std::make_pair(caps.NotRange.DataIndex,
+                    HIDMainItem(caps.BitField, HIDUsagePage(caps.UsagePage), HIDUsage(caps.NotRange.Usage),
+                                HIDRange(caps.LogicalMin, caps.LogicalMax), caps.BitSize)));
+            }
+        }
+    }
+
+    m_itemPool.reserve(inputItems.size());
+    for (const auto& item : inputItems)
+        m_itemPool.push_back(item.second);
+
+    m_status = ParserStatus::Done;
+    return ParserStatus::Done;
+}
+#else
+
 HIDParser::ParserStatus
 HIDParser::ParseItem(HIDReports& reportsOut,
-                     std::stack<HIDItemState>& stateStack, std::stack<HIDCollectionItem>& collectionStack,
+                     std::stack<HIDItemState>& stateStack,
+                     std::stack<HIDCollectionItem>& collectionStack,
                      const uint8_t*& it, const uint8_t* end)
 {
     ParserStatus status = ParserStatus::OK;
@@ -567,8 +660,24 @@ HIDParser::ParserStatus HIDParser::Parse(const uint8_t* descriptorData, size_t l
 
     return m_status;
 }
+#endif
 
-void HIDParser::EnumerateValues(std::function<bool(uint32_t rep, const HIDMainItem& item)>& valueCB) const
+#if _WIN32
+void HIDParser::EnumerateValues(const std::function<bool(const HIDMainItem& item)>& valueCB) const
+{
+    if (m_status != ParserStatus::Done)
+        return;
+
+    for (const HIDMainItem& item : m_itemPool)
+    {
+        if (item.IsConstant())
+            continue;
+        if (!valueCB(item))
+            return;
+    }
+}
+#else
+void HIDParser::EnumerateValues(const std::function<bool(const HIDMainItem& item)>& valueCB) const
 {
     if (m_status != ParserStatus::Done)
         return;
@@ -579,11 +688,50 @@ void HIDParser::EnumerateValues(std::function<bool(uint32_t rep, const HIDMainIt
         for (uint32_t j=rep.second.first ; j<rep.second.second ; ++j)
         {
             const HIDMainItem& item = m_itemPool[j];
-            if (!valueCB(rep.first, item))
+            if (item.IsConstant())
+                continue;
+            if (!valueCB(item))
                 return;
         }
     }
 }
+#endif
+
+#if _WIN32
+void HIDParser::ScanValues(const std::function<bool(const HIDMainItem& item, int32_t value)>& valueCB,
+                           const uint8_t* data, size_t len) const
+{
+    if (m_status != ParserStatus::Done)
+        return;
+
+    ULONG dataLen = m_dataList.size();
+    if (HidP_GetData(HidP_Input, m_dataList.data(), &dataLen,
+                     m_descriptorData, PCHAR(data), len) != HIDP_STATUS_SUCCESS)
+        return;
+
+    int idx = 0;
+    auto it = m_dataList.begin();
+    auto end = m_dataList.begin() + dataLen;
+    for (const HIDMainItem& item : m_itemPool)
+    {
+        if (item.IsConstant())
+            continue;
+        int32_t value = 0;
+        if (it != end)
+        {
+            const HIDP_DATA& data = *it;
+            if (data.DataIndex == idx)
+            {
+                value = data.RawValue;
+                ++it;
+            }
+        }
+        if (!valueCB(item, value))
+            return;
+        ++idx;
+    }
+}
+#else
 
 class BitwiseIterator
 {
@@ -618,7 +766,7 @@ public:
     }
 };
 
-void HIDParser::ScanValues(std::function<bool(const HIDMainItem& item, int32_t value)>& valueCB,
+void HIDParser::ScanValues(const std::function<bool(const HIDMainItem& item, int32_t value)>& valueCB,
                            const uint8_t* data, size_t len) const
 {
     if (m_status != ParserStatus::Done)
@@ -646,11 +794,14 @@ void HIDParser::ScanValues(std::function<bool(const HIDMainItem& item, int32_t v
             int32_t val = bitIt.GetUnsignedValue(item.m_reportSize, status);
             if (status == ParserStatus::Error)
                 return;
+            if (item.IsConstant())
+                continue;
             if (!valueCB(item, val))
                 return;
         }
         break;
     }
 }
+#endif
 
 }
