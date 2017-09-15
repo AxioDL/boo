@@ -1282,14 +1282,17 @@ public:
             m_nsWindow = [[WindowCocoaInternal alloc] initWithBooWindow:windowPtr title:title];
 #if BOO_HAS_METAL
             if (metalCtx->m_dev)
-                m_gfxCtx = static_cast<GraphicsContextCocoa*>(_GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI::Metal,
-                                                                                            this, metalCtx, sampleCount));
+                m_gfxCtx = static_cast<GraphicsContextCocoa*>(
+                    _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI::Metal,
+                                                  this, metalCtx, sampleCount));
             else
 #endif
-                m_gfxCtx = static_cast<GraphicsContextCocoa*>(_GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI::OpenGL3_3,
-                                                                                         this, lastGLCtx, sampleCount));
+                m_gfxCtx = static_cast<GraphicsContextCocoa*>(
+                    _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI::OpenGL3_3,
+                                               this, lastGLCtx, sampleCount));
             m_gfxCtx->initializeContext(nullptr);
         });
+        m_gfxCtx->getMainContextDataFactory();
     }
 
     void _clearWindow()

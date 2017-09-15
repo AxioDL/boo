@@ -13,13 +13,16 @@ bool DeviceSignature::DeviceMatchToken(const DeviceToken& token, const TDeviceSi
 {
     if (token.getDeviceType() == DeviceType::HID)
     {
+        bool hasGenericPad = false;
         for (const DeviceSignature* sig : sigSet)
         {
             if (sig->m_vid == token.getVendorId() && sig->m_pid == token.getProductId() &&
                 sig->m_type != DeviceType::HID)
                 return false;
+            if (sig->m_typeIdx == typeid(GenericPad))
+                hasGenericPad = true;
         }
-        return true;
+        return hasGenericPad;
     }
     for (const DeviceSignature* sig : sigSet)
     {
@@ -29,7 +32,7 @@ bool DeviceSignature::DeviceMatchToken(const DeviceToken& token, const TDeviceSi
     return false;
 }
 
-std::unique_ptr<IHIDDevice> IHIDDeviceNew(DeviceToken& token, DeviceBase& devImp);
+std::shared_ptr<IHIDDevice> IHIDDeviceNew(DeviceToken& token, const std::shared_ptr<DeviceBase>& devImp);
 std::shared_ptr<DeviceBase> DeviceSignature::DeviceNew(DeviceToken& token)
 {
     std::shared_ptr<DeviceBase> retval;
@@ -57,7 +60,7 @@ std::shared_ptr<DeviceBase> DeviceSignature::DeviceNew(DeviceToken& token)
             if (!retval)
                 return nullptr;
 
-            retval->m_hidDev = IHIDDeviceNew(token, *retval);
+            retval->m_hidDev = IHIDDeviceNew(token, retval);
             if (!retval->m_hidDev)
                 return nullptr;
             retval->m_hidDev->_startThread();
@@ -74,7 +77,7 @@ std::shared_ptr<DeviceBase> DeviceSignature::DeviceNew(DeviceToken& token)
     if (!retval)
         return nullptr;
     
-    retval->m_hidDev = IHIDDeviceNew(token, *retval);
+    retval->m_hidDev = IHIDDeviceNew(token, retval);
     if (!retval->m_hidDev)
         return nullptr;
     retval->m_hidDev->_startThread();

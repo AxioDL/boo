@@ -54,6 +54,13 @@ size_t DeviceBase::receiveUSBInterruptTransfer(uint8_t* data, size_t length)
     return false;
 }
 
+std::vector<uint8_t> DeviceBase::getReportDescriptor()
+{
+    if (m_hidDev)
+        return m_hidDev->_getReportDescriptor();
+    return {};
+}
+
 bool DeviceBase::sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message)
 {
     if (m_hidDev)

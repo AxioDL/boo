@@ -1,11 +1,7 @@
 #include "IHIDDevice.hpp"
-#include "boo/inputdev/DeviceToken.hpp"
-#include "boo/inputdev/DeviceBase.hpp"
 #include <IOKit/hid/IOHIDLib.h>
 #include <IOKit/hid/IOHIDDevicePlugin.h>
-#include <IOKit/hid/IOHIDDevice.h>
 #include <IOKit/usb/IOUSBLib.h>
-#include <IOKit/IOCFPlugIn.h>
 #include "IOKitPointer.hpp"
 #include <thread>
 
@@ -15,7 +11,7 @@ namespace boo
 class HIDDeviceIOKit : public IHIDDevice
 {
     DeviceToken& m_token;
-    DeviceBase& m_devImp;
+    std::shared_ptr<DeviceBase> m_devImp;
 
     IUnknownPointer<IOUSBInterfaceInterface> m_usbIntf;
     uint8_t m_usbIntfInPipe = 0;
@@ -52,6 +48,21 @@ class HIDDeviceIOKit : public IHIDDevice
         return 0;
     }
 
+    std::vector<uint8_t> _getReportDescriptor()
+    {
+        if (m_hidIntf)
+        {
+            if (CFTypeRef desc = IOHIDDeviceGetProperty(m_hidIntf.get(), CFSTR(kIOHIDReportDescriptorKey)))
+            {
+                CFIndex len = CFDataGetLength(CFDataRef(desc));
+                std::vector<uint8_t> ret(len, '\0');
+                CFDataGetBytes(CFDataRef(desc), CFRangeMake(0, len), &ret[0]);
+                return ret;
+            }
+        }
+        return {};
+    }
+
     bool _sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message)
     {
         /* HACK: A bug in IOBluetoothGamepadHIDDriver prevents raw output report transmission
@@ -77,7 +88,7 @@ class HIDDeviceIOKit : public IHIDDevice
         return 0;
     }
 
-    static void _threadProcUSBLL(HIDDeviceIOKit* device)
+    static void _threadProcUSBLL(std::shared_ptr<HIDDeviceIOKit> device)
     {
         char thrName[128];
         snprintf(thrName, 128, "%s Transfer Thread", device->m_token.getProductName().c_str());
@@ -102,7 +113,7 @@ class HIDDeviceIOKit : public IHIDDevice
             snprintf(errStr, 256, "Unable to find interface for %s@%s\n",
                      device->m_token.getProductName().c_str(),
                      device->m_devPath.c_str());
-            device->m_devImp.deviceError(errStr);
+            device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
             return;
@@ -121,7 +132,7 @@ class HIDDeviceIOKit : public IHIDDevice
         {
             snprintf(errStr, 256, "Unable to open %s@%s\n",
                      device->m_token.getProductName().c_str(), device->m_devPath.c_str());
-            device->m_devImp.deviceError(errStr);
+            device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
             return;
@@ -134,7 +145,7 @@ class HIDDeviceIOKit : public IHIDDevice
         {
             snprintf(errStr, 256, "Unable to open %s@%s\n",
                      device->m_token.getProductName().c_str(), device->m_devPath.c_str());
-            device->m_devImp.deviceError(errStr);
+            device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
             return;
@@ -149,13 +160,13 @@ class HIDDeviceIOKit : public IHIDDevice
             {
                 snprintf(errStr, 256, "Unable to open %s@%s: someone else using it\n",
                          device->m_token.getProductName().c_str(), device->m_devPath.c_str());
-                device->m_devImp.deviceError(errStr);
+                device->m_devImp->deviceError(errStr);
             }
             else
             {
                 snprintf(errStr, 256, "Unable to open %s@%s\n",
                          device->m_token.getProductName().c_str(), device->m_devPath.c_str());
-                device->m_devImp.deviceError(errStr);
+                device->m_devImp->deviceError(errStr);
             }
             lk.unlock();
             device->m_initCond.notify_one();
@@ -185,17 +196,17 @@ class HIDDeviceIOKit : public IHIDDevice
         device->m_initCond.notify_one();
 
         /* Start transfer loop */
-        device->m_devImp.initialCycle();
+        device->m_devImp->initialCycle();
         while (device->m_runningTransferLoop)
-            device->m_devImp.transferCycle();
-        device->m_devImp.finalCycle();
+            device->m_devImp->transferCycle();
+        device->m_devImp->finalCycle();
 
         /* Cleanup */
         intf->USBInterfaceClose(intf.storage());
         device->m_usbIntf = nullptr;
     }
 
-    static void _threadProcBTLL(HIDDeviceIOKit* device)
+    static void _threadProcBTLL(std::shared_ptr<HIDDeviceIOKit> device)
     {
         std::unique_lock<std::mutex> lk(device->m_initMutex);
 
@@ -205,11 +216,17 @@ class HIDDeviceIOKit : public IHIDDevice
         device->m_initCond.notify_one();
 
         /* Start transfer loop */
-        device->m_devImp.initialCycle();
+        device->m_devImp->initialCycle();
         while (device->m_runningTransferLoop)
-            device->m_devImp.transferCycle();
-        device->m_devImp.finalCycle();
+            device->m_devImp->transferCycle();
+        device->m_devImp->finalCycle();
+    }
 
+    static void _hidRemoveCb(void * _Nullable        context,
+                             IOReturn                result,
+                             void * _Nullable        sender)
+    {
+        reinterpret_cast<HIDDeviceIOKit*>(context)->m_runningTransferLoop = false;
     }
 
     static void _hidReportCb(void * _Nullable        context,
@@ -223,7 +240,7 @@ class HIDDeviceIOKit : public IHIDDevice
         reinterpret_cast<DeviceBase*>(context)->receivedHIDReport(report, reportLength, HIDReportType(type), reportID);
     }
 
-    static void _threadProcHID(HIDDeviceIOKit* device)
+    static void _threadProcHID(std::shared_ptr<HIDDeviceIOKit> device)
     {
         char thrName[128];
         snprintf(thrName, 128, "%s Transfer Thread", device->m_token.getProductName().c_str());
@@ -239,7 +256,7 @@ class HIDDeviceIOKit : public IHIDDevice
             snprintf(errStr, 256, "Unable to find interface for %s@%s\n",
                      device->m_token.getProductName().c_str(),
                      device->m_devPath.c_str());
-            device->m_devImp.deviceError(errStr);
+            device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
             return;
@@ -250,7 +267,7 @@ class HIDDeviceIOKit : public IHIDDevice
         {
             snprintf(errStr, 256, "Unable to open %s@%s\n",
                      device->m_token.getProductName().c_str(), device->m_devPath.c_str());
-            device->m_devImp.deviceError(errStr);
+            device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
             return;
@@ -264,18 +281,21 @@ class HIDDeviceIOKit : public IHIDDevice
             {
                 snprintf(errStr, 256, "Unable to open %s@%s: someone else using it\n",
                          device->m_token.getProductName().c_str(), device->m_devPath.c_str());
-                device->m_devImp.deviceError(errStr);
+                device->m_devImp->deviceError(errStr);
             }
             else
             {
                 snprintf(errStr, 256, "Unable to open %s@%s\n",
                          device->m_token.getProductName().c_str(), device->m_devPath.c_str());
-                device->m_devImp.deviceError(errStr);
+                device->m_devImp->deviceError(errStr);
             }
             lk.unlock();
             device->m_initCond.notify_one();
             return;
         }
+
+        /* Register removal callback */
+        IOHIDDeviceRegisterRemovalCallback(device->m_hidIntf.get(), _hidRemoveCb, device.get());
 
         /* Make note if device uses bluetooth driver */
         if (CFTypeRef transport = IOHIDDeviceGetProperty(device->m_hidIntf.get(), CFSTR(kIOHIDTransportKey)))
@@ -283,11 +303,14 @@ class HIDDeviceIOKit : public IHIDDevice
 
         /* Register input buffer */
         std::unique_ptr<uint8_t[]> buffer;
-        if (size_t bufSize = device->m_devImp.getInputBufferSize())
+        int bufSize = 0;
+        if (CFTypeRef maxSize = IOHIDDeviceGetProperty(device->m_hidIntf.get(), CFSTR(kIOHIDMaxInputReportSizeKey)))
+            CFNumberGetValue(CFNumberRef(maxSize), kCFNumberIntType, &bufSize);
+        if (bufSize)
         {
             buffer = std::unique_ptr<uint8_t[]>(new uint8_t[bufSize]);
             IOHIDDeviceRegisterInputReportCallback(device->m_hidIntf.get(), buffer.get(), bufSize,
-                                                   _hidReportCb, &device->m_devImp);
+                                                   _hidReportCb, device->m_devImp.get());
             IOHIDDeviceScheduleWithRunLoop(device->m_hidIntf.get(), CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
         }
 
@@ -297,13 +320,14 @@ class HIDDeviceIOKit : public IHIDDevice
         device->m_initCond.notify_one();
 
         /* Start transfer loop */
-        device->m_devImp.initialCycle();
+        device->m_devImp->initialCycle();
         while (device->m_runningTransferLoop)
         {
             CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.010, true);
-            device->m_devImp.transferCycle();
+            if (device->m_runningTransferLoop)
+                device->m_devImp->transferCycle();
         }
-        device->m_devImp.finalCycle();
+        device->m_devImp->finalCycle();
 
         /* Cleanup */
         IOHIDDeviceClose(device->m_hidIntf.get(), kIOHIDOptionsTypeNone);
@@ -317,7 +341,7 @@ class HIDDeviceIOKit : public IHIDDevice
 
 public:
 
-    HIDDeviceIOKit(DeviceToken& token, DeviceBase& devImp)
+    HIDDeviceIOKit(DeviceToken& token, const std::shared_ptr<DeviceBase>& devImp)
     : m_token(token),
       m_devImp(devImp),
       m_devPath(token.getDevicePath())
@@ -329,11 +353,11 @@ public:
         std::unique_lock<std::mutex> lk(m_initMutex);
         DeviceType dType = m_token.getDeviceType();
         if (dType == DeviceType::USB)
-            m_thread = std::thread(_threadProcUSBLL, this);
+            m_thread = std::thread(_threadProcUSBLL, std::static_pointer_cast<HIDDeviceIOKit>(shared_from_this()));
         else if (dType == DeviceType::Bluetooth)
-            m_thread = std::thread(_threadProcBTLL, this);
+            m_thread = std::thread(_threadProcBTLL, std::static_pointer_cast<HIDDeviceIOKit>(shared_from_this()));
         else if (dType == DeviceType::HID)
-            m_thread = std::thread(_threadProcHID, this);
+            m_thread = std::thread(_threadProcHID, std::static_pointer_cast<HIDDeviceIOKit>(shared_from_this()));
         else
         {
             fprintf(stderr, "invalid token supplied to device constructor\n");
@@ -346,15 +370,13 @@ public:
     {
         m_runningTransferLoop = false;
         if (m_thread.joinable())
-            m_thread.join();
+            m_thread.detach();
     }
-
-
 };
 
-std::unique_ptr<IHIDDevice> IHIDDeviceNew(DeviceToken& token, DeviceBase& devImp)
+std::shared_ptr<IHIDDevice> IHIDDeviceNew(DeviceToken& token, const std::shared_ptr<DeviceBase>& devImp)
 {
-    return std::make_unique<HIDDeviceIOKit>(token, devImp);
+    return std::make_shared<HIDDeviceIOKit>(token, devImp);
 }
 
 }

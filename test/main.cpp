@@ -74,15 +74,48 @@ class DualshockPadCallback : public IDualshockPadCallback
     }
 };
 
+class GenericPadCallback : public IGenericPadCallback
+{
+    void controllerConnected()
+    {
+        printf("CONTROLLER CONNECTED\n");
+    }
+    void controllerDisconnected()
+    {
+        printf("CONTROLLER DISCONNECTED\n");
+    }
+    void valueUpdate(const HIDMainItem& item, int32_t value)
+    {
+        const char* pageName = item.GetUsagePageName();
+        const char* usageName = item.GetUsageName();
+        if (pageName)
+        {
+            if (usageName)
+                printf("%s %s %d\n", pageName, usageName, value);
+            else
+                printf("%s %d %d\n", pageName, item.m_usage, value);
+        }
+        else
+        {
+            if (usageName)
+                printf("page%d %s %d\n", item.m_usagePage, usageName, value);
+            else
+                printf("page%d %d %d\n", item.m_usagePage, item.m_usage, value);
+        }
+    }
+};
+
 class TestDeviceFinder : public DeviceFinder
 {
     std::shared_ptr<DolphinSmashAdapter> smashAdapter;
     std::shared_ptr<DualshockPad> ds3;
+    std::shared_ptr<GenericPad> generic;
     DolphinSmashAdapterCallback m_cb;
     DualshockPadCallback m_ds3CB;
+    GenericPadCallback m_genericCb;
 public:
     TestDeviceFinder()
-    : DeviceFinder({typeid(DolphinSmashAdapter)})
+    : DeviceFinder({typeid(DolphinSmashAdapter), typeid(GenericPad)})
     {}
     void deviceConnected(DeviceToken& tok)
     {
@@ -99,6 +132,11 @@ public:
             ds3->setCallback(&m_ds3CB);
             ds3->setLED(EDualshockLED::LED_1);
         }
+        generic = std::dynamic_pointer_cast<GenericPad>(tok.openAndGetDevice());
+        if (generic)
+        {
+            generic->setCallback(&m_genericCb);
+        }
     }
     void deviceDisconnected(DeviceToken&, DeviceBase* device)
     {
@@ -106,6 +144,8 @@ public:
             smashAdapter.reset();
         if (ds3.get() == device)
             ds3.reset();
+        if (generic.get() == device)
+            generic.reset();
     }
 };
 

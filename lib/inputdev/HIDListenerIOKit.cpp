@@ -252,7 +252,7 @@ public:
     HIDListenerIOKit(DeviceFinder& finder)
     : m_finder(finder)
     {
-        m_listenerRunLoop = CFRunLoopGetCurrent();
+        m_listenerRunLoop = CFRunLoopGetMain();
         m_llPort = IONotificationPortCreate(kIOMasterPortDefault);
         CFRunLoopSourceRef rlSrc = IONotificationPortGetRunLoopSource(m_llPort);
         CFRunLoopAddSource(m_listenerRunLoop, rlSrc, kCFRunLoopDefaultMode);

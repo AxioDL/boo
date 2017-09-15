@@ -1159,6 +1159,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
 
     static void RenderingWorker(GLCommandQueue* self)
     {
+        logvisor::RegisterThreadName("Boo GL Rendering Thread");
         {
             std::unique_lock<std::mutex> lk(self->m_initmt);
             self->m_parent->makeCurrent();

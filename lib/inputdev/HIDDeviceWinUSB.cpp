@@ -377,9 +377,9 @@ public:
     }
 };
 
-std::unique_ptr<IHIDDevice> IHIDDeviceNew(DeviceToken& token, DeviceBase& devImp)
+std::shared_ptr<IHIDDevice> IHIDDeviceNew(DeviceToken& token, const std::shared_ptr<DeviceBase>& devImp)
 {
-    return std::make_unique<HIDDeviceWinUSB>(token, devImp);
+    return std::make_shared<HIDDeviceWinUSB>(token, devImp);
 }
 
 }

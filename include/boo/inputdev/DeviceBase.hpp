@@ -22,9 +22,10 @@ class DeviceBase : public std::enable_shared_from_this<DeviceBase>
 {
     friend class DeviceToken;
     friend struct DeviceSignature;
+    friend class HIDDeviceIOKit;
 
     class DeviceToken* m_token;
-    std::unique_ptr<IHIDDevice> m_hidDev;
+    std::shared_ptr<IHIDDevice> m_hidDev;
     void _deviceDisconnected();
     
 public:
@@ -38,13 +39,13 @@ public:
     virtual void initialCycle() {}
     virtual void transferCycle() {}
     virtual void finalCycle() {}
-    virtual size_t getInputBufferSize() const { return 0; }
 
     /* Low-Level API */
     bool sendUSBInterruptTransfer(const uint8_t* data, size_t length);
     size_t receiveUSBInterruptTransfer(uint8_t* data, size_t length);
 
     /* High-Level API */
+    std::vector<uint8_t> getReportDescriptor();
     bool sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message=0);
     size_t receiveHIDReport(uint8_t* data, size_t length, HIDReportType tp, uint32_t message=0); // Prefer callback version
     virtual void receivedHIDReport(const uint8_t* /*data*/, size_t /*length*/, HIDReportType /*tp*/, uint32_t /*message*/) {}

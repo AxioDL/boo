@@ -182,8 +182,6 @@ public:
         m_report.leds = led;
         sendHIDReport(m_report.buf, sizeof(m_report), HIDReportType::Output, 0x01);
     }
-
-    size_t getInputBufferSize() const { return 49; }
 };
 
 }

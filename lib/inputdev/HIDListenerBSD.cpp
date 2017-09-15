@@ -27,8 +27,8 @@ public:
     }
 };
 
-IHIDDevice* IHIDDeviceNew(DeviceToken& token, DeviceBase& devImp)
+std::shared_ptr<IHIDDevice> IHIDDeviceNew(DeviceToken& token, const std::shared_ptr<DeviceBase>& devImp)
 {
-    return new HIDDeviceBSD(token, devImp);
+    return std::make_shared<HIDDeviceBSD>(token, devImp);
 }
 }
