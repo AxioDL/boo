@@ -481,7 +481,8 @@ HIDParser::ParserStatus
 HIDParser::ParseItem(HIDReports& reportsOut,
                      std::stack<HIDItemState>& stateStack,
                      std::stack<HIDCollectionItem>& collectionStack,
-                     const uint8_t*& it, const uint8_t* end)
+                     const uint8_t*& it, const uint8_t* end,
+                     bool& multipleReports)
 {
     ParserStatus status = ParserStatus::OK;
     uint8_t head = *it++;
@@ -560,7 +561,7 @@ HIDParser::ParseItem(HIDReports& reportsOut,
                 stateStack.top().m_reportSize = data;
                 break;
             case HIDItemTag::ReportID:
-                m_multipleReports = true;
+                multipleReports = true;
                 stateStack.top().m_reportID = data;
                 break;
             case HIDItemTag::ReportCount:
@@ -620,7 +621,8 @@ HIDParser::ParserStatus HIDParser::Parse(const uint8_t* descriptorData, size_t l
 
     const uint8_t* end = descriptorData + len;
     for (const uint8_t* it = descriptorData; it != end;)
-        if ((m_status = ParseItem(reports, stateStack, collectionStack, it, end)) != ParserStatus::OK)
+        if ((m_status =
+             ParseItem(reports, stateStack, collectionStack, it, end, m_multipleReports)) != ParserStatus::OK)
             break;
 
     if (m_status != ParserStatus::Done)
@@ -659,6 +661,60 @@ HIDParser::ParserStatus HIDParser::Parse(const uint8_t* descriptorData, size_t l
     func(m_featureReports, reports.m_featureReports);
 
     return m_status;
+}
+
+size_t HIDParser::CalculateMaxInputReportSize(const uint8_t* descriptorData, size_t len)
+{
+    std::stack<HIDItemState> stateStack;
+    stateStack.emplace();
+    std::stack<HIDCollectionItem> collectionStack;
+    HIDReports reports;
+    ParserStatus status = ParserStatus::Done;
+
+    bool multipleReports = false;
+    const uint8_t* end = descriptorData + len;
+    for (const uint8_t* it = descriptorData; it != end;)
+        if ((status = ParseItem(reports, stateStack, collectionStack, it, end, multipleReports)) != ParserStatus::OK)
+            break;
+
+    if (status != ParserStatus::Done)
+        return 0;
+
+    size_t maxSize = 0;
+    for (const auto& rep : reports.m_inputReports)
+    {
+        size_t repSize = 0;
+        for (const auto& item : rep.second)
+            repSize += item.m_reportSize;
+        if (repSize > maxSize)
+            maxSize = repSize;
+    }
+
+    return (maxSize + 7) / 8 + multipleReports;
+}
+
+std::pair<HIDUsagePage, HIDUsage> HIDParser::GetApplicationUsage(const uint8_t* descriptorData, size_t len)
+{
+    std::stack<HIDItemState> stateStack;
+    stateStack.emplace();
+    std::stack<HIDCollectionItem> collectionStack;
+    HIDReports reports;
+    ParserStatus status = ParserStatus::Done;
+
+    bool multipleReports = false;
+    const uint8_t* end = descriptorData + len;
+    for (const uint8_t* it = descriptorData; it != end;)
+    {
+        status = ParseItem(reports, stateStack, collectionStack, it, end, multipleReports);
+        if (collectionStack.empty())
+            continue;
+        if (collectionStack.top().m_type == HIDCollectionType::Application)
+            return { collectionStack.top().m_usagePage, collectionStack.top().m_usage };
+        if (status != ParserStatus::OK)
+            break;
+    }
+
+    return {};
 }
 #endif
 

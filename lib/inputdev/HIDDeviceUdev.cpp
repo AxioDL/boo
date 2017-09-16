@@ -16,6 +16,7 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <string.h>
+#include "boo/inputdev/HIDParser.hpp"
 
 namespace boo
 {
@@ -29,7 +30,7 @@ udev* GetUdev();
 class HIDDeviceUdev final : public IHIDDevice
 {
     DeviceToken& m_token;
-    DeviceBase& m_devImp;
+    std::shared_ptr<DeviceBase> m_devImp;
 
     int m_devFd = 0;
     unsigned m_usbIntfInPipe = 0;
@@ -76,7 +77,7 @@ class HIDDeviceUdev final : public IHIDDevice
         return 0;
     }
 
-    static void _threadProcUSBLL(HIDDeviceUdev* device)
+    static void _threadProcUSBLL(std::shared_ptr<HIDDeviceUdev> device)
     {
         int i;
         char errStr[256];
@@ -90,7 +91,7 @@ class HIDDeviceUdev final : public IHIDDevice
         {
             snprintf(errStr, 256, "Unable to open %s@%s: %s\n",
                      device->m_token.getProductName().c_str(), dp, strerror(errno));
-            device->m_devImp.deviceError(errStr);
+            device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
             udev_device_unref(udevDev);
@@ -140,10 +141,10 @@ class HIDDeviceUdev final : public IHIDDevice
         device->m_initCond.notify_one();
 
         /* Start transfer loop */
-        device->m_devImp.initialCycle();
+        device->m_devImp->initialCycle();
         while (device->m_runningTransferLoop)
-            device->m_devImp.transferCycle();
-        device->m_devImp.finalCycle();
+            device->m_devImp->transferCycle();
+        device->m_devImp->finalCycle();
 
         /* Cleanup */
         close(fd);
@@ -151,7 +152,7 @@ class HIDDeviceUdev final : public IHIDDevice
         udev_device_unref(udevDev);
     }
 
-    static void _threadProcBTLL(HIDDeviceUdev* device)
+    static void _threadProcBTLL(std::shared_ptr<HIDDeviceUdev> device)
     {
         std::unique_lock<std::mutex> lk(device->m_initMutex);
         udev_device* udevDev = udev_device_new_from_syspath(GetUdev(), device->m_devPath.c_str());
@@ -162,15 +163,17 @@ class HIDDeviceUdev final : public IHIDDevice
         device->m_initCond.notify_one();
 
         /* Start transfer loop */
-        device->m_devImp.initialCycle();
+        device->m_devImp->initialCycle();
         while (device->m_runningTransferLoop)
-            device->m_devImp.transferCycle();
-        device->m_devImp.finalCycle();
+            device->m_devImp->transferCycle();
+        device->m_devImp->finalCycle();
 
         udev_device_unref(udevDev);
     }
 
-    static void _threadProcHID(HIDDeviceUdev* device)
+    int m_reportDescSz;
+
+    static void _threadProcHID(std::shared_ptr<HIDDeviceUdev> device)
     {
         char errStr[256];
         std::unique_lock<std::mutex> lk(device->m_initMutex);
@@ -183,7 +186,7 @@ class HIDDeviceUdev final : public IHIDDevice
         {
             snprintf(errStr, 256, "Unable to open %s@%s: %s\n",
                      device->m_token.getProductName().c_str(), dp, strerror(errno));
-            device->m_devImp.deviceError(errStr);
+            device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
             udev_device_unref(udevDev);
@@ -196,12 +199,33 @@ class HIDDeviceUdev final : public IHIDDevice
         lk.unlock();
         device->m_initCond.notify_one();
 
-        /* Report input size */
-        size_t readSz = device->m_devImp.getInputBufferSize();
+        /* Report descriptor size */
+        int reportDescSize;
+        if (ioctl(fd, HIDIOCGRDESCSIZE, &reportDescSize) == -1)
+        {
+            snprintf(errStr, 256, "Unable to ioctl(HIDIOCGRDESCSIZE) %s@%s: %s\n",
+                     device->m_token.getProductName().c_str(), dp, strerror(errno));
+            device->m_devImp->deviceError(errStr);
+            close(fd);
+            return;
+        }
+
+        /* Get report descriptor */
+        hidraw_report_descriptor reportDesc;
+        reportDesc.size = reportDescSize;
+        if (ioctl(fd, HIDIOCGRDESC, &reportDesc) == -1)
+        {
+            snprintf(errStr, 256, "Unable to ioctl(HIDIOCGRDESC) %s@%s: %s\n",
+                     device->m_token.getProductName().c_str(), dp, strerror(errno));
+            device->m_devImp->deviceError(errStr);
+            close(fd);
+            return;
+        }
+        size_t readSz = HIDParser::CalculateMaxInputReportSize(reportDesc.value, reportDesc.size);
         std::unique_ptr<uint8_t[]> readBuf(new uint8_t[readSz]);
 
         /* Start transfer loop */
-        device->m_devImp.initialCycle();
+        device->m_devImp->initialCycle();
         while (device->m_runningTransferLoop)
         {
             fd_set readset;
@@ -215,13 +239,13 @@ class HIDDeviceUdev final : public IHIDDevice
                     ssize_t sz = read(fd, readBuf.get(), readSz);
                     if (sz < 0)
                         break;
-                    device->m_devImp.receivedHIDReport(readBuf.get(), sz,
-                                                       HIDReportType::Input, readBuf[0]);
+                    device->m_devImp->receivedHIDReport(readBuf.get(), sz,
+                                                        HIDReportType::Input, readBuf[0]);
                 }
             }
-            device->m_devImp.transferCycle();
+            device->m_devImp->transferCycle();
         }
-        device->m_devImp.finalCycle();
+        device->m_devImp->finalCycle();
 
         /* Cleanup */
         close(fd);
@@ -232,6 +256,23 @@ class HIDDeviceUdev final : public IHIDDevice
     void _deviceDisconnected()
     {
         m_runningTransferLoop = false;
+    }
+
+    std::vector<uint8_t> _getReportDescriptor()
+    {
+        /* Report descriptor size */
+        int reportDescSize;
+        if (ioctl(m_devFd, HIDIOCGRDESCSIZE, &reportDescSize) == -1)
+            return {};
+
+        /* Get report descriptor */
+        hidraw_report_descriptor reportDesc;
+        reportDesc.size = reportDescSize;
+        if (ioctl(m_devFd, HIDIOCGRDESC, &reportDesc) == -1)
+            return {};
+        std::vector<uint8_t> ret(reportDesc.size, '\0');
+        memmove(ret.data(), reportDesc.value, reportDesc.size);
+        return ret;
     }
 
     bool _sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message)
@@ -274,7 +315,7 @@ class HIDDeviceUdev final : public IHIDDevice
 
 public:
 
-    HIDDeviceUdev(DeviceToken& token, DeviceBase& devImp)
+    HIDDeviceUdev(DeviceToken& token, const std::shared_ptr<DeviceBase>& devImp)
     : m_token(token),
       m_devImp(devImp),
       m_devPath(token.getDevicePath())
@@ -286,11 +327,11 @@ public:
         std::unique_lock<std::mutex> lk(m_initMutex);
         DeviceType dType = m_token.getDeviceType();
         if (dType == DeviceType::USB)
-            m_thread = std::thread(_threadProcUSBLL, this);
+            m_thread = std::thread(_threadProcUSBLL, std::static_pointer_cast<HIDDeviceUdev>(shared_from_this()));
         else if (dType == DeviceType::Bluetooth)
-            m_thread = std::thread(_threadProcBTLL, this);
+            m_thread = std::thread(_threadProcBTLL, std::static_pointer_cast<HIDDeviceUdev>(shared_from_this()));
         else if (dType == DeviceType::HID)
-            m_thread = std::thread(_threadProcHID, this);
+            m_thread = std::thread(_threadProcHID, std::static_pointer_cast<HIDDeviceUdev>(shared_from_this()));
         else
         {
             fprintf(stderr, "invalid token supplied to device constructor");
@@ -303,7 +344,7 @@ public:
     {
         m_runningTransferLoop = false;
         if (m_thread.joinable())
-            m_thread.join();
+            m_thread.detach();
     }
 
 

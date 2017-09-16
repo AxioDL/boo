@@ -115,12 +115,8 @@ class HIDListenerIOKit : public IHIDListener
                 getUSBStringDescriptor(dev, pstridx, pstr);
             }
 
-            if (!listener->m_finder._insertToken(std::make_unique<DeviceToken>(DeviceType::USB,
-                                                 vid, pid, vstr, pstr, devPath)))
-            {
-                /* Matched-insertion failed; see if generic HID interface is available */
-                /* TODO: Do */
-            }
+            listener->m_finder._insertToken(std::make_unique<DeviceToken>(DeviceType::USB,
+                                            vid, pid, vstr, pstr, devPath));
 
             //printf("ADDED %08X %s\n", obj, devPath);
         }
@@ -195,7 +191,7 @@ class HIDListenerIOKit : public IHIDListener
                     if (usageV != kHIDUsage_GD_Joystick && usageV != kHIDUsage_GD_GamePad)
                         continue;
                 }
-                else if (usagePageV != kHIDPage_Game)
+                else
                 {
                     continue;
                 }
@@ -216,12 +212,8 @@ class HIDListenerIOKit : public IHIDListener
                     CFStringGetCString(pstridx.get(), pstr, 128, kCFStringEncodingUTF8);
             }
 
-            if (!listener->m_finder._insertToken(std::make_unique<DeviceToken>(DeviceType::HID,
-                                                 vidv, pidv, vstr, pstr, devPath)))
-            {
-                /* Matched-insertion failed; see if generic HID interface is available */
-                /* TODO: Do */
-            }
+            listener->m_finder._insertToken(std::make_unique<DeviceToken>(DeviceType::HID,
+                                            vidv, pidv, vstr, pstr, devPath));
 
             //printf("ADDED %08X %s\n", obj, devPath);
         }

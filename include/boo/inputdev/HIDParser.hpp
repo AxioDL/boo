@@ -192,10 +192,11 @@ private:
     std::pair<uint32_t, uint32_t> m_outputReports = {};
     std::pair<uint32_t, uint32_t> m_featureReports = {};
     bool m_multipleReports = false;
-    ParserStatus ParseItem(HIDReports& reportsOut,
-                           std::stack<HIDItemState>& stateStack,
-                           std::stack<HIDCollectionItem>& collectionStack,
-                           const uint8_t*& it, const uint8_t* end);
+    static ParserStatus ParseItem(HIDReports& reportsOut,
+                                  std::stack<HIDItemState>& stateStack,
+                                  std::stack<HIDCollectionItem>& collectionStack,
+                                  const uint8_t*& it, const uint8_t* end,
+                                  bool& multipleReports);
 #endif
 
 public:
@@ -203,6 +204,8 @@ public:
     ParserStatus Parse(const PHIDP_PREPARSED_DATA descriptorData);
 #else
     ParserStatus Parse(const uint8_t* descriptorData, size_t len);
+    static size_t CalculateMaxInputReportSize(const uint8_t* descriptorData, size_t len);
+    static std::pair<HIDUsagePage, HIDUsage> GetApplicationUsage(const uint8_t* descriptorData, size_t len);
 #endif
     operator bool() const { return m_status == ParserStatus::Done; }
     void EnumerateValues(const std::function<bool(const HIDMainItem& item)>& valueCB) const;

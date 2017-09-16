@@ -89,7 +89,7 @@ dbgFunc(VkDebugReportFlagsEXT msgFlags, VkDebugReportObjectTypeEXT objType,
         const char *pLayerPrefix, const char *pMsg, void *pUserData)
 {
     if (msgFlags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
-        Log.report(logvisor::Fatal, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
+        Log.report(logvisor::Error, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
     } else if (msgFlags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
         Log.report(logvisor::Warning, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
     } else if (msgFlags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT) {
@@ -339,7 +339,6 @@ void VulkanContext::initVulkan(const char* appName)
     m_layerNames.push_back("VK_LAYER_LUNARG_core_validation");
     m_layerNames.push_back("VK_LAYER_LUNARG_object_tracker");
     m_layerNames.push_back("VK_LAYER_LUNARG_parameter_validation");
-    m_layerNames.push_back("VK_LAYER_LUNARG_swapchain");
     m_layerNames.push_back("VK_LAYER_GOOGLE_threading");
 #endif
 

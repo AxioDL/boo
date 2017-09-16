@@ -1,9 +1,14 @@
 #include "boo/inputdev/IHIDListener.hpp"
 #include "boo/inputdev/DeviceFinder.hpp"
+#include "boo/inputdev/HIDParser.hpp"
 #include <libudev.h>
 #include <string.h>
 #include <stdio.h>
 #include <signal.h>
+#include <fcntl.h>
+#include <linux/hidraw.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
 #include <thread>
 
 namespace boo
@@ -91,6 +96,38 @@ class HIDListenerUdev final : public IHIDListener
                 product = udev_list_entry_get_value(hidnamee);
                 manuf = product;
             }
+
+            /* Get device file */
+            const char* dp = udev_device_get_devnode(device);
+            int fd = open(dp, O_RDWR);
+            if (fd < 0)
+                return;
+
+            /* Report descriptor size */
+            int reportDescSize;
+            if (ioctl(fd, HIDIOCGRDESCSIZE, &reportDescSize) == -1)
+            {
+                const char* err = strerror(errno);
+                close(fd);
+                return;
+            }
+
+            /* Get report descriptor */
+            hidraw_report_descriptor reportDesc;
+            reportDesc.size = reportDescSize;
+            if (ioctl(fd, HIDIOCGRDESC, &reportDesc) == -1)
+            {
+                const char* err = strerror(errno);
+                close(fd);
+                return;
+            }
+            close(fd);
+
+            std::pair<HIDUsagePage, HIDUsage> usage =
+                HIDParser::GetApplicationUsage(reportDesc.value, reportDesc.size);
+            if (usage.first != HIDUsagePage::GenericDesktop ||
+                (usage.second != HIDUsage::Joystick && usage.second != HIDUsage::GamePad))
+                return;
         }
 
 #if 0
@@ -171,6 +208,7 @@ public:
         }
         udev_monitor_filter_add_match_subsystem_devtype(m_udevMon, "usb", "usb_device");
         udev_monitor_filter_add_match_subsystem_devtype(m_udevMon, "bluetooth", "bluetooth_device");
+        udev_monitor_filter_add_match_subsystem_devtype(m_udevMon, "hidraw", nullptr);
         udev_monitor_filter_update(m_udevMon);
 
         /* Initial HID Device Add */
