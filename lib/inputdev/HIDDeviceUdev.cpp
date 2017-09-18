@@ -243,7 +243,8 @@ class HIDDeviceUdev final : public IHIDDevice
                                                         HIDReportType::Input, readBuf[0]);
                 }
             }
-            device->m_devImp->transferCycle();
+            if (device->m_runningTransferLoop)
+                device->m_devImp->transferCycle();
         }
         device->m_devImp->finalCycle();
 
