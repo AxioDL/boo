@@ -130,6 +130,9 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         default: break;
         }
 
+        if (hwChannels > 8)
+            return AudioChannelSet::Surround71;
+
         return AudioChannelSet::Unknown;
     }
 
@@ -632,67 +635,100 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
             UInt32 layoutSz = sizeof(layout);
             if (AudioQueueGetProperty(m_queue, kAudioQueueProperty_ChannelLayout, &layout, &layoutSz))
             {
-                Log.report(logvisor::Fatal, "unable to get channel layout from audio queue");
-                return;
-            }
-
-            switch (layout.mChannelLayoutTag)
-            {
-            case kAudioChannelLayoutTag_UseChannelDescriptions:
-                chMapOut.m_channelCount = layout.mNumberChannelDescriptions;
-                for (int i=0 ; i<layout.mNumberChannelDescriptions ; ++i)
+                Log.report(logvisor::Warning, "unable to get channel layout from audio queue; using count's default");
+                switch (m_mixInfo.m_channels)
                 {
-                    AudioChannel ch = AQSChannelToBooChannel(layout.mChannelDescriptions[i].mChannelLabel);
-                    chMapOut.m_channels[i] = ch;
-                }
-                break;
-            case kAudioChannelLayoutTag_UseChannelBitmap:
-                if ((layout.mChannelBitmap & kAudioChannelBit_Left) != 0)
+                case AudioChannelSet::Stereo:
+                default:
                     chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontLeft;
-                if ((layout.mChannelBitmap & kAudioChannelBit_Right) != 0)
                     chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontRight;
-                if ((layout.mChannelBitmap & kAudioChannelBit_Center) != 0)
-                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontCenter;
-                if ((layout.mChannelBitmap & kAudioChannelBit_LFEScreen) != 0)
-                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::LFE;
-                if ((layout.mChannelBitmap & kAudioChannelBit_LeftSurround) != 0)
+                    break;
+                case AudioChannelSet::Quad:
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontLeft;
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontRight;
                     chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::RearLeft;
-                if ((layout.mChannelBitmap & kAudioChannelBit_RightSurround) != 0)
                     chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::RearRight;
-                if ((layout.mChannelBitmap & kAudioChannelBit_LeftSurroundDirect) != 0)
+                    break;
+                case AudioChannelSet::Surround51:
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontLeft;
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontRight;
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontCenter;
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::LFE;
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::RearLeft;
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::RearRight;
+                    break;
+                case AudioChannelSet::Surround71:
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontLeft;
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontRight;
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontCenter;
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::LFE;
                     chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::SideLeft;
-                if ((layout.mChannelBitmap & kAudioChannelBit_RightSurroundDirect) != 0)
                     chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::SideRight;
-                break;
-            case kAudioChannelLayoutTag_Stereo:
-            case kAudioChannelLayoutTag_StereoHeadphones:
-                chMapOut.m_channelCount = 2;
-                chMapOut.m_channels[0] = AudioChannel::FrontLeft;
-                chMapOut.m_channels[1] = AudioChannel::FrontRight;
-                break;
-            case kAudioChannelLayoutTag_Quadraphonic:
-                chMapOut.m_channelCount = 4;
-                chMapOut.m_channels[0] = AudioChannel::FrontLeft;
-                chMapOut.m_channels[1] = AudioChannel::FrontRight;
-                chMapOut.m_channels[2] = AudioChannel::RearLeft;
-                chMapOut.m_channels[3] = AudioChannel::RearRight;
-                break;
-            case kAudioChannelLayoutTag_Pentagonal:
-                chMapOut.m_channelCount = 5;
-                chMapOut.m_channels[0] = AudioChannel::FrontLeft;
-                chMapOut.m_channels[1] = AudioChannel::FrontRight;
-                chMapOut.m_channels[2] = AudioChannel::RearLeft;
-                chMapOut.m_channels[3] = AudioChannel::RearRight;
-                chMapOut.m_channels[4] = AudioChannel::FrontCenter;
-                break;
-            default:
-                Log.report(logvisor::Fatal,
-                           "unknown channel layout %u; using stereo",
-                           layout.mChannelLayoutTag);
-                chMapOut.m_channelCount = 2;
-                chMapOut.m_channels[0] = AudioChannel::FrontLeft;
-                chMapOut.m_channels[1] = AudioChannel::FrontRight;
-                break;
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::RearLeft;
+                    chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::RearRight;
+                    break;
+                }
+            }
+            else
+            {
+                switch (layout.mChannelLayoutTag)
+                {
+                case kAudioChannelLayoutTag_UseChannelDescriptions:
+                    chMapOut.m_channelCount = layout.mNumberChannelDescriptions;
+                    for (int i = 0; i < layout.mNumberChannelDescriptions; ++i)
+                    {
+                        AudioChannel ch = AQSChannelToBooChannel(layout.mChannelDescriptions[i].mChannelLabel);
+                        chMapOut.m_channels[i] = ch;
+                    }
+                    break;
+                case kAudioChannelLayoutTag_UseChannelBitmap:
+                    if ((layout.mChannelBitmap & kAudioChannelBit_Left) != 0)
+                        chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontLeft;
+                    if ((layout.mChannelBitmap & kAudioChannelBit_Right) != 0)
+                        chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontRight;
+                    if ((layout.mChannelBitmap & kAudioChannelBit_Center) != 0)
+                        chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::FrontCenter;
+                    if ((layout.mChannelBitmap & kAudioChannelBit_LFEScreen) != 0)
+                        chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::LFE;
+                    if ((layout.mChannelBitmap & kAudioChannelBit_LeftSurround) != 0)
+                        chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::RearLeft;
+                    if ((layout.mChannelBitmap & kAudioChannelBit_RightSurround) != 0)
+                        chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::RearRight;
+                    if ((layout.mChannelBitmap & kAudioChannelBit_LeftSurroundDirect) != 0)
+                        chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::SideLeft;
+                    if ((layout.mChannelBitmap & kAudioChannelBit_RightSurroundDirect) != 0)
+                        chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::SideRight;
+                    break;
+                case kAudioChannelLayoutTag_Stereo:
+                case kAudioChannelLayoutTag_StereoHeadphones:
+                    chMapOut.m_channelCount = 2;
+                    chMapOut.m_channels[0] = AudioChannel::FrontLeft;
+                    chMapOut.m_channels[1] = AudioChannel::FrontRight;
+                    break;
+                case kAudioChannelLayoutTag_Quadraphonic:
+                    chMapOut.m_channelCount = 4;
+                    chMapOut.m_channels[0] = AudioChannel::FrontLeft;
+                    chMapOut.m_channels[1] = AudioChannel::FrontRight;
+                    chMapOut.m_channels[2] = AudioChannel::RearLeft;
+                    chMapOut.m_channels[3] = AudioChannel::RearRight;
+                    break;
+                case kAudioChannelLayoutTag_Pentagonal:
+                    chMapOut.m_channelCount = 5;
+                    chMapOut.m_channels[0] = AudioChannel::FrontLeft;
+                    chMapOut.m_channels[1] = AudioChannel::FrontRight;
+                    chMapOut.m_channels[2] = AudioChannel::RearLeft;
+                    chMapOut.m_channels[3] = AudioChannel::RearRight;
+                    chMapOut.m_channels[4] = AudioChannel::FrontCenter;
+                    break;
+                default:
+                    Log.report(logvisor::Warning,
+                               "unknown channel layout %u; using stereo",
+                               layout.mChannelLayoutTag);
+                    chMapOut.m_channelCount = 2;
+                    chMapOut.m_channels[0] = AudioChannel::FrontLeft;
+                    chMapOut.m_channels[1] = AudioChannel::FrontRight;
+                    break;
+                }
             }
         }
         else
