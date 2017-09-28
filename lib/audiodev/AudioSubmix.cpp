@@ -95,7 +95,7 @@ int16_t* AudioSubmix::_getMergeBuf16(size_t frames)
     if (m_redirect16)
         return m_redirect16;
 
-    size_t sampleCount = frames * m_root.m_mixInfo.m_channelMap.m_channelCount;
+    size_t sampleCount = frames * m_root.clientMixInfo().m_channelMap.m_channelCount;
     if (m_scratch16.size() < sampleCount)
         m_scratch16.resize(sampleCount);
 
@@ -107,7 +107,7 @@ int32_t* AudioSubmix::_getMergeBuf32(size_t frames)
     if (m_redirect32)
         return m_redirect32;
 
-    size_t sampleCount = frames * m_root.m_mixInfo.m_channelMap.m_channelCount;
+    size_t sampleCount = frames * m_root.clientMixInfo().m_channelMap.m_channelCount;
     if (m_scratch32.size() < sampleCount)
         m_scratch32.resize(sampleCount);
 
@@ -119,7 +119,7 @@ float* AudioSubmix::_getMergeBufFlt(size_t frames)
     if (m_redirectFlt)
         return m_redirectFlt;
 
-    size_t sampleCount = frames * m_root.m_mixInfo.m_channelMap.m_channelCount;
+    size_t sampleCount = frames * m_root.clientMixInfo().m_channelMap.m_channelCount;
     if (m_scratchFlt.size() < sampleCount)
         m_scratchFlt.resize(sampleCount);
 
@@ -128,13 +128,13 @@ float* AudioSubmix::_getMergeBufFlt(size_t frames)
 
 size_t AudioSubmix::_pumpAndMix16(size_t frames)
 {
-    ChannelMap& chMap = m_root.m_mixInfo.m_channelMap;
+    const ChannelMap& chMap = m_root.clientMixInfo().m_channelMap;
     size_t chanCount = chMap.m_channelCount;
 
     if (m_redirect16)
     {
         if (m_cb && m_cb->canApplyEffect())
-            m_cb->applyEffect(m_redirect16, frames, chMap, m_root.m_mixInfo.m_sampleRate);
+            m_cb->applyEffect(m_redirect16, frames, chMap, m_root.clientMixInfo().m_sampleRate);
         m_redirect16 += chanCount * frames;
     }
     else
@@ -143,7 +143,7 @@ size_t AudioSubmix::_pumpAndMix16(size_t frames)
         if (m_scratch16.size() < sampleCount)
             m_scratch16.resize(sampleCount);
         if (m_cb && m_cb->canApplyEffect())
-            m_cb->applyEffect(m_scratch16.data(), frames, chMap, m_root.m_mixInfo.m_sampleRate);
+            m_cb->applyEffect(m_scratch16.data(), frames, chMap, m_root.clientMixInfo().m_sampleRate);
 
         size_t curSlewFrame = m_slewFrames;
         for (auto& smx : m_sendGains)
@@ -188,13 +188,13 @@ size_t AudioSubmix::_pumpAndMix16(size_t frames)
 
 size_t AudioSubmix::_pumpAndMix32(size_t frames)
 {
-    ChannelMap& chMap = m_root.m_mixInfo.m_channelMap;
+    const ChannelMap& chMap = m_root.clientMixInfo().m_channelMap;
     size_t chanCount = chMap.m_channelCount;
 
     if (m_redirect32)
     {
         if (m_cb && m_cb->canApplyEffect())
-            m_cb->applyEffect(m_redirect32, frames, chMap, m_root.m_mixInfo.m_sampleRate);
+            m_cb->applyEffect(m_redirect32, frames, chMap, m_root.clientMixInfo().m_sampleRate);
         m_redirect32 += chanCount * frames;
     }
     else
@@ -203,7 +203,7 @@ size_t AudioSubmix::_pumpAndMix32(size_t frames)
         if (m_scratch32.size() < sampleCount)
             m_scratch32.resize(sampleCount);
         if (m_cb && m_cb->canApplyEffect())
-            m_cb->applyEffect(m_scratch32.data(), frames, chMap, m_root.m_mixInfo.m_sampleRate);
+            m_cb->applyEffect(m_scratch32.data(), frames, chMap, m_root.clientMixInfo().m_sampleRate);
 
         size_t curSlewFrame = m_slewFrames;
         for (auto& smx : m_sendGains)
@@ -248,13 +248,13 @@ size_t AudioSubmix::_pumpAndMix32(size_t frames)
 
 size_t AudioSubmix::_pumpAndMixFlt(size_t frames)
 {
-    ChannelMap& chMap = m_root.m_mixInfo.m_channelMap;
+    const ChannelMap& chMap = m_root.clientMixInfo().m_channelMap;
     size_t chanCount = chMap.m_channelCount;
 
     if (m_redirectFlt)
     {
         if (m_cb && m_cb->canApplyEffect())
-            m_cb->applyEffect(m_redirectFlt, frames, chMap, m_root.m_mixInfo.m_sampleRate);
+            m_cb->applyEffect(m_redirectFlt, frames, chMap, m_root.clientMixInfo().m_sampleRate);
         m_redirectFlt += chanCount * frames;
     }
     else
@@ -263,7 +263,7 @@ size_t AudioSubmix::_pumpAndMixFlt(size_t frames)
         if (m_scratchFlt.size() < sampleCount)
             m_scratchFlt.resize(sampleCount);
         if (m_cb && m_cb->canApplyEffect())
-            m_cb->applyEffect(m_scratchFlt.data(), frames, chMap, m_root.m_mixInfo.m_sampleRate);
+            m_cb->applyEffect(m_scratchFlt.data(), frames, chMap, m_root.clientMixInfo().m_sampleRate);
 
         size_t curSlewFrame = m_slewFrames;
         for (auto& smx : m_sendGains)

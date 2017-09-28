@@ -60,6 +60,9 @@ struct IAudioVoiceEngine
     /** Set total volume of engine */
     virtual void setVolume(float vol)=0;
 
+    /** Enable or disable Lt/Rt surround encoding. If successful, getAvailableSet() will return Surround51 */
+    virtual bool enableLtRt(bool enable)=0;
+
     /** Get list of MIDI devices found on system */
     virtual std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const=0;
 

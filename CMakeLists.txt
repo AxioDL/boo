@@ -14,6 +14,14 @@ endif()
 
 add_subdirectory(xxhash)
 
+set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
+find_package(IPP)
+if (IPP_FOUND)
+  add_definitions(-DINTEL_IPP=1)
+  include_directories(${IPP_INCLUDE_DIRS})
+  list(APPEND _BOO_SYS_LIBS ${IPP_LIBRARIES})
+endif ()
+
 set(WITH_LSR_BINDINGS OFF)
 set(BUILD_TESTS OFF)
 set(BUILD_SHARED_LIBS OFF)
@@ -222,6 +230,7 @@ add_library(boo
             lib/inputdev/DeviceFinder.cpp include/boo/inputdev/DeviceFinder.hpp
             lib/inputdev/HIDParser.cpp include/boo/inputdev/HIDParser.hpp
             lib/inputdev/IHIDDevice.hpp
+            lib/audiodev/Common.hpp
             lib/audiodev/WAVOut.cpp
             lib/audiodev/AudioMatrix.hpp
             #lib/audiodev/AudioMatrix.cpp
@@ -232,6 +241,8 @@ add_library(boo
             lib/audiodev/AudioVoice.cpp
             lib/audiodev/AudioSubmix.hpp
             lib/audiodev/AudioSubmix.cpp
+            lib/audiodev/LtRtProcessing.hpp
+            lib/audiodev/LtRtProcessing.cpp
             lib/audiodev/MIDIEncoder.cpp
             lib/audiodev/MIDIDecoder.cpp
             lib/audiodev/MIDICommon.hpp

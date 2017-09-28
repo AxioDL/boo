@@ -1,5 +1,5 @@
 #include "AudioVoiceEngine.hpp"
-#include <string.h>
+#include "LtRtProcessing.hpp"
 
 namespace boo
 {
@@ -15,7 +15,17 @@ BaseAudioVoiceEngine::~BaseAudioVoiceEngine()
 void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int16_t* dataOut)
 {
     memset(dataOut, 0, sizeof(int16_t) * frames * m_mixInfo.m_channelMap.m_channelCount);
-    m_mainSubmix.m_redirect16 = dataOut;
+    if (m_ltRtProcessing)
+    {
+        size_t sampleCount = m_5msFrames * 5;
+        if (m_ltRtIn16.size() < sampleCount)
+            m_ltRtIn16.resize(sampleCount);
+        m_mainSubmix.m_redirect16 = m_ltRtIn16.data();
+    }
+    else
+    {
+        m_mainSubmix.m_redirect16 = dataOut;
+    }
 
     if (m_submixesDirty)
     {
@@ -50,6 +60,12 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int16_t* dataOut)
         for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
             (*it)->_pumpAndMix16(thisFrames);
 
+        if (m_ltRtProcessing)
+        {
+            m_ltRtProcessing->Process(m_ltRtIn16.data(), dataOut, int(thisFrames));
+            m_mainSubmix.m_redirect16 = m_ltRtIn16.data();
+        }
+
         size_t sampleCount = thisFrames * m_mixInfo.m_channelMap.m_channelCount;
         for (size_t i=0 ; i<sampleCount ; ++i)
             dataOut[i] *= m_totalVol;
@@ -65,7 +81,17 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int16_t* dataOut)
 void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int32_t* dataOut)
 {
     memset(dataOut, 0, sizeof(int32_t) * frames * m_mixInfo.m_channelMap.m_channelCount);
-    m_mainSubmix.m_redirect32 = dataOut;
+    if (m_ltRtProcessing)
+    {
+        size_t sampleCount = m_5msFrames * 5;
+        if (m_ltRtIn32.size() < sampleCount)
+            m_ltRtIn32.resize(sampleCount);
+        m_mainSubmix.m_redirect32 = m_ltRtIn32.data();
+    }
+    else
+    {
+        m_mainSubmix.m_redirect32 = dataOut;
+    }
 
     if (m_submixesDirty)
     {
@@ -100,6 +126,12 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int32_t* dataOut)
         for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
             (*it)->_pumpAndMix32(thisFrames);
 
+        if (m_ltRtProcessing)
+        {
+            m_ltRtProcessing->Process(m_ltRtIn32.data(), dataOut, int(thisFrames));
+            m_mainSubmix.m_redirect32 = m_ltRtIn32.data();
+        }
+
         size_t sampleCount = thisFrames * m_mixInfo.m_channelMap.m_channelCount;
         for (size_t i=0 ; i<sampleCount ; ++i)
             dataOut[i] *= m_totalVol;
@@ -115,7 +147,17 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int32_t* dataOut)
 void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, float* dataOut)
 {
     memset(dataOut, 0, sizeof(float) * frames * m_mixInfo.m_channelMap.m_channelCount);
-    m_mainSubmix.m_redirectFlt = dataOut;
+    if (m_ltRtProcessing)
+    {
+        size_t sampleCount = m_5msFrames * 5;
+        if (m_ltRtInFlt.size() < sampleCount)
+            m_ltRtInFlt.resize(sampleCount);
+        m_mainSubmix.m_redirectFlt = m_ltRtInFlt.data();
+    }
+    else
+    {
+        m_mainSubmix.m_redirectFlt = dataOut;
+    }
 
     if (m_submixesDirty)
     {
@@ -149,6 +191,12 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, float* dataOut)
 
         for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
             (*it)->_pumpAndMixFlt(thisFrames);
+
+        if (m_ltRtProcessing)
+        {
+            m_ltRtProcessing->Process(m_ltRtInFlt.data(), dataOut, int(thisFrames));
+            m_mainSubmix.m_redirectFlt = m_ltRtInFlt.data();
+        }
 
         size_t sampleCount = thisFrames * m_mixInfo.m_channelMap.m_channelCount;
         for (size_t i=0 ; i<sampleCount ; ++i)
@@ -216,9 +264,24 @@ void BaseAudioVoiceEngine::setVolume(float vol)
     m_totalVol = vol;
 }
 
+bool BaseAudioVoiceEngine::enableLtRt(bool enable)
+{
+    if (enable && m_mixInfo.m_channelMap.m_channelCount == 2 &&
+        m_mixInfo.m_channels == AudioChannelSet::Stereo)
+        m_ltRtProcessing = std::make_unique<LtRtProcessing>(m_5msFrames, m_mixInfo);
+    else
+        m_ltRtProcessing.reset();
+    return m_ltRtProcessing.operator bool();
+}
+
 const AudioVoiceEngineMixInfo& BaseAudioVoiceEngine::mixInfo() const
 {
     return m_mixInfo;
+}
+
+const AudioVoiceEngineMixInfo& BaseAudioVoiceEngine::clientMixInfo() const
+{
+    return m_ltRtProcessing ? m_ltRtProcessing->inMixInfo() : m_mixInfo;
 }
 
 }

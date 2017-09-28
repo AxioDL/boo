@@ -2,23 +2,14 @@
 #define BOO_AUDIOVOICEENGINE_HPP
 
 #include "boo/audiodev/IAudioVoiceEngine.hpp"
+#include "LtRtProcessing.hpp"
+#include "Common.hpp"
 #include "AudioVoice.hpp"
 #include "AudioSubmix.hpp"
 #include <functional>
 
 namespace boo
 {
-
-/** Pertinent information from audio backend about optimal mixed-audio representation */
-struct AudioVoiceEngineMixInfo
-{
-    double m_sampleRate;
-    soxr_datatype_t m_sampleFormat;
-    unsigned m_bitsPerSample;
-    AudioChannelSet m_channels;
-    ChannelMap m_channelMap;
-    size_t m_periodFrames;
-};
 
 /** Base class for managing mixing and sample-rate-conversion amongst active voices */
 class BaseAudioVoiceEngine : public IAudioVoiceEngine
@@ -43,6 +34,12 @@ protected:
     std::vector<int16_t> m_scratch16Post;
     std::vector<int32_t> m_scratch32Post;
     std::vector<float> m_scratchFltPost;
+
+    /* LtRt processing if enabled */
+    std::unique_ptr<LtRtProcessing> m_ltRtProcessing;
+    std::vector<int16_t> m_ltRtIn16;
+    std::vector<int32_t> m_ltRtIn32;
+    std::vector<float> m_ltRtInFlt;
 
     AudioSubmix m_mainSubmix;
     std::list<AudioSubmix*> m_linearizedSubmixes;
@@ -71,8 +68,10 @@ public:
     void setCallbackInterface(IAudioVoiceEngineCallback* cb);
 
     void setVolume(float vol);
+    bool enableLtRt(bool enable);
     const AudioVoiceEngineMixInfo& mixInfo() const;
-    AudioChannelSet getAvailableSet() {return m_mixInfo.m_channels;}
+    const AudioVoiceEngineMixInfo& clientMixInfo() const;
+    AudioChannelSet getAvailableSet() {return clientMixInfo().m_channels;}
     void pumpAndMixVoices() {}
     size_t get5MsFrames() const {return m_5msFrames;}
 };
