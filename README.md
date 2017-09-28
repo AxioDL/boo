@@ -38,3 +38,12 @@ refresh-rate.
 * **[Windows]** WASAPI
 * **[OS X]** Audio Queue Services
 * **[Linux]** ALSA
+
+#### Pro Logic II Encoding Support
+
+The Boo audio engine supports real-time Pro Logic II surround matrixing for 5.1 client mixes.
+Call `IAudioVoiceEngine::enableLtRt(true);` to enable this functionality.
+
+**Note:** Before building Boo, the [Intel Integrated Performance Primitives](https://software.intel.com/en-us/intel-ipp)
+must be installed for full surround-sound encoding capabilities. Without this library, only the left, right, and center
+channels will be encoded. The surround channels are phase-shifted 90-degrees using the Hilbert functions in the library.
