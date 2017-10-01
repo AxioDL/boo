@@ -115,6 +115,12 @@ enum class TextureFormat
     PVRTC4
 };
 
+enum class TextureClampMode
+{
+    Repeat,
+    ClampToWhite
+};
+
 /** Opaque token for representing the data layout of a vertex
  *  in a VBO. Also able to reference buffers for platforms like
  *  OpenGL that cache object refs */
@@ -253,14 +259,14 @@ struct IGraphicsDataFactory
 
         virtual ITextureS*
         newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                         const void* data, size_t sz)=0;
+                         TextureClampMode clampMode, const void* data, size_t sz)=0;
         virtual ITextureSA*
         newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
-                              TextureFormat fmt, const void* data, size_t sz)=0;
+                              TextureFormat fmt, TextureClampMode clampMode, const void* data, size_t sz)=0;
         virtual ITextureD*
-        newDynamicTexture(size_t width, size_t height, TextureFormat fmt)=0;
+        newDynamicTexture(size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode)=0;
         virtual ITextureR*
-        newRenderTexture(size_t width, size_t height,
+        newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
                          size_t colorBindingCount, size_t depthBindingCount)=0;
 
         virtual bool bindingNeedsVertexFormat() const=0;

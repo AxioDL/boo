@@ -595,7 +595,14 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
     samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.maxAnisotropy = 1.f;
-    ThrowIfFailed(vk::CreateSampler(m_dev, &samplerInfo, nullptr, &m_linearSampler));
+    ThrowIfFailed(vk::CreateSampler(m_dev, &samplerInfo, nullptr, &m_linearSamplers[0]));
+
+    /* Create shared white-clamped sampler */
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+    ThrowIfFailed(vk::CreateSampler(m_dev, &samplerInfo, nullptr, &m_linearSamplers[1]));
 
     /* images */
     sc.m_bufs.resize(swapchainImageCount);
@@ -960,7 +967,8 @@ class VulkanTextureS : public ITextureS
 
     VulkanTextureS(IGraphicsData* parent, VulkanContext* ctx,
                    size_t width, size_t height, size_t mips,
-                   TextureFormat fmt, const void* data, size_t sz)
+                   TextureFormat fmt, TextureClampMode clampMode,
+                   const void* data, size_t sz)
     : ITextureS(parent), m_ctx(ctx), m_fmt(fmt), m_sz(sz), m_width(width), m_height(height), m_mips(mips)
     {
         VkFormat pfmt;
@@ -1031,7 +1039,7 @@ class VulkanTextureS : public ITextureS
         texCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex));
 
-        m_descInfo.sampler = ctx->m_linearSampler;
+        m_descInfo.sampler = ctx->m_linearSamplers[int(clampMode)];
         m_descInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 public:
@@ -1159,7 +1167,8 @@ class VulkanTextureSA : public ITextureSA
 
     VulkanTextureSA(IGraphicsData* parent, VulkanContext* ctx,
                     size_t width, size_t height, size_t layers,
-                    size_t mips, TextureFormat fmt, const void* data, size_t sz)
+                    size_t mips, TextureFormat fmt, TextureClampMode clampMode,
+                    const void* data, size_t sz)
     : ITextureSA(parent), m_ctx(ctx), m_fmt(fmt), m_width(width),
       m_height(height), m_layers(layers), m_mips(mips), m_sz(sz)
     {
@@ -1226,7 +1235,7 @@ class VulkanTextureSA : public ITextureSA
         texCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex));
 
-        m_descInfo.sampler = ctx->m_linearSampler;
+        m_descInfo.sampler = ctx->m_linearSamplers[int(clampMode)];
         m_descInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 public:
@@ -1357,7 +1366,7 @@ class VulkanTextureD : public ITextureD
     VkFormat m_vkFmt;
     int m_validSlots = 0;
     VulkanTextureD(IGraphicsData* parent, VulkanCommandQueue* q, VulkanContext* ctx,
-                   size_t width, size_t height, TextureFormat fmt)
+                   size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode)
     : ITextureD(parent), m_width(width), m_height(height), m_fmt(fmt), m_q(q)
     {
         VkFormat pfmt;
@@ -1441,7 +1450,7 @@ class VulkanTextureD : public ITextureD
             /* create gpu image */
             ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex[i]));
 
-            m_descInfo[i].sampler = ctx->m_linearSampler;
+            m_descInfo[i].sampler = ctx->m_linearSamplers[int(clampMode)];
             m_descInfo[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
     }
@@ -1519,11 +1528,11 @@ class VulkanTextureR : public ITextureR
     size_t m_height = 0;
     size_t m_samples = 0;
 
+    TextureClampMode m_clampMode;
     size_t m_colorBindCount;
     size_t m_depthBindCount;
 
-    void Setup(VulkanContext* ctx, size_t width, size_t height, size_t samples,
-               size_t colorBindCount, size_t depthBindCount)
+    void Setup(VulkanContext* ctx)
     {
         /* no-ops on first call */
         doDestroy();
@@ -1535,12 +1544,12 @@ class VulkanTextureR : public ITextureR
         texCreateInfo.pNext = nullptr;
         texCreateInfo.imageType = VK_IMAGE_TYPE_2D;
         texCreateInfo.format = ctx->m_displayFormat;
-        texCreateInfo.extent.width = width;
-        texCreateInfo.extent.height = height;
+        texCreateInfo.extent.width = m_width;
+        texCreateInfo.extent.height = m_height;
         texCreateInfo.extent.depth = 1;
         texCreateInfo.mipLevels = 1;
         texCreateInfo.arrayLayers = 1;
-        texCreateInfo.samples = VkSampleCountFlagBits(samples);
+        texCreateInfo.samples = VkSampleCountFlagBits(m_samples);
         texCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         texCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         texCreateInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
@@ -1580,7 +1589,9 @@ class VulkanTextureR : public ITextureR
         memAlloc.allocationSize = (memAlloc.allocationSize + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
         memTypeBits &= memReqs.memoryTypeBits;
 
-        for (size_t i=0 ; i<colorBindCount ; ++i)
+        texCreateInfo.samples = VkSampleCountFlagBits(1);
+
+        for (size_t i=0 ; i<m_colorBindCount ; ++i)
         {
             m_colorBindLayout[i] = VK_IMAGE_LAYOUT_UNDEFINED;
             texCreateInfo.format = ctx->m_displayFormat;
@@ -1593,11 +1604,11 @@ class VulkanTextureR : public ITextureR
             memAlloc.allocationSize = (memAlloc.allocationSize + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
             memTypeBits &= memReqs.memoryTypeBits;
 
-            m_colorBindDescInfo[i].sampler = ctx->m_linearSampler;
+            m_colorBindDescInfo[i].sampler = ctx->m_linearSamplers[int(m_clampMode)];
             m_colorBindDescInfo[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
 
-        for (size_t i=0 ; i<depthBindCount ; ++i)
+        for (size_t i=0 ; i<m_depthBindCount ; ++i)
         {
             m_depthBindLayout[i] = VK_IMAGE_LAYOUT_UNDEFINED;
             texCreateInfo.format = VK_FORMAT_D24_UNORM_S8_UINT;
@@ -1610,7 +1621,7 @@ class VulkanTextureR : public ITextureR
             memAlloc.allocationSize = (memAlloc.allocationSize + memReqs.alignment - 1) & ~(memReqs.alignment - 1);
             memTypeBits &= memReqs.memoryTypeBits;
 
-            m_depthBindDescInfo[i].sampler = ctx->m_linearSampler;
+            m_depthBindDescInfo[i].sampler = ctx->m_linearSamplers[int(m_clampMode)];
             m_depthBindDescInfo[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
 
@@ -1651,7 +1662,7 @@ class VulkanTextureR : public ITextureR
         viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
         ThrowIfFailed(vk::CreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_depthView));
 
-        for (size_t i=0 ; i<colorBindCount ; ++i)
+        for (size_t i=0 ; i<m_colorBindCount ; ++i)
         {
             ThrowIfFailed(vk::BindImageMemory(ctx->m_dev, m_colorBindTex[i], m_gpuMem, colorOffsets[i]));
             viewCreateInfo.image = m_colorBindTex[i];
@@ -1661,7 +1672,7 @@ class VulkanTextureR : public ITextureR
             m_colorBindDescInfo[i].imageView = m_colorBindView[i];
         }
 
-        for (size_t i=0 ; i<depthBindCount ; ++i)
+        for (size_t i=0 ; i<m_depthBindCount ; ++i)
         {
             ThrowIfFailed(vk::BindImageMemory(ctx->m_dev, m_depthBindTex[i], m_gpuMem, depthOffsets[i]));
             viewCreateInfo.image = m_depthBindTex[i];
@@ -1677,8 +1688,8 @@ class VulkanTextureR : public ITextureR
         fbCreateInfo.pNext = nullptr;
         fbCreateInfo.renderPass = ctx->m_pass;
         fbCreateInfo.attachmentCount = 2;
-        fbCreateInfo.width = width;
-        fbCreateInfo.height = height;
+        fbCreateInfo.width = m_width;
+        fbCreateInfo.height = m_height;
         fbCreateInfo.layers = 1;
         VkImageView attachments[2] = {m_colorView, m_depthView};
         fbCreateInfo.pAttachments = attachments;
@@ -1690,17 +1701,18 @@ class VulkanTextureR : public ITextureR
         m_passBeginInfo.framebuffer = m_framebuffer;
         m_passBeginInfo.renderArea.offset.x = 0;
         m_passBeginInfo.renderArea.offset.y = 0;
-        m_passBeginInfo.renderArea.extent.width = width;
-        m_passBeginInfo.renderArea.extent.height = height;
+        m_passBeginInfo.renderArea.extent.width = m_width;
+        m_passBeginInfo.renderArea.extent.height = m_height;
         m_passBeginInfo.clearValueCount = 0;
         m_passBeginInfo.pClearValues = nullptr;
     }
 
     VulkanCommandQueue* m_q;
     VulkanTextureR(IGraphicsData* parent, VulkanContext* ctx, VulkanCommandQueue* q,
-                   size_t width, size_t height, size_t samples,
+                   size_t width, size_t height, size_t samples, TextureClampMode clampMode,
                    size_t colorBindCount, size_t depthBindCount)
     : ITextureR(parent), m_q(q), m_width(width), m_height(height), m_samples(samples),
+      m_clampMode(clampMode),
       m_colorBindCount(colorBindCount),
       m_depthBindCount(depthBindCount)
     {
@@ -1710,7 +1722,7 @@ class VulkanTextureR : public ITextureR
             Log.report(logvisor::Fatal, "too many depth bindings for render texture");
 
         if (samples == 0) m_samples = 1;
-        Setup(ctx, width, height, samples, colorBindCount, depthBindCount);
+        Setup(ctx);
     }
 public:
     size_t samples() const {return m_samples;}
@@ -1748,7 +1760,7 @@ public:
             height = 1;
         m_width = width;
         m_height = height;
-        Setup(ctx, width, height, m_samples, m_colorBindCount, m_depthBindCount);
+        Setup(ctx);
     }
 };
 
@@ -3050,7 +3062,7 @@ VulkanDataFactoryImpl::VulkanDataFactoryImpl(IGraphicsContext* parent,
         layoutBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         layoutBindings[i].descriptorCount = 1;
         layoutBindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-        layoutBindings[i].pImmutableSamplers = &ctx->m_linearSampler;
+        layoutBindings[i].pImmutableSamplers = nullptr;
     }
 
     VkDescriptorSetLayoutCreateInfo descriptorLayout = {};
@@ -3342,43 +3354,48 @@ IGraphicsBufferD* VulkanDataFactory::Context::newDynamicBuffer(BufferUse use, si
 }
 
 ITextureS* VulkanDataFactory::Context::newStaticTexture(size_t width, size_t height, size_t mips,
-                                                        TextureFormat fmt, const void* data, size_t sz)
+                                                        TextureFormat fmt, TextureClampMode clampMode,
+                                                        const void* data, size_t sz)
 {
     VulkanData* d = static_cast<VulkanData*>(VulkanDataFactoryImpl::m_deferredData.get());
     VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
-    VulkanTextureS* retval = new VulkanTextureS(d, factory.m_ctx, width, height, mips, fmt, data, sz);
+    VulkanTextureS* retval = new VulkanTextureS(d, factory.m_ctx, width, height, mips, fmt,
+                                                clampMode, data, sz);
     d->m_STexs.emplace_back(retval);
     return retval;
 }
 
 ITextureSA* VulkanDataFactory::Context::newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
-                                                              TextureFormat fmt, const void* data, size_t sz)
+                                                              TextureFormat fmt, TextureClampMode clampMode,
+                                                              const void* data, size_t sz)
 {
     VulkanData* d = static_cast<VulkanData*>(VulkanDataFactoryImpl::m_deferredData.get());
     VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
-    VulkanTextureSA* retval = new VulkanTextureSA(d, factory.m_ctx, width, height, layers, mips, fmt, data, sz);
+    VulkanTextureSA* retval = new VulkanTextureSA(d, factory.m_ctx, width, height, layers, mips, fmt,
+                                                  clampMode, data, sz);
     d->m_SATexs.emplace_back(retval);
     return retval;
 }
 
-ITextureD* VulkanDataFactory::Context::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
+ITextureD* VulkanDataFactory::Context::newDynamicTexture(size_t width, size_t height, TextureFormat fmt,
+                                                         TextureClampMode clampMode)
 {
     VulkanData* d = static_cast<VulkanData*>(VulkanDataFactoryImpl::m_deferredData.get());
     VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
     VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(factory.m_parent->getCommandQueue());
-    VulkanTextureD* retval = new VulkanTextureD(d, q, factory.m_ctx, width, height, fmt);
+    VulkanTextureD* retval = new VulkanTextureD(d, q, factory.m_ctx, width, height, fmt, clampMode);
     d->m_DTexs.emplace_back(retval);
     return retval;
 }
 
-ITextureR* VulkanDataFactory::Context::newRenderTexture(size_t width, size_t height,
+ITextureR* VulkanDataFactory::Context::newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
                                                         size_t colorBindCount, size_t depthBindCount)
 {
     VulkanData* d = static_cast<VulkanData*>(VulkanDataFactoryImpl::m_deferredData.get());
     VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
     VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(factory.m_parent->getCommandQueue());
     VulkanTextureR* retval = new VulkanTextureR(d, factory.m_ctx, q, width, height, factory.m_drawSamples,
-                                                colorBindCount, depthBindCount);
+                                                clampMode, colorBindCount, depthBindCount);
     d->m_RTexs.emplace_back(retval);
     return retval;
 }

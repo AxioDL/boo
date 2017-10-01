@@ -314,29 +314,25 @@ class D3D11TextureR : public ITextureR
     size_t m_colorBindCount;
     size_t m_depthBindCount;
 
-    void Setup(D3D11Context* ctx, size_t width, size_t height, size_t samples,
-               size_t colorBindCount, size_t depthBindCount)
+    void Setup(D3D11Context* ctx)
     {
-        ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R8G8B8A8_UNORM, width, height,
-            1, 1, D3D11_BIND_RENDER_TARGET, D3D11_USAGE_DEFAULT, 0, samples), nullptr, &m_colorTex));
-        ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_D24_UNORM_S8_UINT, width, height,
-            1, 1, D3D11_BIND_DEPTH_STENCIL, D3D11_USAGE_DEFAULT, 0, samples), nullptr, &m_depthTex));
+        ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R8G8B8A8_UNORM, m_width, m_height,
+            1, 1, D3D11_BIND_RENDER_TARGET, D3D11_USAGE_DEFAULT, 0, m_samples), nullptr, &m_colorTex));
+        ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_D24_UNORM_S8_UINT, m_width, m_height,
+            1, 1, D3D11_BIND_DEPTH_STENCIL, D3D11_USAGE_DEFAULT, 0, m_samples), nullptr, &m_depthTex));
 
         D3D11_RTV_DIMENSION rtvDim;
         D3D11_DSV_DIMENSION dsvDim;
-        D3D11_SRV_DIMENSION srvDim;
 
         if (samples > 1)
         {
             rtvDim = D3D11_RTV_DIMENSION_TEXTURE2DMS;
             dsvDim = D3D11_DSV_DIMENSION_TEXTURE2DMS;
-            srvDim = D3D11_SRV_DIMENSION_TEXTURE2DMS;
         }
         else
         {
             rtvDim = D3D11_RTV_DIMENSION_TEXTURE2D;
             dsvDim = D3D11_DSV_DIMENSION_TEXTURE2D;
-            srvDim = D3D11_SRV_DIMENSION_TEXTURE2D;
         }
 
         ThrowIfFailed(ctx->m_dev->CreateRenderTargetView(m_colorTex.Get(),
@@ -344,20 +340,21 @@ class D3D11TextureR : public ITextureR
         ThrowIfFailed(ctx->m_dev->CreateDepthStencilView(m_depthTex.Get(),
             &CD3D11_DEPTH_STENCIL_VIEW_DESC(m_depthTex.Get(), dsvDim), &m_dsv));
 
-        for (size_t i=0 ; i<colorBindCount ; ++i)
+        for (size_t i=0 ; i<m_colorBindCount ; ++i)
         {
-            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R8G8B8A8_UNORM, width, height,
-                1, 1, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, samples), nullptr, &m_colorBindTex[i]));
+            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R8G8B8A8_UNORM, m_width, m_height,
+                1, 1, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, 1), nullptr, &m_colorBindTex[i]));
             ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_colorBindTex[i].Get(),
-                &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_colorBindTex[i].Get(), srvDim), &m_colorSrv[i]));
+                &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_colorBindTex[i].Get(), D3D11_SRV_DIMENSION_TEXTURE2D), &m_colorSrv[i]));
         }
 
-        for (size_t i=0 ; i<depthBindCount ; ++i)
+        for (size_t i=0 ; i<m_depthBindCount ; ++i)
         {
-            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R24G8_TYPELESS, width, height,
-                1, 1, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, samples), nullptr, &m_depthBindTex[i]));
+            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R24G8_TYPELESS, m_width, m_height,
+                1, 1, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, 1), nullptr, &m_depthBindTex[i]));
             ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_depthBindTex[i].Get(),
-                &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_depthBindTex[i].Get(), srvDim, DXGI_FORMAT_R24_UNORM_X8_TYPELESS), &m_depthSrv[i]));
+                &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_depthBindTex[i].Get(), D3D11_SRV_DIMENSION_TEXTURE2D,
+                                                  DXGI_FORMAT_R24_UNORM_X8_TYPELESS), &m_depthSrv[i]));
         }
     }
 
@@ -372,7 +369,7 @@ class D3D11TextureR : public ITextureR
             Log.report(logvisor::Fatal, "too many depth bindings for render texture");
 
         if (samples == 0) m_samples = 1;
-        Setup(ctx, width, height, samples, colorBindCount, depthBindCount);
+        Setup(ctx);
     }
 public:
     size_t samples() const {return m_samples;}
@@ -398,7 +395,7 @@ public:
             height = 1;
         m_width = width;
         m_height = height;
-        Setup(ctx, width, height, m_samples, m_colorBindCount, m_depthBindCount);
+        Setup(ctx);
     }
 };
 
@@ -1024,8 +1021,8 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         cbind->bind(m_deferredCtx.Get(), m_fillBuf);
         m_cmdLists[m_fillBuf].resTokens.push_back(cbind->lock());
 
-        ID3D11SamplerState* samp[] = {m_ctx->m_ss.Get()};
-        m_deferredCtx->PSSetSamplers(0, 1, samp);
+        ID3D11SamplerState* samp[] = {m_ctx->m_ss[0].Get(), m_ctx->m_ss[1].Get()};
+        m_deferredCtx->PSSetSamplers(0, 2, samp);
     }
 
     D3D11TextureR* m_boundTarget;

@@ -313,49 +313,30 @@ class MetalTextureR : public ITextureR
     size_t m_colorBindCount;
     size_t m_depthBindCount;
 
-    void Setup(MetalContext* ctx, size_t width, size_t height, size_t samples,
-               size_t colorBindCount, size_t depthBindCount)
+    void Setup(MetalContext* ctx)
     {
-        m_width = width;
-        m_height = height;
-
-        if (colorBindCount > MAX_BIND_TEXS)
+        if (m_colorBindCount > MAX_BIND_TEXS)
             Log.report(logvisor::Fatal, "too many color bindings for render texture");
-        if (depthBindCount > MAX_BIND_TEXS)
+        if (m_depthBindCount > MAX_BIND_TEXS)
             Log.report(logvisor::Fatal, "too many depth bindings for render texture");
 
         @autoreleasepool
         {
             MTLTextureDescriptor* desc =
             [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
-                                                               width:width height:height
+                                                               width:m_width height:m_height
                                                            mipmapped:NO];
             desc.storageMode = MTLStorageModePrivate;
 
-            if (samples > 1)
+            if (m_samples > 1)
             {
                 desc.textureType = MTLTextureType2DMultisample;
-                desc.sampleCount = samples;
+                desc.sampleCount = m_samples;
                 desc.usage = MTLTextureUsageRenderTarget;
                 m_colorTex = [ctx->m_dev newTextureWithDescriptor:desc];
 
-                if (colorBindCount)
-                {
-                    desc.usage = MTLTextureUsageShaderRead;
-                    for (int i=0 ; i<colorBindCount ; ++i)
-                        m_colorBindTex[i] = [ctx->m_dev newTextureWithDescriptor:desc];
-                }
-
-                desc.usage = MTLTextureUsageRenderTarget;
                 desc.pixelFormat = MTLPixelFormatDepth32Float;
                 m_depthTex = [ctx->m_dev newTextureWithDescriptor:desc];
-
-                if (depthBindCount)
-                {
-                    desc.usage = MTLTextureUsageShaderRead;
-                    for (int i=0 ; i<depthBindCount ; ++i)
-                        m_depthBindTex[i] = [ctx->m_dev newTextureWithDescriptor:desc];
-                }
             }
             else
             {
@@ -364,23 +345,25 @@ class MetalTextureR : public ITextureR
                 desc.usage = MTLTextureUsageRenderTarget;
                 m_colorTex = [ctx->m_dev newTextureWithDescriptor:desc];
 
-                if (colorBindCount)
-                {
-                    desc.usage = MTLTextureUsageShaderRead;
-                    for (int i=0 ; i<colorBindCount ; ++i)
-                        m_colorBindTex[i] = [ctx->m_dev newTextureWithDescriptor:desc];
-                }
-
-                desc.usage = MTLTextureUsageRenderTarget;
                 desc.pixelFormat = MTLPixelFormatDepth32Float;
                 m_depthTex = [ctx->m_dev newTextureWithDescriptor:desc];
+            }
 
-                if (depthBindCount)
-                {
-                    desc.usage = MTLTextureUsageShaderRead;
-                    for (int i=0 ; i<depthBindCount ; ++i)
-                        m_depthBindTex[i] = [ctx->m_dev newTextureWithDescriptor:desc];
-                }
+            desc.textureType = MTLTextureType2D;
+            desc.sampleCount = 1;
+            desc.usage = MTLTextureUsageShaderRead;
+            if (m_colorBindCount)
+            {
+                desc.pixelFormat = MTLPixelFormatBGRA8Unorm;
+                for (int i=0 ; i<m_colorBindCount ; ++i)
+                    m_colorBindTex[i] = [ctx->m_dev newTextureWithDescriptor:desc];
+            }
+
+            if (m_depthBindCount)
+            {
+                desc.pixelFormat = MTLPixelFormatDepth32Float;
+                for (int i=0 ; i<m_depthBindCount ; ++i)
+                    m_depthBindTex[i] = [ctx->m_dev newTextureWithDescriptor:desc];
             }
 
             {
@@ -446,7 +429,7 @@ class MetalTextureR : public ITextureR
       m_depthBindCount(depthBindCount)
     {
         if (samples == 0) m_samples = 1;
-        Setup(ctx, width, height, samples, colorBindCount, depthBindCount);
+        Setup(ctx);
     }
 public:
     size_t samples() const {return m_samples;}
@@ -468,7 +451,7 @@ public:
             height = 1;
         m_width = width;
         m_height = height;
-        Setup(ctx, width, height, m_samples, m_colorBindCount, m_depthBindCount);
+        Setup(ctx);
     }
 };
 
@@ -1255,7 +1238,7 @@ IGraphicsBufferD* MetalDataFactory::Context::newDynamicBuffer(BufferUse use, siz
 }
 
 ITextureS* MetalDataFactory::Context::newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                                       const void* data, size_t sz)
+                                                       TextureClampMode clampMode, const void* data, size_t sz)
 {
     MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
     MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
@@ -1264,7 +1247,8 @@ ITextureS* MetalDataFactory::Context::newStaticTexture(size_t width, size_t heig
     return retval;
 }
 ITextureSA* MetalDataFactory::Context::newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
-                                                             TextureFormat fmt, const void* data, size_t sz)
+                                                             TextureFormat fmt, TextureClampMode clampMode,
+                                                             const void* data, size_t sz)
 {
     MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
     MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
@@ -1272,7 +1256,8 @@ ITextureSA* MetalDataFactory::Context::newStaticArrayTexture(size_t width, size_
     d->m_SATexs.emplace_back(retval);
     return retval;
 }
-ITextureD* MetalDataFactory::Context::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
+ITextureD* MetalDataFactory::Context::newDynamicTexture(size_t width, size_t height, TextureFormat fmt,
+                                                        TextureClampMode clampMode)
 {
     MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
     MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
@@ -1281,7 +1266,7 @@ ITextureD* MetalDataFactory::Context::newDynamicTexture(size_t width, size_t hei
     d->m_DTexs.emplace_back(retval);
     return retval;
 }
-ITextureR* MetalDataFactory::Context::newRenderTexture(size_t width, size_t height,
+ITextureR* MetalDataFactory::Context::newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
                                                        size_t colorBindCount, size_t depthBindCount)
 {
     MetalData* d = MetalDataFactoryImpl::m_deferredData.get();

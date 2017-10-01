@@ -265,7 +265,12 @@ public:
             sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
             sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
             sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
-            m_3dCtx.m_ctx11.m_dev->CreateSamplerState(&sampDesc, &m_3dCtx.m_ctx11.m_ss);
+            m_3dCtx.m_ctx11.m_dev->CreateSamplerState(&sampDesc, &m_3dCtx.m_ctx11.m_ss[0]);
+
+            sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
+            sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
+            sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
+            m_3dCtx.m_ctx11.m_dev->CreateSamplerState(&sampDesc, &m_3dCtx.m_ctx11.m_ss[1]);
 
             Log.report(logvisor::Info, "initialized D3D11 renderer");
             return;

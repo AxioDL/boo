@@ -43,7 +43,7 @@ struct VulkanContext
     VkRenderPass m_pass;
     VkCommandPool m_loadPool;
     VkCommandBuffer m_loadCmdBuf;
-    VkSampler m_linearSampler;
+    VkSampler m_linearSamplers[2];
     VkFormat m_displayFormat;
 
     struct Window
@@ -117,11 +117,11 @@ public:
         IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count);
 
         ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                    const void* data, size_t sz);
+                                    TextureClampMode clampMode, const void* data, size_t sz);
         ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
-                                          TextureFormat fmt, const void* data, size_t sz);
-        ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt);
-        ITextureR* newRenderTexture(size_t width, size_t height,
+                                          TextureFormat fmt, TextureClampMode clampMode, const void* data, size_t sz);
+        ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode);
+        ITextureR* newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
                                     size_t colorBindCount, size_t depthBindCount);
 
         bool bindingNeedsVertexFormat() const {return false;}

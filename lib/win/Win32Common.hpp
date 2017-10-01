@@ -67,7 +67,7 @@ struct D3D11Context
     ComPtr<IDXGIFactory2> m_dxFactory;
     ComPtr<ID3D11Device1> m_dev;
     ComPtr<ID3D11DeviceContext1> m_devCtx;
-    ComPtr<ID3D11SamplerState> m_ss;
+    ComPtr<ID3D11SamplerState> m_ss[2];
     struct Window
     {
         ComPtr<IDXGISwapChain1> m_swapChain;

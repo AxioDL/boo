@@ -435,8 +435,7 @@ class D3D12TextureR : public ITextureR
     size_t m_colorBindCount;
     size_t m_depthBindCount;
 
-    void Setup(D3D12Context* ctx, size_t width, size_t height, size_t samples,
-               size_t colorBindCount, size_t depthBindCount)
+    void Setup(D3D12Context* ctx)
     {
         D3D12_DESCRIPTOR_HEAP_DESC rtvdesc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1};
         ThrowIfFailed(ctx->m_dev->CreateDescriptorHeap(&rtvdesc, __uuidof(ID3D12DescriptorHeap), &m_rtvHeap));
@@ -449,29 +448,31 @@ class D3D12TextureR : public ITextureR
         CD3DX12_RESOURCE_DESC rtvresdesc;
         CD3DX12_RESOURCE_DESC dsvresdesc;
         CD3DX12_RESOURCE_DESC cbindresdesc;
+        CD3DX12_RESOURCE_DESC dbindresdesc;
 
-        if (samples > 1)
+        if (m_samples > 1)
         {
             rtvDim = D3D12_RTV_DIMENSION_TEXTURE2DMS;
             dsvDim = D3D12_DSV_DIMENSION_TEXTURE2DMS;
-            rtvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, 1, samples,
+            rtvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, m_width, m_height, 1, 1, m_samples,
                 0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT);
-            dsvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R24G8_TYPELESS, width, height, 1, 1, samples,
+            dsvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R24G8_TYPELESS, m_width, m_height, 1, 1, m_samples,
                 0, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT);
-            cbindresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, 1, samples,
-                0, D3D12_RESOURCE_FLAG_NONE, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT);
         }
         else
         {
             rtvDim = D3D12_RTV_DIMENSION_TEXTURE2D;
             dsvDim = D3D12_DSV_DIMENSION_TEXTURE2D;
-            rtvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, 1, 1,
+            rtvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, m_width, m_height, 1, 1, 1,
                 0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
-            dsvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R24G8_TYPELESS, width, height, 1, 1, 1,
+            dsvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R24G8_TYPELESS, m_width, m_height, 1, 1, 1,
                 0, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
-            cbindresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, 1, 1,
-                0, D3D12_RESOURCE_FLAG_NONE);
         }
+
+        cbindresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, m_width, m_height, 1, 1, 1,
+            0, D3D12_RESOURCE_FLAG_NONE);
+        dbindresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R24G8_TYPELESS, m_width, m_height, 1, 1, 1,
+            0, D3D12_RESOURCE_FLAG_NONE);
 
         D3D12_CLEAR_VALUE colorClear = {};
         colorClear.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -491,17 +492,17 @@ class D3D12TextureR : public ITextureR
         D3D12_DEPTH_STENCIL_VIEW_DESC dsvvdesc = {DXGI_FORMAT_D24_UNORM_S8_UINT, dsvDim};
         ctx->m_dev->CreateDepthStencilView(m_depthTex.Get(), &dsvvdesc, m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
 
-        for (size_t i=0 ; i<colorBindCount ; ++i)
+        for (size_t i=0 ; i<m_colorBindCount ; ++i)
         {
             ThrowIfFailed(ctx->m_dev->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE,
                 &cbindresdesc, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, nullptr,
                 __uuidof(ID3D12Resource), &m_colorBindTex[i]));
         }
 
-        for (size_t i=0 ; i<depthBindCount ; ++i)
+        for (size_t i=0 ; i<m_depthBindCount ; ++i)
         {
             ThrowIfFailed(ctx->m_dev->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE,
-                &dsvresdesc, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, nullptr,
+                &dbindresdesc, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, nullptr,
                 __uuidof(ID3D12Resource), &m_depthBindTex[i]));
         }
     }
@@ -519,7 +520,7 @@ class D3D12TextureR : public ITextureR
             Log.report(logvisor::Fatal, "too many depth bindings for render texture");
 
         if (samples == 0) m_samples = 1;
-        Setup(ctx, width, height, samples, colorBindCount, depthBindCount);
+        Setup(ctx);
     }
 public:
     size_t samples() const {return m_samples;}
@@ -543,7 +544,7 @@ public:
             height = 1;
         m_width = width;
         m_height = height;
-        Setup(ctx, width, height, m_samples, m_colorBindCount, m_depthBindCount);
+        Setup(ctx);
     }
 };
 
@@ -1739,8 +1740,16 @@ public:
 
         ComPtr<ID3DBlob> rsOutBlob;
         ComPtr<ID3DBlob> rsErrorBlob;
+
+        D3D12_STATIC_SAMPLER_DESC samplers[] =
+        {
+            CD3DX12_STATIC_SAMPLER_DESC(0),
+            CD3DX12_STATIC_SAMPLER_DESC(1, D3D12_FILTER_ANISOTROPIC, D3D12_TEXTURE_ADDRESS_MODE_BORDER,
+                D3D12_TEXTURE_ADDRESS_MODE_BORDER, D3D12_TEXTURE_ADDRESS_MODE_BORDER)
+        };
+
         ThrowIfFailed(D3D12SerializeRootSignaturePROC(
-            &CD3DX12_ROOT_SIGNATURE_DESC(1, rootParms, 1, &CD3DX12_STATIC_SAMPLER_DESC(0),
+            &CD3DX12_ROOT_SIGNATURE_DESC(1, rootParms, 2, samplers,
                 D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT),
             D3D_ROOT_SIGNATURE_VERSION_1, &rsOutBlob, &rsErrorBlob));
 

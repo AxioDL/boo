@@ -267,7 +267,7 @@ struct TestApplicationCallback : IApplicationCallback
             /* Create render target */
             int x, y, w, h;
             self->mainWindow->getWindowFrame(x, y, w, h);
-            self->m_renderTarget = ctx.newRenderTexture(w, h, false, false);
+            self->m_renderTarget = ctx.newRenderTexture(w, h, boo::TextureClampMode::Repeat, 0, 0);
 
             /* Make Tri-strip VBO */
             struct Vert
@@ -305,7 +305,7 @@ struct TestApplicationCallback : IApplicationCallback
                     tex[i][j][3] = 0xff;
                 }
             ITexture* texture =
-            ctx.newStaticTexture(256, 256, 1, TextureFormat::RGBA8, tex, 256*256*4);
+            ctx.newStaticTexture(256, 256, 1, TextureFormat::RGBA8, boo::TextureClampMode::Repeat, tex, 256*256*4);
 
             /* Make shader pipeline */
             IShaderPipeline* pipeline = nullptr;

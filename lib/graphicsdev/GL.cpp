@@ -172,12 +172,35 @@ GLDataFactory::Context::newStaticBuffer(BufferUse use, const void* data, size_t 
     return retval;
 }
 
+static void SetClampMode(GLenum target, TextureClampMode clampMode)
+{
+    switch (clampMode)
+    {
+    case TextureClampMode::Repeat:
+    {
+        glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(target, GL_TEXTURE_WRAP_R, GL_REPEAT);
+        break;
+    }
+    case TextureClampMode::ClampToWhite:
+    {
+        glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        glTexParameteri(target, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
+        GLfloat color[] = {1.f, 1.f, 1.f, 1.f};
+        glTexParameterfv(target, GL_TEXTURE_BORDER_COLOR, color);
+        break;
+    }
+    }
+}
+
 class GLTextureS : public ITextureS
 {
     friend class GLDataFactory;
     GLuint m_tex;
     GLTextureS(GLData* parent, size_t width, size_t height, size_t mips,
-               TextureFormat fmt, const void* data, size_t sz)
+               TextureFormat fmt, TextureClampMode clampMode, const void* data, size_t sz)
     : ITextureS(parent)
     {
         const uint8_t* dataIt = static_cast<const uint8_t*>(data);
@@ -191,6 +214,8 @@ class GLTextureS : public ITextureS
         }
         else
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+        SetClampMode(GL_TEXTURE_2D, clampMode);
 
         GLenum intFormat, format;
         int pxPitch;
@@ -256,7 +281,7 @@ class GLTextureSA : public ITextureSA
     friend class GLDataFactory;
     GLuint m_tex;
     GLTextureSA(GLData* parent, size_t width, size_t height, size_t layers, size_t mips,
-                TextureFormat fmt, const void* data, size_t sz)
+                TextureFormat fmt, TextureClampMode clampMode, const void* data, size_t sz)
     : ITextureSA(parent)
     {
         const uint8_t* dataIt = static_cast<const uint8_t*>(data);
@@ -270,6 +295,8 @@ class GLTextureSA : public ITextureSA
         }
         else
             glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+        SetClampMode(GL_TEXTURE_2D_ARRAY, clampMode);
 
         GLenum intFormat, format;
         int pxPitch;
@@ -317,7 +344,7 @@ class GLTextureD : public ITextureD
     size_t m_width = 0;
     size_t m_height = 0;
     int m_validMask = 0;
-    GLTextureD(IGraphicsData* parent, size_t width, size_t height, TextureFormat fmt);
+    GLTextureD(IGraphicsData* parent, size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode);
     void update(int b);
 public:
     ~GLTextureD();
@@ -344,7 +371,7 @@ class GLTextureR : public ITextureR
     size_t m_samples = 0;
     GLenum m_target;
     GLTextureR(IGraphicsData* parent, GLCommandQueue* q, size_t width, size_t height, size_t samples,
-               size_t colorBindCount, size_t depthBindCount);
+               TextureClampMode clampMode, size_t colorBindCount, size_t depthBindCount);
 public:
     ~GLTextureR();
 
@@ -365,24 +392,6 @@ public:
             glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_samples, GL_RGBA, width, height, GL_FALSE);
             glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[1]);
             glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_samples, GL_DEPTH_COMPONENT24, width, height, GL_FALSE);
-
-            for (int i=0 ; i<MAX_BIND_TEXS ; ++i)
-            {
-                if (m_bindTexs[0][i])
-                {
-                    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_bindTexs[0][i]);
-                    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_samples, GL_RGBA, width, height, GL_FALSE);
-                }
-            }
-
-            for (int i=0 ; i<MAX_BIND_TEXS ; ++i)
-            {
-                if (m_bindTexs[1][i])
-                {
-                    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_bindTexs[1][i]);
-                    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_samples, GL_DEPTH_COMPONENT24, width, height, GL_FALSE);
-                }
-            }
         }
         else
         {
@@ -394,23 +403,23 @@ public:
             glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
             glDepthMask(GL_TRUE);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        }
 
-            for (int i=0 ; i<MAX_BIND_TEXS ; ++i)
+        for (int i=0 ; i<MAX_BIND_TEXS ; ++i)
+        {
+            if (m_bindTexs[0][i])
             {
-                if (m_bindTexs[0][i])
-                {
-                    glBindTexture(GL_TEXTURE_2D, m_bindTexs[0][i]);
-                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-                }
+                glBindTexture(GL_TEXTURE_2D, m_bindTexs[0][i]);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
             }
+        }
 
-            for (int i=0 ; i<MAX_BIND_TEXS ; ++i)
+        for (int i=0 ; i<MAX_BIND_TEXS ; ++i)
+        {
+            if (m_bindTexs[1][i])
             {
-                if (m_bindTexs[1][i])
-                {
-                    glBindTexture(GL_TEXTURE_2D, m_bindTexs[1][i]);
-                    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
-                }
+                glBindTexture(GL_TEXTURE_2D, m_bindTexs[1][i]);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
             }
         }
     }
@@ -418,20 +427,20 @@ public:
 
 ITextureS*
 GLDataFactory::Context::newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                         const void* data, size_t sz)
+                                         TextureClampMode clampMode, const void* data, size_t sz)
 {
     GLData* d = GLDataFactoryImpl::m_deferredData.get();
-    GLTextureS* retval = new GLTextureS(d, width, height, mips, fmt, data, sz);
+    GLTextureS* retval = new GLTextureS(d, width, height, mips, fmt, clampMode, data, sz);
     d->m_STexs.emplace_back(retval);
     return retval;
 }
 
 ITextureSA*
 GLDataFactory::Context::newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
-                                              TextureFormat fmt, const void *data, size_t sz)
+                                              TextureFormat fmt, TextureClampMode clampMode, const void *data, size_t sz)
 {
     GLData* d = GLDataFactoryImpl::m_deferredData.get();
-    GLTextureSA* retval = new GLTextureSA(d, width, height, layers, mips, fmt, data, sz);
+    GLTextureSA* retval = new GLTextureSA(d, width, height, layers, mips, fmt, clampMode, data, sz);
     d->m_SATexs.emplace_back(retval);
     return retval;
 }
@@ -1597,7 +1606,8 @@ GLDataFactory::Context::newDynamicBuffer(BufferUse use, size_t stride, size_t co
     return retval;
 }
 
-GLTextureD::GLTextureD(IGraphicsData* parent, size_t width, size_t height, TextureFormat fmt)
+GLTextureD::GLTextureD(IGraphicsData* parent, size_t width, size_t height, TextureFormat fmt,
+                       TextureClampMode clampMode)
 : boo::ITextureD(parent), m_width(width), m_height(height)
 {
     int pxPitch = 4;
@@ -1626,6 +1636,7 @@ GLTextureD::GLTextureD(IGraphicsData* parent, size_t width, size_t height, Textu
         glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, width, height, 0, m_format, GL_UNSIGNED_BYTE, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        SetClampMode(GL_TEXTURE_2D, clampMode);
     }
 }
 GLTextureD::~GLTextureD() {glDeleteTextures(3, m_texs);}
@@ -1665,16 +1676,16 @@ void GLTextureD::bind(size_t idx, int b)
 }
 
 ITextureD*
-GLDataFactory::Context::newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
+GLDataFactory::Context::newDynamicTexture(size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode)
 {
     GLData* d = GLDataFactoryImpl::m_deferredData.get();
-    GLTextureD* retval = new GLTextureD(d, width, height, fmt);
+    GLTextureD* retval = new GLTextureD(d, width, height, fmt, clampMode);
     d->m_DTexs.emplace_back(retval);
     return retval;
 }
 
 GLTextureR::GLTextureR(IGraphicsData* parent, GLCommandQueue* q, size_t width, size_t height, size_t samples,
-                       size_t colorBindingCount, size_t depthBindingCount)
+                       TextureClampMode clampMode, size_t colorBindingCount, size_t depthBindingCount)
 : boo::ITextureR(parent), m_q(q), m_width(width), m_height(height), m_samples(samples)
 {
     glGenTextures(2, m_texs);
@@ -1690,6 +1701,7 @@ GLTextureR::GLTextureR(IGraphicsData* parent, GLCommandQueue* q, size_t width, s
             Log.report(logvisor::Fatal, "too many depth bindings for render texture");
         glGenTextures(depthBindingCount, m_bindTexs[1]);
     }
+
     if (samples > 1)
     {
         m_target = GL_TEXTURE_2D_MULTISAMPLE;
@@ -1697,18 +1709,6 @@ GLTextureR::GLTextureR(IGraphicsData* parent, GLCommandQueue* q, size_t width, s
         glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGBA, width, height, GL_FALSE);
         glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[1]);
         glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_DEPTH_COMPONENT24, width, height, GL_FALSE);
-
-        for (int i=0 ; i<colorBindingCount ; ++i)
-        {
-            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_bindTexs[0][i]);
-            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGBA, width, height, GL_FALSE);
-        }
-
-        for (int i=0 ; i<depthBindingCount ; ++i)
-        {
-            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_bindTexs[1][i]);
-            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_DEPTH_COMPONENT24, width, height, GL_FALSE);
-        }
     }
     else
     {
@@ -1717,24 +1717,28 @@ GLTextureR::GLTextureR(IGraphicsData* parent, GLCommandQueue* q, size_t width, s
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
         glBindTexture(GL_TEXTURE_2D, m_texs[1]);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
-
-        for (int i=0 ; i<colorBindingCount ; ++i)
-        {
-            glBindTexture(GL_TEXTURE_2D, m_bindTexs[0][i]);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        }
-        for (int i=0 ; i<depthBindingCount ; ++i)
-        {
-            glBindTexture(GL_TEXTURE_2D, m_bindTexs[1][i]);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        }
     }
+
+    for (int i=0 ; i<colorBindingCount ; ++i)
+    {
+        glBindTexture(GL_TEXTURE_2D, m_bindTexs[0][i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        SetClampMode(GL_TEXTURE_2D, clampMode);
+    }
+    for (int i=0 ; i<depthBindingCount ; ++i)
+    {
+        glBindTexture(GL_TEXTURE_2D, m_bindTexs[1][i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        SetClampMode(GL_TEXTURE_2D, clampMode);
+    }
+
     m_q->addFBO(this);
 }
+
 GLTextureR::~GLTextureR()
 {
     glDeleteTextures(2, m_texs);
@@ -1743,13 +1747,13 @@ GLTextureR::~GLTextureR()
 }
 
 ITextureR*
-GLDataFactory::Context::newRenderTexture(size_t width, size_t height,
+GLDataFactory::Context::newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
                                          size_t colorBindingCount, size_t depthBindingCount)
 {
     GLData* d = GLDataFactoryImpl::m_deferredData.get();
     GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
     GLCommandQueue* q = static_cast<GLCommandQueue*>(factory.m_parent->getCommandQueue());
-    GLTextureR* retval = new GLTextureR(d, q, width, height, factory.m_drawSamples,
+    GLTextureR* retval = new GLTextureR(d, q, width, height, factory.m_drawSamples, clampMode,
                                         colorBindingCount, depthBindingCount);
     q->resizeRenderTexture(retval, width, height);
     GLDataFactoryImpl::m_deferredData->m_RTexs.emplace_back(retval);
