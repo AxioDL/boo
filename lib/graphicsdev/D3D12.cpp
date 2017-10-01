@@ -1788,7 +1788,7 @@ public:
         }
 
         ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                    const void* data, size_t sz)
+                                    TextureClampMode clampMode, const void* data, size_t sz)
         {
             D3D12Data* d = D3D12DataFactory::m_deferredData;
             D3D12TextureS* retval = new D3D12TextureS(d, m_parent.m_ctx, width, height, mips, fmt, data, sz);
@@ -1797,7 +1797,7 @@ public:
         }
 
         ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
-                                          TextureFormat fmt, const void* data, size_t sz)
+                                          TextureFormat fmt, TextureClampMode clampMode, const void* data, size_t sz)
         {
             D3D12Data* d = D3D12DataFactory::m_deferredData;
             D3D12TextureSA* retval = new D3D12TextureSA(d, m_parent.m_ctx, width, height, layers, mips, fmt, data, sz);
@@ -1805,7 +1805,7 @@ public:
             return retval;
         }
 
-        ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
+        ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode)
         {
             D3D12Data* d = D3D12DataFactory::m_deferredData;
             D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent.m_parent->getCommandQueue());
@@ -1814,7 +1814,7 @@ public:
             return retval;
         }
 
-        ITextureR* newRenderTexture(size_t width, size_t height,
+        ITextureR* newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
                                     size_t colorBindCount, size_t depthBindCount)
         {
             D3D12Data* d = D3D12DataFactory::m_deferredData;

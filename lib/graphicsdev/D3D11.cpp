@@ -324,7 +324,7 @@ class D3D11TextureR : public ITextureR
         D3D11_RTV_DIMENSION rtvDim;
         D3D11_DSV_DIMENSION dsvDim;
 
-        if (samples > 1)
+        if (m_samples > 1)
         {
             rtvDim = D3D11_RTV_DIMENSION_TEXTURE2DMS;
             dsvDim = D3D11_DSV_DIMENSION_TEXTURE2DMS;
@@ -1311,7 +1311,7 @@ public:
         }
 
         ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-            const void* data, size_t sz)
+            TextureClampMode clampMode, const void* data, size_t sz)
         {
             D3D11Data* d = static_cast<D3D11Data*>(m_deferredData);
             D3D11TextureS* retval = new D3D11TextureS(d, m_parent.m_ctx, width, height, mips, fmt, data, sz);
@@ -1320,7 +1320,7 @@ public:
         }
 
         ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
-                                          TextureFormat fmt, const void* data, size_t sz)
+                                          TextureFormat fmt, TextureClampMode clampMode, const void* data, size_t sz)
         {
             D3D11Data* d = static_cast<D3D11Data*>(m_deferredData);
             D3D11TextureSA* retval = new D3D11TextureSA(d, m_parent.m_ctx, width, height, layers, mips, fmt, data, sz);
@@ -1328,7 +1328,7 @@ public:
             return retval;
         }
 
-        ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt)
+        ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode)
         {
             D3D11Data* d = static_cast<D3D11Data*>(m_deferredData);
             D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent.m_parent->getCommandQueue());
@@ -1337,7 +1337,7 @@ public:
             return retval;
         }
 
-        ITextureR* newRenderTexture(size_t width, size_t height,
+        ITextureR* newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
                                     size_t colorBindCount, size_t depthBindCount)
         {
             D3D11Data* d = static_cast<D3D11Data*>(m_deferredData);

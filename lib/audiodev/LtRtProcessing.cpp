@@ -1,5 +1,9 @@
 #include "LtRtProcessing.hpp"
 #include <cmath>
+#include <algorithm>
+
+#undef min
+#undef max
 
 namespace boo
 {
@@ -26,6 +30,10 @@ inline T ClampFull(float in)
 }
 
 #if INTEL_IPP
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846 /* pi */
+#endif
 
 WindowedHilbert::WindowedHilbert(int windowSamples)
 : m_windowSamples(windowSamples), m_halfSamples(windowSamples / 2),
@@ -158,7 +166,10 @@ template <> float* LtRtProcessing::_getOutBuf<float>() { return m_fltBuffer.get(
 
 LtRtProcessing::LtRtProcessing(int _5msFrames, const AudioVoiceEngineMixInfo& mixInfo)
 : m_inMixInfo(mixInfo), m_5msFrames(_5msFrames), m_5msFramesHalf(_5msFrames / 2),
-  m_outputOffset(m_5msFrames * 5 * 2), m_hilbertSL(_5msFrames), m_hilbertSR(_5msFrames)
+  m_outputOffset(m_5msFrames * 5 * 2)
+#if INTEL_IPP
+, m_hilbertSL(_5msFrames), m_hilbertSR(_5msFrames)
+#endif
 {
     m_inMixInfo.m_channels = AudioChannelSet::Surround51;
     m_inMixInfo.m_channelMap.m_channelCount = 5;
@@ -205,8 +216,10 @@ void LtRtProcessing::Process(const T* input, T* output, int frameCount)
     {
         T* in = &inBuf[bufIdx * m_5msFrames * 5];
         T* out = &outBuf[bufIdx * m_5msFrames * 2];
+#if INTEL_IPP
         m_hilbertSL.AddWindow(in + 3, 5);
         m_hilbertSR.AddWindow(in + 4, 5);
+#endif
 
         // x(:,1) + sqrt(.5)*x(:,3) + sqrt(19/25)*x(:,4) + sqrt(6/25)*x(:,5)
         // x(:,2) + sqrt(.5)*x(:,3) - sqrt(6/25)*x(:,4) - sqrt(19/25)*x(:,5)

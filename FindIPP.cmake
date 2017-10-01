@@ -16,7 +16,11 @@ set(IPP_STATIC ON)
 
 include(FindPackageHandleStandardArgs)
 
-set(IPP_ROOT /opt/intel/ipp CACHE PATH "Folder contains IPP")
+if(WIN32)
+    set(IPP_ROOT $ENV{PROGRAMFILES\(X86\)}/IntelSWTools/compilers_and_libraries/windows/ipp CACHE PATH "Folder contains IPP")
+else()
+    set(IPP_ROOT /opt/intel/ipp CACHE PATH "Folder contains IPP")
+endif()
 
 # Find header file dir
 find_path(IPP_INCLUDE_DIR ipp.h
@@ -53,7 +57,7 @@ macro(find_ipp_library IPP_COMPONENT)
     string(TOLOWER ${IPP_COMPONENT} IPP_COMPONENT_LOWER)
 
     find_library(IPP_LIB_${IPP_COMPONENT} ipp${IPP_COMPONENT_LOWER}${IPP_LIBNAME_SUFFIX}
-            PATHS ${IPP_ROOT}/lib/ia32/ ${IPP_ROOT}/lib)
+            PATHS ${IPP_ROOT}/lib/intel64/ ${IPP_ROOT}/lib)
 endmacro()
 
 # IPP components
