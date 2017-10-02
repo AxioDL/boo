@@ -49,6 +49,9 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int16_t* dataOut)
                 m_engineCallback->on5MsInterval(*this, 5.0 / 1000.0);
         }
 
+        if (m_ltRtProcessing)
+            std::fill(m_ltRtIn16.begin(), m_ltRtIn16.end(), 0);
+
         for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
             (*it)->_zeroFill16();
 
@@ -115,6 +118,9 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, int32_t* dataOut)
                 m_engineCallback->on5MsInterval(*this, 5.0 / 1000.0);
         }
 
+        if (m_ltRtProcessing)
+            std::fill(m_ltRtIn32.begin(), m_ltRtIn32.end(), 0);
+
         for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
             (*it)->_zeroFill32();
 
@@ -180,6 +186,9 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, float* dataOut)
             if (m_engineCallback)
                 m_engineCallback->on5MsInterval(*this, 5.0 / 1000.0);
         }
+
+        if (m_ltRtProcessing)
+            std::fill(m_ltRtInFlt.begin(), m_ltRtInFlt.end(), 0.f);
 
         for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
             (*it)->_zeroFillFlt();

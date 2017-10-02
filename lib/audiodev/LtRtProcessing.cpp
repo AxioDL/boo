@@ -35,52 +35,100 @@ inline T ClampFull(float in)
 #define M_PI 3.14159265358979323846 /* pi */
 #endif
 
-WindowedHilbert::WindowedHilbert(int windowSamples)
-: m_windowSamples(windowSamples), m_halfSamples(windowSamples / 2),
-  m_inputBuf(new Ipp32f[m_windowSamples * 2 + m_halfSamples]),
-  m_outputBuf(new Ipp32fc[m_windowSamples * 4]),
-  m_hammingTable(new Ipp32f[m_halfSamples])
+static constexpr int FirTaps = 27;
+
+FIRFilter12k::FIRFilter12k(int windowFrames, double sampleRate)
 {
-    memset(m_inputBuf.get(), 0, sizeof(Ipp32fc) * m_windowSamples * 2 + m_halfSamples);
-    memset(m_outputBuf.get(), 0, sizeof(Ipp32fc) * m_windowSamples * 4);
-    m_output[0] = m_outputBuf.get();
-    m_output[1] = m_output[0] + m_windowSamples;
-    m_output[2] = m_output[1] + m_windowSamples;
-    m_output[3] = m_output[2] + m_windowSamples;
+    Ipp64f* taps = ippsMalloc_64f(FirTaps);
+    Ipp32f* taps32 = ippsMalloc_32f(FirTaps);
     int sizeSpec, sizeBuf;
-    ippsHilbertGetSize_32f32fc(m_windowSamples, ippAlgHintNone, &sizeSpec, &sizeBuf);
+
+    ippsFIRGenGetBufferSize(FirTaps, &sizeBuf);
+    m_firBuffer = ippsMalloc_8u(sizeBuf);
+    ippsFIRGenLowpass_64f(12000.0 / sampleRate, taps, FirTaps, ippWinBartlett, ippTrue, m_firBuffer);
+    ippsConvert_64f32f(taps, taps32, FirTaps);
+    ippsFree(taps);
+    ippsFree(m_firBuffer);
+
+    m_dlySrc = ippsMalloc_32f(FirTaps);
+
+    ippsFIRSRGetSize(FirTaps, ipp32f, &sizeSpec, &sizeBuf);
+    m_firSpec = (IppsFIRSpec_32f*)ippsMalloc_8u(sizeSpec);
+    m_firBuffer = ippsMalloc_8u(sizeBuf);
+    ippsFIRSRInit_32f(taps32, FirTaps, ippAlgDirect, m_firSpec);
+    ippsFree(taps32);
+
+    m_inBuf = ippsMalloc_32f(windowFrames);
+}
+
+FIRFilter12k::~FIRFilter12k()
+{
+    ippsFree(m_firSpec);
+    ippsFree(m_firBuffer);
+    ippsFree(m_dlySrc);
+    ippsFree(m_inBuf);
+}
+
+void FIRFilter12k::Process(Ipp32f* buf, int windowFrames)
+{
+    ippsZero_32f(m_dlySrc, FirTaps);
+    ippsMove_32f(buf, m_inBuf, windowFrames);
+    ippsFIRSR_32f(m_inBuf, buf, windowFrames, m_firSpec, m_dlySrc, nullptr, m_firBuffer);
+}
+
+WindowedHilbert::WindowedHilbert(int windowFrames, double sampleRate)
+: m_fir(windowFrames, sampleRate), m_windowFrames(windowFrames),
+  m_halfFrames(windowFrames / 2),
+  m_inputBuf(ippsMalloc_32f(m_windowFrames * 2 + m_halfFrames)),
+  m_outputBuf(ippsMalloc_32fc(m_windowFrames * 4)),
+  m_hammingTable(ippsMalloc_32f(m_halfFrames))
+{
+    ippsZero_32f(m_inputBuf, m_windowFrames * 2 + m_halfFrames);
+    ippsZero_32fc(m_outputBuf, m_windowFrames * 4);
+    m_output[0] = m_outputBuf;
+    m_output[1] = m_output[0] + m_windowFrames;
+    m_output[2] = m_output[1] + m_windowFrames;
+    m_output[3] = m_output[2] + m_windowFrames;
+    int sizeSpec, sizeBuf;
+    ippsHilbertGetSize_32f32fc(m_windowFrames, ippAlgHintFast, &sizeSpec, &sizeBuf);
     m_spec = (IppsHilbertSpec*)ippMalloc(sizeSpec);
     m_buffer = (Ipp8u*)ippMalloc(sizeBuf);
-    ippsHilbertInit_32f32fc(m_windowSamples, ippAlgHintNone, m_spec, m_buffer);
+    ippsHilbertInit_32f32fc(m_windowFrames, ippAlgHintFast, m_spec, m_buffer);
 
-    for (int i=0 ; i<m_halfSamples ; ++i)
-        m_hammingTable[i] = Ipp32f(std::cos(M_PI * (i / double(m_halfSamples) + 1.0)) * 0.5 + 0.5);
+    for (int i=0 ; i<m_halfFrames ; ++i)
+        m_hammingTable[i] = Ipp32f(std::cos(M_PI * (i / double(m_halfFrames) + 1.0)) * 0.5 + 0.5);
 }
 
 WindowedHilbert::~WindowedHilbert()
 {
     ippFree(m_spec);
     ippFree(m_buffer);
+    ippFree(m_inputBuf);
+    ippFree(m_outputBuf);
+    ippFree(m_hammingTable);
 }
 
 void WindowedHilbert::_AddWindow()
 {
+    Ipp32f* inBufBase = &m_inputBuf[m_windowFrames * m_bufIdx + m_halfFrames];
+    m_fir.Process(inBufBase, m_windowFrames);
+
     if (m_bufIdx)
     {
         /* Mirror last half of samples to start of input buffer */
-        Ipp32f* bufBase = &m_inputBuf[m_windowSamples * 2];
-        for (int i=0 ; i<m_halfSamples ; ++i)
+        Ipp32f* bufBase = &m_inputBuf[m_windowFrames * 2];
+        for (int i=0 ; i<m_halfFrames ; ++i)
             m_inputBuf[i] = bufBase[i];
-        ippsHilbert_32f32fc(&m_inputBuf[m_windowSamples],
+        ippsHilbert_32f32fc(&m_inputBuf[m_windowFrames],
                             m_output[2], m_spec, m_buffer);
-        ippsHilbert_32f32fc(&m_inputBuf[m_windowSamples + m_halfSamples],
+        ippsHilbert_32f32fc(&m_inputBuf[m_windowFrames + m_halfFrames],
                             m_output[3], m_spec, m_buffer);
     }
     else
     {
         ippsHilbert_32f32fc(&m_inputBuf[0],
                             m_output[0], m_spec, m_buffer);
-        ippsHilbert_32f32fc(&m_inputBuf[m_halfSamples],
+        ippsHilbert_32f32fc(&m_inputBuf[m_halfFrames],
                             m_output[1], m_spec, m_buffer);
     }
     m_bufIdx ^= 1;
@@ -88,24 +136,24 @@ void WindowedHilbert::_AddWindow()
 
 void WindowedHilbert::AddWindow(const float* input, int stride)
 {
-    Ipp32f* bufBase = &m_inputBuf[m_windowSamples * m_bufIdx + m_halfSamples];
-    for (int i=0 ; i<m_windowSamples ; ++i)
+    Ipp32f* bufBase = &m_inputBuf[m_windowFrames * m_bufIdx + m_halfFrames];
+    for (int i=0 ; i<m_windowFrames ; ++i)
         bufBase[i] = input[i * stride];
     _AddWindow();
 }
 
 void WindowedHilbert::AddWindow(const int32_t* input, int stride)
 {
-    Ipp32f* bufBase = &m_inputBuf[m_windowSamples * m_bufIdx + m_halfSamples];
-    for (int i=0 ; i<m_windowSamples ; ++i)
+    Ipp32f* bufBase = &m_inputBuf[m_windowFrames * m_bufIdx + m_halfFrames];
+    for (int i=0 ; i<m_windowFrames ; ++i)
         bufBase[i] = input[i * stride] / (float(INT32_MAX) + 1.f);
     _AddWindow();
 }
 
 void WindowedHilbert::AddWindow(const int16_t* input, int stride)
 {
-    Ipp32f* bufBase = &m_inputBuf[m_windowSamples * m_bufIdx + m_halfSamples];
-    for (int i=0 ; i<m_windowSamples ; ++i)
+    Ipp32f* bufBase = &m_inputBuf[m_windowFrames * m_bufIdx + m_halfFrames];
+    for (int i=0 ; i<m_windowFrames ; ++i)
         bufBase[i] = input[i * stride] / (float(INT16_MAX) + 1.f);
     _AddWindow();
 }
@@ -127,21 +175,31 @@ void WindowedHilbert::Output(T* output, float lCoef, float rCoef) const
         last = 3;
     }
 
+#if 0
+    for (int i=0 ; i<m_windowSamples ; ++i)
+    {
+        float tmp = m_output[middle][i].im;
+        output[i*2] = ClampFull<T>(output[i*2] + tmp * lCoef);
+        output[i*2+1] = ClampFull<T>(output[i*2+1] + tmp * rCoef);
+    }
+    return;
+#endif
+
     int i, t;
-    for (i=0, t=0 ; i<m_halfSamples ; ++i, ++t)
+    for (i=0, t=0 ; i<m_halfFrames ; ++i, ++t)
     {
         float tmp = m_output[first][i].im * (1.f - m_hammingTable[t]) +
                     m_output[middle][i].im * m_hammingTable[t];
         output[i*2] = ClampFull<T>(output[i*2] + tmp * lCoef);
         output[i*2+1] = ClampFull<T>(output[i*2+1] + tmp * rCoef);
     }
-    for (; i<m_windowSamples-m_halfSamples ; ++i)
+    for (; i<m_windowFrames-m_halfFrames ; ++i)
     {
         float tmp = m_output[middle][i].im;
         output[i*2] = ClampFull<T>(output[i*2] + tmp * lCoef);
         output[i*2+1] = ClampFull<T>(output[i*2+1] + tmp * rCoef);
     }
-    for (t=0 ; i<m_windowSamples ; ++i, ++t)
+    for (t=0 ; i<m_windowFrames ; ++i, ++t)
     {
         float tmp = m_output[middle][i].im * (1.f - m_hammingTable[t]) +
                     m_output[last][i].im * m_hammingTable[t];
@@ -165,10 +223,11 @@ template <> int32_t* LtRtProcessing::_getOutBuf<int32_t>() { return m_32Buffer.g
 template <> float* LtRtProcessing::_getOutBuf<float>() { return m_fltBuffer.get() + m_outputOffset; }
 
 LtRtProcessing::LtRtProcessing(int _5msFrames, const AudioVoiceEngineMixInfo& mixInfo)
-: m_inMixInfo(mixInfo), m_5msFrames(_5msFrames), m_5msFramesHalf(_5msFrames / 2),
-  m_outputOffset(m_5msFrames * 5 * 2)
+: m_inMixInfo(mixInfo), m_windowFrames(_5msFrames), m_halfFrames(m_windowFrames / 2),
+  m_outputOffset(m_windowFrames * 5 * 2)
 #if INTEL_IPP
-, m_hilbertSL(_5msFrames), m_hilbertSR(_5msFrames)
+, m_hilbertSL(m_windowFrames, mixInfo.m_sampleRate),
+  m_hilbertSR(m_windowFrames, mixInfo.m_sampleRate)
 #endif
 {
     m_inMixInfo.m_channels = AudioChannelSet::Surround51;
@@ -179,7 +238,7 @@ LtRtProcessing::LtRtProcessing(int _5msFrames, const AudioVoiceEngineMixInfo& mi
     m_inMixInfo.m_channelMap.m_channels[3] = AudioChannel::RearLeft;
     m_inMixInfo.m_channelMap.m_channels[4] = AudioChannel::RearRight;
 
-    int samples = m_5msFrames * (5 * 2 + 2 * 2);
+    int samples = m_windowFrames * (5 * 2 + 2 * 2);
     switch (mixInfo.m_sampleFormat)
     {
     case SOXR_INT16_I:
@@ -205,17 +264,25 @@ void LtRtProcessing::Process(const T* input, T* output, int frameCount)
     int outFramesRem = frameCount;
     T* inBuf = _getInBuf<T>();
     T* outBuf = _getOutBuf<T>();
-    int tail = std::min(m_5msFrames * 2, m_bufferTail + frameCount);
+    int tail = std::min(m_windowFrames * 2, m_bufferTail + frameCount);
     int samples = (tail - m_bufferTail) * 5;
-    memmove(&inBuf[m_bufferTail * 5], input, samples * sizeof(float));
+    memmove(&inBuf[m_bufferTail * 5], input, samples * sizeof(T));
+    //printf("input %d to %d\n", tail - m_bufferTail, m_bufferTail);
     input += samples;
     frameCount -= tail - m_bufferTail;
 
-    int bufIdx = m_bufferTail / m_5msFrames;
-    if (tail / m_5msFrames > bufIdx)
+    int head = std::min(m_windowFrames * 2, m_bufferHead + outFramesRem);
+    samples = (head - m_bufferHead) * 2;
+    memmove(output, outBuf + m_bufferHead * 2, samples * sizeof(T));
+    //printf("output %d from %d\n", head - m_bufferHead, m_bufferHead);
+    output += samples;
+    outFramesRem -= head - m_bufferHead;
+
+    int bufIdx = m_bufferTail / m_windowFrames;
+    if (tail / m_windowFrames > bufIdx)
     {
-        T* in = &inBuf[bufIdx * m_5msFrames * 5];
-        T* out = &outBuf[bufIdx * m_5msFrames * 2];
+        T* in = &inBuf[bufIdx * m_windowFrames * 5];
+        T* out = &outBuf[bufIdx * m_windowFrames * 2];
 #if INTEL_IPP
         m_hilbertSL.AddWindow(in + 3, 5);
         m_hilbertSR.AddWindow(in + 4, 5);
@@ -225,27 +292,30 @@ void LtRtProcessing::Process(const T* input, T* output, int frameCount)
         // x(:,2) + sqrt(.5)*x(:,3) - sqrt(6/25)*x(:,4) - sqrt(19/25)*x(:,5)
         if (bufIdx)
         {
-            int delayI = -m_5msFramesHalf;
-            for (int i=0 ; i<m_5msFrames ; ++i, ++delayI)
+            int delayI = -m_halfFrames;
+            for (int i=0 ; i<m_windowFrames ; ++i, ++delayI)
             {
                 out[i * 2] = ClampFull<T>(in[delayI * 5] + 0.7071068f * in[delayI * 5 + 2]);
                 out[i * 2 + 1] = ClampFull<T>(in[delayI * 5 + 1] + 0.7071068f * in[delayI * 5 + 2]);
+                //printf("in %d out %d\n", bufIdx * m_5msFrames + delayI, bufIdx * m_5msFrames + i);
             }
         }
         else
         {
-            int delayI = m_5msFrames * 2 - m_5msFramesHalf;
+            int delayI = m_windowFrames * 2 - m_halfFrames;
             int i;
-            for (i=0 ; i<m_5msFramesHalf ; ++i, ++delayI)
+            for (i=0 ; i<m_halfFrames ; ++i, ++delayI)
             {
                 out[i * 2] = ClampFull<T>(in[delayI * 5] + 0.7071068f * in[delayI * 5 + 2]);
                 out[i * 2 + 1] = ClampFull<T>(in[delayI * 5 + 1] + 0.7071068f * in[delayI * 5 + 2]);
+                //printf("in %d out %d\n", bufIdx * m_5msFrames + delayI, bufIdx * m_5msFrames + i);
             }
             delayI = 0;
-            for (; i<m_5msFrames ; ++i, ++delayI)
+            for (; i<m_windowFrames ; ++i, ++delayI)
             {
                 out[i * 2] = ClampFull<T>(in[delayI * 5] + 0.7071068f * in[delayI * 5 + 2]);
                 out[i * 2 + 1] = ClampFull<T>(in[delayI * 5 + 1] + 0.7071068f * in[delayI * 5 + 2]);
+                //printf("in %d out %d\n", bufIdx * m_5msFrames + delayI, bufIdx * m_5msFrames + i);
             }
         }
 #if INTEL_IPP
@@ -253,25 +323,22 @@ void LtRtProcessing::Process(const T* input, T* output, int frameCount)
         m_hilbertSR.Output(out, -0.4898979f, -0.8717798f);
 #endif
     }
-    m_bufferTail = tail;
+    m_bufferTail = (tail == m_windowFrames * 2) ? 0 : tail;
+    m_bufferHead = (head == m_windowFrames * 2) ? 0 : head;
 
     if (frameCount)
     {
         samples = frameCount * 5;
-        memmove(inBuf, input, samples * sizeof(float));
+        memmove(inBuf, input, samples * sizeof(T));
+        //printf("input %d to %d\n", frameCount, 0);
         m_bufferTail = frameCount;
     }
 
-    int head = std::min(m_5msFrames * 2, m_bufferHead + outFramesRem);
-    samples = (head - m_bufferHead) * 2;
-    memmove(output, outBuf + m_bufferHead * 2, samples * sizeof(float));
-    output += samples;
-    outFramesRem -= head - m_bufferHead;
-    m_bufferHead = head;
     if (outFramesRem)
     {
         samples = outFramesRem * 2;
-        memmove(output, outBuf, samples * sizeof(float));
+        memmove(output, outBuf, samples * sizeof(T));
+        //printf("output %d from %d\n", outFramesRem, 0);
         m_bufferHead = outFramesRem;
     }
 }

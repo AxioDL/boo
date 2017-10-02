@@ -14,20 +14,33 @@ namespace boo
 {
 
 #if INTEL_IPP
+
+class FIRFilter12k
+{
+    IppsFIRSpec_32f* m_firSpec;
+    Ipp8u* m_firBuffer;
+    Ipp32f* m_dlySrc;
+    Ipp32f* m_inBuf;
+public:
+    explicit FIRFilter12k(int windowFrames, double sampleRate);
+    ~FIRFilter12k();
+    void Process(Ipp32f* buf, int windowFrames);
+};
+
 class WindowedHilbert
 {
+    FIRFilter12k m_fir;
     IppsHilbertSpec* m_spec;
     Ipp8u* m_buffer;
-    int m_windowSamples, m_halfSamples;
+    int m_windowFrames, m_halfFrames;
     int m_bufIdx = 0;
-    int m_bufferTail = 0;
-    std::unique_ptr<Ipp32f[]> m_inputBuf;
-    std::unique_ptr<Ipp32fc[]> m_outputBuf;
+    Ipp32f* m_inputBuf;
+    Ipp32fc* m_outputBuf;
     Ipp32fc* m_output[4];
-    std::unique_ptr<Ipp32f[]> m_hammingTable;
+    Ipp32f* m_hammingTable;
     void _AddWindow();
 public:
-    explicit WindowedHilbert(int windowSamples);
+    explicit WindowedHilbert(int windowFrames, double sampleRate);
     ~WindowedHilbert();
     void AddWindow(const float* input, int stride);
     void AddWindow(const int32_t* input, int stride);
@@ -40,8 +53,8 @@ public:
 class LtRtProcessing
 {
     AudioVoiceEngineMixInfo m_inMixInfo;
-    int m_5msFrames;
-    int m_5msFramesHalf;
+    int m_windowFrames;
+    int m_halfFrames;
     int m_outputOffset;
     int m_bufferTail = 0;
     int m_bufferHead = 0;
