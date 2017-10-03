@@ -14,7 +14,9 @@ namespace boo
 {
 
 #if INTEL_IPP
+#define USE_LPF 0
 
+#if USE_LPF
 class FIRFilter12k
 {
     IppsFIRSpec_32f* m_firSpec;
@@ -26,10 +28,13 @@ public:
     ~FIRFilter12k();
     void Process(Ipp32f* buf, int windowFrames);
 };
+#endif
 
 class WindowedHilbert
 {
+#if USE_LPF
     FIRFilter12k m_fir;
+#endif
     IppsHilbertSpec* m_spec;
     Ipp8u* m_buffer;
     int m_windowFrames, m_halfFrames;

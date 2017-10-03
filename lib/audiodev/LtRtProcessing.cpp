@@ -35,6 +35,7 @@ inline T ClampFull(float in)
 #define M_PI 3.14159265358979323846 /* pi */
 #endif
 
+#if USE_LPF
 static constexpr int FirTaps = 27;
 
 FIRFilter12k::FIRFilter12k(int windowFrames, double sampleRate)
@@ -75,9 +76,13 @@ void FIRFilter12k::Process(Ipp32f* buf, int windowFrames)
     ippsMove_32f(buf, m_inBuf, windowFrames);
     ippsFIRSR_32f(m_inBuf, buf, windowFrames, m_firSpec, m_dlySrc, nullptr, m_firBuffer);
 }
+#endif
 
-WindowedHilbert::WindowedHilbert(int windowFrames, double sampleRate)
-: m_fir(windowFrames, sampleRate), m_windowFrames(windowFrames),
+WindowedHilbert::WindowedHilbert(int windowFrames, double sampleRate) :
+#if USE_LPF
+  m_fir(windowFrames, sampleRate),
+#endif
+  m_windowFrames(windowFrames),
   m_halfFrames(windowFrames / 2),
   m_inputBuf(ippsMalloc_32f(m_windowFrames * 2 + m_halfFrames)),
   m_outputBuf(ippsMalloc_32fc(m_windowFrames * 4)),
@@ -110,15 +115,16 @@ WindowedHilbert::~WindowedHilbert()
 
 void WindowedHilbert::_AddWindow()
 {
+#if USE_LPF
     Ipp32f* inBufBase = &m_inputBuf[m_windowFrames * m_bufIdx + m_halfFrames];
     m_fir.Process(inBufBase, m_windowFrames);
+#endif
 
     if (m_bufIdx)
     {
         /* Mirror last half of samples to start of input buffer */
         Ipp32f* bufBase = &m_inputBuf[m_windowFrames * 2];
-        for (int i=0 ; i<m_halfFrames ; ++i)
-            m_inputBuf[i] = bufBase[i];
+        ippsCopy_32f(bufBase, m_inputBuf, m_halfFrames);
         ippsHilbert_32f32fc(&m_inputBuf[m_windowFrames],
                             m_output[2], m_spec, m_buffer);
         ippsHilbert_32f32fc(&m_inputBuf[m_windowFrames + m_halfFrames],
@@ -176,7 +182,7 @@ void WindowedHilbert::Output(T* output, float lCoef, float rCoef) const
     }
 
 #if 0
-    for (int i=0 ; i<m_windowSamples ; ++i)
+    for (int i=0 ; i<m_windowFrames ; ++i)
     {
         float tmp = m_output[middle][i].im;
         output[i*2] = ClampFull<T>(output[i*2] + tmp * lCoef);
@@ -188,7 +194,7 @@ void WindowedHilbert::Output(T* output, float lCoef, float rCoef) const
     int i, t;
     for (i=0, t=0 ; i<m_halfFrames ; ++i, ++t)
     {
-        float tmp = m_output[first][i].im * (1.f - m_hammingTable[t]) +
+        float tmp = m_output[first][m_halfFrames + i].im * (1.f - m_hammingTable[t]) +
                     m_output[middle][i].im * m_hammingTable[t];
         output[i*2] = ClampFull<T>(output[i*2] + tmp * lCoef);
         output[i*2+1] = ClampFull<T>(output[i*2+1] + tmp * rCoef);
@@ -202,7 +208,7 @@ void WindowedHilbert::Output(T* output, float lCoef, float rCoef) const
     for (t=0 ; i<m_windowFrames ; ++i, ++t)
     {
         float tmp = m_output[middle][i].im * (1.f - m_hammingTable[t]) +
-                    m_output[last][i].im * m_hammingTable[t];
+                    m_output[last][t].im * m_hammingTable[t];
         output[i*2] = ClampFull<T>(output[i*2] + tmp * lCoef);
         output[i*2+1] = ClampFull<T>(output[i*2+1] + tmp * rCoef);
     }
@@ -223,7 +229,7 @@ template <> int32_t* LtRtProcessing::_getOutBuf<int32_t>() { return m_32Buffer.g
 template <> float* LtRtProcessing::_getOutBuf<float>() { return m_fltBuffer.get() + m_outputOffset; }
 
 LtRtProcessing::LtRtProcessing(int _5msFrames, const AudioVoiceEngineMixInfo& mixInfo)
-: m_inMixInfo(mixInfo), m_windowFrames(_5msFrames), m_halfFrames(m_windowFrames / 2),
+: m_inMixInfo(mixInfo), m_windowFrames(_5msFrames * 4), m_halfFrames(m_windowFrames / 2),
   m_outputOffset(m_windowFrames * 5 * 2)
 #if INTEL_IPP
 , m_hilbertSL(m_windowFrames, mixInfo.m_sampleRate),
@@ -261,6 +267,15 @@ LtRtProcessing::LtRtProcessing(int _5msFrames, const AudioVoiceEngineMixInfo& mi
 template <typename T>
 void LtRtProcessing::Process(const T* input, T* output, int frameCount)
 {
+#if 0
+    for (int i=0 ; i<frameCount ; ++i)
+    {
+        output[i * 2] = input[i * 5 + 3];
+        output[i * 2 + 1] = input[i * 5 + 4];
+    }
+    return;
+#endif
+
     int outFramesRem = frameCount;
     T* inBuf = _getInBuf<T>();
     T* outBuf = _getOutBuf<T>();
