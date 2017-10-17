@@ -91,16 +91,16 @@ class GenericPadCallback : public IGenericPadCallback
         if (pageName)
         {
             if (usageName)
-                printf("%s %s %d\n", pageName, usageName, value);
+                printf("%s %s %d\n", pageName, usageName, int(value));
             else
-                printf("%s %d %d\n", pageName, item.m_usage, value);
+                printf("%s %d %d\n", pageName, int(item.m_usage), int(value));
         }
         else
         {
             if (usageName)
-                printf("page%d %s %d\n", item.m_usagePage, usageName, value);
+                printf("page%d %s %d\n", int(item.m_usagePage), usageName, int(value));
             else
-                printf("page%d %d %d\n", item.m_usagePage, item.m_usage, value);
+                printf("page%d %d %d\n", int(item.m_usagePage), int(item.m_usage), int(value));
         }
     }
 };
