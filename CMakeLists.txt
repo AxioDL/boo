@@ -100,7 +100,7 @@ elseif(APPLE)
   find_library(IOKIT_LIBRARY IOKit)
   find_library(OPENGL_LIBRARY OpenGL)
   unset(BOO_HAS_METAL CACHE)
-  if (NOT CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET VERSION_GREATER 10.10)
+  if (NOT CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET VERSION_GREATER 10.11)
     set(BOO_HAS_METAL ON CACHE BOOL "Metal is available in this OS X version" FORCE)
     find_library(METAL_LIBRARY Metal)
     list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_METAL=1)
@@ -212,7 +212,7 @@ target_include_directories(glslang-default-resource-limits
 list(APPEND _BOO_SYS_LIBS glslang soxr xxhash OSDependent OGLCompiler SPIRV glslang-default-resource-limits)
 
 set(BOO_SYS_LIBS ${_BOO_SYS_LIBS} CACHE PATH "boo system libraries" FORCE)
-set(BOO_SYS_DEFINES ${_BOO_SYS_DEFINES} CACHE PATH "boo system defines" FORCE)
+set(BOO_SYS_DEFINES ${_BOO_SYS_DEFINES} CACHE STRING "boo system defines" FORCE)
 set(BOO_SYS_INCLUDES ${_BOO_SYS_INCLUDES} CACHE PATH "boo system includes" FORCE)
 
 add_definitions(${_BOO_SYS_DEFINES})

@@ -1297,7 +1297,7 @@ IShaderPipeline* MetalDataFactory::Context::newShaderPipeline(const char* vertSo
         MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
         MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
         MTLCompileOptions* compOpts = [MTLCompileOptions new];
-        compOpts.languageVersion = MTLLanguageVersion1_1;
+        compOpts.languageVersion = MTLLanguageVersion1_2;
         NSError* err = nullptr;
 
         XXH64_state_t hashState;
