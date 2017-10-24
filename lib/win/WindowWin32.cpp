@@ -50,9 +50,9 @@ struct GraphicsContextWin32 : IGraphicsContext
     EGraphicsAPI m_api;
     EPixelFormat m_pf;
     IWindow* m_parentWindow;
-    Boo3DAppContext& m_3dCtx;
+    Boo3DAppContextWin32& m_3dCtx;
     ComPtr<IDXGIOutput> m_output;
-    GraphicsContextWin32(EGraphicsAPI api, IWindow* parentWindow, Boo3DAppContext& b3dCtx)
+    GraphicsContextWin32(EGraphicsAPI api, IWindow* parentWindow, Boo3DAppContextWin32& b3dCtx)
     : m_api(api),
       m_pf(EPixelFormat::RGBA8),
       m_parentWindow(parentWindow),
@@ -75,7 +75,7 @@ public:
     IWindowCallback* m_callback;
 
     GraphicsContextWin32D3D(EGraphicsAPI api, IWindow* parentWindow, HWND hwnd,
-                            Boo3DAppContext& b3dCtx, uint32_t sampleCount)
+                            Boo3DAppContextWin32& b3dCtx, uint32_t sampleCount)
     : GraphicsContextWin32(api, parentWindow, b3dCtx)
     {
         /* Create Swap Chain */
@@ -211,7 +211,7 @@ public:
     IWindowCallback* m_callback;
 
     GraphicsContextWin32GL(EGraphicsAPI api, IWindow* parentWindow, HWND hwnd,
-                           Boo3DAppContext& b3dCtx, uint32_t sampleCount)
+                           Boo3DAppContextWin32& b3dCtx, uint32_t sampleCount)
     : GraphicsContextWin32(api, parentWindow, b3dCtx)
     {
 
@@ -416,7 +416,7 @@ public:
     IWindowCallback* m_callback;
 
     GraphicsContextWin32Vulkan(IWindow* parentWindow, HINSTANCE appInstance, HWND hwnd,
-                               VulkanContext* ctx, Boo3DAppContext& b3dCtx, uint32_t drawSamples)
+                               VulkanContext* ctx, Boo3DAppContextWin32& b3dCtx, uint32_t drawSamples)
     : GraphicsContextWin32(EGraphicsAPI::Vulkan, parentWindow, b3dCtx),
       m_appInstance(appInstance), m_hwnd(hwnd), m_ctx(ctx), m_sampleCount(drawSamples)
     {
@@ -973,7 +973,7 @@ class WindowWin32 : public IWindow
 
 public:
 
-    WindowWin32(const SystemString& title, Boo3DAppContext& b3dCtx, void* vulkanHandle, uint32_t sampleCount)
+    WindowWin32(const SystemString& title, Boo3DAppContextWin32& b3dCtx, void* vulkanHandle, uint32_t sampleCount)
     {
         m_hwnd = CreateWindowW(L"BooWindow", title.c_str(), WS_OVERLAPPEDWINDOW,
                                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
@@ -1585,7 +1585,7 @@ public:
 
 };
 
-std::shared_ptr<IWindow> _WindowWin32New(const SystemString& title, Boo3DAppContext& d3dCtx,
+std::shared_ptr<IWindow> _WindowWin32New(const SystemString& title, Boo3DAppContextWin32& d3dCtx,
                                          void* vulkanHandle, uint32_t sampleCount)
 {
     return std::make_shared<WindowWin32>(title, d3dCtx, vulkanHandle, sampleCount);

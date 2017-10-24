@@ -1,13 +1,9 @@
-#include "Win32Common.hpp"
-#include <shellapi.h>
-#include <initguid.h>
-#include <Usbiodef.h>
-#include <winver.h>
-#include <Dbt.h>
+#include "UWPCommon.hpp"
 
-#if _WIN32_WINNT_WINBLUE
-PFN_GetScaleFactorForMonitor MyGetScaleFactorForMonitor = nullptr;
-#endif
+using namespace Windows::Foundation;
+using namespace Windows::UI::Core;
+using namespace Windows::ApplicationModel::Activation;
+using namespace Platform;
 
 #if _DEBUG
 #define D3D11_CREATE_DEVICE_FLAGS D3D11_CREATE_DEVICE_DEBUG
@@ -21,13 +17,6 @@ PFN_GetScaleFactorForMonitor MyGetScaleFactorForMonitor = nullptr;
 #include "boo/graphicsdev/D3D.hpp"
 #include "logvisor/logvisor.hpp"
 
-#if BOO_HAS_VULKAN
-#include <vulkan/vulkan.h>
-#endif
-
-DWORD g_mainThreadId = 0;
-
-static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 #if _WIN32_WINNT_WIN10
 PFN_D3D12_SERIALIZE_ROOT_SIGNATURE D3D12SerializeRootSignaturePROC = nullptr;
 #endif
@@ -64,40 +53,37 @@ static bool FindBestD3DCompile()
 
 namespace boo
 {
-static logvisor::Module Log("boo::ApplicationWin32");
-Win32Cursors WIN32_CURSORS;
+static logvisor::Module Log("boo::ApplicationUWP");
 
-std::shared_ptr<IWindow> _WindowWin32New(const SystemString& title, Boo3DAppContextWin32& d3dCtx,
-                                         void* vulkanHandle, uint32_t sampleCount);
+std::shared_ptr<IWindow> _WindowUWPNew(const SystemString& title, Boo3DAppContextUWP& d3dCtx,
+                                       uint32_t sampleCount);
 
-class ApplicationWin32 final : public IApplication
+class ApplicationUWP final : public IApplication
 {
+    friend ref class AppView;
     IApplicationCallback& m_callback;
     const SystemString m_uniqueName;
     const SystemString m_friendlyName;
     const SystemString m_pname;
     const std::vector<SystemString> m_args;
-    std::unordered_map<HWND, std::weak_ptr<IWindow>> m_allWindows;
+    std::shared_ptr<IWindow> m_window;
     bool m_singleInstance;
+    bool m_issuedWindow = false;
 
-    Boo3DAppContextWin32 m_3dCtx;
-#if BOO_HAS_VULKAN
-    PFN_vkGetInstanceProcAddr m_getVkProc = nullptr;
-#endif
+    Boo3DAppContextUWP m_3dCtx;
 
     void _deletedWindow(IWindow* window)
     {
-        m_allWindows.erase(HWND(window->getPlatformHandle()));
     }
 
 public:
 
-    ApplicationWin32(IApplicationCallback& callback,
-                     const SystemString& uniqueName,
-                     const SystemString& friendlyName,
-                     const SystemString& pname,
-                     const std::vector<SystemString>& args,
-                     bool singleInstance)
+    ApplicationUWP(IApplicationCallback& callback,
+                   const SystemString& uniqueName,
+                   const SystemString& friendlyName,
+                   const SystemString& pname,
+                   const std::vector<SystemString>& args,
+                   bool singleInstance)
     : m_callback(callback),
       m_uniqueName(uniqueName),
       m_friendlyName(friendlyName),
@@ -115,31 +101,13 @@ public:
             Log.report(logvisor::Fatal, "unable to find CreateDXGIFactory1 in DXGI.dll\n");
 
         bool no12 = false;
-        bool noD3d = false;
-#if BOO_HAS_VULKAN
-        bool useVulkan = true;
-#endif
         for (const SystemString& arg : args)
-        {
             if (!arg.compare(L"--d3d11"))
                 no12 = true;
-#if BOO_HAS_VULKAN
-            if (!arg.compare(L"--vulkan"))
-                noD3d = true;
-            if (!arg.compare(L"--gl"))
-            {
-                noD3d = true;
-                useVulkan = false;
-            }
-#else
-            if (!arg.compare(L"--gl"))
-                noD3d = true;
-#endif
-        }
 
 #if _WIN32_WINNT_WIN10
         HMODULE d3d12lib = LoadLibraryW(L"D3D12.dll");
-        if (!no12 && !noD3d && d3d12lib)
+        if (!no12 && d3d12lib)
         {   
 #if _DEBUG
             {
@@ -224,7 +192,7 @@ public:
         }
 #endif
         HMODULE d3d11lib = LoadLibraryW(L"D3D11.dll");
-        if (d3d11lib && !noD3d)
+        if (d3d11lib)
         {
             if (!FindBestD3DCompile())
                 Log.report(logvisor::Fatal, "unable to find D3DCompile_[43-47].dll");
@@ -274,154 +242,23 @@ public:
             return;
         }
 
-#if BOO_HAS_VULKAN
-        if (useVulkan)
-        {
-            HMODULE vulkanLib = LoadLibraryW(L"vulkan-1.dll");
-            if (vulkanLib)
-            {
-                m_getVkProc = (PFN_vkGetInstanceProcAddr)GetProcAddress(vulkanLib, "vkGetInstanceProcAddr");
-                if (m_getVkProc)
-                {
-                    /* Obtain DXGI Factory */
-                    HRESULT hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory1), &m_3dCtx.m_vulkanDxFactory);
-                    if (FAILED(hr))
-                        Log.report(logvisor::Fatal, "unable to create DXGI factory");
-
-                    Log.report(logvisor::Info, "initialized Vulkan renderer");
-                    return;
-                }
-            }
-        }
-#endif
-
-        /* Finally try OpenGL */
-        {
-            /* Obtain DXGI Factory */
-            HRESULT hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory1), &m_3dCtx.m_ctxOgl.m_dxFactory);
-            if (FAILED(hr))
-                Log.report(logvisor::Fatal, "unable to create DXGI factory");
-
-            Log.report(logvisor::Info, "initialized OpenGL renderer");
-            return;
-        }
-
-        Log.report(logvisor::Fatal, "system doesn't support OGL, D3D11 or D3D12");
+        Log.report(logvisor::Fatal, "system doesn't support D3D11 or D3D12");
     }
 
     EPlatformType getPlatformType() const
     {
-        return EPlatformType::Win32;
-    }
-
-    LRESULT winHwndHandler(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-    {
-        /* Lookup boo window instance */
-        auto search = m_allWindows.find(hwnd);
-        if (search == m_allWindows.end())
-            return DefWindowProc(hwnd, uMsg, wParam, lParam);;
-
-        std::shared_ptr<IWindow> window = search->second.lock();
-        if (!window)
-            return DefWindowProc(hwnd, uMsg, wParam, lParam);
-
-        switch (uMsg)
-        {
-            case WM_CREATE:
-                return 0;
-
-            case WM_DEVICECHANGE:
-                return DeviceFinder::winDevChangedHandler(wParam, lParam);
-
-            case WM_CLOSE:
-            case WM_SIZE:
-            case WM_MOVING:
-            case WM_SYSKEYDOWN:
-            case WM_KEYDOWN:
-            case WM_SYSKEYUP:
-            case WM_KEYUP:
-            case WM_LBUTTONDOWN:
-            case WM_LBUTTONUP:
-            case WM_RBUTTONDOWN:
-            case WM_RBUTTONUP:
-            case WM_MBUTTONDOWN:
-            case WM_MBUTTONUP:
-            case WM_XBUTTONDOWN:
-            case WM_XBUTTONUP:
-            case WM_MOUSEMOVE:
-            case WM_MOUSELEAVE:
-            case WM_NCMOUSELEAVE:
-            case WM_MOUSEHOVER:
-            case WM_NCMOUSEHOVER:
-            case WM_MOUSEWHEEL:
-            case WM_MOUSEHWHEEL:
-            case WM_CHAR:
-            case WM_UNICHAR:
-            {
-                HWNDEvent eventData(uMsg, wParam, lParam);
-                window->_incomingEvent(&eventData);
-            }
-
-            default:
-                return DefWindowProc(hwnd, uMsg, wParam, lParam);
-        }
+        return EPlatformType::UWP;
     }
 
     int run()
     {
-        g_mainThreadId = GetCurrentThreadId();
-
         /* Spawn client thread */
         int clientReturn = 0;
         std::thread clientThread([&]()
         {
             logvisor::RegisterThreadName("Boo Client Thread");
-            CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE);
             clientReturn = m_callback.appMain(this);
-            PostThreadMessage(g_mainThreadId, WM_USER+1, 0, 0);
         });
-
-        /* Pump messages */
-        MSG msg = {0};
-        while (GetMessage(&msg, NULL, 0, 0))
-        {
-            if (!msg.hwnd)
-            {
-                /* PostThreadMessage events */
-                switch (msg.message)
-                {
-                case WM_USER:
-                {
-                    /* New-window message (coalesced onto main thread) */
-                    std::unique_lock<std::mutex> lk(m_nwmt);
-                    const SystemString* title = reinterpret_cast<const SystemString*>(msg.wParam);
-                    m_mwret = newWindow(*title, 1);
-                    lk.unlock();
-                    m_nwcv.notify_one();
-                    continue;
-                }
-                case WM_USER+1:
-                    /* Quit message from client thread */
-                    PostQuitMessage(0);
-                    continue;
-                case WM_USER+2:
-                    /* SetCursor call from client thread */
-                    SetCursor(HCURSOR(msg.wParam));
-                    continue;
-                case WM_USER+3:
-                    /* ImmSetOpenStatus call from client thread */
-                    ImmSetOpenStatus(HIMC(msg.wParam), BOOL(msg.lParam));
-                    continue;
-                case WM_USER+4:
-                    /* ImmSetCompositionWindow call from client thread */
-                    ImmSetCompositionWindow(HIMC(msg.wParam), LPCOMPOSITIONFORM(msg.lParam));
-                    continue;
-                default: break;
-                }
-            }
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
 
         m_callback.appQuitting(this);
         clientThread.join();
@@ -448,113 +285,72 @@ public:
         return m_args;
     }
 
-    std::mutex m_nwmt;
-    std::condition_variable m_nwcv;
-    std::shared_ptr<IWindow> m_mwret;
     std::shared_ptr<IWindow> newWindow(const SystemString& title, uint32_t sampleCount)
     {
-        if (GetCurrentThreadId() != g_mainThreadId)
+        if (!m_issuedWindow)
         {
-            std::unique_lock<std::mutex> lk(m_nwmt);
-            if (!PostThreadMessage(g_mainThreadId, WM_USER, WPARAM(&title), 0))
-                Log.report(logvisor::Fatal, "PostThreadMessage error");
-            m_nwcv.wait(lk);
-            std::shared_ptr<IWindow> ret = std::move(m_mwret);
-            m_mwret.reset();
-            return ret;
+            m_issuedWindow = true;
+            return m_window;
         }
+        return {};
+    }
 
-#if BOO_HAS_VULKAN
-        std::shared_ptr<IWindow> window = _WindowWin32New(title, m_3dCtx, m_getVkProc, sampleCount);
-#else
-        std::shared_ptr<IWindow> window = _WindowWin32New(title, m_3dCtx, nullptr, sampleCount);
-#endif
-
-        HWND hwnd = HWND(window->getPlatformHandle());
-        m_allWindows[hwnd] = window;
-        return window;
+    void _setWindow(CoreWindow^ window)
+    {
+        m_window = _WindowUWPNew(m_friendlyName, m_3dCtx, 1);
     }
 };
 
 IApplication* APP = NULL;
-int ApplicationRun(IApplication::EPlatformType platform,
-                   IApplicationCallback& cb,
-                   const SystemString& uniqueName,
-                   const SystemString& friendlyName,
-                   const SystemString& pname,
-                   const std::vector<SystemString>& args,
-                   bool singleInstance)
+ref class AppView sealed : public IFrameworkView
 {
-    logvisor::RegisterThreadName("Boo Main Thread");
-    if (APP)
-        return 1;
-    if (platform != IApplication::EPlatformType::Win32 &&
-        platform != IApplication::EPlatformType::Auto)
-        return 1;
+    ApplicationUWP m_app;
 
-#if _WIN32_WINNT_WINBLUE
-    /* HI-DPI support */
-    HMODULE shcoreLib = LoadLibraryW(L"Shcore.dll");
-    if (shcoreLib)
+internal:
+    AppView(IApplicationCallback& callback,
+            const SystemString& uniqueName,
+            const SystemString& friendlyName,
+            const SystemString& pname,
+            const std::vector<SystemString>& args,
+            bool singleInstance)
+    : m_app(callback, uniqueName, friendlyName, pname, args, singleInstance) { APP = &m_app; }
+
+public:
+    virtual void Initialize(CoreApplicationView^ applicationView)
     {
-        PFN_SetProcessDpiAwareness MySetProcessDpiAwareness =
-            (PFN_SetProcessDpiAwareness)GetProcAddress(shcoreLib, "SetProcessDpiAwareness");
-        if (MySetProcessDpiAwareness)
-            MySetProcessDpiAwareness(PROCESS_SYSTEM_DPI_AWARE);
-
-        MyGetScaleFactorForMonitor =
-            (PFN_GetScaleFactorForMonitor)GetProcAddress(shcoreLib, "GetScaleFactorForMonitor");
+        applicationView->Activated += ref new TypedEventHandler<CoreApplicationView^, IActivatedEventArgs^>(this, &AppView::OnActivated);
     }
-#endif
 
-    WIN32_CURSORS.m_arrow = LoadCursor(nullptr, IDC_ARROW);
-    WIN32_CURSORS.m_hResize = LoadCursor(nullptr, IDC_SIZEWE);
-    WIN32_CURSORS.m_vResize = LoadCursor(nullptr, IDC_SIZENS);
-    WIN32_CURSORS.m_ibeam = LoadCursor(nullptr, IDC_IBEAM);
-    WIN32_CURSORS.m_crosshairs = LoadCursor(nullptr, IDC_CROSS);
-    WIN32_CURSORS.m_wait = LoadCursor(nullptr, IDC_WAIT);
-
-    /* One class for *all* boo windows */
-    WNDCLASS wndClass =
+    virtual void SetWindow(CoreWindow^ window)
     {
-        0,
-        WindowProc,
-        0,
-        0,
-        GetModuleHandle(nullptr),
-        0,
-        0,
-        0,
-        0,
-        L"BooWindow"
-    };
-    wndClass.hIcon = LoadIconW(wndClass.hInstance, MAKEINTRESOURCEW(101));
-    wndClass.hCursor = WIN32_CURSORS.m_arrow;
-    ATOM a = RegisterClassW(&wndClass);
+        m_app._setWindow(window);
+    }
 
-    APP = new ApplicationWin32(cb, uniqueName, friendlyName, pname, args, singleInstance);
-    return APP->run();
-}
+    virtual void Load(String^ entryPoint)
+    {
 
-}
+    }
 
-static const DEV_BROADCAST_DEVICEINTERFACE HOTPLUG_CONF =
-{
-    sizeof(DEV_BROADCAST_DEVICEINTERFACE),
-    DBT_DEVTYP_DEVICEINTERFACE,
-    0,
-    0
+    virtual void Run()
+    {
+        m_app.run();
+    }
+
+    virtual void Uninitialize()
+    {
+
+    }
+
+    void OnActivated(CoreApplicationView^ applicationView, IActivatedEventArgs^ args)
+    {
+        CoreWindow::GetForCurrentThread()->Activate();
+    }
 };
-static bool HOTPLUG_REGISTERED = false;
-static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+
+IFrameworkView^ ViewProvider::CreateView()
 {
-    if (!HOTPLUG_REGISTERED && uMsg == WM_CREATE)
-    {
-        /* Register hotplug notification with windows */
-        RegisterDeviceNotification(hwnd, (LPVOID)&HOTPLUG_CONF,
-                                   DEVICE_NOTIFY_WINDOW_HANDLE | DEVICE_NOTIFY_ALL_INTERFACE_CLASSES);
-        HOTPLUG_REGISTERED = true;
-    }
-    return static_cast<boo::ApplicationWin32*>(boo::APP)->winHwndHandler(hwnd, uMsg, wParam, lParam);
+    return ref new AppView(m_appCb, m_uniqueName, m_friendlyName, m_pname, m_args, m_singleInstance);
+}
+
 }
 

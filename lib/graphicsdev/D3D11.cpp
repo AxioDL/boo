@@ -1369,6 +1369,7 @@ public:
             if (FAILED(D3DCompilePROC(vertSource, strlen(vertSource), "HECL Vert Source", nullptr, nullptr, "main",
                 "vs_5_0", BOO_D3DCOMPILE_FLAG, 0, &vertBlobOut, &errBlob)))
             {
+                printf("%s\n", vertSource);
                 Log.report(logvisor::Fatal, "error compiling vert shader: %s", errBlob->GetBufferPointer());
             }
 
@@ -1387,6 +1388,7 @@ public:
             if (FAILED(D3DCompilePROC(fragSource, strlen(fragSource), "HECL Pixel Source", nullptr, nullptr, "main",
                 "ps_5_0", BOO_D3DCOMPILE_FLAG, 0, &fragBlobOut, &errBlob)))
             {
+                printf("%s\n", fragSource);
                 Log.report(logvisor::Fatal, "error compiling pixel shader: %s", errBlob->GetBufferPointer());
             }
 

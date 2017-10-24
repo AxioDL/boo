@@ -107,9 +107,9 @@ class GenericPadCallback : public IGenericPadCallback
 
 class TestDeviceFinder : public DeviceFinder
 {
-    std::shared_ptr<DolphinSmashAdapter> smashAdapter;
-    std::shared_ptr<DualshockPad> ds3;
-    std::shared_ptr<GenericPad> generic;
+    std::shared_ptr<DolphinSmashAdapter> m_smashAdapter;
+    std::shared_ptr<DualshockPad> m_ds3;
+    std::shared_ptr<GenericPad> m_generic;
     DolphinSmashAdapterCallback m_cb;
     DualshockPadCallback m_ds3CB;
     GenericPadCallback m_genericCb;
@@ -119,33 +119,33 @@ public:
     {}
     void deviceConnected(DeviceToken& tok)
     {
-        smashAdapter = std::dynamic_pointer_cast<DolphinSmashAdapter>(tok.openAndGetDevice());
-        if (smashAdapter)
+        m_smashAdapter = std::dynamic_pointer_cast<DolphinSmashAdapter>(tok.openAndGetDevice());
+        if (m_smashAdapter)
         {
-            smashAdapter->setCallback(&m_cb);
-            smashAdapter->startRumble(0);
+            m_smashAdapter->setCallback(&m_cb);
+            m_smashAdapter->startRumble(0);
             return;
         }
-        ds3 = std::dynamic_pointer_cast<DualshockPad>(tok.openAndGetDevice());
-        if (ds3)
+        m_ds3 = std::dynamic_pointer_cast<DualshockPad>(tok.openAndGetDevice());
+        if (m_ds3)
         {
-            ds3->setCallback(&m_ds3CB);
-            ds3->setLED(EDualshockLED::LED_1);
+            m_ds3->setCallback(&m_ds3CB);
+            m_ds3->setLED(EDualshockLED::LED_1);
         }
-        generic = std::dynamic_pointer_cast<GenericPad>(tok.openAndGetDevice());
-        if (generic)
+        m_generic = std::dynamic_pointer_cast<GenericPad>(tok.openAndGetDevice());
+        if (m_generic)
         {
-            generic->setCallback(&m_genericCb);
+            m_generic->setCallback(&m_genericCb);
         }
     }
     void deviceDisconnected(DeviceToken&, DeviceBase* device)
     {
-        if (smashAdapter.get() == device)
-            smashAdapter.reset();
-        if (ds3.get() == device)
-            ds3.reset();
-        if (generic.get() == device)
-            generic.reset();
+        if (m_smashAdapter.get() == device)
+            m_smashAdapter.reset();
+        if (m_ds3.get() == device)
+            m_ds3.reset();
+        if (m_generic.get() == device)
+            m_generic.reset();
     }
 };
 
@@ -571,7 +571,21 @@ int main(int argc, const boo::SystemChar** argv)
     return ret;
 }
 
-#if _WIN32
+#if WINAPI_FAMILY && !WINAPI_PARTITION_DESKTOP
+using namespace Windows::ApplicationModel::Core;
+
+[Platform::MTAThread]
+int WINAPIV main(Platform::Array<Platform::String^>^ params)
+{
+    logvisor::RegisterStandardExceptions();
+    logvisor::RegisterConsoleLogger();
+    boo::TestApplicationCallback appCb;
+    auto viewProvider = ref new ViewProvider(appCb, _S("boo"), _S("boo"), params, false);
+    CoreApplication::Run(viewProvider);
+    return 0;
+}
+
+#elif _WIN32
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int)
 {
     int argc = 0;

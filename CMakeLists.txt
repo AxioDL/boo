@@ -33,7 +33,7 @@ set(BOO_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE PATH "boo include 
 
 include_directories(include xxhash ${LOGVISOR_INCLUDE_DIR})
 
-if(NOT GEKKO AND NOT CAFE)
+if(NOT GEKKO AND NOT CAFE AND NOT WINDOWS_STORE)
 list(APPEND PLAT_SRCS
     lib/graphicsdev/GL.cpp
     lib/graphicsdev/glew.c)
@@ -47,8 +47,26 @@ list(APPEND PLAT_HDRS
 add_library(glew lib/graphicsdev/glew.c)
 endif()
 
-if(WIN32)
+if(WINDOWS_STORE)
+  list(APPEND PLAT_SRCS
+       lib/win/ApplicationUWP.cpp
+       lib/win/WindowUWP.cpp
+       lib/win/WinCommon.hpp
+       lib/win/UWPCommon.hpp
+       lib/inputdev/HIDListenerWinUSB.cpp
+       lib/inputdev/HIDDeviceWinUSB.cpp
+       lib/graphicsdev/D3D11.cpp
+       lib/graphicsdev/D3D12.cpp
+       lib/audiodev/WASAPI.cpp)
 
+  list(APPEND PLAT_HDRS
+        include/boo/graphicsdev/D3D.hpp)
+
+  list(APPEND _BOO_SYS_DEFINES -DUNICODE -D_UNICODE)
+
+  list(APPEND _BOO_SYS_LIBS Winusb opengl32 Setupapi Imm32 Winmm Shlwapi Hid Xinput)
+
+elseif(WIN32)
   unset(VULKAN_SDK_DIRS CACHE)
   get_filename_component(VULKAN_SDK_DIRS "[HKEY_LOCAL_MACHINE\\SOFTWARE\\LunarG\\VulkanSDK;VK_SDK_PATHs]" ABSOLUTE CACHE)
   if (NOT ${VULKAN_SDK_DIRS} STREQUAL "/registry")
@@ -64,6 +82,7 @@ if(WIN32)
   list(APPEND PLAT_SRCS
        lib/win/ApplicationWin32.cpp
        lib/win/WindowWin32.cpp
+       lib/win/WinCommon.hpp
        lib/win/Win32Common.hpp
        lib/inputdev/HIDListenerWinUSB.cpp
        lib/inputdev/HIDDeviceWinUSB.cpp
@@ -77,6 +96,7 @@ if(WIN32)
   list(APPEND _BOO_SYS_DEFINES -DUNICODE -D_UNICODE)
 
   list(APPEND _BOO_SYS_LIBS Winusb opengl32 Setupapi Imm32 Winmm Shlwapi Hid Xinput)
+
 elseif(APPLE)
   list(APPEND PLAT_SRCS
        lib/mac/ApplicationCocoa.mm
@@ -115,6 +135,7 @@ elseif(APPLE)
   list(APPEND _BOO_SYS_LIBS ${APPKIT_LIBRARY} ${IOKIT_LIBRARY} ${OPENGL_LIBRARY} ${METAL_LIBRARY}
                             ${QUARTZCORE_LIBRARY} ${COREVIDEO_LIBRARY} ${AUDIOTOOLBOX_LIBRARY}
                             ${COREAUDIO_LIBRARY} ${COREMIDI_LIBRARY})
+
 else(NOT GEKKO)
   list(APPEND PLAT_SRCS
        lib/x11/XlibCommon.hpp
