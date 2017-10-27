@@ -50,7 +50,7 @@ class MetalDataFactoryImpl : public MetalDataFactory
     void deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf);
 public:
     MetalDataFactoryImpl(IGraphicsContext* parent, MetalContext* ctx, uint32_t sampleCount);
-    ~MetalDataFactoryImpl() {}
+    ~MetalDataFactoryImpl() = default;
 
     Platform platform() const {return Platform::Metal;}
     const char* platformName() const {return "Metal";}
@@ -891,10 +891,13 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     MTLPrimitiveType m_currentPrimitive = MTLPrimitiveTypeTriangle;
     void setShaderDataBinding(IShaderDataBinding* binding)
     {
-        MetalShaderDataBinding* cbind = static_cast<MetalShaderDataBinding*>(binding);
-        cbind->bind(m_enc, m_fillBuf);
-        m_boundData = cbind;
-        m_currentPrimitive = cbind->m_pipeline->m_drawPrim;
+        @autoreleasepool
+        {
+            MetalShaderDataBinding* cbind = static_cast<MetalShaderDataBinding*>(binding);
+            cbind->bind(m_enc, m_fillBuf);
+            m_boundData = cbind;
+            m_currentPrimitive = cbind->m_pipeline->m_drawPrim;
+        }
     }
 
     MetalTextureR* m_boundTarget = nullptr;
@@ -1221,69 +1224,90 @@ MetalDataFactoryImpl::MetalDataFactoryImpl(IGraphicsContext* parent, MetalContex
 
 IGraphicsBufferS* MetalDataFactory::Context::newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
 {
-    MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
-    MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
-    MetalGraphicsBufferS* retval = new MetalGraphicsBufferS(d, use, factory.m_ctx, data, stride, count);
-    d->m_SBufs.emplace_back(retval);
-    return retval;
+    @autoreleasepool
+    {
+        MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
+        MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
+        MetalGraphicsBufferS* retval = new MetalGraphicsBufferS(d, use, factory.m_ctx, data, stride, count);
+        d->m_SBufs.emplace_back(retval);
+        return retval;
+    }
 }
 IGraphicsBufferD* MetalDataFactory::Context::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
 {
-    MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
-    MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
-    MetalCommandQueue* q = static_cast<MetalCommandQueue*>(factory.m_parent->getCommandQueue());
-    MetalGraphicsBufferD* retval = new MetalGraphicsBufferD(d, q, use, factory.m_ctx, stride, count);
-    d->m_DBufs.emplace_back(retval);
-    return retval;
+    @autoreleasepool
+    {
+        MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
+        MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
+        MetalCommandQueue* q = static_cast<MetalCommandQueue*>(factory.m_parent->getCommandQueue());
+        MetalGraphicsBufferD* retval = new MetalGraphicsBufferD(d, q, use, factory.m_ctx, stride, count);
+        d->m_DBufs.emplace_back(retval);
+        return retval;
+    }
 }
 
 ITextureS* MetalDataFactory::Context::newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                                                        TextureClampMode clampMode, const void* data, size_t sz)
 {
-    MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
-    MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
-    MetalTextureS* retval = new MetalTextureS(d, factory.m_ctx, width, height, mips, fmt, data, sz);
-    d->m_STexs.emplace_back(retval);
-    return retval;
+    @autoreleasepool
+    {
+        MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
+        MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
+        MetalTextureS* retval = new MetalTextureS(d, factory.m_ctx, width, height, mips, fmt, data, sz);
+        d->m_STexs.emplace_back(retval);
+        return retval;
+    }
 }
 ITextureSA* MetalDataFactory::Context::newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
                                                              TextureFormat fmt, TextureClampMode clampMode,
                                                              const void* data, size_t sz)
 {
-    MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
-    MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
-    MetalTextureSA* retval = new MetalTextureSA(d, factory.m_ctx, width, height, layers, mips, fmt, data, sz);
-    d->m_SATexs.emplace_back(retval);
-    return retval;
+    @autoreleasepool
+    {
+        MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
+        MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
+        MetalTextureSA* retval = new MetalTextureSA(d, factory.m_ctx, width, height, layers, mips, fmt, data, sz);
+        d->m_SATexs.emplace_back(retval);
+        return retval;
+    }
 }
 ITextureD* MetalDataFactory::Context::newDynamicTexture(size_t width, size_t height, TextureFormat fmt,
                                                         TextureClampMode clampMode)
 {
-    MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
-    MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
-    MetalCommandQueue* q = static_cast<MetalCommandQueue*>(factory.m_parent->getCommandQueue());
-    MetalTextureD* retval = new MetalTextureD(d, q, factory.m_ctx, width, height, fmt);
-    d->m_DTexs.emplace_back(retval);
-    return retval;
+    @autoreleasepool
+    {
+        MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
+        MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
+        MetalCommandQueue* q = static_cast<MetalCommandQueue*>(factory.m_parent->getCommandQueue());
+        MetalTextureD* retval = new MetalTextureD(d, q, factory.m_ctx, width, height, fmt);
+        d->m_DTexs.emplace_back(retval);
+        return retval;
+    }
 }
 ITextureR* MetalDataFactory::Context::newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
                                                        size_t colorBindCount, size_t depthBindCount)
 {
-    MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
-    MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
-    MetalTextureR* retval = new MetalTextureR(d, factory.m_ctx, width, height, factory.m_sampleCount,
-                                              colorBindCount, depthBindCount);
-    d->m_RTexs.emplace_back(retval);
-    return retval;
+    @autoreleasepool
+    {
+        MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
+        MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
+        MetalTextureR* retval = new MetalTextureR(d, factory.m_ctx, width, height, factory.m_sampleCount,
+                                                  colorBindCount, depthBindCount);
+        d->m_RTexs.emplace_back(retval);
+        return retval;
+    }
 }
 
 IVertexFormat* MetalDataFactory::Context::newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
                                                           size_t baseVert, size_t baseInst)
 {
-    MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
-    MetalVertexFormat* retval = new struct MetalVertexFormat(d, elementCount, elements);
-    d->m_VFmts.emplace_back(retval);
-    return retval;
+    @autoreleasepool
+    {
+        MetalData* d = MetalDataFactoryImpl::m_deferredData.get();
+        MetalVertexFormat* retval = new struct MetalVertexFormat(d, elementCount, elements);
+        d->m_VFmts.emplace_back(retval);
+        return retval;
+    }
 }
 
 IShaderPipeline* MetalDataFactory::Context::newShaderPipeline(const char* vertSource, const char* fragSource,
@@ -1375,15 +1399,18 @@ MetalDataFactory::Context::newShaderDataBinding(IShaderPipeline* pipeline,
                                                 const int* texBindIdxs, const bool* depthBind,
                                                 size_t baseVert, size_t baseInst)
 {
-    MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
-    MetalShaderDataBinding* retval =
-    new MetalShaderDataBinding(MetalDataFactoryImpl::m_deferredData.get(),
-                               factory.m_ctx, pipeline, vbuf, instVbo, ibuf,
-                               ubufCount, ubufs, ubufStages, ubufOffs,
-                               ubufSizes, texCount, texs, texBindIdxs,
-                               depthBind, baseVert, baseInst);
-    MetalDataFactoryImpl::m_deferredData->m_SBinds.emplace_back(retval);
-    return retval;
+    @autoreleasepool
+    {
+        MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
+        MetalShaderDataBinding* retval =
+            new MetalShaderDataBinding(MetalDataFactoryImpl::m_deferredData.get(),
+                                       factory.m_ctx, pipeline, vbuf, instVbo, ibuf,
+                                       ubufCount, ubufs, ubufStages, ubufOffs,
+                                       ubufSizes, texCount, texs, texBindIdxs,
+                                       depthBind, baseVert, baseInst);
+        MetalDataFactoryImpl::m_deferredData->m_SBinds.emplace_back(retval);
+        return retval;
+    }
 }
 
 GraphicsDataToken MetalDataFactoryImpl::commitTransaction(const FactoryCommitFunc& trans)
