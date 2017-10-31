@@ -59,9 +59,9 @@ find_ipp_library(S)
 find_ipp_library(VM)
 
 set(IPP_LIBRARY
-    ${IPP_LIB_CORE}
     ${IPP_LIB_S}
-    ${IPP_LIB_VM})
+    ${IPP_LIB_VM}
+    ${IPP_LIB_CORE})
 
 set(CMAKE_FIND_LIBRARY_SUFFIXES ${_IPP_ORIG_CMAKE_FIND_LIBRARY_SUFFIXES})
 

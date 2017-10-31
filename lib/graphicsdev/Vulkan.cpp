@@ -1286,7 +1286,7 @@ public:
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.pNext = nullptr;
         viewInfo.image = m_gpuTex;
-        viewInfo.viewType = (m_layers > 1) ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
         viewInfo.format = m_vkFmt;
         viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
         viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;

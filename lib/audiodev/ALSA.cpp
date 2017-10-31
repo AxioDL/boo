@@ -52,8 +52,11 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
 
     ~ALSAAudioVoiceEngine()
     {
-        snd_pcm_drain(m_pcm);
-        snd_pcm_close(m_pcm);
+        if (m_pcm)
+        {
+            snd_pcm_drain(m_pcm);
+            snd_pcm_close(m_pcm);
+        }
     }
 
     AudioChannelSet _getAvailableSet()
@@ -123,7 +126,8 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
 
     ALSAAudioVoiceEngine()
     {
-        if (snd_pcm_open(&m_pcm, "default", SND_PCM_STREAM_PLAYBACK, 0) < 0)
+        /* Open device */
+        if (snd_pcm_open(&m_pcm, "default", SND_PCM_STREAM_PLAYBACK, 0))
         {
             Log.report(logvisor::Error, "unable to allocate ALSA voice");
             return;
@@ -133,6 +137,16 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
         snd_pcm_hw_params_t* hwParams;
         snd_pcm_hw_params_malloc(&hwParams);
         snd_pcm_hw_params_any(m_pcm, hwParams);
+
+        int errr;
+        if ((errr = snd_pcm_hw_params_set_access(m_pcm, hwParams, SND_PCM_ACCESS_RW_INTERLEAVED)))
+        {
+            snd_pcm_hw_params_free(hwParams);
+            snd_pcm_close(m_pcm);
+            m_pcm = nullptr;
+            Log.report(logvisor::Error, "Can't set interleaved mode. %s\n", snd_strerror(errr));
+            return;
+        }
 
         snd_pcm_format_t bestFmt;
         if (!snd_pcm_hw_params_test_format(m_pcm, hwParams, SND_PCM_FORMAT_FLOAT))
@@ -155,9 +169,31 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
         }
         else
         {
+            snd_pcm_hw_params_free(hwParams);
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
-            Log.report(logvisor::Fatal, "unsupported audio formats on default ALSA device");
+            Log.report(logvisor::Error, "unsupported audio formats on default ALSA device");
+            return;
+        }
+
+        if ((errr = snd_pcm_hw_params_set_format(m_pcm, hwParams, bestFmt)))
+        {
+            snd_pcm_hw_params_free(hwParams);
+            snd_pcm_close(m_pcm);
+            m_pcm = nullptr;
+            Log.report(logvisor::Error, "Can't set format. %s\n", snd_strerror(errr));
+            return;
+        }
+
+        /* Query audio card for channel map */
+        m_mixInfo.m_channels = _getAvailableSet();
+        unsigned int chCount = ChannelCount(m_mixInfo.m_channels);
+        if ((errr = snd_pcm_hw_params_set_channels_near(m_pcm, hwParams, &chCount)))
+        {
+            snd_pcm_hw_params_free(hwParams);
+            snd_pcm_close(m_pcm);
+            m_pcm = nullptr;
+            Log.report(logvisor::Error, "Can't set channels number. %s\n", snd_strerror(errr));
             return;
         }
 
@@ -176,35 +212,55 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
         }
         else
         {
+            snd_pcm_hw_params_free(hwParams);
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
-            Log.report(logvisor::Fatal, "unsupported audio sample rates on default ALSA device");
+            Log.report(logvisor::Error, "unsupported audio sample rates on default ALSA device");
+            return;
+        }
+
+        if ((errr = snd_pcm_hw_params_set_rate_near(m_pcm, hwParams, &bestRate, 0)))
+        {
+            snd_pcm_hw_params_free(hwParams);
+            snd_pcm_close(m_pcm);
+            m_pcm = nullptr;
+            Log.report(logvisor::Error, "Can't set rate. %s\n", snd_strerror(errr));
+            return;
+        }
+        m_mixInfo.m_sampleRate = bestRate;
+
+        snd_pcm_uframes_t bufSz = m_5msFrames * 3;
+        if ((errr = snd_pcm_hw_params_set_buffer_size_near(m_pcm, hwParams, &bufSz)))
+        {
+            snd_pcm_hw_params_free(hwParams);
+            snd_pcm_close(m_pcm);
+            m_pcm = nullptr;
+            Log.report(logvisor::Error, "Can't set buffer size. %s\n", snd_strerror(errr));
+            return;
+        }
+
+        snd_pcm_uframes_t periodSz = bufSz / 2;
+        if ((errr = snd_pcm_hw_params_set_period_size_near(m_pcm, hwParams, &periodSz, 0)))
+        {
+            snd_pcm_hw_params_free(hwParams);
+            snd_pcm_close(m_pcm);
+            m_pcm = nullptr;
+            Log.report(logvisor::Error, "Can't set period size. %s\n", snd_strerror(errr));
+            return;
+        }
+
+        /* Write parameters */
+        if ((errr = snd_pcm_hw_params(m_pcm, hwParams)))
+        {
+            snd_pcm_hw_params_free(hwParams);
+            snd_pcm_close(m_pcm);
+            m_pcm = nullptr;
+            Log.report(logvisor::Error, "Can't set harware parameters. %s\n", snd_strerror(errr));
             return;
         }
 
         snd_pcm_hw_params_free(hwParams);
 
-        /* Query audio card for channel map */
-        m_mixInfo.m_channels = _getAvailableSet();
-
-        /* Populate channel map */
-        unsigned chCount = ChannelCount(m_mixInfo.m_channels);
-        int err;
-        while ((err = snd_pcm_set_params(m_pcm, bestFmt, SND_PCM_ACCESS_RW_INTERLEAVED,
-                                         chCount, bestRate, 0, 100000)) < 0)
-        {
-            if (m_mixInfo.m_channels == AudioChannelSet::Stereo)
-                break;
-            m_mixInfo.m_channels = AudioChannelSet(int(m_mixInfo.m_channels) - 1);
-            chCount = ChannelCount(m_mixInfo.m_channels);
-        }
-        if (err < 0)
-        {
-            snd_pcm_close(m_pcm);
-            m_pcm = nullptr;
-            Log.report(logvisor::Error, "unable to set ALSA voice params");
-            return;
-        }
 
         snd_pcm_chmap_query_t** chmaps = snd_pcm_query_chmaps(m_pcm);
         ChannelMap& chmapOut = m_mixInfo.m_channelMap;
@@ -294,6 +350,24 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
 
     void pumpAndMixVoices()
     {
+        if (!m_pcm)
+        {
+            /* Dummy pump mode - use failsafe defaults for 1/60sec of samples */
+            m_mixInfo.m_sampleRate = 32000.0;
+            m_mixInfo.m_sampleFormat = SOXR_FLOAT32_I;
+            m_mixInfo.m_bitsPerSample = 32;
+            m_5msFrames = 32000 / 60;
+            m_mixInfo.m_periodFrames = m_5msFrames;
+            m_mixInfo.m_channels = AudioChannelSet::Stereo;
+            m_mixInfo.m_channelMap.m_channelCount = 2;
+            m_mixInfo.m_channelMap.m_channels[0] = AudioChannel::FrontLeft;
+            m_mixInfo.m_channelMap.m_channels[1] = AudioChannel::FrontRight;
+            if (m_finalFlt.size() < m_5msFrames * 2)
+                m_finalFlt.resize(m_5msFrames * 2);
+            _pumpAndMixVoices(m_5msFrames, m_finalFlt.data());
+            return;
+        }
+
         snd_pcm_sframes_t frames = snd_pcm_avail_update(m_pcm);
         if (frames < 0)
         {
@@ -564,10 +638,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
 
 std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine()
 {
-    std::unique_ptr<IAudioVoiceEngine> ret = std::make_unique<ALSAAudioVoiceEngine>();
-    if (!static_cast<ALSAAudioVoiceEngine&>(*ret).m_pcm)
-        return {};
-    return ret;
+    return std::make_unique<ALSAAudioVoiceEngine>();
 }
 
 }
