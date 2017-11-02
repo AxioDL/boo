@@ -112,13 +112,14 @@ class GLGraphicsBufferS : public IGraphicsBufferS
     GLGraphicsBufferS(IGraphicsData* parent, BufferUse use, const void* data, size_t sz)
     : IGraphicsBufferS(parent)
     {
+        Log.report(logvisor::Info, "Create static buffer %p\n", this);
         m_target = USE_TABLE[int(use)];
         glGenBuffers(1, &m_buf);
         glBindBuffer(m_target, m_buf);
         glBufferData(m_target, sz, data, GL_STATIC_DRAW);
     }
 public:
-    ~GLGraphicsBufferS() {glDeleteBuffers(1, &m_buf);}
+    ~GLGraphicsBufferS() {glDeleteBuffers(1, &m_buf); Log.report(logvisor::Info, "Delete static buffer %p\n", this); }
 
     void bindVertex() const
     {glBindBuffer(GL_ARRAY_BUFFER, m_buf);}
@@ -144,6 +145,7 @@ class GLGraphicsBufferD : public IGraphicsBufferD
     : boo::IGraphicsBufferD(parent),
       m_target(USE_TABLE[int(use)]), m_cpuBuf(new uint8_t[sz]), m_cpuSz(sz)
     {
+        Log.report(logvisor::Info, "Create dynamic buffer %p\n", this);
         glGenBuffers(3, m_bufs);
         for (int i=0 ; i<3 ; ++i)
         {
@@ -153,7 +155,7 @@ class GLGraphicsBufferD : public IGraphicsBufferD
     }
     void update(int b);
 public:
-    ~GLGraphicsBufferD() {glDeleteBuffers(3, m_bufs);}
+    ~GLGraphicsBufferD() {glDeleteBuffers(3, m_bufs); Log.report(logvisor::Info, "Delete dynamic buffer %p\n", this);}
 
     void load(const void* data, size_t sz);
     void* map(size_t sz);
