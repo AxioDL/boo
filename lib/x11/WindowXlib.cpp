@@ -28,6 +28,7 @@
 #include <X11/XKBlib.h>
 #include <X11/extensions/XInput2.h>
 #include <X11/Xatom.h>
+#include <X11/extensions/Xrandr.h>
 #include "logvisor/logvisor.hpp"
 
 #include "XlibCommon.hpp"
@@ -278,6 +279,16 @@ static void genFrameDefault(Screen* screen, int& xOut, int& yOut, int& wOut, int
     float height = screen->height * 2.0 / 3.0;
     xOut = (screen->width - width) / 2.0;
     yOut = (screen->height - height) / 2.0;
+    wOut = width;
+    hOut = height;
+}
+
+static void genFrameDefault(XRRMonitorInfo* screen, int& xOut, int& yOut, int& wOut, int& hOut)
+{
+    float width = screen->width * 2.0 / 3.0;
+    float height = screen->height * 2.0 / 3.0;
+    xOut = (screen->width - width) / 2.0 + screen->x;
+    yOut = (screen->height - height) / 2.0 + screen->y;
     wOut = width;
     hOut = height;
 }
@@ -976,7 +987,13 @@ public:
 
             /* Create window */
             int x, y, w, h;
-            genFrameDefault(screen, x, y, w, h);
+            int nmonitors = 0;
+            XRRMonitorInfo* mInfo = XRRGetMonitors(m_xDisp, screen->root, true, &nmonitors);
+            if (nmonitors)
+                genFrameDefault(mInfo, x, y, w, h);
+            else
+                genFrameDefault(screen, x, y, w, h);
+            XRRFreeMonitors(mInfo);
             XSetWindowAttributes swa;
             swa.colormap = m_colormapId;
             swa.border_pixmap = 0;
@@ -1042,6 +1059,7 @@ public:
             XMapWindow(m_xDisp, m_windowId);
             setStyle(EWindowStyle::Default);
             setCursor(EMouseCursor::Pointer);
+            setWindowFrameDefault();
             XFlush(m_xDisp);
 
             if (!m_gfxCtx->initializeContext(vulkanHandle))
@@ -1150,9 +1168,14 @@ public:
     
     void setWindowFrameDefault()
     {
-        int x, y, w, h;
+        int x, y, w, h, nmonitors;
         Screen* screen = DefaultScreenOfDisplay(m_xDisp);
-        genFrameDefault(screen, x, y, w, h);
+        XRRMonitorInfo* mInfo = XRRGetMonitors(m_xDisp, screen->root, true, &nmonitors);
+        if (nmonitors)
+            genFrameDefault(mInfo, x, y, w, h);
+        else
+            genFrameDefault(screen, x, y, w, h);
+        XRRFreeMonitors(mInfo);
         XWindowChanges values = {(int)x, (int)y, (int)w, (int)h};
         XLockDisplay(m_xDisp);
         XConfigureWindow(m_xDisp, m_windowId, CWX|CWY|CWWidth|CWHeight, &values);

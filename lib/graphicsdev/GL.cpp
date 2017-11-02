@@ -67,6 +67,7 @@ public:
 ThreadLocalPtr<struct GLData> GLDataFactoryImpl::m_deferredData;
 struct GLData : IGraphicsDataPriv
 {
+    int m_deadCounter = 0;
     std::vector<std::unique_ptr<class GLShaderPipeline>> m_SPs;
     std::vector<std::unique_ptr<struct GLShaderDataBinding>> m_SBinds;
     std::vector<std::unique_ptr<class GLGraphicsBufferS>> m_SBufs;
@@ -85,6 +86,7 @@ struct GLPoolItem : IGraphicsDataPriv
 
 struct GLPool : IGraphicsBufferPool
 {
+    int m_deadCounter = 0;
     std::unordered_set<GLPoolItem*> m_items;
     ~GLPool()
     {
@@ -450,9 +452,9 @@ class GLShaderPipeline : public IShaderPipeline
     friend class GLDataFactory;
     friend struct GLCommandQueue;
     friend struct GLShaderDataBinding;
-    GLShareableShader::Token m_vert;
-    GLShareableShader::Token m_frag;
-    GLuint m_prog = 0;
+    mutable GLShareableShader::Token m_vert;
+    mutable GLShareableShader::Token m_frag;
+    mutable GLuint m_prog = 0;
     GLenum m_sfactor = GL_ONE;
     GLenum m_dfactor = GL_ZERO;
     GLenum m_drawPrim = GL_TRIANGLES;
@@ -462,10 +464,11 @@ class GLShaderPipeline : public IShaderPipeline
     bool m_alphaWrite = true;
     bool m_subtractBlend = false;
     CullMode m_culling;
-    std::vector<GLint> m_uniLocs;
+    mutable std::vector<GLint> m_uniLocs;
+    mutable std::vector<std::string> m_texNames;
+    mutable std::vector<std::string> m_blockNames;
     GLShaderPipeline(GLData* parent) : IShaderPipeline(parent) {}
 public:
-    operator bool() const {return m_prog != 0;}
     ~GLShaderPipeline() { if (m_prog) glDeleteProgram(m_prog); }
     GLShaderPipeline& operator=(const GLShaderPipeline&) = delete;
     GLShaderPipeline(const GLShaderPipeline&) = delete;
@@ -485,6 +488,8 @@ public:
         m_subtractBlend = other.m_subtractBlend;
         m_culling = other.m_culling;
         m_uniLocs = std::move(other.m_uniLocs);
+        m_texNames = std::move(other.m_texNames);
+        m_blockNames = std::move(other.m_blockNames);
         return *this;
     }
     GLShaderPipeline(GLShaderPipeline&& other)
@@ -492,7 +497,71 @@ public:
 
     GLuint bind() const
     {
-        glUseProgram(m_prog);
+        if (!m_prog)
+        {
+            m_prog = glCreateProgram();
+            if (!m_prog)
+            {
+                Log.report(logvisor::Error, "unable to create shader program");
+                return 0;
+            }
+
+            glAttachShader(m_prog, m_vert.get().m_shader);
+            glAttachShader(m_prog, m_frag.get().m_shader);
+
+            glLinkProgram(m_prog);
+
+            glDetachShader(m_prog, m_vert.get().m_shader);
+            glDetachShader(m_prog, m_frag.get().m_shader);
+
+            m_vert.reset();
+            m_frag.reset();
+
+            GLint status;
+            glGetProgramiv(m_prog, GL_LINK_STATUS, &status);
+            if (status != GL_TRUE)
+            {
+                GLint logLen;
+                glGetProgramiv(m_prog, GL_INFO_LOG_LENGTH, &logLen);
+                char* log = (char*)malloc(logLen);
+                glGetProgramInfoLog(m_prog, logLen, nullptr, log);
+                Log.report(logvisor::Error, "unable to link shader program\n%s\n", log);
+                free(log);
+                return 0;
+            }
+
+            glUseProgram(m_prog);
+
+            if (m_blockNames.size())
+            {
+                m_uniLocs.reserve(m_blockNames.size());
+                for (size_t i=0 ; i<m_blockNames.size() ; ++i)
+                {
+                    GLint uniLoc = glGetUniformBlockIndex(m_prog, m_blockNames[i].c_str());
+                    //if (uniLoc < 0)
+                    //    Log.report(logvisor::Warning, "unable to find uniform block '%s'", uniformBlockNames[i]);
+                    m_uniLocs.push_back(uniLoc);
+                }
+                m_blockNames = std::vector<std::string>();
+            }
+
+            if (m_texNames.size())
+            {
+                for (int i=0 ; i<m_texNames.size() ; ++i)
+                {
+                    GLint texLoc = glGetUniformLocation(m_prog, m_texNames[i].c_str());
+                    if (texLoc < 0)
+                    { /* Log.report(logvisor::Warning, "unable to find sampler variable '%s'", texNames[i]); */ }
+                    else
+                        glUniform1i(texLoc, i);
+                }
+                m_texNames = std::vector<std::string>();
+            }
+        }
+        else
+        {
+            glUseProgram(m_prog);
+        }
 
         if (m_dfactor != GL_ZERO)
         {
@@ -654,54 +723,13 @@ IShaderPipeline* GLDataFactory::Context::newShaderPipeline
         shader.m_frag = it->second->lock();
     }
 
-    shader.m_prog = glCreateProgram();
-    if (!shader.m_prog)
-    {
-        Log.report(logvisor::Error, "unable to create shader program");
-        return nullptr;
-    }
+    shader.m_texNames.reserve(texCount);
+    for (int i=0 ; i<texCount ; ++i)
+        shader.m_texNames.emplace_back(texNames[i]);
 
-    glAttachShader(shader.m_prog, shader.m_vert.get().m_shader);
-    glAttachShader(shader.m_prog, shader.m_frag.get().m_shader);
-
-    glLinkProgram(shader.m_prog);
-    glGetProgramiv(shader.m_prog, GL_LINK_STATUS, &status);
-    if (status != GL_TRUE)
-    {
-        GLint logLen;
-        glGetProgramiv(shader.m_prog, GL_INFO_LOG_LENGTH, &logLen);
-        char* log = (char*)malloc(logLen);
-        glGetProgramInfoLog(shader.m_prog, logLen, nullptr, log);
-        Log.report(logvisor::Error, "unable to link shader program\n%s\n", log);
-        free(log);
-        return nullptr;
-    }
-
-    glUseProgram(shader.m_prog);
-
-    if (uniformBlockCount)
-    {
-        shader.m_uniLocs.reserve(uniformBlockCount);
-        for (size_t i=0 ; i<uniformBlockCount ; ++i)
-        {
-            GLint uniLoc = glGetUniformBlockIndex(shader.m_prog, uniformBlockNames[i]);
-            //if (uniLoc < 0)
-            //    Log.report(logvisor::Warning, "unable to find uniform block '%s'", uniformBlockNames[i]);
-            shader.m_uniLocs.push_back(uniLoc);
-        }
-    }
-
-    if (texCount && texNames)
-    {
-        for (int i=0 ; i<texCount ; ++i)
-        {
-            GLint texLoc = glGetUniformLocation(shader.m_prog, texNames[i]);
-            if (texLoc < 0)
-            { /* Log.report(logvisor::Warning, "unable to find sampler variable '%s'", texNames[i]); */ }
-            else
-                glUniform1i(texLoc, i);
-        }
-    }
+    shader.m_blockNames.reserve(uniformBlockCount);
+    for (int i=0 ; i<uniformBlockCount ; ++i)
+        shader.m_blockNames.emplace_back(uniformBlockNames[i]);
 
     if (srcFac == BlendFactor::Subtract || dstFac == BlendFactor::Subtract)
     {
@@ -926,8 +954,9 @@ void GLDataFactoryImpl::destroyData(IGraphicsData* d)
 {
     std::unique_lock<std::mutex> lk(m_committedMutex);
     GLData* data = static_cast<GLData*>(d);
-    m_committedData.erase(data);
-    data->decrement();
+    data->m_deadCounter = 3;
+    //m_committedData.erase(data);
+    //data->decrement();
 }
 
 void GLDataFactoryImpl::destroyAllData()
@@ -945,8 +974,9 @@ void GLDataFactoryImpl::destroyPool(IGraphicsBufferPool* p)
 {
     std::unique_lock<std::mutex> lk(m_committedMutex);
     GLPool* pool = static_cast<GLPool*>(p);
-    m_committedPools.erase(pool);
-    delete pool;
+    pool->m_deadCounter = 3;
+    //m_committedPools.erase(pool);
+    //delete pool;
 }
 
 IGraphicsBufferD* GLDataFactoryImpl::newPoolBuffer(IGraphicsBufferPool* p, BufferUse use,
@@ -1094,9 +1124,9 @@ struct GLCommandQueue : IGraphicsCommandQueue
     std::vector<std::function<void(void)>> m_pendingPosts1;
     std::vector<std::function<void(void)>> m_pendingPosts2;
     std::vector<GLVertexFormat*> m_pendingFmtAdds;
-    std::vector<std::array<GLuint, 3>> m_pendingFmtDels;
+    //std::vector<std::array<GLuint, 3>> m_pendingFmtDels;
     std::vector<GLTextureR*> m_pendingFboAdds;
-    std::vector<GLuint> m_pendingFboDels;
+    //std::vector<GLuint> m_pendingFboDels;
 
     static void ConfigureVertexFormat(GLVertexFormat* fmt)
     {
@@ -1213,6 +1243,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     self->m_pendingFmtAdds.clear();
                 }
 
+#if 0
                 if (self->m_pendingFmtDels.size())
                 {
                     for (const auto& fmt : self->m_pendingFmtDels)
@@ -1226,12 +1257,14 @@ struct GLCommandQueue : IGraphicsCommandQueue
                         glDeleteFramebuffers(1, &fbo);
                     self->m_pendingFboDels.clear();
                 }
+#endif
 
                 if (self->m_pendingPosts2.size())
                     posts.swap(self->m_pendingPosts2);
             }
             std::vector<Command>& cmds = self->m_cmdBufs[self->m_drawBuf];
             GLenum currentPrim = GL_TRIANGLES;
+            const GLShaderDataBinding* curBinding = nullptr;
             for (const Command& cmd : cmds)
             {
                 switch (cmd.m_op)
@@ -1240,6 +1273,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 {
                     const GLShaderDataBinding* binding = static_cast<const GLShaderDataBinding*>(cmd.binding);
                     binding->bind(self->m_drawBuf);
+                    curBinding = binding;
                     currentPrim = binding->m_pipeline->m_drawPrim;
                     break;
                 }
@@ -1332,6 +1366,31 @@ struct GLCommandQueue : IGraphicsCommandQueue
             cmds.clear();
             for (auto& p : posts)
                 p();
+
+            GLDataFactoryImpl* gfxF = static_cast<GLDataFactoryImpl*>(self->m_parent->getDataFactory());
+            std::unique_lock<std::mutex> datalk(gfxF->m_committedMutex);
+            for (auto it = gfxF->m_committedData.begin() ; it != gfxF->m_committedData.end() ;)
+            {
+                GLData* d = *it;
+                if (d->m_deadCounter && --d->m_deadCounter == 0)
+                {
+                    d->decrement();
+                    it = gfxF->m_committedData.erase(it);
+                    continue;
+                }
+                ++it;
+            }
+            for (auto it = gfxF->m_committedPools.begin() ; it != gfxF->m_committedPools.end() ;)
+            {
+                GLPool* p = *it;
+                if (p->m_deadCounter && --p->m_deadCounter == 0)
+                {
+                    delete p;
+                    it = gfxF->m_committedPools.erase(it);
+                    continue;
+                }
+                ++it;
+            }
         }
     }
 
@@ -1496,6 +1555,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
 
     void delVertexFormat(GLVertexFormat* fmt)
     {
+#if 0
         std::unique_lock<std::mutex> lk(m_mt);
         bool foundAdd = false;
         for (GLVertexFormat*& afmt : m_pendingFmtAdds)
@@ -1507,6 +1567,8 @@ struct GLCommandQueue : IGraphicsCommandQueue
             }
         if (!foundAdd)
             m_pendingFmtDels.push_back({fmt->m_vao[0], fmt->m_vao[1], fmt->m_vao[2]});
+#endif
+        glDeleteVertexArrays(3, fmt->m_vao);
     }
 
     void addFBO(GLTextureR* tex)
@@ -1517,8 +1579,11 @@ struct GLCommandQueue : IGraphicsCommandQueue
 
     void delFBO(GLTextureR* tex)
     {
+#if 0
         std::unique_lock<std::mutex> lk(m_mt);
         m_pendingFboDels.push_back(tex->m_fbo);
+#endif
+        glDeleteFramebuffers(1, &tex->m_fbo);
     }
 
     void execute()

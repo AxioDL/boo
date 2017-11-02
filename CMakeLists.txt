@@ -192,7 +192,7 @@ else(NOT GEKKO)
   endif()
 
   include_directories(${DBUS_INCLUDE_DIR} ${DBUS_ARCH_INCLUDE_DIR})
-  list(APPEND _BOO_SYS_LIBS X11 Xi GL asound ${DBUS_LIBRARY} pthread)
+  list(APPEND _BOO_SYS_LIBS X11 Xi Xrandr GL asound ${DBUS_LIBRARY} pthread)
 
   if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
       message(STATUS "Enabling Vulkan support")

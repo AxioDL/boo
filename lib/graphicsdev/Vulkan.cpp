@@ -26,11 +26,10 @@ class VulkanDataFactoryImpl;
 struct VulkanShareableShader : IShareableShader<VulkanDataFactoryImpl, VulkanShareableShader>
 {
     VkDevice m_dev;
-    VkShaderModule m_shader;
+    std::vector<unsigned int> m_shader;
     VulkanShareableShader(VulkanDataFactoryImpl& fac, uint64_t srcKey, uint64_t binKey,
-                          VkDevice dev, VkShaderModule s)
+                          VkDevice dev, const std::vector<unsigned int>& s)
     : IShareableShader(fac, srcKey, binKey), m_dev(dev), m_shader(s) {}
-    ~VulkanShareableShader() { vk::DestroyShaderModule(m_dev, m_shader, nullptr); }
 };
 
 class VulkanDataFactoryImpl : public VulkanDataFactory
@@ -338,8 +337,8 @@ void VulkanContext::initVulkan(const char* appName)
 #ifndef NDEBUG
     m_layerNames.push_back("VK_LAYER_LUNARG_core_validation");
     m_layerNames.push_back("VK_LAYER_LUNARG_object_tracker");
-    m_layerNames.push_back("VK_LAYER_LUNARG_parameter_validation");
-    m_layerNames.push_back("VK_LAYER_GOOGLE_threading");
+    //m_layerNames.push_back("VK_LAYER_LUNARG_parameter_validation");
+    //m_layerNames.push_back("VK_LAYER_GOOGLE_threading");
 #endif
 
     demo_check_layers(m_instanceLayerProperties, m_layerNames);
@@ -753,7 +752,7 @@ struct VulkanData : IGraphicsDataPriv
     std::vector<std::unique_ptr<class VulkanTextureD>> m_DTexs;
     std::vector<std::unique_ptr<class VulkanTextureR>> m_RTexs;
     std::vector<std::unique_ptr<struct VulkanVertexFormat>> m_VFmts;
-    bool m_dead = false;
+    int m_deadCounter = 0;
     VulkanData(VulkanContext* ctx) : m_ctx(ctx) {}
     ~VulkanData()
     {
@@ -769,7 +768,7 @@ struct VulkanPoolItem : IGraphicsDataPriv
     VulkanContext* m_ctx;
     VkDeviceMemory m_bufMem = VK_NULL_HANDLE;
     std::unique_ptr<class VulkanGraphicsBufferD> m_buf;
-    bool m_dead = false;
+    int m_deadCounter = 0;
     VulkanPoolItem(VulkanContext* ctx) : m_ctx(ctx) {}
     ~VulkanPoolItem()
     {
@@ -781,7 +780,7 @@ struct VulkanPoolItem : IGraphicsDataPriv
 struct VulkanPool : IGraphicsBufferPool
 {
     std::unordered_set<VulkanPoolItem*> m_items;
-    bool m_dead = false;
+    int m_deadCounter = 0;
     ~VulkanPool()
     {
         for (auto& item : m_items)
@@ -792,7 +791,7 @@ struct VulkanPool : IGraphicsBufferPool
     {
         for (auto it = m_items.begin() ; it != m_items.end() ;)
         {
-            if ((*it)->m_dead)
+            if ((*it)->m_deadCounter && --(*it)->m_deadCounter == 0)
             {
                 (*it)->decrement();
                 it = m_items.erase(it);
@@ -1881,8 +1880,18 @@ class VulkanShaderPipeline : public IShaderPipeline
     VulkanContext* m_ctx;
     VkPipelineCache m_pipelineCache;
     const VulkanVertexFormat* m_vtxFmt;
-    VulkanShareableShader::Token m_vert;
-    VulkanShareableShader::Token m_frag;
+    mutable VulkanShareableShader::Token m_vert;
+    mutable VulkanShareableShader::Token m_frag;
+    BlendFactor m_srcFac;
+    BlendFactor m_dstFac;
+    Primitive m_prim;
+    ZTest m_depthTest;
+    bool m_depthWrite;
+    bool m_colorWrite;
+    bool m_alphaWrite;
+    CullMode m_culling;
+    mutable VkPipeline m_pipeline = VK_NULL_HANDLE;
+
     VulkanShaderPipeline(IGraphicsData* parent,
                          VulkanContext* ctx,
                          VulkanShareableShader::Token&& vert,
@@ -1893,171 +1902,197 @@ class VulkanShaderPipeline : public IShaderPipeline
                          ZTest depthTest, bool depthWrite, bool colorWrite,
                          bool alphaWrite, CullMode culling)
     : IShaderPipeline(parent), m_ctx(ctx), m_pipelineCache(pipelineCache), m_vtxFmt(vtxFmt),
-      m_vert(std::move(vert)), m_frag(std::move(frag))
-    {
-        VkCullModeFlagBits cullMode;
-        switch (culling)
-        {
-        case CullMode::None:
-        default:
-            cullMode = VK_CULL_MODE_NONE;
-            break;
-        case CullMode::Backface:
-            cullMode = VK_CULL_MODE_BACK_BIT;
-            break;
-        case CullMode::Frontface:
-            cullMode = VK_CULL_MODE_FRONT_BIT;
-            break;
-        }
-
-        VkDynamicState dynamicStateEnables[VK_DYNAMIC_STATE_RANGE_SIZE] = {};
-        VkPipelineDynamicStateCreateInfo dynamicState = {};
-        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicState.pNext = nullptr;
-        dynamicState.pDynamicStates = dynamicStateEnables;
-        dynamicState.dynamicStateCount = 0;
-
-        VkPipelineShaderStageCreateInfo stages[2] = {};
-
-        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[0].pNext = nullptr;
-        stages[0].flags = 0;
-        stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-        stages[0].module = m_vert.get().m_shader;
-        stages[0].pName = "main";
-        stages[0].pSpecializationInfo = nullptr;
-
-        stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[1].pNext = nullptr;
-        stages[1].flags = 0;
-        stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        stages[1].module = m_frag.get().m_shader;
-        stages[1].pName = "main";
-        stages[1].pSpecializationInfo = nullptr;
-
-        VkPipelineInputAssemblyStateCreateInfo assemblyInfo = {};
-        assemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        assemblyInfo.pNext = nullptr;
-        assemblyInfo.flags = 0;
-        assemblyInfo.topology = PRIMITIVE_TABLE[int(prim)];
-        assemblyInfo.primitiveRestartEnable = VK_FALSE;
-
-        VkPipelineViewportStateCreateInfo viewportInfo = {};
-        viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewportInfo.pNext = nullptr;
-        viewportInfo.flags = 0;
-        viewportInfo.viewportCount = 1;
-        viewportInfo.pViewports = nullptr;
-        viewportInfo.scissorCount = 1;
-        viewportInfo.pScissors = nullptr;
-        dynamicStateEnables[dynamicState.dynamicStateCount++] = VK_DYNAMIC_STATE_VIEWPORT;
-        dynamicStateEnables[dynamicState.dynamicStateCount++] = VK_DYNAMIC_STATE_SCISSOR;
-
-        VkPipelineRasterizationStateCreateInfo rasterizationInfo = {};
-        rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterizationInfo.pNext = nullptr;
-        rasterizationInfo.flags = 0;
-        rasterizationInfo.depthClampEnable = VK_FALSE;
-        rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
-        rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterizationInfo.cullMode = cullMode;
-        rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        rasterizationInfo.depthBiasEnable = VK_FALSE;
-        rasterizationInfo.lineWidth = 1.f;
-
-        VkPipelineMultisampleStateCreateInfo multisampleInfo = {};
-        multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisampleInfo.pNext = nullptr;
-        multisampleInfo.flags = 0;
-        multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-        VkPipelineDepthStencilStateCreateInfo depthStencilInfo = {};
-        depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        depthStencilInfo.pNext = nullptr;
-        depthStencilInfo.flags = 0;
-        depthStencilInfo.depthTestEnable = depthTest != ZTest::None;
-        depthStencilInfo.depthWriteEnable = depthWrite;
-        depthStencilInfo.front.compareOp = VK_COMPARE_OP_ALWAYS;
-        depthStencilInfo.back.compareOp = VK_COMPARE_OP_ALWAYS;
-
-        switch (depthTest)
-        {
-        case ZTest::None:
-        default:
-            depthStencilInfo.depthCompareOp = VK_COMPARE_OP_ALWAYS;
-            break;
-        case ZTest::LEqual:
-            depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-            break;
-        case ZTest::Greater:
-            depthStencilInfo.depthCompareOp = VK_COMPARE_OP_GREATER;
-            break;
-        case ZTest::Equal:
-            depthStencilInfo.depthCompareOp = VK_COMPARE_OP_EQUAL;
-            break;
-        }
-
-        VkPipelineColorBlendAttachmentState colorAttachment = {};
-        colorAttachment.blendEnable = dstFac != BlendFactor::Zero;
-        if (srcFac == BlendFactor::Subtract || dstFac == BlendFactor::Subtract)
-        {
-            colorAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_DST_COLOR;
-            colorAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_SRC_COLOR;
-            colorAttachment.colorBlendOp = VK_BLEND_OP_SUBTRACT;
-        }
-        else
-        {
-            colorAttachment.srcColorBlendFactor = BLEND_FACTOR_TABLE[int(srcFac)];
-            colorAttachment.dstColorBlendFactor = BLEND_FACTOR_TABLE[int(dstFac)];
-            colorAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-        }
-        colorAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        colorAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        colorAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-        colorAttachment.colorWriteMask =
-                (colorWrite ? (VK_COLOR_COMPONENT_R_BIT |
-                               VK_COLOR_COMPONENT_G_BIT |
-                               VK_COLOR_COMPONENT_B_BIT) : 0) |
-                (alphaWrite ? VK_COLOR_COMPONENT_A_BIT : 0);
-
-        VkPipelineColorBlendStateCreateInfo colorBlendInfo = {};
-        colorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        colorBlendInfo.pNext = nullptr;
-        colorBlendInfo.flags = 0;
-        colorBlendInfo.logicOpEnable = VK_FALSE;
-        colorBlendInfo.attachmentCount = 1;
-        colorBlendInfo.pAttachments = &colorAttachment;
-
-        VkGraphicsPipelineCreateInfo pipelineCreateInfo = {};
-        pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineCreateInfo.pNext = nullptr;
-        pipelineCreateInfo.flags = 0;
-        pipelineCreateInfo.stageCount = 2;
-        pipelineCreateInfo.pStages = stages;
-        pipelineCreateInfo.pVertexInputState = &vtxFmt->m_info;
-        pipelineCreateInfo.pInputAssemblyState = &assemblyInfo;
-        pipelineCreateInfo.pViewportState = &viewportInfo;
-        pipelineCreateInfo.pRasterizationState = &rasterizationInfo;
-        pipelineCreateInfo.pMultisampleState = &multisampleInfo;
-        pipelineCreateInfo.pDepthStencilState = &depthStencilInfo;
-        pipelineCreateInfo.pColorBlendState = &colorBlendInfo;
-        pipelineCreateInfo.pDynamicState = &dynamicState;
-        pipelineCreateInfo.layout = ctx->m_pipelinelayout;
-        pipelineCreateInfo.renderPass = ctx->m_pass;
-
-        ThrowIfFailed(vk::CreateGraphicsPipelines(ctx->m_dev, pipelineCache, 1, &pipelineCreateInfo,
-                                                  nullptr, &m_pipeline));
-    }
+      m_vert(std::move(vert)), m_frag(std::move(frag)), m_srcFac(srcFac), m_dstFac(dstFac),
+      m_prim(prim), m_depthTest(depthTest), m_depthWrite(depthWrite), m_colorWrite(colorWrite),
+      m_alphaWrite(alphaWrite), m_culling(culling)
+    {}
 public:
-    VkPipeline m_pipeline;
     ~VulkanShaderPipeline()
     {
-        vk::DestroyPipeline(m_ctx->m_dev, m_pipeline, nullptr);
+        if (m_pipeline)
+            vk::DestroyPipeline(m_ctx->m_dev, m_pipeline, nullptr);
         if (m_pipelineCache)
             vk::DestroyPipelineCache(m_ctx->m_dev, m_pipelineCache, nullptr);
     }
     VulkanShaderPipeline& operator=(const VulkanShaderPipeline&) = delete;
     VulkanShaderPipeline(const VulkanShaderPipeline&) = delete;
+    VkPipeline bind() const
+    {
+        if (!m_pipeline)
+        {
+            VkCullModeFlagBits cullMode;
+            switch (m_culling)
+            {
+            case CullMode::None:
+            default:
+                cullMode = VK_CULL_MODE_NONE;
+                break;
+            case CullMode::Backface:
+                cullMode = VK_CULL_MODE_BACK_BIT;
+                break;
+            case CullMode::Frontface:
+                cullMode = VK_CULL_MODE_FRONT_BIT;
+                break;
+            }
+
+            VkDynamicState dynamicStateEnables[VK_DYNAMIC_STATE_RANGE_SIZE] = {};
+            VkPipelineDynamicStateCreateInfo dynamicState = {};
+            dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+            dynamicState.pNext = nullptr;
+            dynamicState.pDynamicStates = dynamicStateEnables;
+            dynamicState.dynamicStateCount = 0;
+
+            VkPipelineShaderStageCreateInfo stages[2] = {};
+
+            VkShaderModuleCreateInfo smCreateInfo = {};
+            smCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            VkShaderModule vertModule, fragModule;
+            const auto& vertShader = m_vert.get().m_shader;
+            smCreateInfo.codeSize = vertShader.size() * sizeof(unsigned int);
+            smCreateInfo.pCode = vertShader.data();
+            ThrowIfFailed(vk::CreateShaderModule(m_ctx->m_dev, &smCreateInfo, nullptr, &vertModule));
+            const auto& fragShader = m_frag.get().m_shader;
+            smCreateInfo.codeSize = fragShader.size() * sizeof(unsigned int);
+            smCreateInfo.pCode = fragShader.data();
+            ThrowIfFailed(vk::CreateShaderModule(m_ctx->m_dev, &smCreateInfo, nullptr, &fragModule));
+
+            stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            stages[0].pNext = nullptr;
+            stages[0].flags = 0;
+            stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+            stages[0].module = vertModule;
+            stages[0].pName = "main";
+            stages[0].pSpecializationInfo = nullptr;
+
+            stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            stages[1].pNext = nullptr;
+            stages[1].flags = 0;
+            stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+            stages[1].module = fragModule;
+            stages[1].pName = "main";
+            stages[1].pSpecializationInfo = nullptr;
+
+            VkPipelineInputAssemblyStateCreateInfo assemblyInfo = {};
+            assemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+            assemblyInfo.pNext = nullptr;
+            assemblyInfo.flags = 0;
+            assemblyInfo.topology = PRIMITIVE_TABLE[int(m_prim)];
+            assemblyInfo.primitiveRestartEnable = VK_FALSE;
+
+            VkPipelineViewportStateCreateInfo viewportInfo = {};
+            viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+            viewportInfo.pNext = nullptr;
+            viewportInfo.flags = 0;
+            viewportInfo.viewportCount = 1;
+            viewportInfo.pViewports = nullptr;
+            viewportInfo.scissorCount = 1;
+            viewportInfo.pScissors = nullptr;
+            dynamicStateEnables[dynamicState.dynamicStateCount++] = VK_DYNAMIC_STATE_VIEWPORT;
+            dynamicStateEnables[dynamicState.dynamicStateCount++] = VK_DYNAMIC_STATE_SCISSOR;
+
+            VkPipelineRasterizationStateCreateInfo rasterizationInfo = {};
+            rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+            rasterizationInfo.pNext = nullptr;
+            rasterizationInfo.flags = 0;
+            rasterizationInfo.depthClampEnable = VK_FALSE;
+            rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
+            rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
+            rasterizationInfo.cullMode = cullMode;
+            rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+            rasterizationInfo.depthBiasEnable = VK_FALSE;
+            rasterizationInfo.lineWidth = 1.f;
+
+            VkPipelineMultisampleStateCreateInfo multisampleInfo = {};
+            multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+            multisampleInfo.pNext = nullptr;
+            multisampleInfo.flags = 0;
+            multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+            VkPipelineDepthStencilStateCreateInfo depthStencilInfo = {};
+            depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+            depthStencilInfo.pNext = nullptr;
+            depthStencilInfo.flags = 0;
+            depthStencilInfo.depthTestEnable = m_depthTest != ZTest::None;
+            depthStencilInfo.depthWriteEnable = m_depthWrite;
+            depthStencilInfo.front.compareOp = VK_COMPARE_OP_ALWAYS;
+            depthStencilInfo.back.compareOp = VK_COMPARE_OP_ALWAYS;
+
+            switch (m_depthTest)
+            {
+            case ZTest::None:
+            default:
+                depthStencilInfo.depthCompareOp = VK_COMPARE_OP_ALWAYS;
+                break;
+            case ZTest::LEqual:
+                depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+                break;
+            case ZTest::Greater:
+                depthStencilInfo.depthCompareOp = VK_COMPARE_OP_GREATER;
+                break;
+            case ZTest::Equal:
+                depthStencilInfo.depthCompareOp = VK_COMPARE_OP_EQUAL;
+                break;
+            }
+
+            VkPipelineColorBlendAttachmentState colorAttachment = {};
+            colorAttachment.blendEnable = m_dstFac != BlendFactor::Zero;
+            if (m_srcFac == BlendFactor::Subtract || m_dstFac == BlendFactor::Subtract)
+            {
+                colorAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_DST_COLOR;
+                colorAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_SRC_COLOR;
+                colorAttachment.colorBlendOp = VK_BLEND_OP_SUBTRACT;
+            }
+            else
+            {
+                colorAttachment.srcColorBlendFactor = BLEND_FACTOR_TABLE[int(m_srcFac)];
+                colorAttachment.dstColorBlendFactor = BLEND_FACTOR_TABLE[int(m_dstFac)];
+                colorAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+            }
+            colorAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+            colorAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+            colorAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+            colorAttachment.colorWriteMask =
+                    (m_colorWrite ? (VK_COLOR_COMPONENT_R_BIT |
+                                     VK_COLOR_COMPONENT_G_BIT |
+                                     VK_COLOR_COMPONENT_B_BIT) : 0) |
+                    (m_alphaWrite ? VK_COLOR_COMPONENT_A_BIT : 0);
+
+            VkPipelineColorBlendStateCreateInfo colorBlendInfo = {};
+            colorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+            colorBlendInfo.pNext = nullptr;
+            colorBlendInfo.flags = 0;
+            colorBlendInfo.logicOpEnable = VK_FALSE;
+            colorBlendInfo.attachmentCount = 1;
+            colorBlendInfo.pAttachments = &colorAttachment;
+
+            VkGraphicsPipelineCreateInfo pipelineCreateInfo = {};
+            pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+            pipelineCreateInfo.pNext = nullptr;
+            pipelineCreateInfo.flags = 0;
+            pipelineCreateInfo.stageCount = 2;
+            pipelineCreateInfo.pStages = stages;
+            pipelineCreateInfo.pVertexInputState = &m_vtxFmt->m_info;
+            pipelineCreateInfo.pInputAssemblyState = &assemblyInfo;
+            pipelineCreateInfo.pViewportState = &viewportInfo;
+            pipelineCreateInfo.pRasterizationState = &rasterizationInfo;
+            pipelineCreateInfo.pMultisampleState = &multisampleInfo;
+            pipelineCreateInfo.pDepthStencilState = &depthStencilInfo;
+            pipelineCreateInfo.pColorBlendState = &colorBlendInfo;
+            pipelineCreateInfo.pDynamicState = &dynamicState;
+            pipelineCreateInfo.layout = m_ctx->m_pipelinelayout;
+            pipelineCreateInfo.renderPass = m_ctx->m_pass;
+
+            ThrowIfFailed(vk::CreateGraphicsPipelines(m_ctx->m_dev, m_pipelineCache, 1, &pipelineCreateInfo,
+                                                      nullptr, &m_pipeline));
+
+            vk::DestroyShaderModule(m_ctx->m_dev, vertModule, nullptr);
+            vk::DestroyShaderModule(m_ctx->m_dev, fragModule, nullptr);
+
+            m_vert.reset();
+            m_frag.reset();
+        }
+        return m_pipeline;
+    }
 };
 
 static VkDeviceSize SizeBufferForGPU(IGraphicsBuffer* buf, VulkanContext* ctx,
@@ -2156,7 +2191,7 @@ struct VulkanShaderDataBinding : IShaderDataBindingPriv
     std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
     std::vector<std::array<VkDescriptorBufferInfo, 2>> m_ubufOffs;
     size_t m_texCount;
-    VkImageView m_knownViewHandles[2][8] = {};
+    VkImageView m_knownViewHandles[2][BOO_GLSL_MAX_TEXTURE_COUNT] = {};
     struct BindTex
     {
         ITexture* tex;
@@ -2402,7 +2437,7 @@ struct VulkanShaderDataBinding : IShaderDataBindingPriv
         if (totalWrites)
             vk::UpdateDescriptorSets(m_ctx->m_dev, totalWrites, writes, 0, nullptr);
 
-        vk::CmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline->m_pipeline);
+        vk::CmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline->bind());
         if (m_descSets[b])
             vk::CmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_ctx->m_pipelinelayout,
                                       0, 1, &m_descSets[b], 0, nullptr);
@@ -3023,13 +3058,13 @@ void VulkanTextureD::unmap()
 void VulkanDataFactoryImpl::destroyData(IGraphicsData* d)
 {
     VulkanData* data = static_cast<VulkanData*>(d);
-    data->m_dead = true;
+    data->m_deadCounter = 3;
 }
 
 void VulkanDataFactoryImpl::destroyPool(IGraphicsBufferPool* p)
 {
     VulkanPool* pool = static_cast<VulkanPool*>(p);
-    pool->m_dead = true;
+    pool->m_deadCounter = 3;
 }
 
 void VulkanDataFactoryImpl::destroyAllData()
@@ -3255,15 +3290,10 @@ IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
             binHashes[0] = CompileVert(vertBlob, vertSource, srcHashes[0], factory);
         }
 
-        smCreateInfo.codeSize = useVertBlob->size() * sizeof(unsigned int);
-        smCreateInfo.pCode = useVertBlob->data();
-        VkShaderModule vertModule;
-        ThrowIfFailed(vk::CreateShaderModule(factory.m_ctx->m_dev, &smCreateInfo, nullptr, &vertModule));
-
         auto it =
         factory.m_sharedShaders.emplace(std::make_pair(binHashes[0],
             std::make_unique<VulkanShareableShader>(factory, srcHashes[0], binHashes[0],
-                                                    factory.m_ctx->m_dev, vertModule))).first;
+                                                    factory.m_ctx->m_dev, *useVertBlob))).first;
         vertShader = it->second->lock();
     }
     auto fragFind = binHashes[1] ? factory.m_sharedShaders.find(binHashes[1]) :
@@ -3286,18 +3316,12 @@ IShaderPipeline* VulkanDataFactory::Context::newShaderPipeline
             binHashes[1] = CompileFrag(fragBlob, fragSource, srcHashes[1], factory);
         }
 
-        smCreateInfo.codeSize = useFragBlob->size() * sizeof(unsigned int);
-        smCreateInfo.pCode = useFragBlob->data();
-        VkShaderModule fragModule;
-        ThrowIfFailed(vk::CreateShaderModule(factory.m_ctx->m_dev, &smCreateInfo, nullptr, &fragModule));
-
         auto it =
         factory.m_sharedShaders.emplace(std::make_pair(binHashes[1],
             std::make_unique<VulkanShareableShader>(factory, srcHashes[1], binHashes[1],
-                                                    factory.m_ctx->m_dev, fragModule))).first;
+                                                    factory.m_ctx->m_dev, *useFragBlob))).first;
         fragShader = it->second->lock();
     }
-
 
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
     if (pipelineBlob)
@@ -3590,7 +3614,7 @@ void VulkanDataFactoryImpl::deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBu
     VulkanPool* pool = static_cast<VulkanPool*>(p);
     auto search = pool->m_items.find(static_cast<VulkanPoolItem*>(buf->m_parentData));
     if (search != pool->m_items.end())
-        (*search)->m_dead = true;
+        (*search)->m_deadCounter = 3;
 }
 
 GraphicsBufferPoolToken VulkanDataFactoryImpl::newBufferPool()
@@ -3666,9 +3690,10 @@ void VulkanCommandQueue::execute()
     datalk.lock();
     for (auto it = gfxF->m_committedData.begin() ; it != gfxF->m_committedData.end() ;)
     {
-        if ((*it)->m_dead)
+        VulkanData* data = *it;
+        if (data->m_deadCounter && --data->m_deadCounter == 0)
         {
-            (*it)->decrement();
+            data->decrement();
             it = gfxF->m_committedData.erase(it);
             continue;
         }
@@ -3676,16 +3701,16 @@ void VulkanCommandQueue::execute()
     }
     for (auto it = gfxF->m_committedPools.begin() ; it != gfxF->m_committedPools.end() ;)
     {
-        if ((*it)->m_dead)
+        VulkanPool* p = *it;
+        if (p->m_deadCounter && --p->m_deadCounter == 0)
         {
-            VulkanPool* p = *it;
             it = gfxF->m_committedPools.erase(it);
             delete p;
             continue;
         }
         else
         {
-            (*it)->clearDeadBuffers();
+            p->clearDeadBuffers();
         }
         ++it;
     }

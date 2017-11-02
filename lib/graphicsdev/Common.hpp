@@ -95,6 +95,7 @@ public:
         { m_parent = other.m_parent; other.m_parent = nullptr; return *this; }
         Token(Token&& other)
         { m_parent = other.m_parent; other.m_parent = nullptr; }
+        void reset() { if (m_parent) m_parent->decrement(); m_parent = nullptr; }
         ~Token() { if (m_parent) m_parent->decrement(); }
         operator bool() const { return m_parent != nullptr; }
         ShaderImpl& get() const { return static_cast<ShaderImpl&>(*m_parent); }
