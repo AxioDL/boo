@@ -16,12 +16,12 @@ struct IGraphicsCommandQueue
     virtual Platform platform() const=0;
     virtual const SystemChar* platformName() const=0;
 
-    virtual void setShaderDataBinding(IShaderDataBinding* binding)=0;
-    virtual void setRenderTarget(ITextureR* target)=0;
+    virtual void setShaderDataBinding(const ObjToken<IShaderDataBinding>& binding)=0;
+    virtual void setRenderTarget(const ObjToken<ITextureR>& target)=0;
     virtual void setViewport(const SWindowRect& rect, float znear=0.f, float zfar=1.f)=0;
     virtual void setScissor(const SWindowRect& rect)=0;
 
-    virtual void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)=0;
+    virtual void resizeRenderTexture(const ObjToken<ITextureR>& tex, size_t width, size_t height)=0;
     virtual void schedulePostFrameHandler(std::function<void(void)>&& func)=0;
 
     virtual void setClearColor(const float rgba[4])=0;
@@ -32,9 +32,9 @@ struct IGraphicsCommandQueue
     virtual void drawInstances(size_t start, size_t count, size_t instCount)=0;
     virtual void drawInstancesIndexed(size_t start, size_t count, size_t instCount)=0;
 
-    virtual void resolveBindTexture(ITextureR* texture, const SWindowRect& rect,
+    virtual void resolveBindTexture(const ObjToken<ITextureR>& texture, const SWindowRect& rect,
                                     bool tlOrigin, int bindIdx, bool color, bool depth)=0;
-    virtual void resolveDisplay(ITextureR* source)=0;
+    virtual void resolveDisplay(const ObjToken<ITextureR>& source)=0;
     virtual void execute()=0;
 
     virtual void stopRenderer()=0;

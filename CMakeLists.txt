@@ -285,6 +285,7 @@ add_library(boo
             include/boo/ThreadLocalPtr.hpp
             include/boo/DeferredWindowEvents.hpp
             include/boo/System.hpp
+            include/boo/BooObject.hpp
             include/boo/boo.hpp
             InputDeviceClasses.cpp
             ${PLAT_SRCS}
