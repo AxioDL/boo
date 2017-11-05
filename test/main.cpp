@@ -157,7 +157,7 @@ struct CTestWindowCallback : IWindowCallback
     bool m_rectDirty = false;
     bool m_windowInvalid = false;
 
-    void resized(const SWindowRect& rect)
+    void resized(const SWindowRect& rect, bool sync)
     {
         m_lastRect = rect;
         m_rectDirty = true;
@@ -247,8 +247,8 @@ struct TestApplicationCallback : IApplicationCallback
     CTestWindowCallback windowCallback;
     bool running = true;
 
-    IShaderDataBinding* m_binding = nullptr;
-    ITextureR* m_renderTarget = nullptr;
+    boo::ObjToken<IShaderDataBinding> m_binding;
+    boo::ObjToken<ITextureR> m_renderTarget;
 
     std::mutex m_mt;
     std::condition_variable m_cv;
@@ -256,13 +256,13 @@ struct TestApplicationCallback : IApplicationCallback
     std::mutex m_initmt;
     std::condition_variable m_initcv;
 
-    static GraphicsDataToken LoaderProc(TestApplicationCallback* self)
+    static void LoaderProc(TestApplicationCallback* self)
     {
         std::unique_lock<std::mutex> lk(self->m_initmt);
 
         IGraphicsDataFactory* factory = self->mainWindow->getLoadContextDataFactory();
 
-        GraphicsDataToken data = factory->commitTransaction([&](IGraphicsDataFactory::Context& ctx) -> bool
+        factory->commitTransaction([&](IGraphicsDataFactory::Context& ctx) -> bool
         {
             /* Create render target */
             int x, y, w, h;
@@ -282,16 +282,15 @@ struct TestApplicationCallback : IApplicationCallback
                 {{0.5,-0.5},{1.0,0.0}},
                 {{-0.5,-0.5},{0.0,0.0}}
             };
-            IGraphicsBuffer* vbo =
-            ctx.newStaticBuffer(BufferUse::Vertex, quad, sizeof(Vert), 4);
+            auto vbo = ctx.newStaticBuffer(BufferUse::Vertex, quad, sizeof(Vert), 4);
 
             /* Make vertex format */
             VertexElementDescriptor descs[2] =
             {
-                {vbo, nullptr, VertexSemantic::Position3},
-                {vbo, nullptr, VertexSemantic::UV2}
+                {vbo.get(), nullptr, VertexSemantic::Position3},
+                {vbo.get(), nullptr, VertexSemantic::UV2}
             };
-            IVertexFormat* vfmt = ctx.newVertexFormat(2, descs);
+            auto vfmt = ctx.newVertexFormat(2, descs);
 
             /* Make ramp texture */
             using Pixel = uint8_t[4];
@@ -304,11 +303,11 @@ struct TestApplicationCallback : IApplicationCallback
                     tex[i][j][2] = 0;
                     tex[i][j][3] = 0xff;
                 }
-            ITexture* texture =
-            ctx.newStaticTexture(256, 256, 1, TextureFormat::RGBA8, boo::TextureClampMode::Repeat, tex, 256*256*4);
+            boo::ObjToken<ITexture> texture = ctx.newStaticTexture(256, 256, 1, TextureFormat::RGBA8,
+                                              boo::TextureClampMode::Repeat, tex, 256*256*4).get();
 
             /* Make shader pipeline */
-            IShaderPipeline* pipeline = nullptr;
+            boo::ObjToken<IShaderPipeline> pipeline;
             auto plat = ctx.platform();
             if (plat == IGraphicsDataFactory::Platform::OpenGL)
             {
@@ -437,7 +436,7 @@ struct TestApplicationCallback : IApplicationCallback
                 "    return tex.sample(samp, d.out_uv);\n"
                 "}\n";
 
-                pipeline = metalF.newShaderPipeline(VS, FS, vfmt, 1,
+                pipeline = metalF.newShaderPipeline(VS, FS, nullptr, nullptr, vfmt, 1,
                                                     BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
                                                     boo::ZTest::LEqual, true, true, true, boo::CullMode::None);
             }
@@ -445,7 +444,7 @@ struct TestApplicationCallback : IApplicationCallback
 
             /* Make shader data binding */
             self->m_binding =
-            ctx.newShaderDataBinding(pipeline, vfmt, vbo, nullptr, nullptr, 0, nullptr, nullptr,
+            ctx.newShaderDataBinding(pipeline, vfmt, vbo.get(), nullptr, nullptr, 0, nullptr, nullptr,
                                      1, &texture, nullptr, nullptr);
 
             return true;
@@ -463,7 +462,6 @@ struct TestApplicationCallback : IApplicationCallback
             if (!self->running)
                 break;
         }
-        return data;
     }
 
     int appMain(IApplication* app)

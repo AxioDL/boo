@@ -8,7 +8,7 @@
 
 namespace boo
 {
-class BaseGraphicsData;
+struct BaseGraphicsData;
 
 class GLDataFactory : public IGraphicsDataFactory
 {

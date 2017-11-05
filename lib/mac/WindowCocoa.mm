@@ -215,7 +215,6 @@ public:
     ~GraphicsContextCocoaGL()
     {
         m_commandQueue->stopRenderer();
-        m_dataFactory->destroyAllData();
         delete m_commandQueue;
         delete m_dataFactory;
         printf("CONTEXT DESTROYED\n");
@@ -374,7 +373,6 @@ public:
     ~GraphicsContextCocoaMetal()
     {
         m_commandQueue->stopRenderer();
-        m_dataFactory->destroyAllData();
         delete m_commandQueue;
         delete m_dataFactory;
         m_metalCtx->m_windows.erase(m_parentWindow);

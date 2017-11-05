@@ -26,6 +26,24 @@ struct GraphicsDataFactoryHead
     BaseGraphicsPool* m_poolHead = nullptr;
 };
 
+/** Linked-list iterator shareable by data container types */
+template<class T>
+class DataIterator
+{
+    T* m_node;
+public:
+    using value_type = T;
+    using pointer = T*;
+    using reference = T&;
+    using iterator_category = std::bidirectional_iterator_tag;
+
+    explicit DataIterator(T* node) : m_node(node) {}
+    T& operator*() const { return *m_node; }
+    bool operator!=(const DataIterator& other) const { return m_node != other.m_node; }
+    DataIterator& operator++() { m_node = m_node->m_next; return *this; }
+    DataIterator& operator--() { m_node = m_node->m_prev; return *this; }
+};
+
 /** Private generalized data container class.
  *  Keeps head pointers to all graphics objects by type
  */
@@ -50,6 +68,8 @@ struct BaseGraphicsData : IObj
     {
         std::lock_guard<std::mutex> lk(m_head.m_dataMutex);
         m_next = head.m_dataHead;
+        if (m_next)
+            m_next->m_prev = this;
         head.m_dataHead = this;
     }
     ~BaseGraphicsData()
@@ -64,52 +84,37 @@ struct BaseGraphicsData : IObj
         else
         {
             if (m_next)
-                m_next->m_prev = m_head.m_dataHead;
+                m_next->m_prev = nullptr;
             m_head.m_dataHead = m_next;
         }
     }
 
-    class iterator
-    {
-        BaseGraphicsData* m_node;
-    public:
-        using value_type = BaseGraphicsData;
-        using pointer = BaseGraphicsData*;
-        using reference = BaseGraphicsData&;
-        using iterator_category = std::bidirectional_iterator_tag;
-
-        explicit iterator(BaseGraphicsData* node) : m_node(node) {}
-        BaseGraphicsData& operator*() const { return *m_node; }
-        bool operator!=(const iterator& other) const { return m_node != other.m_node; }
-        iterator& operator++() { m_node = m_node->m_next; return *this; }
-        iterator& operator--() { m_node = m_node->m_prev; return *this; }
-    };
-
+    using iterator = DataIterator<BaseGraphicsData>;
     iterator begin() { return iterator(this); }
     iterator end() { return iterator(nullptr); }
 };
 
-template <> GraphicsDataNode<IShaderPipeline, BaseGraphicsData>*&
+template <> inline GraphicsDataNode<IShaderPipeline, BaseGraphicsData>*&
 BaseGraphicsData::getHead<IShaderPipeline>() { return m_SPs; }
-template <> GraphicsDataNode<IShaderDataBinding, BaseGraphicsData>*&
+template <> inline GraphicsDataNode<IShaderDataBinding, BaseGraphicsData>*&
 BaseGraphicsData::getHead<IShaderDataBinding>() { return m_SBinds; }
-template <> GraphicsDataNode<IGraphicsBufferS, BaseGraphicsData>*&
+template <> inline GraphicsDataNode<IGraphicsBufferS, BaseGraphicsData>*&
 BaseGraphicsData::getHead<IGraphicsBufferS>() { return m_SBufs; }
-template <> GraphicsDataNode<IGraphicsBufferD, BaseGraphicsData>*&
+template <> inline GraphicsDataNode<IGraphicsBufferD, BaseGraphicsData>*&
 BaseGraphicsData::getHead<IGraphicsBufferD>() { return m_DBufs; }
-template <> GraphicsDataNode<ITextureS, BaseGraphicsData>*&
+template <> inline GraphicsDataNode<ITextureS, BaseGraphicsData>*&
 BaseGraphicsData::getHead<ITextureS>() { return m_STexs; }
-template <> GraphicsDataNode<ITextureSA, BaseGraphicsData>*&
+template <> inline GraphicsDataNode<ITextureSA, BaseGraphicsData>*&
 BaseGraphicsData::getHead<ITextureSA>() { return m_SATexs; }
-template <> GraphicsDataNode<ITextureD, BaseGraphicsData>*&
+template <> inline GraphicsDataNode<ITextureD, BaseGraphicsData>*&
 BaseGraphicsData::getHead<ITextureD>() { return m_DTexs; }
-template <> GraphicsDataNode<ITextureR, BaseGraphicsData>*&
+template <> inline GraphicsDataNode<ITextureR, BaseGraphicsData>*&
 BaseGraphicsData::getHead<ITextureR>() { return m_RTexs; }
-template <> GraphicsDataNode<IVertexFormat, BaseGraphicsData>*&
+template <> inline GraphicsDataNode<IVertexFormat, BaseGraphicsData>*&
 BaseGraphicsData::getHead<IVertexFormat>() { return m_VFmts; }
 
 /** Private generalized pool container class.
- *  Keeps head pointer to exactly one dynamic buffer while otherwise conforming to IGraphicsData
+ *  Keeps head pointer to exactly one dynamic buffer while otherwise conforming to BaseGraphicsData
  */
 struct BaseGraphicsPool : IObj
 {
@@ -124,6 +129,8 @@ struct BaseGraphicsPool : IObj
     {
         std::lock_guard<std::mutex> lk(m_head.m_dataMutex);
         m_next = head.m_poolHead;
+        if (m_next)
+            m_next->m_prev = this;
         head.m_poolHead = this;
     }
     ~BaseGraphicsPool()
@@ -138,32 +145,17 @@ struct BaseGraphicsPool : IObj
         else
         {
             if (m_next)
-                m_next->m_prev = m_head.m_poolHead;
+                m_next->m_prev = nullptr;
             m_head.m_poolHead = m_next;
         }
     }
 
-    class iterator
-    {
-        BaseGraphicsPool* m_node;
-    public:
-        using value_type = BaseGraphicsPool;
-        using pointer = BaseGraphicsPool*;
-        using reference = BaseGraphicsPool&;
-        using iterator_category = std::bidirectional_iterator_tag;
-
-        explicit iterator(BaseGraphicsPool* node) : m_node(node) {}
-        BaseGraphicsPool& operator*() const { return *m_node; }
-        bool operator!=(const iterator& other) const { return m_node != other.m_node; }
-        iterator& operator++() { m_node = m_node->m_next; return *this; }
-        iterator& operator--() { m_node = m_node->m_prev; return *this; }
-    };
-
+    using iterator = DataIterator<BaseGraphicsPool>;
     iterator begin() { return iterator(this); }
     iterator end() { return iterator(nullptr); }
 };
 
-template <> GraphicsDataNode<IGraphicsBufferD, BaseGraphicsPool>*&
+template <> inline GraphicsDataNode<IGraphicsBufferD, BaseGraphicsPool>*&
 BaseGraphicsPool::getHead<IGraphicsBufferD>() { return m_DBufs; }
 
 /** Private generalised graphics object node.
@@ -182,6 +174,8 @@ struct GraphicsDataNode : NodeCls
     {
         std::lock_guard<std::mutex> lk(m_data->m_head.m_dataMutex);
         m_next = data->template getHead<NodeCls>();
+        if (m_next)
+            m_next->m_prev = this;
         data->template getHead<NodeCls>() = this;
     }
     ~GraphicsDataNode()
@@ -196,7 +190,7 @@ struct GraphicsDataNode : NodeCls
         else
         {
             if (m_next)
-                m_next->m_prev = m_data->template getHead<NodeCls>();
+                m_next->m_prev = nullptr;
             m_data->template getHead<NodeCls>() = m_next;
         }
     }
@@ -221,6 +215,7 @@ struct GraphicsDataNode : NodeCls
     iterator end() { return iterator(nullptr); }
 };
 
+/** Hash table entry for owning sharable shader objects */
 template <class FactoryImpl, class ShaderImpl>
 class IShareableShader
 {

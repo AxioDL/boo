@@ -9,6 +9,7 @@
 
 namespace boo
 {
+struct BaseGraphicsData;
 
 class MetalDataFactory : public IGraphicsDataFactory
 {
@@ -17,7 +18,9 @@ public:
     {
         friend class MetalDataFactoryImpl;
         MetalDataFactory& m_parent;
-        Context(MetalDataFactory& parent) : m_parent(parent) {}
+        ObjToken<BaseGraphicsData> m_data;
+        Context(MetalDataFactory& parent);
+        ~Context();
     public:
         Platform platform() const { return Platform::Metal; }
         const SystemChar* platformName() const { return _S("Metal"); }
@@ -40,7 +43,9 @@ public:
                                                 size_t baseVert = 0, size_t baseInst = 0);
 
         ObjToken<IShaderPipeline> newShaderPipeline(const char* vertSource, const char* fragSource,
-                                                    IVertexFormat* vtxFmt, unsigned targetSamples,
+                                                    std::vector<uint8_t>* vertBlobOut,
+                                                    std::vector<uint8_t>* fragBlobOut,
+                                                    const ObjToken<IVertexFormat>& vtxFmt, unsigned targetSamples,
                                                     BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                                                     ZTest depthTest, bool depthWrite, bool colorWrite,
                                                     bool alphaWrite, CullMode culling);

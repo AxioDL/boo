@@ -34,7 +34,8 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead
     uint32_t m_drawSamples;
     std::unordered_map<uint64_t, std::unique_ptr<GLShareableShader>> m_sharedShaders;
 public:
-    GLDataFactoryImpl(IGraphicsContext* parent, uint32_t drawSamples);
+    GLDataFactoryImpl(IGraphicsContext* parent, uint32_t drawSamples)
+    : m_parent(parent), m_drawSamples(drawSamples) {}
 
     Platform platform() const { return Platform::OpenGL; }
     const SystemChar* platformName() const { return _S("OpenGL"); }
@@ -60,14 +61,13 @@ class GLGraphicsBufferS : public GraphicsDataNode<IGraphicsBufferS>
     GLGraphicsBufferS(const ObjToken<BaseGraphicsData>& parent, BufferUse use, const void* data, size_t sz)
     : GraphicsDataNode<IGraphicsBufferS>(parent)
     {
-        Log.report(logvisor::Info, "Create static buffer %p\n", this);
         m_target = USE_TABLE[int(use)];
         glGenBuffers(1, &m_buf);
         glBindBuffer(m_target, m_buf);
         glBufferData(m_target, sz, data, GL_STATIC_DRAW);
     }
 public:
-    ~GLGraphicsBufferS() {glDeleteBuffers(1, &m_buf); Log.report(logvisor::Info, "Delete static buffer %p\n", this); }
+    ~GLGraphicsBufferS() { glDeleteBuffers(1, &m_buf); }
 
     void bindVertex() const
     {glBindBuffer(GL_ARRAY_BUFFER, m_buf);}
@@ -94,7 +94,6 @@ class GLGraphicsBufferD : public GraphicsDataNode<IGraphicsBufferD, DataCls>
     : GraphicsDataNode<IGraphicsBufferD, DataCls>(parent),
       m_target(USE_TABLE[int(use)]), m_cpuBuf(new uint8_t[sz]), m_cpuSz(sz)
     {
-        Log.report(logvisor::Info, "Create dynamic buffer %p\n", this);
         glGenBuffers(3, m_bufs);
         for (int i=0 ; i<3 ; ++i)
         {
@@ -102,18 +101,44 @@ class GLGraphicsBufferD : public GraphicsDataNode<IGraphicsBufferD, DataCls>
             glBufferData(m_target, m_cpuSz, nullptr, GL_STREAM_DRAW);
         }
     }
-    void update(int b);
 public:
-    ~GLGraphicsBufferD() {glDeleteBuffers(3, m_bufs); Log.report(logvisor::Info, "Delete dynamic buffer %p\n", this);}
+    ~GLGraphicsBufferD() { glDeleteBuffers(3, m_bufs); }
 
-    void load(const void* data, size_t sz);
-    void* map(size_t sz);
-    void unmap();
+    void update(int b)
+    {
+        int slot = 1 << b;
+        if ((slot & m_validMask) == 0)
+        {
+            glBindBuffer(m_target, m_bufs[b]);
+            glBufferSubData(m_target, 0, m_cpuSz, m_cpuBuf.get());
+            m_validMask |= slot;
+        }
+    }
 
-    void bindVertex(int b);
-    void bindIndex(int b);
-    void bindUniform(size_t idx, int b);
-    void bindUniformRange(size_t idx, GLintptr off, GLsizeiptr size, int b);
+    void load(const void* data, size_t sz)
+    {
+        size_t bufSz = std::min(sz, m_cpuSz);
+        memcpy(m_cpuBuf.get(), data, bufSz);
+        m_validMask = 0;
+    }
+    void* map(size_t sz)
+    {
+        if (sz < m_cpuSz)
+            return nullptr;
+        return m_cpuBuf.get();
+    }
+    void unmap()
+    {
+        m_validMask = 0;
+    }
+    void bindVertex(int b)
+    {glBindBuffer(GL_ARRAY_BUFFER, m_bufs[b]);}
+    void bindIndex(int b)
+    {glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_bufs[b]);}
+    void bindUniform(size_t idx, int b)
+    {glBindBufferBase(GL_UNIFORM_BUFFER, idx, m_bufs[b]);}
+    void bindUniformRange(size_t idx, GLintptr off, GLsizeiptr size, int b)
+    {glBindBufferRange(GL_UNIFORM_BUFFER, idx, m_bufs[b], off, size);}
 };
 
 ObjToken<IGraphicsBufferS>
@@ -217,7 +242,7 @@ class GLTextureS : public GraphicsDataNode<ITextureS>
         }
     }
 public:
-    ~GLTextureS() {glDeleteTextures(1, &m_tex);}
+    ~GLTextureS() { glDeleteTextures(1, &m_tex); }
 
     void bind(size_t idx) const
     {
@@ -274,7 +299,7 @@ class GLTextureSA : public GraphicsDataNode<ITextureSA>
         }
     }
 public:
-    ~GLTextureSA() {glDeleteTextures(1, &m_tex);}
+    ~GLTextureSA() { glDeleteTextures(1, &m_tex); }
 
     void bind(size_t idx) const
     {
@@ -294,16 +319,76 @@ class GLTextureD : public GraphicsDataNode<ITextureD>
     size_t m_width = 0;
     size_t m_height = 0;
     int m_validMask = 0;
-    GLTextureD(const ObjToken<BaseGraphicsData>& parent, size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode);
-    void update(int b);
+    GLTextureD(const ObjToken<BaseGraphicsData>& parent, size_t width, size_t height,
+               TextureFormat fmt, TextureClampMode clampMode)
+    : GraphicsDataNode<ITextureD>(parent), m_width(width), m_height(height)
+    {
+        int pxPitch = 4;
+        switch (fmt)
+        {
+        case TextureFormat::RGBA8:
+            m_intFormat = GL_RGBA8;
+            m_format = GL_RGBA;
+            pxPitch = 4;
+            break;
+        case TextureFormat::I8:
+            m_intFormat = GL_R8;
+            m_format = GL_RED;
+            pxPitch = 1;
+            break;
+        default:
+            Log.report(logvisor::Fatal, "unsupported tex format");
+        }
+        m_cpuSz = width * height * pxPitch;
+        m_cpuBuf.reset(new uint8_t[m_cpuSz]);
+
+        glGenTextures(3, m_texs);
+        for (int i=0 ; i<3 ; ++i)
+        {
+            glBindTexture(GL_TEXTURE_2D, m_texs[i]);
+            glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, width, height, 0, m_format, GL_UNSIGNED_BYTE, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            SetClampMode(GL_TEXTURE_2D, clampMode);
+        }
+    }
+
 public:
-    ~GLTextureD();
+    ~GLTextureD() { glDeleteTextures(3, m_texs); }
 
-    void load(const void* data, size_t sz);
-    void* map(size_t sz);
-    void unmap();
+    void update(int b)
+    {
+        int slot = 1 << b;
+        if ((slot & m_validMask) == 0)
+        {
+            glBindTexture(GL_TEXTURE_2D, m_texs[b]);
+            glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, m_width, m_height, 0, m_format, GL_UNSIGNED_BYTE, m_cpuBuf.get());
+            m_validMask |= slot;
+        }
+    }
 
-    void bind(size_t idx, int b);
+    void load(const void* data, size_t sz)
+    {
+        size_t bufSz = std::min(sz, m_cpuSz);
+        memcpy(m_cpuBuf.get(), data, bufSz);
+        m_validMask = 0;
+    }
+    void* map(size_t sz)
+    {
+        if (sz > m_cpuSz)
+            return nullptr;
+        return m_cpuBuf.get();
+    }
+    void unmap()
+    {
+        m_validMask = 0;
+    }
+
+    void bind(size_t idx, int b)
+    {
+        glActiveTexture(GL_TEXTURE0 + idx);
+        glBindTexture(GL_TEXTURE_2D, m_texs[b]);
+    }
 };
 
 #define MAX_BIND_TEXS 4
@@ -323,7 +408,12 @@ class GLTextureR : public GraphicsDataNode<ITextureR>
     GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue* q, size_t width, size_t height, size_t samples,
                TextureClampMode clampMode, size_t colorBindCount, size_t depthBindCount);
 public:
-    ~GLTextureR();
+    ~GLTextureR()
+    {
+        glDeleteTextures(2, m_texs);
+        glDeleteTextures(MAX_BIND_TEXS * 2, m_bindTexs[0]);
+        glDeleteFramebuffers(1, &m_fbo);
+    }
 
     void bind(size_t idx, int bindIdx, bool depth) const
     {
@@ -673,16 +763,14 @@ ObjToken<IShaderPipeline> GLDataFactory::Context::newShaderPipeline
 
 struct GLVertexFormat : GraphicsDataNode<IVertexFormat>
 {
-    GLCommandQueue* m_q;
     GLuint m_vao[3] = {};
-    size_t m_elementCount;
     GLuint m_baseVert, m_baseInst;
-    std::unique_ptr<VertexElementDescriptor[]> m_elements;
-    GLVertexFormat(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue* q, size_t elementCount,
-                   const VertexElementDescriptor* elements,
+    std::vector<VertexElementDescriptor> m_elements;
+    GLVertexFormat(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue* q,
+                   size_t elementCount, const VertexElementDescriptor* elements,
                    size_t baseVert, size_t baseInst);
-    ~GLVertexFormat();
-    void bind(int idx) const {glBindVertexArray(m_vao[idx]);}
+    ~GLVertexFormat() { glDeleteVertexArrays(3, m_vao); }
+    void bind(int idx) const { glBindVertexArray(m_vao[idx]); }
 };
 
 struct GLShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
@@ -735,7 +823,7 @@ struct GLShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
         m_texs.reserve(texCount);
         for (size_t i=0 ; i<texCount ; ++i)
         {
-            m_texs[i] = {texs[i], bindTexIdx ? bindTexIdx[i] : 0, depthBind ? depthBind[i] : false};
+            m_texs.push_back({texs[i], bindTexIdx ? bindTexIdx[i] : 0, depthBind ? depthBind[i] : false});
         }
     }
     void bind(int b) const
@@ -816,9 +904,6 @@ GLDataFactory::Context::newShaderDataBinding(const ObjToken<IShaderPipeline>& pi
     return {new GLShaderDataBinding(m_data, pipeline, vtxFormat, ubufCount, ubufs,
                                     ubufOffs, ubufSizes, texCount, texs, texBindIdx, depthBind)};
 }
-
-GLDataFactoryImpl::GLDataFactoryImpl(IGraphicsContext* parent, uint32_t drawSamples)
-: m_parent(parent), m_drawSamples(drawSamples) {}
 
 GLDataFactory::Context::Context(GLDataFactory& parent)
 : m_parent(parent), m_data(new BaseGraphicsData(static_cast<GLDataFactoryImpl&>(parent)))
@@ -974,13 +1059,13 @@ struct GLCommandQueue : IGraphicsCommandQueue
 
         size_t stride = 0;
         size_t instStride = 0;
-        for (size_t i=0 ; i<fmt->m_elementCount ; ++i)
+        for (size_t i=0 ; i<fmt->m_elements.size() ; ++i)
         {
-            const VertexElementDescriptor* desc = &fmt->m_elements[i];
-            if ((desc->semantic & VertexSemantic::Instanced) != VertexSemantic::None)
-                instStride += SEMANTIC_SIZE_TABLE[int(desc->semantic & VertexSemantic::SemanticMask)];
+            const VertexElementDescriptor& desc = fmt->m_elements[i];
+            if ((desc.semantic & VertexSemantic::Instanced) != VertexSemantic::None)
+                instStride += SEMANTIC_SIZE_TABLE[int(desc.semantic & VertexSemantic::SemanticMask)];
             else
-                stride += SEMANTIC_SIZE_TABLE[int(desc->semantic & VertexSemantic::SemanticMask)];
+                stride += SEMANTIC_SIZE_TABLE[int(desc.semantic & VertexSemantic::SemanticMask)];
         }
 
         for (int b=0 ; b<3 ; ++b)
@@ -990,28 +1075,28 @@ struct GLCommandQueue : IGraphicsCommandQueue
             glBindVertexArray(fmt->m_vao[b]);
             IGraphicsBuffer* lastVBO = nullptr;
             IGraphicsBuffer* lastEBO = nullptr;
-            for (size_t i=0 ; i<fmt->m_elementCount ; ++i)
+            for (size_t i=0 ; i<fmt->m_elements.size() ; ++i)
             {
-                const VertexElementDescriptor* desc = &fmt->m_elements[i];
-                if (desc->vertBuffer != lastVBO)
+                const VertexElementDescriptor& desc = fmt->m_elements[i];
+                if (desc.vertBuffer.get() != lastVBO)
                 {
-                    lastVBO = desc->vertBuffer;
+                    lastVBO = desc.vertBuffer.get();
                     if (lastVBO->dynamic())
                         static_cast<GLGraphicsBufferD<BaseGraphicsData>*>(lastVBO)->bindVertex(b);
                     else
                         static_cast<GLGraphicsBufferS*>(lastVBO)->bindVertex();
                 }
-                if (desc->indexBuffer != lastEBO)
+                if (desc.indexBuffer.get() != lastEBO)
                 {
-                    lastEBO = desc->indexBuffer;
+                    lastEBO = desc.indexBuffer.get();
                     if (lastEBO->dynamic())
                         static_cast<GLGraphicsBufferD<BaseGraphicsData>*>(lastEBO)->bindIndex(b);
                     else
                         static_cast<GLGraphicsBufferS*>(lastEBO)->bindIndex();
                 }
                 glEnableVertexAttribArray(i);
-                int maskedSem = int(desc->semantic & VertexSemantic::SemanticMask);
-                if ((desc->semantic & VertexSemantic::Instanced) != VertexSemantic::None)
+                int maskedSem = int(desc.semantic & VertexSemantic::SemanticMask);
+                if ((desc.semantic & VertexSemantic::Instanced) != VertexSemantic::None)
                 {
                     glVertexAttribPointer(i, SEMANTIC_COUNT_TABLE[maskedSem],
                             SEMANTIC_TYPE_TABLE[maskedSem], GL_TRUE, instStride, (void*)instOffset);
@@ -1350,37 +1435,10 @@ struct GLCommandQueue : IGraphicsCommandQueue
         m_pendingFmtAdds.push_back(fmt);
     }
 
-    void delVertexFormat(const ObjToken<GLVertexFormat>& fmt)
-    {
-#if 0
-        std::unique_lock<std::mutex> lk(m_mt);
-        bool foundAdd = false;
-        for (GLVertexFormat*& afmt : m_pendingFmtAdds)
-            if (afmt == fmt)
-            {
-                foundAdd = true;
-                afmt = nullptr;
-                break;
-            }
-        if (!foundAdd)
-            m_pendingFmtDels.push_back({fmt->m_vao[0], fmt->m_vao[1], fmt->m_vao[2]});
-#endif
-        glDeleteVertexArrays(3, fmt->m_vao);
-    }
-
     void addFBO(const ObjToken<ITextureR>& tex)
     {
         std::unique_lock<std::mutex> lk(m_mt);
         m_pendingFboAdds.push_back(tex);
-    }
-
-    void delFBO(const ObjToken<ITextureR>& tex)
-    {
-#if 0
-        std::unique_lock<std::mutex> lk(m_mt);
-        m_pendingFboDels.push_back(tex->m_fbo);
-#endif
-        glDeleteFramebuffers(1, &tex.cast<GLTextureR>()->m_fbo);
     }
 
     void execute()
@@ -1432,123 +1490,10 @@ struct GLCommandQueue : IGraphicsCommandQueue
     }
 };
 
-template<class DataCls>
-void GLGraphicsBufferD<DataCls>::update(int b)
-{
-    int slot = 1 << b;
-    if ((slot & m_validMask) == 0)
-    {
-        glBindBuffer(m_target, m_bufs[b]);
-        glBufferSubData(m_target, 0, m_cpuSz, m_cpuBuf.get());
-        m_validMask |= slot;
-    }
-}
-
-template<class DataCls>
-void GLGraphicsBufferD<DataCls>::load(const void* data, size_t sz)
-{
-    size_t bufSz = std::min(sz, m_cpuSz);
-    memcpy(m_cpuBuf.get(), data, bufSz);
-    m_validMask = 0;
-}
-template<class DataCls>
-void* GLGraphicsBufferD<DataCls>::map(size_t sz)
-{
-    if (sz < m_cpuSz)
-        return nullptr;
-    return m_cpuBuf.get();
-}
-template<class DataCls>
-void GLGraphicsBufferD<DataCls>::unmap()
-{
-    m_validMask = 0;
-}
-template<class DataCls>
-void GLGraphicsBufferD<DataCls>::bindVertex(int b)
-{glBindBuffer(GL_ARRAY_BUFFER, m_bufs[b]);}
-template<class DataCls>
-void GLGraphicsBufferD<DataCls>::bindIndex(int b)
-{glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_bufs[b]);}
-template<class DataCls>
-void GLGraphicsBufferD<DataCls>::bindUniform(size_t idx, int b)
-{glBindBufferBase(GL_UNIFORM_BUFFER, idx, m_bufs[b]);}
-template<class DataCls>
-void GLGraphicsBufferD<DataCls>::bindUniformRange(size_t idx, GLintptr off, GLsizeiptr size, int b)
-{glBindBufferRange(GL_UNIFORM_BUFFER, idx, m_bufs[b], off, size);}
-
 ObjToken<IGraphicsBufferD>
 GLDataFactory::Context::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
 {
     return {new GLGraphicsBufferD<BaseGraphicsData>(m_data, use, stride * count)};
-}
-
-GLTextureD::GLTextureD(const ObjToken<BaseGraphicsData>& parent, size_t width, size_t height, TextureFormat fmt,
-                       TextureClampMode clampMode)
-: GraphicsDataNode<ITextureD>(parent), m_width(width), m_height(height)
-{
-    int pxPitch = 4;
-    switch (fmt)
-    {
-    case TextureFormat::RGBA8:
-        m_intFormat = GL_RGBA8;
-        m_format = GL_RGBA;
-        pxPitch = 4;
-        break;
-    case TextureFormat::I8:
-        m_intFormat = GL_R8;
-        m_format = GL_RED;
-        pxPitch = 1;
-        break;
-    default:
-        Log.report(logvisor::Fatal, "unsupported tex format");
-    }
-    m_cpuSz = width * height * pxPitch;
-    m_cpuBuf.reset(new uint8_t[m_cpuSz]);
-
-    glGenTextures(3, m_texs);
-    for (int i=0 ; i<3 ; ++i)
-    {
-        glBindTexture(GL_TEXTURE_2D, m_texs[i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, width, height, 0, m_format, GL_UNSIGNED_BYTE, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        SetClampMode(GL_TEXTURE_2D, clampMode);
-    }
-}
-GLTextureD::~GLTextureD() { glDeleteTextures(3, m_texs); }
-
-void GLTextureD::update(int b)
-{
-    int slot = 1 << b;
-    if ((slot & m_validMask) == 0)
-    {
-        glBindTexture(GL_TEXTURE_2D, m_texs[b]);
-        glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, m_width, m_height, 0, m_format, GL_UNSIGNED_BYTE, m_cpuBuf.get());
-        m_validMask |= slot;
-    }
-}
-
-void GLTextureD::load(const void* data, size_t sz)
-{
-    size_t bufSz = std::min(sz, m_cpuSz);
-    memcpy(m_cpuBuf.get(), data, bufSz);
-    m_validMask = 0;
-}
-void* GLTextureD::map(size_t sz)
-{
-    if (sz > m_cpuSz)
-        return nullptr;
-    return m_cpuBuf.get();
-}
-void GLTextureD::unmap()
-{
-    m_validMask = 0;
-}
-
-void GLTextureD::bind(size_t idx, int b)
-{
-    glActiveTexture(GL_TEXTURE0 + idx);
-    glBindTexture(GL_TEXTURE_2D, m_texs[b]);
 }
 
 ObjToken<ITextureD>
@@ -1612,13 +1557,6 @@ GLTextureR::GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue*
     m_q->addFBO(this);
 }
 
-GLTextureR::~GLTextureR()
-{
-    glDeleteTextures(2, m_texs);
-    glDeleteTextures(MAX_BIND_TEXS * 2, m_bindTexs[0]);
-    m_q->delFBO(this);
-}
-
 ObjToken<ITextureR>
 GLDataFactory::Context::newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
                                          size_t colorBindingCount, size_t depthBindingCount)
@@ -1631,20 +1569,17 @@ GLDataFactory::Context::newRenderTexture(size_t width, size_t height, TextureCla
     return retval;
 }
 
-GLVertexFormat::GLVertexFormat(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue* q, size_t elementCount,
-                               const VertexElementDescriptor* elements,
+GLVertexFormat::GLVertexFormat(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue* q,
+                               size_t elementCount, const VertexElementDescriptor* elements,
                                size_t baseVert, size_t baseInst)
 : GraphicsDataNode<IVertexFormat>(parent),
-  m_q(q),
-  m_elementCount(elementCount),
-  m_elements(new VertexElementDescriptor[elementCount]),
   m_baseVert(baseVert), m_baseInst(baseInst)
 {
+    m_elements.reserve(elementCount);
     for (size_t i=0 ; i<elementCount ; ++i)
-        m_elements[i] = elements[i];
-    m_q->addVertexFormat(this);
+        m_elements.push_back(elements[i]);
+    q->addVertexFormat(this);
 }
-GLVertexFormat::~GLVertexFormat() { m_q->delVertexFormat(this); }
 
 ObjToken<IVertexFormat> GLDataFactory::Context::newVertexFormat
 (size_t elementCount, const VertexElementDescriptor* elements,

@@ -139,12 +139,13 @@ ENABLE_BITWISE_ENUM(VertexSemantic)
 /** Used to create IVertexFormat */
 struct VertexElementDescriptor
 {
-    IGraphicsBuffer* vertBuffer = nullptr;
-    IGraphicsBuffer* indexBuffer = nullptr;
+    ObjToken<IGraphicsBuffer> vertBuffer;
+    ObjToken<IGraphicsBuffer> indexBuffer;
     VertexSemantic semantic;
     int semanticIdx = 0;
     VertexElementDescriptor() = default;
-    VertexElementDescriptor(IGraphicsBuffer* v, IGraphicsBuffer* i, VertexSemantic s, int idx=0)
+    VertexElementDescriptor(const ObjToken<IGraphicsBuffer>& v, const ObjToken<IGraphicsBuffer>& i,
+                            VertexSemantic s, int idx=0)
     : vertBuffer(v), indexBuffer(i), semantic(s), semanticIdx(idx) {}
 };
 
