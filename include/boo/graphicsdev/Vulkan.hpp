@@ -15,6 +15,7 @@
 
 namespace boo
 {
+struct BaseGraphicsData;
 
 struct VulkanContext
 {
@@ -108,50 +109,58 @@ public:
     {
         friend class VulkanDataFactoryImpl;
         VulkanDataFactory& m_parent;
-        Context(VulkanDataFactory& parent) : m_parent(parent) {}
+        boo::ObjToken<BaseGraphicsData> m_data;
+        Context(VulkanDataFactory& parent);
+        ~Context();
     public:
         Platform platform() const {return Platform::Vulkan;}
         const SystemChar* platformName() const {return _S("Vulkan");}
 
-        IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
-        IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count);
+        boo::ObjToken<IGraphicsBufferS> newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
+        boo::ObjToken<IGraphicsBufferD> newDynamicBuffer(BufferUse use, size_t stride, size_t count);
 
-        ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                    TextureClampMode clampMode, const void* data, size_t sz);
-        ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
-                                          TextureFormat fmt, TextureClampMode clampMode, const void* data, size_t sz);
-        ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode);
-        ITextureR* newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
-                                    size_t colorBindCount, size_t depthBindCount);
+        boo::ObjToken<ITextureS> newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                                                  TextureClampMode clampMode, const void* data, size_t sz);
+        boo::ObjToken<ITextureSA> newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
+                                                        TextureFormat fmt, TextureClampMode clampMode,
+                                                        const void* data, size_t sz);
+        boo::ObjToken<ITextureD> newDynamicTexture(size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode);
+        boo::ObjToken<ITextureR> newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
+                                                  size_t colorBindCount, size_t depthBindCount);
 
         bool bindingNeedsVertexFormat() const {return false;}
-        IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
-                                       size_t baseVert = 0, size_t baseInst = 0);
+        boo::ObjToken<IVertexFormat> newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
+                                                     size_t baseVert = 0, size_t baseInst = 0);
 
-        IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
-                                           std::vector<unsigned int>* vertBlobOut, std::vector<unsigned int>* fragBlobOut,
-                                           std::vector<unsigned char>* pipelineBlob, IVertexFormat* vtxFmt,
-                                           BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                                           ZTest depthTest, bool depthWrite, bool colorWrite,
-                                           bool alphaWrite, CullMode culling);
+        boo::ObjToken<IShaderPipeline> newShaderPipeline(const char* vertSource, const char* fragSource,
+                                                         std::vector<unsigned int>* vertBlobOut,
+                                                         std::vector<unsigned int>* fragBlobOut,
+                                                         std::vector<unsigned char>* pipelineBlob,
+                                                         const boo::ObjToken<IVertexFormat>& vtxFmt,
+                                                         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
+                                                         ZTest depthTest, bool depthWrite, bool colorWrite,
+                                                         bool alphaWrite, CullMode culling);
 
-        IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource, IVertexFormat* vtxFmt,
-                                           BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                                           ZTest depthTest, bool depthWrite, bool colorWrite,
-                                           bool alphaWrite, CullMode culling)
+        boo::ObjToken<IShaderPipeline> newShaderPipeline(const char* vertSource, const char* fragSource,
+                                                         const boo::ObjToken<IVertexFormat>& vtxFmt,
+                                                         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
+                                                         ZTest depthTest, bool depthWrite, bool colorWrite,
+                                                         bool alphaWrite, CullMode culling)
         {
             return newShaderPipeline(vertSource, fragSource, nullptr, nullptr, nullptr,
                                      vtxFmt, srcFac, dstFac, prim, depthTest, depthWrite,
                                      colorWrite, alphaWrite, culling);
         }
 
-        IShaderDataBinding*
-        newShaderDataBinding(IShaderPipeline* pipeline,
-                             IVertexFormat* vtxFormat,
-                             IGraphicsBuffer* vbo, IGraphicsBuffer* instVbo, IGraphicsBuffer* ibo,
-                             size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
+        boo::ObjToken<IShaderDataBinding>
+        newShaderDataBinding(const boo::ObjToken<IShaderPipeline>& pipeline,
+                             const boo::ObjToken<IVertexFormat>& vtxFormat,
+                             const boo::ObjToken<IGraphicsBuffer>& vbo,
+                             const boo::ObjToken<IGraphicsBuffer>& instVbo,
+                             const boo::ObjToken<IGraphicsBuffer>& ibo,
+                             size_t ubufCount, const boo::ObjToken<IGraphicsBuffer>* ubufs, const PipelineStage* ubufStages,
                              const size_t* ubufOffs, const size_t* ubufSizes,
-                             size_t texCount, ITexture** texs,
+                             size_t texCount, const boo::ObjToken<ITexture>* texs,
                              const int* bindIdxs, const bool* bindDepth,
                              size_t baseVert = 0, size_t baseInst = 0);
     };

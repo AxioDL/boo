@@ -62,6 +62,8 @@ struct BaseGraphicsData : IObj
     GraphicsDataNode<ITextureR, BaseGraphicsData>* m_RTexs = nullptr;
     GraphicsDataNode<IVertexFormat, BaseGraphicsData>* m_VFmts = nullptr;
     template<class T> GraphicsDataNode<T, BaseGraphicsData>*& getHead();
+    template<class T> size_t countForward()
+    { auto* head = getHead<T>(); return head ? head->countForward() : 0; }
 
     explicit BaseGraphicsData(GraphicsDataFactoryHead& head)
     : m_head(head)
@@ -123,6 +125,8 @@ struct BaseGraphicsPool : IObj
     BaseGraphicsPool* m_prev = nullptr;
     GraphicsDataNode<IGraphicsBufferD, BaseGraphicsPool>* m_DBufs = nullptr;
     template<class T> GraphicsDataNode<T, BaseGraphicsPool>*& getHead();
+    template<class T> size_t countForward()
+    { auto* head = getHead<T>(); return head ? head->countForward() : 0; }
 
     explicit BaseGraphicsPool(GraphicsDataFactoryHead& head)
     : m_head(head)
@@ -213,6 +217,14 @@ struct GraphicsDataNode : NodeCls
 
     iterator begin() { return iterator(this); }
     iterator end() { return iterator(nullptr); }
+
+    size_t countForward()
+    {
+        size_t ret = 0;
+        for (auto& n : *this)
+            ++ret;
+        return ret;
+    }
 };
 
 /** Hash table entry for owning sharable shader objects */

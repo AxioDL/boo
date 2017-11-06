@@ -27,12 +27,15 @@ public:
     {
     public:
         bool bindingNeedsVertexFormat() const {return false;}
-        virtual IShaderPipeline* newShaderPipeline(const char* vertSource, const char* fragSource,
-                                                   ComPtr<ID3DBlob>* vertBlobOut, ComPtr<ID3DBlob>* fragBlobOut,
-                                                   ComPtr<ID3DBlob>* pipelineBlob, IVertexFormat* vtxFmt,
-                                                   BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                                                   ZTest depthTest, bool depthWrite, bool colorWrite,
-                                                   bool alphaWrite, CullMode culling)=0;
+        virtual boo::ObjToken<IShaderPipeline>
+        newShaderPipeline(const char* vertSource, const char* fragSource,
+                          ComPtr<ID3DBlob>* vertBlobOut,
+                          ComPtr<ID3DBlob>* fragBlobOut,
+                          ComPtr<ID3DBlob>* pipelineBlob,
+                          const boo::ObjToken<IVertexFormat>& vtxFmt,
+                          BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
+                          ZTest depthTest, bool depthWrite, bool colorWrite,
+                          bool alphaWrite, CullMode culling)=0;
     };
 };
 

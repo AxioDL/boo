@@ -50,35 +50,17 @@ static inline UINT64 NextHeapOffset(UINT64 offset, const D3D12_RESOURCE_ALLOCATI
     return (offset + info.Alignment - 1) & ~(info.Alignment - 1);
 }
 
-struct D3D12Data : IGraphicsDataPriv
+struct D3D12Data : BaseGraphicsData
 {
-    std::vector<std::unique_ptr<class D3D12ShaderPipeline>> m_SPs;
-    std::vector<std::unique_ptr<struct D3D12ShaderDataBinding>> m_SBinds;
-    std::vector<std::unique_ptr<class D3D12GraphicsBufferS>> m_SBufs;
-    std::vector<std::unique_ptr<class D3D12GraphicsBufferD>> m_DBufs;
-    std::vector<std::unique_ptr<class D3D12TextureS>> m_STexs;
-    std::vector<std::unique_ptr<class D3D12TextureSA>> m_SATexs;
-    std::vector<std::unique_ptr<class D3D12TextureD>> m_DTexs;
-    std::vector<std::unique_ptr<class D3D12TextureR>> m_RTexs;
-    std::vector<std::unique_ptr<struct D3D12VertexFormat>> m_VFmts;
     ComPtr<ID3D12Heap> m_bufHeap;
     ComPtr<ID3D12Heap> m_texHeap;
+    explicit D3D12Data(GraphicsDataFactoryHead& head) : BaseGraphicsData(head) {}
 };
 
-struct D3D12PoolItem : IGraphicsDataPriv
+struct D3D12Pool : BaseGraphicsPool
 {
     ComPtr<ID3D12Heap> m_bufHeap;
-    std::unique_ptr<class D3D12GraphicsBufferD> m_buf;
-};
-
-struct D3D12Pool : IGraphicsBufferPool
-{
-    std::unordered_set<D3D12PoolItem*> m_items;
-    ~D3D12Pool()
-    {
-        for (auto& item : m_items)
-            item->decrement();
-    }
+    explicit D3D12Pool(GraphicsDataFactoryHead& head) : BaseGraphicsPool(head) {}
 };
 
 static const D3D12_RESOURCE_STATES USE_TABLE[] =
@@ -89,16 +71,17 @@ static const D3D12_RESOURCE_STATES USE_TABLE[] =
     D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER
 };
 
-class D3D12GraphicsBufferS : public IGraphicsBufferS
+class D3D12GraphicsBufferS : public GraphicsDataNode<IGraphicsBufferS>
 {
     friend class D3D12DataFactory;
     friend struct D3D12CommandQueue;
     D3D12_RESOURCE_STATES m_state;
     size_t m_sz;
     D3D12_RESOURCE_DESC m_gpuDesc;
-    D3D12GraphicsBufferS(IGraphicsData* parent, BufferUse use, D3D12Context* ctx,
+    D3D12GraphicsBufferS(const boo::ObjToken<BaseGraphicsData>& parent,
+                         BufferUse use, D3D12Context* ctx,
                          const void* data, size_t stride, size_t count)
-    : IGraphicsBufferS(parent), m_state(USE_TABLE[int(use)]),
+    : GraphicsDataNode<IGraphicsBufferS>(parent), m_state(USE_TABLE[int(use)]),
       m_stride(stride), m_count(count), m_sz(stride * count)
     {
         size_t gpuSz = use == BufferUse::Uniform ? ((m_sz + 255) & ~255) : m_sz;
@@ -137,7 +120,8 @@ public:
     }
 };
 
-class D3D12GraphicsBufferD : public IGraphicsBufferD
+template <class DataCls>
+class D3D12GraphicsBufferD : public GraphicsDataNode<IGraphicsBufferD, DataCls>
 {
     friend class D3D12DataFactory;
     friend struct D3D12CommandQueue;
@@ -146,9 +130,11 @@ class D3D12GraphicsBufferD : public IGraphicsBufferD
     std::unique_ptr<uint8_t[]> m_cpuBuf;
     size_t m_cpuSz;
     int m_validSlots = 0;
-    D3D12GraphicsBufferD(IGraphicsData* parent, D3D12CommandQueue* q, BufferUse use,
+    D3D12GraphicsBufferD(const boo::ObjToken<DataCls>& parent,
+                         D3D12CommandQueue* q, BufferUse use,
                          D3D12Context* ctx, size_t stride, size_t count)
-    : IGraphicsBufferD(parent), m_state(USE_TABLE[int(use)]), m_q(q), m_stride(stride), m_count(count)
+    : GraphicsDataNode<IGraphicsBufferD, DataCls>(parent),
+      m_state(USE_TABLE[int(use)]), m_q(q), m_stride(stride), m_count(count)
     {
         m_cpuSz = stride * count;
         size_t gpuSz = ((m_cpuSz + 255) & ~255);
@@ -189,15 +175,16 @@ public:
     }
 };
 
-class D3D12TextureS : public ITextureS
+class D3D12TextureS : public GraphicsDataNode<ITextureS>
 {
     friend class D3D12DataFactory;
     TextureFormat m_fmt;
     size_t m_sz;
     D3D12_RESOURCE_DESC m_gpuDesc;
-    D3D12TextureS(IGraphicsData* parent, D3D12Context* ctx, size_t width, size_t height, size_t mips,
+    D3D12TextureS(const boo::ObjToken<BaseGraphicsData>& parent,
+                  D3D12Context* ctx, size_t width, size_t height, size_t mips,
                   TextureFormat fmt, const void* data, size_t sz)
-    : ITextureS(parent), m_fmt(fmt), m_sz(sz), m_mipCount(mips)
+    : GraphicsDataNode<ITextureS>(parent), m_fmt(fmt), m_sz(sz), m_mipCount(mips)
     {
         DXGI_FORMAT pfmt;
         int pxPitchNum = 1;
@@ -270,17 +257,17 @@ public:
     TextureFormat format() const {return m_fmt;}
 };
 
-class D3D12TextureSA : public ITextureSA
+class D3D12TextureSA : public GraphicsDataNode<ITextureSA>
 {
     friend class D3D12DataFactory;
     TextureFormat m_fmt;
     size_t m_layers;
     size_t m_sz;
     D3D12_RESOURCE_DESC m_gpuDesc;
-    D3D12TextureSA(IGraphicsData* parent, D3D12Context* ctx,
+    D3D12TextureSA(const boo::ObjToken<BaseGraphicsData>& parent, D3D12Context* ctx,
                    size_t width, size_t height, size_t layers,
                    size_t mips, TextureFormat fmt, const void* data, size_t sz)
-    : ITextureSA(parent), m_fmt(fmt), m_layers(layers), m_sz(sz)
+    : GraphicsDataNode<ITextureSA>(parent), m_fmt(fmt), m_layers(layers), m_sz(sz)
     {
         size_t pxPitch;
         DXGI_FORMAT pixelFmt;
@@ -349,7 +336,7 @@ public:
     size_t layers() const {return m_layers;}
 };
 
-class D3D12TextureD : public ITextureD
+class D3D12TextureD : public GraphicsDataNode<ITextureD>
 {
     friend class D3D12DataFactory;
     friend struct D3D12CommandQueue;
@@ -362,9 +349,9 @@ class D3D12TextureD : public ITextureD
     size_t m_rowPitch;
     size_t m_cpuSz;
     int m_validSlots = 0;
-    D3D12TextureD(IGraphicsData* parent, D3D12CommandQueue* q, D3D12Context* ctx,
+    D3D12TextureD(const boo::ObjToken<BaseGraphicsData>& parent, D3D12CommandQueue* q, D3D12Context* ctx,
                   size_t width, size_t height, TextureFormat fmt)
-    : ITextureD(parent), m_width(width), m_height(height), m_fmt(fmt), m_q(q)
+    : GraphicsDataNode<ITextureD>(parent), m_width(width), m_height(height), m_fmt(fmt), m_q(q)
     {
         DXGI_FORMAT pixelFmt;
         size_t pxPitch;
@@ -425,7 +412,7 @@ public:
 static const float BLACK_COLOR[] = {0.0,0.0,0.0,1.0};
 #define MAX_BIND_TEXS 4
 
-class D3D12TextureR : public ITextureR
+class D3D12TextureR : public GraphicsDataNode<ITextureR>
 {
     friend class D3D12DataFactory;
     friend struct D3D12CommandQueue;
@@ -508,10 +495,11 @@ class D3D12TextureR : public ITextureR
     }
 
     D3D12CommandQueue* m_q;
-    D3D12TextureR(IGraphicsData* parent, D3D12Context* ctx, D3D12CommandQueue* q,
+    D3D12TextureR(const boo::ObjToken<BaseGraphicsData>& parent,
+                  D3D12Context* ctx, D3D12CommandQueue* q,
                   size_t width, size_t height, size_t samples,
                   size_t colorBindCount, size_t depthBindCount)
-    : ITextureR(parent), m_q(q), m_width(width), m_height(height), m_samples(samples),
+    : GraphicsDataNode<ITextureR>(parent), m_q(q), m_width(width), m_height(height), m_samples(samples),
       m_colorBindCount(colorBindCount), m_depthBindCount(depthBindCount)
     {
         if (colorBindCount > MAX_BIND_TEXS)
@@ -593,15 +581,16 @@ static const DXGI_FORMAT SEMANTIC_TYPE_TABLE[] =
     DXGI_FORMAT_R32G32B32A32_FLOAT
 };
 
-struct D3D12VertexFormat : IVertexFormat
+struct D3D12VertexFormat : GraphicsDataNode<IVertexFormat>
 {
     size_t m_elementCount;
     std::unique_ptr<D3D12_INPUT_ELEMENT_DESC[]> m_elements;
     size_t m_stride = 0;
     size_t m_instStride = 0;
 
-    D3D12VertexFormat(IGraphicsData* parent, size_t elementCount, const VertexElementDescriptor* elements)
-    : IVertexFormat(parent), m_elementCount(elementCount),
+    D3D12VertexFormat(const boo::ObjToken<BaseGraphicsData>& parent,
+                      size_t elementCount, const VertexElementDescriptor* elements)
+    : GraphicsDataNode<IVertexFormat>(parent), m_elementCount(elementCount),
       m_elements(new D3D12_INPUT_ELEMENT_DESC[elementCount])
     {
         memset(m_elements.get(), 0, elementCount * sizeof(D3D12_INPUT_ELEMENT_DESC));
@@ -653,21 +642,23 @@ static const D3D12_BLEND BLEND_FACTOR_TABLE[] =
     D3D12_BLEND_INV_SRC1_COLOR
 };
 
-class D3D12ShaderPipeline : public IShaderPipeline
+class D3D12ShaderPipeline : public GraphicsDataNode<IShaderPipeline>
 {
     friend class D3D12DataFactory;
     friend struct D3D12ShaderDataBinding;
-    const D3D12VertexFormat* m_vtxFmt;
+    boo::ObjToken<IVertexFormat> m_vtxFmt;
     D3D12ShareableShader::Token m_vert;
     D3D12ShareableShader::Token m_pixel;
 
-    D3D12ShaderPipeline(IGraphicsData* parent, D3D12Context* ctx, D3D12ShareableShader::Token&& vert,
+    D3D12ShaderPipeline(const boo::ObjToken<BaseGraphicsData>& parent,
+                        D3D12Context* ctx, D3D12ShareableShader::Token&& vert,
                         D3D12ShareableShader::Token&& pixel, ID3DBlob* pipeline,
-                        const D3D12VertexFormat* vtxFmt,
+                        const boo::ObjToken<IVertexFormat>& vtxFmt,
                         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                         ZTest depthTest, bool depthWrite, bool colorWrite,
                         bool alphaWrite, CullMode culling)
-    : IShaderPipeline(parent), m_vtxFmt(vtxFmt), m_vert(std::move(vert)), m_pixel(std::move(pixel)),
+    : GraphicsDataNode<IShaderPipeline>(parent), m_vtxFmt(vtxFmt),
+      m_vert(std::move(vert)), m_pixel(std::move(pixel)),
       m_topology(PRIMITIVE_TABLE[int(prim)])
     {
         D3D12_CULL_MODE cullMode;
@@ -741,8 +732,9 @@ class D3D12ShaderPipeline : public IShaderPipeline
         desc.DepthStencilState.DepthEnable = depthTest != ZTest::None;
         if (!depthWrite)
             desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
-        desc.InputLayout.NumElements = vtxFmt->m_elementCount;
-        desc.InputLayout.pInputElementDescs = vtxFmt->m_elements.get();
+        D3D12VertexFormat* vfmt = vtxFmt.cast<D3D12VertexFormat>();
+        desc.InputLayout.NumElements = vfmt->m_elementCount;
+        desc.InputLayout.pInputElementDescs = vfmt->m_elements.get();
         desc.SampleMask = UINT_MAX;
         desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
         desc.NumRenderTargets = 1;
@@ -767,7 +759,7 @@ public:
 static UINT64 PlaceBufferForGPU(IGraphicsBuffer* buf, D3D12Context* ctx, ID3D12Heap* gpuHeap, UINT64 offset)
 {
     if (buf->dynamic())
-        return static_cast<D3D12GraphicsBufferD*>(buf)->placeForGPU(ctx, gpuHeap, offset);
+        return static_cast<D3D12GraphicsBufferD<BaseGraphicsData>*>(buf)->placeForGPU(ctx, gpuHeap, offset);
     else
         return static_cast<D3D12GraphicsBufferS*>(buf)->placeForGPU(ctx, gpuHeap, offset);
 }
@@ -791,7 +783,8 @@ static ID3D12Resource* GetBufferGPUResource(const IGraphicsBuffer* buf, int idx,
 {
     if (buf->dynamic())
     {
-        const D3D12GraphicsBufferD* cbuf = static_cast<const D3D12GraphicsBufferD*>(buf);
+        const D3D12GraphicsBufferD<BaseGraphicsData>* cbuf =
+                static_cast<const D3D12GraphicsBufferD<BaseGraphicsData>*>(buf);
         descOut.SizeInBytes = cbuf->m_count * cbuf->m_stride - offset;
         descOut.StrideInBytes = cbuf->m_stride;
         descOut.BufferLocation = cbuf->m_gpuBufs[idx]->GetGPUVirtualAddress() + offset;
@@ -812,7 +805,8 @@ static ID3D12Resource* GetBufferGPUResource(const IGraphicsBuffer* buf, int idx,
 {
     if (buf->dynamic())
     {
-        const D3D12GraphicsBufferD* cbuf = static_cast<const D3D12GraphicsBufferD*>(buf);
+        const D3D12GraphicsBufferD<BaseGraphicsData>* cbuf =
+                static_cast<const D3D12GraphicsBufferD<BaseGraphicsData>*>(buf);
         descOut.SizeInBytes = cbuf->m_count * cbuf->m_stride;
         descOut.BufferLocation = cbuf->m_gpuBufs[idx]->GetGPUVirtualAddress();
         descOut.Format = DXGI_FORMAT_R32_UINT;
@@ -833,7 +827,8 @@ static ID3D12Resource* GetBufferGPUResource(const IGraphicsBuffer* buf, int idx,
 {
     if (buf->dynamic())
     {
-        const D3D12GraphicsBufferD* cbuf = static_cast<const D3D12GraphicsBufferD*>(buf);
+        const D3D12GraphicsBufferD<BaseGraphicsData>* cbuf =
+                static_cast<const D3D12GraphicsBufferD<BaseGraphicsData>*>(buf);
         descOut.SizeInBytes = cbuf->m_count * cbuf->m_stride;
         descOut.BufferLocation = cbuf->m_gpuBufs[idx]->GetGPUVirtualAddress();
         return cbuf->m_gpuBufs[idx].Get();
@@ -999,51 +994,49 @@ static ID3D12Resource* GetTextureGPUResource(const ITexture* tex, int idx, int b
     return nullptr;
 }
 
-struct D3D12ShaderDataBinding : IShaderDataBindingPriv
+struct D3D12ShaderDataBinding : public GraphicsDataNode<IShaderDataBinding>
 {
-    D3D12ShaderPipeline* m_pipeline;
+    boo::ObjToken<IShaderPipeline> m_pipeline;
     ComPtr<ID3D12Heap> m_gpuHeap;
     ComPtr<ID3D12DescriptorHeap> m_descHeap[2];
-    IGraphicsBuffer* m_vbuf;
-    IGraphicsBuffer* m_instVbuf;
-    IGraphicsBuffer* m_ibuf;
-    size_t m_ubufCount;
-    std::unique_ptr<IGraphicsBuffer*[]> m_ubufs;
+    boo::ObjToken<IGraphicsBuffer> m_vbuf;
+    boo::ObjToken<IGraphicsBuffer> m_instVbuf;
+    boo::ObjToken<IGraphicsBuffer> m_ibuf;
+    std::vector<boo::ObjToken<IGraphicsBuffer>> m_ubufs;
     std::vector<std::pair<size_t,size_t>> m_ubufOffs;
-    size_t m_texCount;
     ID3D12Resource* m_knownViewHandles[2][8] = {};
     struct BindTex
     {
-        ITexture* tex;
+        boo::ObjToken<ITexture> tex;
         int idx;
         bool depth;
     };
-    std::unique_ptr<BindTex[]> m_texs;
+    std::vector<BindTex> m_texs;
     D3D12_VERTEX_BUFFER_VIEW m_vboView[2][2] = {{},{}};
     D3D12_INDEX_BUFFER_VIEW m_iboView[2];
     size_t m_vertOffset, m_instOffset;
 
-    D3D12ShaderDataBinding(D3D12Data* d,
+    D3D12ShaderDataBinding(const boo::ObjToken<BaseGraphicsData>& d,
                            D3D12Context* ctx,
-                           IShaderPipeline* pipeline,
-                           IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbuf, IGraphicsBuffer* ibuf,
-                           size_t ubufCount, IGraphicsBuffer** ubufs,
+                           const boo::ObjToken<IShaderPipeline>& pipeline,
+                           const boo::ObjToken<IGraphicsBuffer>& vbuf,
+                           const boo::ObjToken<IGraphicsBuffer>& instVbuf,
+                           const boo::ObjToken<IGraphicsBuffer>& ibuf,
+                           size_t ubufCount, const boo::ObjToken<IGraphicsBuffer>* ubufs,
                            const size_t* ubufOffs, const size_t* ubufSizes,
-                           size_t texCount, ITexture** texs,
+                           size_t texCount, const boo::ObjToken<ITexture>* texs,
                            const int* bindIdxs, const bool* bindDepth,
                            size_t baseVert, size_t baseInst)
-    : IShaderDataBindingPriv(d),
-      m_pipeline(static_cast<D3D12ShaderPipeline*>(pipeline)),
+    : GraphicsDataNode<IShaderDataBinding>(d),
+      m_pipeline(pipeline),
       m_vbuf(vbuf),
       m_instVbuf(instVbuf),
-      m_ibuf(ibuf),
-      m_ubufCount(ubufCount),
-      m_ubufs(new IGraphicsBuffer*[ubufCount]),
-      m_texCount(texCount),
-      m_texs(new BindTex[texCount])
+      m_ibuf(ibuf)
     {
-        m_vertOffset = baseVert * m_pipeline->m_vtxFmt->m_stride;
-        m_instOffset = baseInst * m_pipeline->m_vtxFmt->m_instStride;
+        D3D12ShaderPipeline* cpipeline = m_pipeline.cast<D3D12ShaderPipeline>();
+        D3D12VertexFormat* vtxFmt = cpipeline->m_vtxFmt.cast<D3D12VertexFormat>();
+        m_vertOffset = baseVert * vtxFmt->m_stride;
+        m_instOffset = baseInst * vtxFmt->m_instStride;
 
         if (ubufOffs && ubufSizes)
         {
@@ -1057,19 +1050,19 @@ struct D3D12ShaderDataBinding : IShaderDataBindingPriv
                 m_ubufOffs.emplace_back(ubufOffs[i], (ubufSizes[i] + 255) & ~255);
             }
         }
+        m_ubufs.reserve(ubufCount);
         for (size_t i=0 ; i<ubufCount ; ++i)
         {
 #ifndef NDEBUG
             if (!ubufs[i])
                 Log.report(logvisor::Fatal, "null uniform-buffer %d provided to newShaderDataBinding", int(i));
 #endif
-            m_ubufs[i] = ubufs[i];
+            m_ubufs.push_back(ubufs[i]);
         }
+        m_texs.reserve(texCount);
         for (size_t i=0 ; i<texCount ; ++i)
         {
-            m_texs[i].tex = texs[i];
-            m_texs[i].idx = bindIdxs ? bindIdxs[i] : 0;
-            m_texs[i].depth = bindDepth ? bindDepth[i] : false;
+            m_texs.push_back({texs[i], bindIdxs ? bindIdxs[i] : 0, bindDepth ? bindDepth[i] : false});
         }
     }
 
@@ -1089,20 +1082,20 @@ struct D3D12ShaderDataBinding : IShaderDataBindingPriv
             CD3DX12_CPU_DESCRIPTOR_HANDLE handle(m_descHeap[b]->GetCPUDescriptorHandleForHeapStart());
 
             if (m_vbuf)
-                GetBufferGPUResource(m_vbuf, b, m_vboView[b][0], m_vertOffset);
+                GetBufferGPUResource(m_vbuf.get(), b, m_vboView[b][0], m_vertOffset);
             if (m_instVbuf)
-                GetBufferGPUResource(m_instVbuf, b, m_vboView[b][1], m_instOffset);
+                GetBufferGPUResource(m_instVbuf.get(), b, m_vboView[b][1], m_instOffset);
             if (m_ibuf)
-                GetBufferGPUResource(m_ibuf, b, m_iboView[b]);
+                GetBufferGPUResource(m_ibuf.get(), b, m_iboView[b]);
             if (m_ubufOffs.size())
             {
                 for (size_t i=0 ; i<MAX_UNIFORM_COUNT ; ++i)
                 {
-                    if (i<m_ubufCount)
+                    if (i<m_ubufs.size())
                     {
                         const std::pair<size_t,size_t>& offPair = m_ubufOffs[i];
                         D3D12_CONSTANT_BUFFER_VIEW_DESC viewDesc;
-                        GetBufferGPUResource(m_ubufs[i], b, viewDesc);
+                        GetBufferGPUResource(m_ubufs[i].get(), b, viewDesc);
                         viewDesc.BufferLocation += offPair.first;
                         viewDesc.SizeInBytes = (offPair.second + 255) & ~255;
                         ctx->m_dev->CreateConstantBufferView(&viewDesc, handle);
@@ -1114,10 +1107,10 @@ struct D3D12ShaderDataBinding : IShaderDataBindingPriv
             {
                 for (size_t i=0 ; i<MAX_UNIFORM_COUNT ; ++i)
                 {
-                    if (i<m_ubufCount)
+                    if (i<m_ubufs.size())
                     {
                         D3D12_CONSTANT_BUFFER_VIEW_DESC viewDesc;
-                        GetBufferGPUResource(m_ubufs[i], b, viewDesc);
+                        GetBufferGPUResource(m_ubufs[i].get(), b, viewDesc);
                         viewDesc.SizeInBytes = (viewDesc.SizeInBytes + 255) & ~255;
                         ctx->m_dev->CreateConstantBufferView(&viewDesc, handle);
                     }
@@ -1126,10 +1119,11 @@ struct D3D12ShaderDataBinding : IShaderDataBindingPriv
             }
             for (size_t i=0 ; i<MAX_TEXTURE_COUNT ; ++i)
             {
-                if (i<m_texCount && m_texs[i].tex)
+                if (i<m_texs.size() && m_texs[i].tex)
                 {
                     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
-                    ID3D12Resource* res = GetTextureGPUResource(m_texs[i].tex, b, m_texs[i].idx, m_texs[i].depth, srvDesc);
+                    ID3D12Resource* res = GetTextureGPUResource(m_texs[i].tex.get(), b, m_texs[i].idx,
+                                                                m_texs[i].depth, srvDesc);
                     m_knownViewHandles[b][i] = res;
                     ctx->m_dev->CreateShaderResourceView(res, &srvDesc, handle);
                 }
@@ -1144,11 +1138,11 @@ struct D3D12ShaderDataBinding : IShaderDataBindingPriv
         CD3DX12_CPU_DESCRIPTOR_HANDLE heapStart;
         for (size_t i=0 ; i<MAX_TEXTURE_COUNT ; ++i)
         {
-            if (i<m_texCount && m_texs[i].tex)
+            if (i<m_texs.size() && m_texs[i].tex)
             {
                 if (m_texs[i].tex->type() == TextureType::Render)
                 {
-                    const D3D12TextureR* ctex = static_cast<const D3D12TextureR*>(m_texs[i].tex);
+                    const D3D12TextureR* ctex = m_texs[i].tex.cast<D3D12TextureR>();
                     if (m_texs[i].depth)
                     {
                         ID3D12Resource* res = ctex->m_depthBindTex[m_texs[i].idx].Get();
@@ -1183,14 +1177,15 @@ struct D3D12ShaderDataBinding : IShaderDataBindingPriv
             }
         }
 
+        D3D12ShaderPipeline* pipeline = m_pipeline.cast<D3D12ShaderPipeline>();
         ID3D12DescriptorHeap* heap[] = {m_descHeap[b].Get()};
         list->SetDescriptorHeaps(1, heap);
         list->SetGraphicsRootDescriptorTable(0, m_descHeap[b]->GetGPUDescriptorHandleForHeapStart());
-        list->SetPipelineState(m_pipeline->m_state.Get());
+        list->SetPipelineState(pipeline->m_state.Get());
         list->IASetVertexBuffers(0, 2, m_vboView[b]);
         if (m_ibuf)
             list->IASetIndexBuffer(&m_iboView[b]);
-        list->IASetPrimitiveTopology(m_pipeline->m_topology);
+        list->IASetPrimitiveTopology(pipeline->m_topology);
     }
 };
 
@@ -1306,44 +1301,49 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         if (m_running) stopRenderer();
     }
 
-    void setShaderDataBinding(IShaderDataBinding* binding)
+    void setShaderDataBinding(const boo::ObjToken<IShaderDataBinding>& binding)
     {
-        D3D12ShaderDataBinding* cbind = static_cast<D3D12ShaderDataBinding*>(binding);
+        D3D12ShaderDataBinding* cbind = binding.cast<D3D12ShaderDataBinding>();
         cbind->bind(m_ctx, m_cmdList.Get(), m_fillBuf);
     }
 
-    D3D12TextureR* m_boundTarget = nullptr;
-    void setRenderTarget(ITextureR* target)
+    boo::ObjToken<ITextureR> m_boundTarget;
+    void setRenderTarget(const boo::ObjToken<ITextureR>& target)
     {
-        D3D12TextureR* ctarget = static_cast<D3D12TextureR*>(target);
+        D3D12TextureR* ctarget = target.cast<D3D12TextureR>();
 
         m_cmdList->OMSetRenderTargets(1, &ctarget->m_rtvHeap->GetCPUDescriptorHandleForHeapStart(),
                                       false, &ctarget->m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
 
-        m_boundTarget = ctarget;
+        m_boundTarget = target;
     }
 
     void setViewport(const SWindowRect& rect, float znear, float zfar)
     {
-        D3D12_VIEWPORT vp = {FLOAT(rect.location[0]), FLOAT(m_boundTarget->m_height - rect.location[1] - rect.size[1]),
-                             FLOAT(rect.size[0]), FLOAT(rect.size[1]), znear, zfar};
-        m_cmdList->RSSetViewports(1, &vp);
+        if (m_boundTarget)
+        {
+            D3D12TextureR* ctarget = m_boundTarget.cast<D3D12TextureR>();
+            D3D12_VIEWPORT vp = {FLOAT(rect.location[0]), FLOAT(ctarget->m_height - rect.location[1] - rect.size[1]),
+                                 FLOAT(rect.size[0]), FLOAT(rect.size[1]), znear, zfar};
+            m_cmdList->RSSetViewports(1, &vp);
+        }
     }
 
     void setScissor(const SWindowRect& rect)
     {
         if (m_boundTarget)
         {
-            D3D12_RECT d3drect = {LONG(rect.location[0]), LONG(m_boundTarget->m_height - rect.location[1] - rect.size[1]),
-                                  LONG(rect.location[0] + rect.size[0]), LONG(m_boundTarget->m_height - rect.location[1])};
+            D3D12TextureR* ctarget = m_boundTarget.cast<D3D12TextureR>();
+            D3D12_RECT d3drect = {LONG(rect.location[0]), LONG(ctarget->m_height - rect.location[1] - rect.size[1]),
+                                  LONG(rect.location[0] + rect.size[0]), LONG(ctarget->m_height - rect.location[1])};
             m_cmdList->RSSetScissorRects(1, &d3drect);
         }
     }
 
     std::unordered_map<D3D12TextureR*, std::pair<size_t, size_t>> m_texResizes;
-    void resizeRenderTexture(ITextureR* tex, size_t width, size_t height)
+    void resizeRenderTexture(const boo::ObjToken<ITextureR>& tex, size_t width, size_t height)
     {
-        D3D12TextureR* ctex = static_cast<D3D12TextureR*>(tex);
+        D3D12TextureR* ctex = tex.cast<D3D12TextureR>();
         m_texResizes[ctex] = std::make_pair(width, height);
     }
 
@@ -1365,14 +1365,15 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
     {
         if (!m_boundTarget)
             return;
+        D3D12TextureR* ctarget = m_boundTarget.cast<D3D12TextureR>();
         if (render)
         {
-            CD3DX12_CPU_DESCRIPTOR_HANDLE handle(m_boundTarget->m_rtvHeap->GetCPUDescriptorHandleForHeapStart());
+            CD3DX12_CPU_DESCRIPTOR_HANDLE handle(ctarget->m_rtvHeap->GetCPUDescriptorHandleForHeapStart());
             m_cmdList->ClearRenderTargetView(handle, m_clearColor, 0, nullptr);
         }
         if (depth)
         {
-            CD3DX12_CPU_DESCRIPTOR_HANDLE handle(m_boundTarget->m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
+            CD3DX12_CPU_DESCRIPTOR_HANDLE handle(ctarget->m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
             m_cmdList->ClearDepthStencilView(handle, D3D12_CLEAR_FLAG_DEPTH, 0.0f, 0, 0, nullptr);
         }
     }
@@ -1397,10 +1398,11 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         m_cmdList->DrawIndexedInstanced(count, instCount, start, 0, 0);
     }
 
-    void resolveBindTexture(ITextureR* texture, const SWindowRect& rect, bool tlOrigin,
+    void resolveBindTexture(const boo::ObjToken<ITextureR>& texture,
+                            const SWindowRect& rect, bool tlOrigin,
                             int bindIdx, bool color, bool depth)
     {
-        const D3D12TextureR* tex = static_cast<const D3D12TextureR*>(texture);
+        D3D12TextureR* tex = texture.cast<D3D12TextureR>();
 
         if (color && tex->m_colorBindCount)
         {
@@ -1465,9 +1467,9 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
     }
 
     bool m_doPresent = false;
-    void resolveDisplay(ITextureR* source)
+    void resolveDisplay(const boo::ObjToken<ITextureR>& source)
     {
-        D3D12TextureR* csource = static_cast<D3D12TextureR*>(source);
+        D3D12TextureR* csource = source.cast<D3D12TextureR>();
 
         if (m_windowCtx->m_needsResize)
         {
@@ -1484,7 +1486,7 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
 
         ID3D12Resource* src = csource->m_colorTex.Get();
         D3D12_RESOURCE_STATES srcState = D3D12_RESOURCE_STATE_COPY_SOURCE;
-        if (m_boundTarget == csource)
+        if (m_boundTarget.get() == csource)
             srcState = D3D12_RESOURCE_STATE_RENDER_TARGET;
 
         if (csource->m_samples > 1)
@@ -1564,11 +1566,12 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
 
 D3D12TextureR::~D3D12TextureR()
 {
-    if (m_q->m_boundTarget == this)
-        m_q->m_boundTarget = nullptr;
+    if (m_q->m_boundTarget.get() == this)
+        m_q->m_boundTarget.reset();
 }
 
-void D3D12GraphicsBufferD::update(int b)
+template <class DataCls>
+void D3D12GraphicsBufferD<DataCls>::update(int b)
 {
     int slot = 1 << b;
     if ((slot & m_validSlots) == 0)
@@ -1587,19 +1590,22 @@ void D3D12GraphicsBufferD::update(int b)
     }
 }
 
-void D3D12GraphicsBufferD::load(const void* data, size_t sz)
+template <class DataCls>
+void D3D12GraphicsBufferD<DataCls>::load(const void* data, size_t sz)
 {
     size_t bufSz = std::min(sz, m_cpuSz);
     memcpy(m_cpuBuf.get(), data, bufSz);
     m_validSlots = 0;
 }
-void* D3D12GraphicsBufferD::map(size_t sz)
+template <class DataCls>
+void* D3D12GraphicsBufferD<DataCls>::map(size_t sz)
 {
     if (sz > m_cpuSz)
         return nullptr;
     return m_cpuBuf.get();
 }
-void D3D12GraphicsBufferD::unmap()
+template <class DataCls>
+void D3D12GraphicsBufferD<DataCls>::unmap()
 {
     m_validSlots = 0;
 }
@@ -1647,84 +1653,14 @@ void D3D12TextureD::unmap()
     m_validSlots = 0;
 }
 
-class D3D12DataFactory : public ID3DDataFactory
+class D3D12DataFactory : public ID3DDataFactory, public GraphicsDataFactoryHead
 {
     friend struct D3D12CommandQueue;
     IGraphicsContext* m_parent;
-    static thread_local D3D12Data* m_deferredData;
     struct D3D12Context* m_ctx;
-    std::unordered_set<D3D12Data*> m_committedData;
-    std::unordered_set<D3D12Pool*> m_committedPools;
-    std::mutex m_committedMutex;
     std::unordered_map<uint64_t, std::unique_ptr<D3D12ShareableShader>> m_sharedShaders;
     std::unordered_map<uint64_t, uint64_t> m_sourceToBinary;
     uint32_t m_sampleCount;
-
-    void destroyData(IGraphicsData* d)
-    {
-        std::unique_lock<std::mutex> lk(m_committedMutex);
-        D3D12Data* data = static_cast<D3D12Data*>(d);
-        m_committedData.erase(data);
-        data->decrement();
-    }
-
-    void destroyAllData()
-    {
-        std::unique_lock<std::mutex> lk(m_committedMutex);
-        for (D3D12Data* data : m_committedData)
-            data->decrement();
-        for (IGraphicsBufferPool* pool : m_committedPools)
-            delete static_cast<D3D12Pool*>(pool);
-        m_committedData.clear();
-        m_committedPools.clear();
-    }
-
-    void destroyPool(IGraphicsBufferPool* p)
-    {
-        std::unique_lock<std::mutex> lk(m_committedMutex);
-        D3D12Pool* pool = static_cast<D3D12Pool*>(p);
-        m_committedPools.erase(pool);
-        delete pool;
-    }
-
-    IGraphicsBufferD* newPoolBuffer(IGraphicsBufferPool* p, BufferUse use,
-                                    size_t stride, size_t count)
-    {
-        D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent->getCommandQueue());
-        D3D12Pool* pool = static_cast<D3D12Pool*>(p);
-        D3D12PoolItem* item = new D3D12PoolItem;
-        D3D12GraphicsBufferD* retval = new D3D12GraphicsBufferD(item, q, use, m_ctx, stride, count);
-        item->m_buf.reset(retval);
-
-        /* Gather resource descriptions */
-        D3D12_RESOURCE_DESC bufDescs[2];
-        bufDescs[0] = retval->m_bufs[0]->GetDesc();
-        bufDescs[1] = retval->m_bufs[1]->GetDesc();
-
-        /* Create heap */
-        D3D12_RESOURCE_ALLOCATION_INFO bufAllocInfo =
-            m_ctx->m_dev->GetResourceAllocationInfo(0, 2, bufDescs);
-        ThrowIfFailed(m_ctx->m_dev->CreateHeap(&CD3DX12_HEAP_DESC(bufAllocInfo,
-            D3D12_HEAP_TYPE_DEFAULT, D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS),
-            __uuidof(ID3D12Heap), &item->m_bufHeap));
-
-        /* Place resources */
-        PlaceBufferForGPU(retval, m_ctx, item->m_bufHeap.Get(), 0);
-
-        pool->m_items.emplace(item);
-        return retval;
-    }
-
-    void deletePoolBuffer(IGraphicsBufferPool* p, IGraphicsBufferD* buf)
-    {
-        D3D12Pool* pool = static_cast<D3D12Pool*>(p);
-        auto search = pool->m_items.find(static_cast<D3D12PoolItem*>(buf->m_parentData));
-        if (search != pool->m_items.end())
-        {
-            (*search)->decrement();
-            pool->m_items.erase(search);
-        }
-    }
 
 public:
     D3D12DataFactory(IGraphicsContext* parent, D3D12Context* ctx, uint32_t sampleCount)
@@ -1756,7 +1692,6 @@ public:
         ThrowIfFailed(ctx->m_dev->CreateRootSignature(0, rsOutBlob->GetBufferPointer(),
             rsOutBlob->GetBufferSize(), __uuidof(ID3D12RootSignature), &ctx->m_rs));
     }
-    ~D3D12DataFactory() {destroyAllData();}
 
     Platform platform() const {return Platform::D3D12;}
     const SystemChar* platformName() const {return _S("D3D12");}
@@ -1765,73 +1700,61 @@ public:
     {
         friend class D3D12DataFactory;
         D3D12DataFactory& m_parent;
-        Context(D3D12DataFactory& parent) : m_parent(parent) {}
+        boo::ObjToken<BaseGraphicsData> m_data;
+        Context(D3D12DataFactory& parent)
+        : m_parent(parent), m_data(new D3D12Data(parent)) {}
     public:
         Platform platform() const {return Platform::D3D12;}
         const SystemChar* platformName() const {return _S("D3D12");}
 
-        IGraphicsBufferS* newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
+        boo::ObjToken<IGraphicsBufferS>
+        newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
         {
-            D3D12Data* d = D3D12DataFactory::m_deferredData;
-            D3D12GraphicsBufferS* retval = new D3D12GraphicsBufferS(d, use, m_parent.m_ctx, data, stride, count);
-            d->m_SBufs.emplace_back(retval);
-            return retval;
+            return {new D3D12GraphicsBufferS(m_data, use, m_parent.m_ctx, data, stride, count)};
         }
 
-        IGraphicsBufferD* newDynamicBuffer(BufferUse use, size_t stride, size_t count)
+        boo::ObjToken<IGraphicsBufferD>
+        newDynamicBuffer(BufferUse use, size_t stride, size_t count)
         {
-            D3D12Data* d = D3D12DataFactory::m_deferredData;
             D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent.m_parent->getCommandQueue());
-            D3D12GraphicsBufferD* retval = new D3D12GraphicsBufferD(d, q, use, m_parent.m_ctx, stride, count);
-            d->m_DBufs.emplace_back(retval);
-            return retval;
+            return {new D3D12GraphicsBufferD<BaseGraphicsData>(m_data, q, use, m_parent.m_ctx, stride, count)};
         }
 
-        ITextureS* newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                    TextureClampMode clampMode, const void* data, size_t sz)
+        boo::ObjToken<ITextureS>
+        newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                         TextureClampMode clampMode, const void* data, size_t sz)
         {
-            D3D12Data* d = D3D12DataFactory::m_deferredData;
-            D3D12TextureS* retval = new D3D12TextureS(d, m_parent.m_ctx, width, height, mips, fmt, data, sz);
-            d->m_STexs.emplace_back(retval);
-            return retval;
+            return {new D3D12TextureS(m_data, m_parent.m_ctx, width, height, mips, fmt, data, sz)};
         }
 
-        ITextureSA* newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
-                                          TextureFormat fmt, TextureClampMode clampMode, const void* data, size_t sz)
+        boo::ObjToken<ITextureSA>
+        newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
+                              TextureFormat fmt, TextureClampMode clampMode, const void* data, size_t sz)
         {
-            D3D12Data* d = D3D12DataFactory::m_deferredData;
-            D3D12TextureSA* retval = new D3D12TextureSA(d, m_parent.m_ctx, width, height, layers, mips, fmt, data, sz);
-            d->m_SATexs.emplace_back(retval);
-            return retval;
+            return {new D3D12TextureSA(m_data, m_parent.m_ctx, width, height, layers, mips, fmt, data, sz)};
         }
 
-        ITextureD* newDynamicTexture(size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode)
+        boo::ObjToken<ITextureD>
+        newDynamicTexture(size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode)
         {
-            D3D12Data* d = D3D12DataFactory::m_deferredData;
             D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent.m_parent->getCommandQueue());
-            D3D12TextureD* retval = new D3D12TextureD(d, q, m_parent.m_ctx, width, height, fmt);
-            d->m_DTexs.emplace_back(retval);
-            return retval;
+            return {new D3D12TextureD(m_data, q, m_parent.m_ctx, width, height, fmt)};
         }
 
-        ITextureR* newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
-                                    size_t colorBindCount, size_t depthBindCount)
+        boo::ObjToken<ITextureR>
+        newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
+                         size_t colorBindCount, size_t depthBindCount)
         {
-            D3D12Data* d = D3D12DataFactory::m_deferredData;
             D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent.m_parent->getCommandQueue());
-            D3D12TextureR* retval = new D3D12TextureR(d, m_parent.m_ctx, q, width, height, m_parent.m_sampleCount,
-                                                      colorBindCount, depthBindCount);
-            d->m_RTexs.emplace_back(retval);
-            return retval;
+            return {new D3D12TextureR(m_data, m_parent.m_ctx, q, width, height, m_parent.m_sampleCount,
+                                      colorBindCount, depthBindCount)};
         }
 
-        IVertexFormat* newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
-                                       size_t baseVert, size_t baseInst)
+        boo::ObjToken<IVertexFormat>
+        newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
+                        size_t baseVert, size_t baseInst)
         {
-            D3D12Data* d = D3D12DataFactory::m_deferredData;
-            D3D12VertexFormat* retval = new struct D3D12VertexFormat(d, elementCount, elements);
-            d->m_VFmts.emplace_back(retval);
-            return retval;
+            return {new struct D3D12VertexFormat(m_data, elementCount, elements)};
         }
 
 #if _DEBUG
@@ -1878,15 +1801,14 @@ public:
             return binKey;
         }
 
-        IShaderPipeline* newShaderPipeline
+        boo::ObjToken<IShaderPipeline> newShaderPipeline
             (const char* vertSource, const char* fragSource,
              ComPtr<ID3DBlob>* vertBlobOut, ComPtr<ID3DBlob>* fragBlobOut,
-             ComPtr<ID3DBlob>* pipelineBlob, IVertexFormat* vtxFmt,
+             ComPtr<ID3DBlob>* pipelineBlob, const boo::ObjToken<IVertexFormat>& vtxFmt,
              BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
              ZTest depthTest, bool depthWrite, bool colorWrite,
              bool alphaWrite, CullMode culling)
         {
-            D3D12Data* d = D3D12DataFactory::m_deferredData;
             XXH64_state_t hashState;
             uint64_t srcHashes[2] = {};
             uint64_t binHashes[2] = {};
@@ -1969,78 +1891,101 @@ public:
             }
 
             ID3DBlob* pipeline = pipelineBlob ? pipelineBlob->Get() : nullptr;
-            D3D12ShaderPipeline* retval = new D3D12ShaderPipeline(d, m_parent.m_ctx, std::move(vertShader), std::move(fragShader),
-                                                                  pipeline, static_cast<const D3D12VertexFormat*>(vtxFmt),
-                                                                  srcFac, dstFac, prim, depthTest, depthWrite, colorWrite,
+            D3D12ShaderPipeline* retval = new D3D12ShaderPipeline(m_data, m_parent.m_ctx, std::move(vertShader), std::move(fragShader),
+                                                                  pipeline, vtxFmt, srcFac, dstFac, prim, depthTest, depthWrite, colorWrite,
                                                                   alphaWrite, culling);
             if (pipelineBlob && !*pipelineBlob)
                 retval->m_state->GetCachedBlob(&*pipelineBlob);
-            d->m_SPs.emplace_back(retval);
             return retval;
         }
 
-        IShaderDataBinding* newShaderDataBinding(IShaderPipeline* pipeline,
-                IVertexFormat* vtxFormat,
-                IGraphicsBuffer* vbuf, IGraphicsBuffer* instVbuf, IGraphicsBuffer* ibuf,
-                size_t ubufCount, IGraphicsBuffer** ubufs, const PipelineStage* ubufStages,
+        boo::ObjToken<IShaderDataBinding> newShaderDataBinding(
+                const boo::ObjToken<IShaderPipeline>& pipeline,
+                const boo::ObjToken<IVertexFormat>& vtxFormat,
+                const boo::ObjToken<IGraphicsBuffer>& vbuf,
+                const boo::ObjToken<IGraphicsBuffer>& instVbuf,
+                const boo::ObjToken<IGraphicsBuffer>& ibuf,
+                size_t ubufCount, const boo::ObjToken<IGraphicsBuffer>* ubufs, const PipelineStage* ubufStages,
                 const size_t* ubufOffs, const size_t* ubufSizes,
-                size_t texCount, ITexture** texs,
+                size_t texCount, const boo::ObjToken<ITexture>* texs,
                 const int* bindIdxs, const bool* bindDepth,
                 size_t baseVert, size_t baseInst)
         {
-            D3D12Data* d = static_cast<D3D12Data*>(m_deferredData);
-            D3D12ShaderDataBinding* retval =
-                new D3D12ShaderDataBinding(d, m_parent.m_ctx, pipeline, vbuf, instVbuf, ibuf,
-                                           ubufCount, ubufs, ubufOffs, ubufSizes, texCount, texs,
-                                           bindIdxs, bindDepth, baseVert, baseInst);
-            d->m_SBinds.emplace_back(retval);
-            return retval;
+            return {new D3D12ShaderDataBinding(m_data, m_parent.m_ctx, pipeline, vbuf, instVbuf, ibuf,
+                                               ubufCount, ubufs, ubufOffs, ubufSizes, texCount, texs,
+                                               bindIdxs, bindDepth, baseVert, baseInst)};
         }
     };
 
-    GraphicsDataToken commitTransaction(const FactoryCommitFunc& trans)
+    boo::ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count)
     {
-        if (m_deferredData)
-            Log.report(logvisor::Fatal, "nested commitTransaction usage detected");
-        m_deferredData = new D3D12Data();
+        D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent->getCommandQueue());
+        boo::ObjToken<BaseGraphicsPool> pool(new D3D12Pool(*this));
+        D3D12Pool* cpool = pool.cast<D3D12Pool>();
+        D3D12GraphicsBufferD<BaseGraphicsPool>* retval =
+                new D3D12GraphicsBufferD<BaseGraphicsPool>(pool, q, use, m_ctx, stride, count);
 
+        /* Gather resource descriptions */
+        D3D12_RESOURCE_DESC bufDescs[2];
+        bufDescs[0] = retval->m_bufs[0]->GetDesc();
+        bufDescs[1] = retval->m_bufs[1]->GetDesc();
+
+        /* Create heap */
+        D3D12_RESOURCE_ALLOCATION_INFO bufAllocInfo =
+            m_ctx->m_dev->GetResourceAllocationInfo(0, 2, bufDescs);
+        ThrowIfFailed(m_ctx->m_dev->CreateHeap(&CD3DX12_HEAP_DESC(bufAllocInfo,
+            D3D12_HEAP_TYPE_DEFAULT, D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS),
+            __uuidof(ID3D12Heap), &cpool->m_bufHeap));
+
+        /* Place resources */
+        PlaceBufferForGPU(retval, m_ctx, cpool->m_bufHeap.Get(), 0);
+
+        return {retval};
+    }
+
+    void commitTransaction(const FactoryCommitFunc& trans)
+    {
         D3D12DataFactory::Context ctx(*this);
         if (!trans(ctx))
-        {
-            delete m_deferredData;
-            m_deferredData = nullptr;
-            return GraphicsDataToken(this, nullptr);
-        }
+            return;
 
-        D3D12Data* retval = static_cast<D3D12Data*>(m_deferredData);
+        D3D12Data* data = ctx.m_data.cast<D3D12Data>();
 
         /* Gather resource descriptions */
         std::vector<D3D12_RESOURCE_DESC> bufDescs;
-        bufDescs.reserve(retval->m_SBufs.size() + retval->m_DBufs.size() * 2);
+        bufDescs.reserve(data->countForward<IGraphicsBufferS>() +
+                         data->countForward<IGraphicsBufferD>() * 2);
 
         std::vector<D3D12_RESOURCE_DESC> texDescs;
-        texDescs.reserve(retval->m_STexs.size() + retval->m_SATexs.size() + retval->m_DTexs.size() * 2);
+        texDescs.reserve(data->countForward<ITextureS>() +
+                         data->countForward<ITextureSA>() +
+                         data->countForward<ITextureD>() * 2);
 
-        for (std::unique_ptr<D3D12GraphicsBufferS>& buf : retval->m_SBufs)
-            bufDescs.push_back(buf->m_gpuDesc);
+        if (data->m_SBufs)
+            for (IGraphicsBufferS& buf : *data->m_SBufs)
+                bufDescs.push_back(static_cast<D3D12GraphicsBufferS&>(buf).m_gpuDesc);
 
-        for (std::unique_ptr<D3D12GraphicsBufferD>& buf : retval->m_DBufs)
-        {
-            bufDescs.push_back(buf->m_bufs[0]->GetDesc());
-            bufDescs.push_back(buf->m_bufs[1]->GetDesc());
-        }
+        if (data->m_DBufs)
+            for (IGraphicsBufferD& buf : *data->m_DBufs)
+            {
+                bufDescs.push_back(static_cast<D3D12GraphicsBufferD<BaseGraphicsData>&>(buf).m_bufs[0]->GetDesc());
+                bufDescs.push_back(static_cast<D3D12GraphicsBufferD<BaseGraphicsData>&>(buf).m_bufs[1]->GetDesc());
+            }
 
-        for (std::unique_ptr<D3D12TextureS>& tex : retval->m_STexs)
-            texDescs.push_back(tex->m_gpuDesc);
+        if (data->m_STexs)
+            for (ITextureS& tex : *data->m_STexs)
+                texDescs.push_back(static_cast<D3D12TextureS&>(tex).m_gpuDesc);
 
-        for (std::unique_ptr<D3D12TextureSA>& tex : retval->m_SATexs)
-            texDescs.push_back(tex->m_gpuDesc);
+        if (data->m_SATexs)
+            for (ITextureSA& tex : *data->m_SATexs)
+                texDescs.push_back(static_cast<D3D12TextureSA&>(tex).m_gpuDesc);
 
-        for (std::unique_ptr<D3D12TextureD>& tex : retval->m_DTexs)
-        {
-            texDescs.push_back(tex->m_gpuDesc);
-            texDescs.push_back(tex->m_gpuDesc);
-        }
+        if (data->m_DTexs)
+            for (ITextureD& tex : *data->m_DTexs)
+            {
+                texDescs.push_back(static_cast<D3D12TextureD&>(tex).m_gpuDesc);
+                texDescs.push_back(static_cast<D3D12TextureD&>(tex).m_gpuDesc);
+            }
 
         /* Create heap */
         if (bufDescs.size())
@@ -2049,7 +1994,7 @@ public:
                 m_ctx->m_dev->GetResourceAllocationInfo(0, bufDescs.size(), bufDescs.data());
             ThrowIfFailed(m_ctx->m_dev->CreateHeap(&CD3DX12_HEAP_DESC(bufAllocInfo,
                 D3D12_HEAP_TYPE_DEFAULT, D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS),
-                __uuidof(ID3D12Heap), &retval->m_bufHeap));
+                __uuidof(ID3D12Heap), &data->m_bufHeap));
         }
         if (texDescs.size())
         {
@@ -2057,28 +2002,33 @@ public:
                 m_ctx->m_dev->GetResourceAllocationInfo(0, texDescs.size(), texDescs.data());
             ThrowIfFailed(m_ctx->m_dev->CreateHeap(&CD3DX12_HEAP_DESC(texAllocInfo,
                 D3D12_HEAP_TYPE_DEFAULT, D3D12_HEAP_FLAG_ALLOW_ONLY_NON_RT_DS_TEXTURES),
-                __uuidof(ID3D12Heap), &retval->m_texHeap));
+                __uuidof(ID3D12Heap), &data->m_texHeap));
         }
-        ID3D12Heap* bufHeap = retval->m_bufHeap.Get();
-        ID3D12Heap* texHeap = retval->m_texHeap.Get();
+        ID3D12Heap* bufHeap = data->m_bufHeap.Get();
+        ID3D12Heap* texHeap = data->m_texHeap.Get();
 
         /* Place resources */
         UINT64 offsetBuf = 0;
-        for (std::unique_ptr<D3D12GraphicsBufferS>& buf : retval->m_SBufs)
-            offsetBuf = PlaceBufferForGPU(buf.get(), m_ctx, bufHeap, offsetBuf);
+        if (data->m_SBufs)
+            for (IGraphicsBufferS& buf : *data->m_SBufs)
+                offsetBuf = PlaceBufferForGPU(&buf, m_ctx, bufHeap, offsetBuf);
 
-        for (std::unique_ptr<D3D12GraphicsBufferD>& buf : retval->m_DBufs)
-            offsetBuf = PlaceBufferForGPU(buf.get(), m_ctx, bufHeap, offsetBuf);
+        if (data->m_DBufs)
+            for (IGraphicsBufferD& buf : *data->m_DBufs)
+                offsetBuf = PlaceBufferForGPU(&buf, m_ctx, bufHeap, offsetBuf);
 
         UINT64 offsetTex = 0;
-        for (std::unique_ptr<D3D12TextureS>& tex : retval->m_STexs)
-            offsetTex = PlaceTextureForGPU(tex.get(), m_ctx, texHeap, offsetTex);
+        if (data->m_STexs)
+            for (ITextureS& tex : *data->m_STexs)
+                offsetTex = PlaceTextureForGPU(&tex, m_ctx, texHeap, offsetTex);
 
-        for (std::unique_ptr<D3D12TextureSA>& tex : retval->m_SATexs)
-            offsetTex = PlaceTextureForGPU(tex.get(), m_ctx, texHeap, offsetTex);
+        if (data->m_SATexs)
+            for (ITextureSA& tex : *data->m_SATexs)
+                offsetTex = PlaceTextureForGPU(&tex, m_ctx, texHeap, offsetTex);
 
-        for (std::unique_ptr<D3D12TextureD>& tex : retval->m_DTexs)
-            offsetTex = PlaceTextureForGPU(tex.get(), m_ctx, texHeap, offsetTex);
+        if (data->m_DTexs)
+            for (ITextureD& tex : *data->m_DTexs)
+                offsetTex = PlaceTextureForGPU(&tex, m_ctx, texHeap, offsetTex);
 
         /* Execute static uploads */
         ThrowIfFailed(m_ctx->m_loadlist->Close());
@@ -2088,8 +2038,9 @@ public:
         ThrowIfFailed(m_ctx->m_loadq->Signal(m_ctx->m_loadfence.Get(), m_ctx->m_loadfenceval));
 
         /* Commit data bindings (create descriptor heaps) */
-        for (std::unique_ptr<D3D12ShaderDataBinding>& bind : retval->m_SBinds)
-            bind->commit(m_ctx);
+        if (data->m_SBinds)
+            for (IShaderDataBinding& bind : *data->m_SBinds)
+                static_cast<D3D12ShaderDataBinding&>(bind).commit(m_ctx);
 
         /* Block handle return until data is ready on GPU */
         WaitForLoadList(m_ctx);
@@ -2099,29 +2050,17 @@ public:
         ThrowIfFailed(m_ctx->m_loadlist->Reset(m_ctx->m_loadqalloc.Get(), nullptr));
 
         /* Delete static upload heaps */
-        for (std::unique_ptr<D3D12GraphicsBufferS>& buf : retval->m_SBufs)
-            buf->m_buf.Reset();
+        if (data->m_SBufs)
+            for (IGraphicsBufferS& buf : *data->m_SBufs)
+                static_cast<D3D12GraphicsBufferS&>(buf).m_buf.Reset();
 
-        for (std::unique_ptr<D3D12TextureS>& tex : retval->m_STexs)
-            tex->m_tex.Reset();
+        if (data->m_STexs)
+            for (ITextureS& tex : *data->m_STexs)
+                static_cast<D3D12TextureS&>(tex).m_tex.Reset();
 
-        for (std::unique_ptr<D3D12TextureSA>& tex : retval->m_SATexs)
-            tex->m_tex.Reset();
-
-        /* All set! */
-        std::unique_lock<std::mutex> lk(m_committedMutex);
-        m_deferredData = nullptr;
-        m_committedData.insert(retval);
-        lk.unlock();
-        return GraphicsDataToken(this, retval);
-    }
-
-    GraphicsBufferPoolToken newBufferPool()
-    {
-        std::unique_lock<std::mutex> lk(m_committedMutex);
-        D3D12Pool* retval = new D3D12Pool;
-        m_committedPools.insert(retval);
-        return GraphicsBufferPoolToken(this, retval);
+        if (data->m_SATexs)
+            for (ITextureSA& tex : *data->m_SATexs)
+                static_cast<D3D12TextureSA&>(tex).m_tex.Reset();
     }
 
     void _unregisterShareableShader(uint64_t srcKey, uint64_t binKey)
@@ -2132,8 +2071,6 @@ public:
     }
 };
 
-thread_local D3D12Data* D3D12DataFactory::m_deferredData;
-
 void D3D12CommandQueue::execute()
 {
     if (!m_running)
@@ -2141,18 +2078,27 @@ void D3D12CommandQueue::execute()
 
     /* Stage dynamic uploads */
     D3D12DataFactory* gfxF = static_cast<D3D12DataFactory*>(m_parent->getDataFactory());
-    std::unique_lock<std::mutex> datalk(gfxF->m_committedMutex);
-    for (D3D12Data* d : gfxF->m_committedData)
+    std::unique_lock<std::mutex> datalk(gfxF->m_dataMutex);
+    if (gfxF->m_dataHead)
     {
-        for (std::unique_ptr<D3D12GraphicsBufferD>& b : d->m_DBufs)
-            b->update(m_fillBuf);
-        for (std::unique_ptr<D3D12TextureD>& t : d->m_DTexs)
-            t->update(m_fillBuf);
+        for (BaseGraphicsData& d : *gfxF->m_dataHead)
+        {
+            if (d.m_DBufs)
+                for (IGraphicsBufferD& b : *d.m_DBufs)
+                    static_cast<D3D12GraphicsBufferD<BaseGraphicsData>&>(b).update(m_fillBuf);
+            if (d.m_DTexs)
+                for (ITextureD& t : *d.m_DTexs)
+                    static_cast<D3D12TextureD&>(t).update(m_fillBuf);
+        }
     }
-    for (D3D12Pool* p : gfxF->m_committedPools)
+    if (gfxF->m_poolHead)
     {
-        for (auto& b : p->m_items)
-            b->m_buf->update(m_fillBuf);
+        for (BaseGraphicsPool& p : *gfxF->m_poolHead)
+        {
+            if (p.m_DBufs)
+                for (IGraphicsBufferD& b : *p.m_DBufs)
+                    static_cast<D3D12GraphicsBufferD<BaseGraphicsData>&>(b).update(m_fillBuf);
+        }
     }
     datalk.unlock();
 
