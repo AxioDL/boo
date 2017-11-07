@@ -2349,7 +2349,8 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
                     writes[totalWrites].dstSet = m_descSets[b];
                     writes[totalWrites].descriptorCount = 1;
                     writes[totalWrites].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-                    writes[totalWrites].pImageInfo = GetTextureGPUResource(m_texs[i].tex.get(), b, m_texs[i].idx, m_texs[i].depth);
+                    writes[totalWrites].pImageInfo = GetTextureGPUResource(m_texs[i].tex.get(), b,
+                                                                           m_texs[i].idx, m_texs[i].depth);
                     writes[totalWrites].dstArrayElement = 0;
                     writes[totalWrites].dstBinding = binding;
                     m_knownViewHandles[b][i] = writes[totalWrites].pImageInfo->imageView;
@@ -2382,7 +2383,8 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
         {
             if (i<m_texs.size() && m_texs[i].tex)
             {
-                const VkDescriptorImageInfo* resComp = GetTextureGPUResource(m_texs[i].tex.get(), b, m_texs[i].idx, m_texs[i].depth);
+                const VkDescriptorImageInfo* resComp = GetTextureGPUResource(m_texs[i].tex.get(), b,
+                                                                             m_texs[i].idx, m_texs[i].depth);
                 if (resComp->imageView != m_knownViewHandles[b][i])
                 {
                     writes[totalWrites].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -2983,7 +2985,8 @@ void VulkanTextureD::update(int b)
 
         /* map memory and copy staging data */
         uint8_t* mappedData;
-        ThrowIfFailed(vk::MapMemory(m_q->m_ctx->m_dev, m_cpuMem, m_cpuOffsets[b], m_cpuSz, 0, reinterpret_cast<void**>(&mappedData)));
+        ThrowIfFailed(vk::MapMemory(m_q->m_ctx->m_dev, m_cpuMem, m_cpuOffsets[b], m_cpuSz, 0,
+                                    reinterpret_cast<void**>(&mappedData)));
         memmove(mappedData, m_stagingBuf.get(), m_cpuSz);
         vk::UnmapMemory(m_q->m_ctx->m_dev, m_cpuMem);
 
@@ -3293,8 +3296,9 @@ boo::ObjToken<IShaderPipeline> VulkanDataFactory::Context::newShaderPipeline
         ThrowIfFailed(vk::CreatePipelineCache(factory.m_ctx->m_dev, &cacheDataInfo, nullptr, &pipelineCache));
     }
 
-    VulkanShaderPipeline* retval = new VulkanShaderPipeline(m_data, factory.m_ctx, std::move(vertShader), std::move(fragShader),
-                                                            pipelineCache, vtxFmt, srcFac, dstFac, prim, depthTest, depthWrite, colorWrite,
+    VulkanShaderPipeline* retval = new VulkanShaderPipeline(m_data, factory.m_ctx, std::move(vertShader),
+                                                            std::move(fragShader), pipelineCache, vtxFmt, srcFac,
+                                                            dstFac, prim, depthTest, depthWrite, colorWrite,
                                                             alphaWrite, culling);
 
     if (pipelineBlob && pipelineBlob->empty())
@@ -3304,7 +3308,8 @@ boo::ObjToken<IShaderPipeline> VulkanDataFactory::Context::newShaderPipeline
         if (cacheSz)
         {
             pipelineBlob->resize(cacheSz);
-            ThrowIfFailed(vk::GetPipelineCacheData(factory.m_ctx->m_dev, pipelineCache, &cacheSz, pipelineBlob->data()));
+            ThrowIfFailed(vk::GetPipelineCacheData(factory.m_ctx->m_dev, pipelineCache,
+                                                   &cacheSz, pipelineBlob->data()));
             pipelineBlob->resize(cacheSz);
         }
     }
@@ -3416,7 +3421,8 @@ void VulkanDataFactoryImpl::commitTransaction
 
     if (data->m_DBufs)
         for (IGraphicsBufferD& buf : *data->m_DBufs)
-            bufMemSize = static_cast<VulkanGraphicsBufferD<BaseGraphicsData>&>(buf).sizeForGPU(m_ctx, bufMemTypeBits, bufMemSize);
+            bufMemSize = static_cast<VulkanGraphicsBufferD<BaseGraphicsData>&>(buf).
+                    sizeForGPU(m_ctx, bufMemTypeBits, bufMemSize);
 
     if (data->m_STexs)
         for (ITextureS& tex : *data->m_STexs)
@@ -3611,6 +3617,9 @@ void VulkanCommandQueue::execute()
         resetCommandBuffer();
         m_dynamicNeedsReset = true;
         m_resolveDispSource = nullptr;
+
+        /* Clear dead data */
+        m_drawResTokens[m_fillBuf].clear();
         return;
     }
     m_submitted = false;
