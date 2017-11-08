@@ -1,5 +1,6 @@
 #include "boo/graphicsdev/GL.hpp"
 #include "boo/graphicsdev/glew.h"
+#include "boo/IApplication.hpp"
 #include "Common.hpp"
 #include <thread>
 #include <condition_variable>
@@ -1123,7 +1124,8 @@ struct GLCommandQueue : IGraphicsCommandQueue
 
     static void RenderingWorker(GLCommandQueue* self)
     {
-        logvisor::RegisterThreadName("Boo GL Rendering Thread");
+        std::string thrName = APP->getFriendlyName() + " GL Rendering Thread";
+        logvisor::RegisterThreadName(thrName.c_str());
         {
             std::unique_lock<std::mutex> lk(self->m_initmt);
             self->m_parent->makeCurrent();

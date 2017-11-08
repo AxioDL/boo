@@ -26,10 +26,11 @@ class VulkanDataFactoryImpl;
 struct VulkanShareableShader : IShareableShader<VulkanDataFactoryImpl, VulkanShareableShader>
 {
     VkDevice m_dev;
-    std::vector<unsigned int> m_shader;
+    VkShaderModule m_shader;
     VulkanShareableShader(VulkanDataFactoryImpl& fac, uint64_t srcKey, uint64_t binKey,
-                          VkDevice dev, const std::vector<unsigned int>& s)
+                          VkDevice dev, VkShaderModule s)
     : IShareableShader(fac, srcKey, binKey), m_dev(dev), m_shader(s) {}
+    ~VulkanShareableShader() { vk::DestroyShaderModule(m_dev, m_shader, nullptr); }
 };
 
 class VulkanDataFactoryImpl : public VulkanDataFactory, public GraphicsDataFactoryHead
@@ -328,9 +329,9 @@ void VulkanContext::initVulkan(const char* appName)
 
 #ifndef NDEBUG
     m_layerNames.push_back("VK_LAYER_LUNARG_core_validation");
-    m_layerNames.push_back("VK_LAYER_LUNARG_object_tracker");
-    //m_layerNames.push_back("VK_LAYER_LUNARG_parameter_validation");
-    //m_layerNames.push_back("VK_LAYER_GOOGLE_threading");
+    //m_layerNames.push_back("VK_LAYER_LUNARG_object_tracker");
+    m_layerNames.push_back("VK_LAYER_LUNARG_parameter_validation");
+    m_layerNames.push_back("VK_LAYER_GOOGLE_threading");
 #endif
 
     demo_check_layers(m_instanceLayerProperties, m_layerNames);
@@ -1910,23 +1911,11 @@ public:
 
             VkPipelineShaderStageCreateInfo stages[2] = {};
 
-            VkShaderModuleCreateInfo smCreateInfo = {};
-            smCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-            VkShaderModule vertModule, fragModule;
-            const auto& vertShader = m_vert.get().m_shader;
-            smCreateInfo.codeSize = vertShader.size() * sizeof(unsigned int);
-            smCreateInfo.pCode = vertShader.data();
-            ThrowIfFailed(vk::CreateShaderModule(m_ctx->m_dev, &smCreateInfo, nullptr, &vertModule));
-            const auto& fragShader = m_frag.get().m_shader;
-            smCreateInfo.codeSize = fragShader.size() * sizeof(unsigned int);
-            smCreateInfo.pCode = fragShader.data();
-            ThrowIfFailed(vk::CreateShaderModule(m_ctx->m_dev, &smCreateInfo, nullptr, &fragModule));
-
             stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
             stages[0].pNext = nullptr;
             stages[0].flags = 0;
             stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-            stages[0].module = vertModule;
+            stages[0].module = m_vert.get().m_shader;
             stages[0].pName = "main";
             stages[0].pSpecializationInfo = nullptr;
 
@@ -1934,7 +1923,7 @@ public:
             stages[1].pNext = nullptr;
             stages[1].flags = 0;
             stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-            stages[1].module = fragModule;
+            stages[1].module = m_frag.get().m_shader;
             stages[1].pName = "main";
             stages[1].pSpecializationInfo = nullptr;
 
@@ -2050,9 +2039,6 @@ public:
 
             ThrowIfFailed(vk::CreateGraphicsPipelines(m_ctx->m_dev, m_pipelineCache, 1, &pipelineCreateInfo,
                                                       nullptr, &m_pipeline));
-
-            vk::DestroyShaderModule(m_ctx->m_dev, vertModule, nullptr);
-            vk::DestroyShaderModule(m_ctx->m_dev, fragModule, nullptr);
 
             m_vert.reset();
             m_frag.reset();
@@ -3249,10 +3235,15 @@ boo::ObjToken<IShaderPipeline> VulkanDataFactory::Context::newShaderPipeline
             binHashes[0] = CompileVert(vertBlob, vertSource, srcHashes[0], factory);
         }
 
+        VkShaderModule vertModule;
+        smCreateInfo.codeSize = useVertBlob->size() * sizeof(unsigned int);
+        smCreateInfo.pCode = useVertBlob->data();
+        ThrowIfFailed(vk::CreateShaderModule(factory.m_ctx->m_dev, &smCreateInfo, nullptr, &vertModule));
+
         auto it =
         factory.m_sharedShaders.emplace(std::make_pair(binHashes[0],
             std::make_unique<VulkanShareableShader>(factory, srcHashes[0], binHashes[0],
-                                                    factory.m_ctx->m_dev, *useVertBlob))).first;
+                                                    factory.m_ctx->m_dev, vertModule))).first;
         vertShader = it->second->lock();
     }
     auto fragFind = binHashes[1] ? factory.m_sharedShaders.find(binHashes[1]) :
@@ -3275,10 +3266,15 @@ boo::ObjToken<IShaderPipeline> VulkanDataFactory::Context::newShaderPipeline
             binHashes[1] = CompileFrag(fragBlob, fragSource, srcHashes[1], factory);
         }
 
+        VkShaderModule fragModule;
+        smCreateInfo.codeSize = useFragBlob->size() * sizeof(unsigned int);
+        smCreateInfo.pCode = useFragBlob->data();
+        ThrowIfFailed(vk::CreateShaderModule(factory.m_ctx->m_dev, &smCreateInfo, nullptr, &fragModule));
+
         auto it =
         factory.m_sharedShaders.emplace(std::make_pair(binHashes[1],
             std::make_unique<VulkanShareableShader>(factory, srcHashes[1], binHashes[1],
-                                                    factory.m_ctx->m_dev, *useFragBlob))).first;
+                                                    factory.m_ctx->m_dev, fragModule))).first;
         fragShader = it->second->lock();
     }
 
