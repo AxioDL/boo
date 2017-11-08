@@ -56,7 +56,8 @@ int ApplicationRun(IApplication::EPlatformType platform,
                    const std::vector<std::string>& args,
                    bool singleInstance)
 {
-    logvisor::RegisterThreadName("Boo Main Thread");
+    std::string thrName = friendlyName + " Main Thread";
+    logvisor::RegisterThreadName(thrName.c_str());
     if (APP)
         return 1;
     if (platform == IApplication::EPlatformType::Wayland)
