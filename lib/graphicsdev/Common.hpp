@@ -21,7 +21,7 @@ struct GraphicsDataNode;
 /** Inherited by data factory implementations to track the head data and pool nodes */
 struct GraphicsDataFactoryHead
 {
-    std::mutex m_dataMutex;
+    std::recursive_mutex m_dataMutex;
     BaseGraphicsData* m_dataHead = nullptr;
     BaseGraphicsPool* m_poolHead = nullptr;
 };
@@ -68,7 +68,8 @@ struct BaseGraphicsData : IObj
     explicit BaseGraphicsData(GraphicsDataFactoryHead& head)
     : m_head(head)
     {
-        std::lock_guard<std::mutex> lk(m_head.m_dataMutex);
+        IObj::m_mutex = &m_head.m_dataMutex;
+        std::lock_guard<std::recursive_mutex> lk(m_head.m_dataMutex);
         m_next = head.m_dataHead;
         if (m_next)
             m_next->m_prev = this;
@@ -76,7 +77,6 @@ struct BaseGraphicsData : IObj
     }
     ~BaseGraphicsData()
     {
-        std::lock_guard<std::mutex> lk(m_head.m_dataMutex);
         if (m_prev)
         {
             if (m_next)
@@ -131,7 +131,8 @@ struct BaseGraphicsPool : IObj
     explicit BaseGraphicsPool(GraphicsDataFactoryHead& head)
     : m_head(head)
     {
-        std::lock_guard<std::mutex> lk(m_head.m_dataMutex);
+        IObj::m_mutex = &m_head.m_dataMutex;
+        std::lock_guard<std::recursive_mutex> lk(m_head.m_dataMutex);
         m_next = head.m_poolHead;
         if (m_next)
             m_next->m_prev = this;
@@ -139,7 +140,6 @@ struct BaseGraphicsPool : IObj
     }
     ~BaseGraphicsPool()
     {
-        std::lock_guard<std::mutex> lk(m_head.m_dataMutex);
         if (m_prev)
         {
             if (m_next)
@@ -176,7 +176,8 @@ struct GraphicsDataNode : NodeCls
     explicit GraphicsDataNode(const ObjToken<DataCls>& data)
     : m_data(data)
     {
-        std::lock_guard<std::mutex> lk(m_data->m_head.m_dataMutex);
+        IObj::m_mutex = &m_data->m_head.m_dataMutex;
+        std::lock_guard<std::recursive_mutex> lk(m_data->m_head.m_dataMutex);
         m_next = data->template getHead<NodeCls>();
         if (m_next)
             m_next->m_prev = this;
@@ -184,7 +185,6 @@ struct GraphicsDataNode : NodeCls
     }
     ~GraphicsDataNode()
     {
-        std::lock_guard<std::mutex> lk(m_data->m_head.m_dataMutex);
         if (m_prev)
         {
             if (m_next)

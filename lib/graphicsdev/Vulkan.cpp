@@ -3558,7 +3558,7 @@ void VulkanCommandQueue::execute()
 
     /* Stage dynamic uploads */
     VulkanDataFactoryImpl* gfxF = static_cast<VulkanDataFactoryImpl*>(m_parent->getDataFactory());
-    std::unique_lock<std::mutex> datalk(gfxF->m_dataMutex);
+    std::unique_lock<std::recursive_mutex> datalk(gfxF->m_dataMutex);
     if (gfxF->m_dataHead)
     {
         for (BaseGraphicsData& d : *gfxF->m_dataHead)

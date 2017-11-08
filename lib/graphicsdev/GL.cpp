@@ -1457,7 +1457,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
 
         /* Update dynamic data here */
         GLDataFactoryImpl* gfxF = static_cast<GLDataFactoryImpl*>(m_parent->getDataFactory());
-        std::unique_lock<std::mutex> datalk(gfxF->m_dataMutex);
+        std::unique_lock<std::recursive_mutex> datalk(gfxF->m_dataMutex);
         if (gfxF->m_dataHead)
         {
             for (BaseGraphicsData& d : *gfxF->m_dataHead)

@@ -2078,7 +2078,7 @@ void D3D12CommandQueue::execute()
 
     /* Stage dynamic uploads */
     D3D12DataFactory* gfxF = static_cast<D3D12DataFactory*>(m_parent->getDataFactory());
-    std::unique_lock<std::mutex> datalk(gfxF->m_dataMutex);
+    std::unique_lock<std::recursive_mutex> datalk(gfxF->m_dataMutex);
     if (gfxF->m_dataHead)
     {
         for (BaseGraphicsData& d : *gfxF->m_dataHead)

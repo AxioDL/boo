@@ -2,6 +2,7 @@
 #define BOOOBJECT_HPP
 
 #include <atomic>
+#include <mutex>
 
 namespace boo
 {
@@ -9,13 +10,26 @@ namespace boo
 class IObj
 {
     std::atomic_int m_refCount = {0};
+protected:
+    std::recursive_mutex* m_mutex = nullptr;
 public:
     virtual ~IObj() = default;
     void increment() { m_refCount++; }
     void decrement()
     {
         if (m_refCount.fetch_sub(1) == 1)
-            delete this;
+        {
+            if (std::recursive_mutex* mutex = m_mutex)
+            {
+                mutex->lock();
+                delete this;
+                mutex->unlock();
+            }
+            else
+            {
+                delete this;
+            }
+        }
     }
 };
 

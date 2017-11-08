@@ -1509,7 +1509,7 @@ void D3D11CommandQueue::ProcessDynamicLoads(ID3D11DeviceContext* ctx)
 {
     D3D11DataFactory* gfxF = static_cast<D3D11DataFactory*>(m_parent->getDataFactory());
     std::unique_lock<std::recursive_mutex> lk(m_dynamicLock);
-    std::unique_lock<std::mutex> datalk(gfxF->m_dataMutex);
+    std::unique_lock<std::recursive_mutex> datalk(gfxF->m_dataMutex);
 
     if (gfxF->m_dataHead)
     {
