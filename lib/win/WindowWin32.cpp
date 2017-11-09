@@ -503,10 +503,7 @@ public:
         if (m_ctx->m_instance == VK_NULL_HANDLE)
         {
             const SystemString& appName = APP->getUniqueName();
-            int len = WideCharToMultiByte(CP_UTF8, 0, appName.c_str(), appName.size(), nullptr, 0, nullptr, nullptr);
-            std::string utf8(len, '\0');
-            WideCharToMultiByte(CP_UTF8, 0, appName.c_str(), appName.size(), &utf8[0], len, nullptr, nullptr);
-            m_ctx->initVulkan(utf8.c_str());
+            m_ctx->initVulkan(WCSTMBS(appName.c_str()).c_str());
         }
 
         vk::init_dispatch_table_middle(m_ctx->m_instance, false);

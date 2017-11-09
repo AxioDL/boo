@@ -427,10 +427,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
                 continue;
 
 #ifdef UNICODE
-            int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, nullptr, 0, nullptr, nullptr);
-            std::string strTo(sizeNeeded, 0);
-            WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, &strTo[0], sizeNeeded, nullptr, nullptr);
-            ret.push_back(std::make_pair(std::string(name), std::move(strTo)));
+            ret.push_back(std::make_pair(std::string(name), WCSTMBS(caps.szPname)));
 #else
             ret.push_back(std::make_pair(std::string(name), std::string(caps.szPname)));
 #endif
@@ -446,10 +443,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
                 continue;
 
 #ifdef UNICODE
-            int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, nullptr, 0, nullptr, nullptr);
-            std::string strTo(sizeNeeded, 0);
-            WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, &strTo[0], sizeNeeded, nullptr, nullptr);
-            ret.push_back(std::make_pair(std::string(name), std::move(strTo)));
+            ret.push_back(std::make_pair(std::string(name), WCSTMBS(caps.szPname)));
 #else
             ret.push_back(std::make_pair(std::string(name), std::string(caps.szPname)));
 #endif
@@ -493,10 +487,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
                 return {};
 
 #ifdef UNICODE
-            int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, nullptr, 0, nullptr, nullptr);
-            std::string strTo(sizeNeeded, 0);
-            WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, &strTo[0], sizeNeeded, nullptr, nullptr);
-            return strTo;
+            return WCSTMBS(caps.szPname);
 #else
             return caps.szPname;
 #endif
@@ -540,10 +531,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
                 return {};
 
 #ifdef UNICODE
-            int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, nullptr, 0, nullptr, nullptr);
-            std::string strTo(sizeNeeded, 0);
-            WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, &strTo[0], sizeNeeded, nullptr, nullptr);
-            return strTo;
+            return WCSTMBS(caps.szPname);
 #else
             return caps.szPname;
 #endif
@@ -598,10 +586,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
                 return {};
 
 #ifdef UNICODE
-            int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, nullptr, 0, nullptr, nullptr);
-            std::string strTo(sizeNeeded, 0);
-            WideCharToMultiByte(CP_UTF8, 0, caps.szPname, -1, &strTo[0], sizeNeeded, nullptr, nullptr);
-            return strTo;
+            return WCSTMBS(caps.szPname);
 #else
             return caps.szPname;
 #endif

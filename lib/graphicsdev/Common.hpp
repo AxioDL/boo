@@ -64,11 +64,12 @@ struct BaseGraphicsData : IObj
     template<class T> GraphicsDataNode<T, BaseGraphicsData>*& getHead();
     template<class T> size_t countForward()
     { auto* head = getHead<T>(); return head ? head->countForward() : 0; }
+    std::unique_lock<std::recursive_mutex> destructorLock() override
+    { return std::unique_lock<std::recursive_mutex>{m_head.m_dataMutex}; }
 
     explicit BaseGraphicsData(GraphicsDataFactoryHead& head)
     : m_head(head)
     {
-        IObj::m_mutex = &m_head.m_dataMutex;
         std::lock_guard<std::recursive_mutex> lk(m_head.m_dataMutex);
         m_next = head.m_dataHead;
         if (m_next)
@@ -127,11 +128,12 @@ struct BaseGraphicsPool : IObj
     template<class T> GraphicsDataNode<T, BaseGraphicsPool>*& getHead();
     template<class T> size_t countForward()
     { auto* head = getHead<T>(); return head ? head->countForward() : 0; }
+    std::unique_lock<std::recursive_mutex> destructorLock() override
+    { return std::unique_lock<std::recursive_mutex>{m_head.m_dataMutex}; }
 
     explicit BaseGraphicsPool(GraphicsDataFactoryHead& head)
     : m_head(head)
     {
-        IObj::m_mutex = &m_head.m_dataMutex;
         std::lock_guard<std::recursive_mutex> lk(m_head.m_dataMutex);
         m_next = head.m_poolHead;
         if (m_next)
@@ -172,11 +174,12 @@ struct GraphicsDataNode : NodeCls
     ObjToken<DataCls> m_data;
     GraphicsDataNode<NodeCls, DataCls>* m_next;
     GraphicsDataNode<NodeCls, DataCls>* m_prev = nullptr;
+    std::unique_lock<std::recursive_mutex> destructorLock() override
+    { return std::unique_lock<std::recursive_mutex>{m_data->m_head.m_dataMutex}; }
 
     explicit GraphicsDataNode(const ObjToken<DataCls>& data)
     : m_data(data)
     {
-        IObj::m_mutex = &m_data->m_head.m_dataMutex;
         std::lock_guard<std::recursive_mutex> lk(m_data->m_head.m_dataMutex);
         m_next = data->template getHead<NodeCls>();
         if (m_next)

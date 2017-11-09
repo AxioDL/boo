@@ -9,6 +9,10 @@
 #include <unordered_set>
 #include "xxhash.h"
 
+#if _WIN32
+#include "../win/WinCommon.hpp"
+#endif
+
 #include "logvisor/logvisor.hpp"
 
 #undef min
@@ -1124,7 +1128,11 @@ struct GLCommandQueue : IGraphicsCommandQueue
 
     static void RenderingWorker(GLCommandQueue* self)
     {
+#if _WIN32
+        std::string thrName = WCSTMBS(APP->getFriendlyName().c_str()) + " GL Rendering Thread";
+#else
         std::string thrName = APP->getFriendlyName() + " GL Rendering Thread";
+#endif
         logvisor::RegisterThreadName(thrName.c_str());
         {
             std::unique_lock<std::mutex> lk(self->m_initmt);

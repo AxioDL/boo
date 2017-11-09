@@ -256,7 +256,8 @@ public:
         int clientReturn = 0;
         std::thread clientThread([&]()
         {
-            logvisor::RegisterThreadName("Boo Client Thread");
+            std::string thrName = WCSTMBS(getFriendlyName().c_str()) + " Client Thread";
+            logvisor::RegisterThreadName(thrName.c_str());
             clientReturn = m_callback.appMain(this);
         });
 

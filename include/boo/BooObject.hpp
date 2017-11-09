@@ -10,25 +10,16 @@ namespace boo
 class IObj
 {
     std::atomic_int m_refCount = {0};
-protected:
-    std::recursive_mutex* m_mutex = nullptr;
 public:
     virtual ~IObj() = default;
+    virtual std::unique_lock<std::recursive_mutex> destructorLock() { return {}; }
     void increment() { m_refCount++; }
     void decrement()
     {
         if (m_refCount.fetch_sub(1) == 1)
         {
-            if (std::recursive_mutex* mutex = m_mutex)
-            {
-                mutex->lock();
-                delete this;
-                mutex->unlock();
-            }
-            else
-            {
-                delete this;
-            }
+            auto lk = destructorLock();
+            delete this;
         }
     }
 };

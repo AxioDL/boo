@@ -375,7 +375,8 @@ public:
         int clientReturn = 0;
         std::thread clientThread([&]()
         {
-            logvisor::RegisterThreadName("Boo Client Thread");
+            std::string thrName = WCSTMBS(getFriendlyName().c_str()) + " Client Thread";
+            logvisor::RegisterThreadName(thrName.c_str());
             CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE);
             clientReturn = m_callback.appMain(this);
             PostThreadMessage(g_mainThreadId, WM_USER+1, 0, 0);
@@ -485,7 +486,8 @@ int ApplicationRun(IApplication::EPlatformType platform,
                    const std::vector<SystemString>& args,
                    bool singleInstance)
 {
-    logvisor::RegisterThreadName("Boo Main Thread");
+    std::string thrName = WCSTMBS(friendlyName.c_str()) + " Main Thread";
+    logvisor::RegisterThreadName(thrName.c_str());
     if (APP)
         return 1;
     if (platform != IApplication::EPlatformType::Win32 &&
