@@ -201,14 +201,10 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
         if (!snd_pcm_hw_params_test_rate(m_pcm, hwParams, 96000, 0))
         {
             bestRate = 96000;
-            m_mixInfo.m_sampleRate = 96000.0;
-            m_5msFrames = 96000 * 5 / 1000;
         }
         else if (!snd_pcm_hw_params_test_rate(m_pcm, hwParams, 48000, 0))
         {
             bestRate = 48000;
-            m_mixInfo.m_sampleRate = 48000.0;
-            m_5msFrames = 48000 * 5 / 1000;
         }
         else
         {
@@ -228,24 +224,25 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             return;
         }
         m_mixInfo.m_sampleRate = bestRate;
+        m_5msFrames = bestRate * 5 / 1000;
 
-        snd_pcm_uframes_t bufSz = m_5msFrames * 3;
-        if ((errr = snd_pcm_hw_params_set_buffer_size_near(m_pcm, hwParams, &bufSz)))
-        {
-            snd_pcm_hw_params_free(hwParams);
-            snd_pcm_close(m_pcm);
-            m_pcm = nullptr;
-            Log.report(logvisor::Error, "Can't set buffer size. %s\n", snd_strerror(errr));
-            return;
-        }
-
-        snd_pcm_uframes_t periodSz = bufSz / 2;
+        snd_pcm_uframes_t periodSz = m_5msFrames * 4;
         if ((errr = snd_pcm_hw_params_set_period_size_near(m_pcm, hwParams, &periodSz, 0)))
         {
             snd_pcm_hw_params_free(hwParams);
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
             Log.report(logvisor::Error, "Can't set period size. %s\n", snd_strerror(errr));
+            return;
+        }
+
+        snd_pcm_uframes_t bufSz = periodSz * 2;
+        if ((errr = snd_pcm_hw_params_set_buffer_size_near(m_pcm, hwParams, &bufSz)))
+        {
+            snd_pcm_hw_params_free(hwParams);
+            snd_pcm_close(m_pcm);
+            m_pcm = nullptr;
+            Log.report(logvisor::Error, "Can't set buffer size. %s\n", snd_strerror(errr));
             return;
         }
 
