@@ -204,8 +204,8 @@ public:
     }
 };
 
-#define MTL_STATIC MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeShared
-#define MTL_DYNAMIC MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeShared
+#define MTL_STATIC MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeManaged
+#define MTL_DYNAMIC MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeManaged
 
 class MetalGraphicsBufferS : public GraphicsDataNode<IGraphicsBufferS>
 {
@@ -257,6 +257,7 @@ public:
         {
             id<MTLBuffer> res = m_bufs[b];
             memcpy(res.contents, m_cpuBuf.get(), m_sz);
+            [res didModifyRange:NSMakeRange(0, m_sz)];
             m_validSlots |= slot;
         }
     }
@@ -1053,7 +1054,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         }
     }
 
-    MetalTextureR* m_boundTarget = nullptr;
+    ObjToken<ITextureR> m_boundTarget;
     void _setRenderTarget(const ObjToken<ITextureR>& target, bool clearColor, bool clearDepth)
     {
         @autoreleasepool
@@ -1069,7 +1070,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             else
                 m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:ctarget->m_passDesc];
             [m_enc setFrontFacingWinding:MTLWindingCounterClockwise];
-            if (ctarget == m_boundTarget)
+            if (ctarget == m_boundTarget.get())
             {
                 if (m_boundVp.width || m_boundVp.height)
                     [m_enc setViewport:m_boundVp];
@@ -1077,7 +1078,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                     [m_enc setScissorRect:m_boundScissor];
             }
             else
-                m_boundTarget = ctarget;
+                m_boundTarget = target;
         }
     }
 
@@ -1090,7 +1091,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     void setViewport(const SWindowRect& rect, float znear, float zfar)
     {
         m_boundVp = MTLViewport{double(rect.location[0]), double(rect.location[1]),
-                                double(rect.size[0]), double(rect.size[1]), znear, zfar};
+                                double(rect.size[0]), double(rect.size[1]), 1.f - zfar, 1.f - znear};
         [m_enc setViewport:m_boundVp];
     }
 
@@ -1099,9 +1100,10 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     {
         if (m_boundTarget)
         {
-            SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, m_boundTarget->m_width, m_boundTarget->m_height));
+            MetalTextureR* ctarget = m_boundTarget.cast<MetalTextureR>();
+            SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, ctarget->m_width, ctarget->m_height));
             m_boundScissor = MTLScissorRect{NSUInteger(intersectRect.location[0]),
-                NSUInteger(m_boundTarget->m_height - intersectRect.location[1] - intersectRect.size[1]),
+                NSUInteger(ctarget->m_height - intersectRect.location[1] - intersectRect.size[1]),
                 NSUInteger(intersectRect.size[0]), NSUInteger(intersectRect.size[1])};
             [m_enc setScissorRect:m_boundScissor];
         }
