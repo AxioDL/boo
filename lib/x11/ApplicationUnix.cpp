@@ -50,13 +50,13 @@ namespace boo
 IApplication* APP = NULL;
 int ApplicationRun(IApplication::EPlatformType platform,
                    IApplicationCallback& cb,
-                   const std::string& uniqueName,
-                   const std::string& friendlyName,
-                   const std::string& pname,
+                   std::string_view uniqueName,
+                   std::string_view friendlyName,
+                   std::string_view pname,
                    const std::vector<std::string>& args,
                    bool singleInstance)
 {
-    std::string thrName = friendlyName + " Main Thread";
+    std::string thrName = std::string(friendlyName) + " Main Thread";
     logvisor::RegisterThreadName(thrName.c_str());
     if (APP)
         return 1;

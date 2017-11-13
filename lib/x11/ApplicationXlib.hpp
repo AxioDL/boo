@@ -219,9 +219,9 @@ class ApplicationXlib final : public IApplication
     
 public:
     ApplicationXlib(IApplicationCallback& callback,
-                    const std::string& uniqueName,
-                    const std::string& friendlyName,
-                    const std::string& pname,
+                    std::string_view uniqueName,
+                    std::string_view friendlyName,
+                    std::string_view pname,
                     const std::vector<std::string>& args,
                     bool singleInstance)
     : m_callback(callback),
@@ -254,7 +254,7 @@ public:
 
         /* DBus single instance registration */
         bool isFirst;
-        m_dbus = RegisterDBus(uniqueName.c_str(), isFirst);
+        m_dbus = RegisterDBus(uniqueName.data(), isFirst);
         if (m_singleInstance)
         {
             if (!isFirst)
@@ -433,7 +433,7 @@ public:
             std::unique_lock<std::mutex> innerLk(initmt);
             innerLk.unlock();
             initcv.notify_one();
-            std::string thrName = getFriendlyName() + " Client Thread";
+            std::string thrName = std::string(getFriendlyName()) + " Client Thread";
             logvisor::RegisterThreadName(thrName.c_str());
             clientReturn = m_callback.appMain(this);
             pthread_kill(mainThread, SIGUSR2);
@@ -507,17 +507,17 @@ public:
         return clientReturn;
     }
 
-    const std::string& getUniqueName() const
+    std::string_view getUniqueName() const
     {
         return m_uniqueName;
     }
 
-    const std::string& getFriendlyName() const
+    std::string_view getFriendlyName() const
     {
         return m_friendlyName;
     }
     
-    const std::string& getProcessName() const
+    std::string_view getProcessName() const
     {
         return m_pname;
     }
@@ -527,7 +527,7 @@ public:
         return m_args;
     }
     
-    std::shared_ptr<IWindow> newWindow(const std::string& title, uint32_t drawSamples)
+    std::shared_ptr<IWindow> newWindow(std::string_view title, uint32_t drawSamples)
     {
 #if BOO_HAS_VULKAN
         std::shared_ptr<IWindow> newWindow = _WindowXlibNew(title, m_xDisp, m_xcbConn, m_xDefaultScreen, m_xIM,

@@ -130,7 +130,7 @@ struct WindowWayland : IWindow
         return "";
     }
     
-    void setTitle(const std::string& title)
+    void setTitle(std::string_view title)
     {
         
     }
@@ -244,7 +244,7 @@ struct WindowWayland : IWindow
 
 };
 
-std::shared_ptr<IWindow> _WindowWaylandNew(const std::string& title)
+std::shared_ptr<IWindow> _WindowWaylandNew(std::string_view title)
 {
     return std::make_shared<WindowWayland>(title);
 }

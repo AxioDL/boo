@@ -82,7 +82,7 @@ class HIDDeviceUdev final : public IHIDDevice
         int i;
         char errStr[256];
         std::unique_lock<std::mutex> lk(device->m_initMutex);
-        udev_device* udevDev = udev_device_new_from_syspath(GetUdev(), device->m_devPath.c_str());
+        udev_device* udevDev = udev_device_new_from_syspath(GetUdev(), device->m_devPath.data());
 
         /* Get device file */
         const char* dp = udev_device_get_devnode(udevDev);
@@ -90,7 +90,7 @@ class HIDDeviceUdev final : public IHIDDevice
         if (fd < 0)
         {
             snprintf(errStr, 256, "Unable to open %s@%s: %s\n",
-                     device->m_token.getProductName().c_str(), dp, strerror(errno));
+                     device->m_token.getProductName().data(), dp, strerror(errno));
             device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
@@ -155,7 +155,7 @@ class HIDDeviceUdev final : public IHIDDevice
     static void _threadProcBTLL(std::shared_ptr<HIDDeviceUdev> device)
     {
         std::unique_lock<std::mutex> lk(device->m_initMutex);
-        udev_device* udevDev = udev_device_new_from_syspath(GetUdev(), device->m_devPath.c_str());
+        udev_device* udevDev = udev_device_new_from_syspath(GetUdev(), device->m_devPath.data());
 
         /* Return control to main thread */
         device->m_runningTransferLoop = true;
@@ -177,7 +177,7 @@ class HIDDeviceUdev final : public IHIDDevice
     {
         char errStr[256];
         std::unique_lock<std::mutex> lk(device->m_initMutex);
-        udev_device* udevDev = udev_device_new_from_syspath(GetUdev(), device->m_devPath.c_str());
+        udev_device* udevDev = udev_device_new_from_syspath(GetUdev(), device->m_devPath.data());
 
         /* Get device file */
         const char* dp = udev_device_get_devnode(udevDev);
@@ -185,7 +185,7 @@ class HIDDeviceUdev final : public IHIDDevice
         if (fd < 0)
         {
             snprintf(errStr, 256, "Unable to open %s@%s: %s\n",
-                     device->m_token.getProductName().c_str(), dp, strerror(errno));
+                     device->m_token.getProductName().data(), dp, strerror(errno));
             device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
@@ -204,7 +204,7 @@ class HIDDeviceUdev final : public IHIDDevice
         if (ioctl(fd, HIDIOCGRDESCSIZE, &reportDescSize) == -1)
         {
             snprintf(errStr, 256, "Unable to ioctl(HIDIOCGRDESCSIZE) %s@%s: %s\n",
-                     device->m_token.getProductName().c_str(), dp, strerror(errno));
+                     device->m_token.getProductName().data(), dp, strerror(errno));
             device->m_devImp->deviceError(errStr);
             close(fd);
             return;
@@ -216,7 +216,7 @@ class HIDDeviceUdev final : public IHIDDevice
         if (ioctl(fd, HIDIOCGRDESC, &reportDesc) == -1)
         {
             snprintf(errStr, 256, "Unable to ioctl(HIDIOCGRDESC) %s@%s: %s\n",
-                     device->m_token.getProductName().c_str(), dp, strerror(errno));
+                     device->m_token.getProductName().data(), dp, strerror(errno));
             device->m_devImp->deviceError(errStr);
             close(fd);
             return;

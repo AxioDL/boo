@@ -260,7 +260,7 @@ static void demo_check_layers(const std::vector<VulkanContext::LayerProperties>&
     }
 }
 
-void VulkanContext::initVulkan(const char* appName)
+void VulkanContext::initVulkan(std::string_view appName)
 {
     if (!glslang::InitializeProcess())
         Log.report(logvisor::Fatal, "unable to initialize glslang");
@@ -346,7 +346,7 @@ void VulkanContext::initVulkan(const char* appName)
     VkApplicationInfo appInfo = {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pNext = nullptr;
-    appInfo.pApplicationName = appName;
+    appInfo.pApplicationName = appName.data();
     appInfo.applicationVersion = 1;
     appInfo.pEngineName = "Boo";
     appInfo.engineVersion = 1;

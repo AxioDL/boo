@@ -75,7 +75,7 @@ struct VulkanContext
     };
     std::unordered_map<const boo::IWindow*, std::unique_ptr<Window>> m_windows;
 
-    void initVulkan(const char* appName);
+    void initVulkan(std::string_view appName);
     bool enumerateDevices();
     void initDevice();
     void initSwapChain(Window& windowCtx, VkSurfaceKHR surface, VkFormat format, VkColorSpaceKHR colorspace);

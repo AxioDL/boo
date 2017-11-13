@@ -704,7 +704,7 @@ public:
 
         vk::init_dispatch_table_top(PFN_vkGetInstanceProcAddr(getVkProc));
         if (m_ctx->m_instance == VK_NULL_HANDLE)
-            m_ctx->initVulkan(APP->getUniqueName().c_str());
+            m_ctx->initVulkan(APP->getUniqueName());
 
         vk::init_dispatch_table_middle(m_ctx->m_instance, false);
         if (!m_ctx->enumerateDevices())
@@ -1042,7 +1042,7 @@ public:
             XSetWMProtocols(m_xDisp, m_windowId, &S_ATOMS->m_wmDeleteWindow, 1);
 
             /* Set the title of the window */
-            const unsigned char* c_title = (unsigned char*)title.c_str();
+            const unsigned char* c_title = (unsigned char*)title.data();
             XChangeProperty(m_xDisp, m_windowId, XA_WM_NAME, XA_STRING, 8, PropModeReplace, c_title, title.length());
 
             /* Set the title of the window icon */
@@ -1133,7 +1133,7 @@ public:
     
     void setTitle(std::string_view title)
     {
-        const unsigned char* c_title = (unsigned char*)title.c_str();
+        const unsigned char* c_title = (unsigned char*)title.data();
         XLockDisplay(m_xDisp);
         XChangeProperty(m_xDisp, m_windowId, XA_WM_NAME, XA_STRING, 8,
                         PropModeReplace, c_title, title.length());
@@ -2011,7 +2011,7 @@ public:
     }
 };
 
-std::shared_ptr<IWindow> _WindowXlibNew(const std::string& title,
+std::shared_ptr<IWindow> _WindowXlibNew(std::string_view title,
                          Display* display, void* xcbConn,
                          int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
                          GLXContext lastCtx, void* vulkanHandle, uint32_t drawSamples)
