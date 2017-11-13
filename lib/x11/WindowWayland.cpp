@@ -94,7 +94,7 @@ struct WindowWayland : IWindow
 {    
     GraphicsContextWayland m_gfxCtx;
 
-    WindowWayland(const std::string& title)
+    WindowWayland(std::string_view title)
         : m_gfxCtx(IGraphicsContext::EGraphicsAPI::OpenGL3_3, this)
     {
         

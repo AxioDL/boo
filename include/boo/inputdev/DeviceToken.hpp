@@ -58,9 +58,9 @@ public:
     inline DeviceType getDeviceType() const {return m_devType;}
     inline unsigned getVendorId() const {return m_vendorId;}
     inline unsigned getProductId() const {return m_productId;}
-    inline const std::string& getVendorName() const {return m_vendorName;}
-    inline const std::string& getProductName() const {return m_productName;}
-    inline const std::string& getDevicePath() const {return m_devPath;}
+    inline std::string_view getVendorName() const {return m_vendorName;}
+    inline std::string_view getProductName() const {return m_productName;}
+    inline std::string_view getDevicePath() const {return m_devPath;}
     inline bool isDeviceOpen() const {return (m_connectedDev != NULL);}
     inline std::shared_ptr<DeviceBase> openAndGetDevice()
     {

@@ -936,7 +936,7 @@ class WindowXlib : public IWindow
     bool m_openGL = false;
 
 public:
-    WindowXlib(const std::string& title,
+    WindowXlib(std::string_view title,
                Display* display, void* xcbConn,
                int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
                GLXContext lastCtx, void* vulkanHandle, uint32_t drawSamples)
@@ -1131,7 +1131,7 @@ public:
         return std::string();
     }
     
-    void setTitle(const std::string& title)
+    void setTitle(std::string_view title)
     {
         const unsigned char* c_title = (unsigned char*)title.c_str();
         XLockDisplay(m_xDisp);

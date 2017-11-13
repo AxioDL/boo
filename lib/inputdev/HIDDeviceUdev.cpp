@@ -37,7 +37,7 @@ class HIDDeviceUdev final : public IHIDDevice
     unsigned m_usbIntfOutPipe = 0;
     bool m_runningTransferLoop = false;
 
-    const std::string& m_devPath;
+    std::string_view m_devPath;
     std::mutex m_initMutex;
     std::condition_variable m_initCond;
     std::thread m_thread;

@@ -1131,7 +1131,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
 #if _WIN32
         std::string thrName = WCSTMBS(APP->getFriendlyName().c_str()) + " GL Rendering Thread";
 #else
-        std::string thrName = APP->getFriendlyName() + " GL Rendering Thread";
+        std::string thrName = std::string(APP->getFriendlyName()) + " GL Rendering Thread";
 #endif
         logvisor::RegisterThreadName(thrName.c_str());
         {

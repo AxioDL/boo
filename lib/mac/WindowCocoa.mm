@@ -20,7 +20,7 @@ namespace boo {class WindowCocoa; class GraphicsContextCocoa;}
     std::shared_ptr<boo::WindowCocoa> booWindow;
     id touchBarProvider;
 }
-- (id)initWithBooWindow:(std::shared_ptr<boo::WindowCocoa>&)bw title:(const std::string&)title;
+- (id)initWithBooWindow:(std::shared_ptr<boo::WindowCocoa>&)bw title:(std::string_view)title;
 - (void)setFrameDefault;
 - (NSRect)genFrameDefault;
 - (void)setTouchBarProvider:(id)provider;
@@ -1271,7 +1271,7 @@ class WindowCocoa : public IWindow
 
 public:
 
-    void setup(const std::string& title, NSOpenGLContext* lastGLCtx, MetalContext* metalCtx, uint32_t sampleCount)
+    void setup(std::string_view title, NSOpenGLContext* lastGLCtx, MetalContext* metalCtx, uint32_t sampleCount)
     {
         dispatch_sync(dispatch_get_main_queue(),
         ^{
@@ -1337,11 +1337,11 @@ public:
         return [[m_nsWindow title] UTF8String];
     }
 
-    void setTitle(const std::string& title)
+    void setTitle(std::string_view title)
     {
         dispatch_sync(dispatch_get_main_queue(),
         ^{
-            [m_nsWindow setTitle:[NSString stringWithUTF8String:title.c_str()]];
+            [m_nsWindow setTitle:[NSString stringWithUTF8String:title.data()]];
         });
     }
 
@@ -1559,7 +1559,7 @@ public:
 
 };
 
-std::shared_ptr<IWindow> _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx,
+std::shared_ptr<IWindow> _WindowCocoaNew(SystemStringView title, NSOpenGLContext* lastGLCtx,
                                          MetalContext* metalCtx, uint32_t sampleCount)
 {
     auto ret = std::make_shared<WindowCocoa>();
@@ -1570,7 +1570,7 @@ std::shared_ptr<IWindow> _WindowCocoaNew(const SystemString& title, NSOpenGLCont
 }
 
 @implementation WindowCocoaInternal
-- (id)initWithBooWindow:(std::shared_ptr<boo::WindowCocoa>&)bw title:(const boo::SystemString&)title
+- (id)initWithBooWindow:(std::shared_ptr<boo::WindowCocoa>&)bw title:(std::string_view)title
 {
     self = [self initWithContentRect:[self genFrameDefault]
                            styleMask:NSWindowStyleMaskTitled|
@@ -1580,7 +1580,7 @@ std::shared_ptr<IWindow> _WindowCocoaNew(const SystemString& title, NSOpenGLCont
                              backing:NSBackingStoreBuffered
                                defer:YES];
     self.releasedWhenClosed = NO;
-    self.title = [NSString stringWithUTF8String:title.c_str()];
+    self.title = [NSString stringWithUTF8String:title.data()];
     booWindow = bw;
     return self;
 }

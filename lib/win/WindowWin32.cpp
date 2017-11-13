@@ -502,8 +502,8 @@ public:
         vk::init_dispatch_table_top(PFN_vkGetInstanceProcAddr(getVkProc));
         if (m_ctx->m_instance == VK_NULL_HANDLE)
         {
-            const SystemString& appName = APP->getUniqueName();
-            m_ctx->initVulkan(WCSTMBS(appName.c_str()).c_str());
+            auto appName = APP->getUniqueName();
+            m_ctx->initVulkan(WCSTMBS(appName.data()).c_str());
         }
 
         vk::init_dispatch_table_middle(m_ctx->m_instance, false);
@@ -970,7 +970,7 @@ class WindowWin32 : public IWindow
 
 public:
 
-    WindowWin32(const SystemString& title, Boo3DAppContextWin32& b3dCtx, void* vulkanHandle, uint32_t sampleCount)
+    WindowWin32(SystemStringView title, Boo3DAppContextWin32& b3dCtx, void* vulkanHandle, uint32_t sampleCount)
     {
         m_hwnd = CreateWindowW(L"BooWindow", title.c_str(), WS_OVERLAPPEDWINDOW,
                                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
@@ -1034,9 +1034,9 @@ public:
         return SystemString(title, c);
     }
 
-    void setTitle(const SystemString& title)
+    void setTitle(SystemStringView title)
     {
-        SetWindowTextW(m_hwnd, title.c_str());
+        SetWindowTextW(m_hwnd, title.data());
     }
 
     static void _setCursor(HCURSOR cur)
@@ -1582,7 +1582,7 @@ public:
 
 };
 
-std::shared_ptr<IWindow> _WindowWin32New(const SystemString& title, Boo3DAppContextWin32& d3dCtx,
+std::shared_ptr<IWindow> _WindowWin32New(SystemStringView title, Boo3DAppContextWin32& d3dCtx,
                                          void* vulkanHandle, uint32_t sampleCount)
 {
     return std::make_shared<WindowWin32>(title, d3dCtx, vulkanHandle, sampleCount);

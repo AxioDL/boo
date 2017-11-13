@@ -67,7 +67,7 @@ namespace boo
 static logvisor::Module Log("boo::ApplicationWin32");
 Win32Cursors WIN32_CURSORS;
 
-std::shared_ptr<IWindow> _WindowWin32New(const SystemString& title, Boo3DAppContextWin32& d3dCtx,
+std::shared_ptr<IWindow> _WindowWin32New(SystemStringView title, Boo3DAppContextWin32& d3dCtx,
                                          void* vulkanHandle, uint32_t sampleCount);
 
 class ApplicationWin32 final : public IApplication
@@ -93,9 +93,9 @@ class ApplicationWin32 final : public IApplication
 public:
 
     ApplicationWin32(IApplicationCallback& callback,
-                     const SystemString& uniqueName,
-                     const SystemString& friendlyName,
-                     const SystemString& pname,
+                     SystemStringView uniqueName,
+                     SystemStringView friendlyName,
+                     SystemStringView pname,
                      const std::vector<SystemString>& args,
                      bool singleInstance)
     : m_callback(callback),
@@ -429,17 +429,17 @@ public:
         return clientReturn;
     }
 
-    const SystemString& getUniqueName() const
+    SystemStringView getUniqueName() const
     {
         return m_uniqueName;
     }
 
-    const SystemString& getFriendlyName() const
+    SystemStringView getFriendlyName() const
     {
         return m_friendlyName;
     }
 
-    const SystemString& getProcessName() const
+    SystemStringView getProcessName() const
     {
         return m_pname;
     }
@@ -452,7 +452,7 @@ public:
     std::mutex m_nwmt;
     std::condition_variable m_nwcv;
     std::shared_ptr<IWindow> m_mwret;
-    std::shared_ptr<IWindow> newWindow(const SystemString& title, uint32_t sampleCount)
+    std::shared_ptr<IWindow> newWindow(SystemStringView title, uint32_t sampleCount)
     {
         if (GetCurrentThreadId() != g_mainThreadId)
         {
@@ -480,9 +480,9 @@ public:
 IApplication* APP = NULL;
 int ApplicationRun(IApplication::EPlatformType platform,
                    IApplicationCallback& cb,
-                   const SystemString& uniqueName,
-                   const SystemString& friendlyName,
-                   const SystemString& pname,
+                   SystemStringView uniqueName,
+                   SystemStringView friendlyName,
+                   SystemStringView pname,
                    const std::vector<SystemString>& args,
                    bool singleInstance)
 {

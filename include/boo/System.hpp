@@ -13,6 +13,7 @@ static inline ComPtr<T>* ReferenceComPtr(ComPtr<T>& ptr)
 #endif
 
 #include <string>
+#include <string_view>
 
 #ifndef ENABLE_BITWISE_ENUM
 #define ENABLE_BITWISE_ENUM(type)\
@@ -50,12 +51,14 @@ namespace boo
 
 #ifdef _WIN32
     using SystemString = std::wstring;
+    using SystemStringView = std::wstring_view;
     using SystemChar = wchar_t;
 #   ifndef _S
 #   define _S(val) L ## val
 #   endif
 #else
     using SystemString = std::string;
+    using SystemStringView = std::string_view;
     using SystemChar = char;
 #   ifndef _S
 #   define _S(val) val

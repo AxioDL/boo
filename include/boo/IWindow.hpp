@@ -157,14 +157,14 @@ struct ITextInputCallback
     virtual bool hasMarkedText() const=0;
     virtual std::pair<int,int> markedRange() const=0;
     virtual std::pair<int,int> selectedRange() const=0;
-    virtual void setMarkedText(const std::string& str,
+    virtual void setMarkedText(std::string_view str,
                                const std::pair<int,int>& selectedRange,
                                const std::pair<int,int>& replacementRange)=0;
     virtual void unmarkText()=0;
     
     virtual std::string substringForRange(const std::pair<int,int>& range,
                                           std::pair<int,int>& actualRange) const=0;
-    virtual void insertText(const std::string& str, const std::pair<int,int>& range={-1,0})=0;
+    virtual void insertText(std::string_view str, const std::pair<int,int>& range={-1,0})=0;
     virtual int characterIndexAtPoint(const SWindowCoord& point) const=0;
     virtual SWindowRect rectForCharacterRange(const std::pair<int,int>& range,
                                               std::pair<int,int>& actualRange) const=0;
@@ -267,7 +267,7 @@ public:
     virtual void hideWindow()=0;
     
     virtual SystemString getTitle()=0;
-    virtual void setTitle(const SystemString& title)=0;
+    virtual void setTitle(SystemStringView title)=0;
 
     virtual void setCursor(EMouseCursor cursor)=0;
     virtual void setWaitCursor(bool wait)=0;

@@ -45,22 +45,22 @@ public:
     virtual EPlatformType getPlatformType() const=0;
     
     virtual int run()=0;
-    virtual const SystemString& getUniqueName() const=0;
-    virtual const SystemString& getFriendlyName() const=0;
-    virtual const SystemString& getProcessName() const=0;
+    virtual SystemStringView getUniqueName() const=0;
+    virtual SystemStringView getFriendlyName() const=0;
+    virtual SystemStringView getProcessName() const=0;
     virtual const std::vector<SystemString>& getArgs() const=0;
     
     /* Constructors/initializers for sub-objects */
-    virtual std::shared_ptr<IWindow> newWindow(const SystemString& title, uint32_t drawSamples)=0;
+    virtual std::shared_ptr<IWindow> newWindow(SystemStringView title, uint32_t drawSamples)=0;
     
 };
 
 int
 ApplicationRun(IApplication::EPlatformType platform,
                IApplicationCallback& cb,
-               const SystemString& uniqueName,
-               const SystemString& friendlyName,
-               const SystemString& pname,
+               SystemStringView uniqueName,
+               SystemStringView friendlyName,
+               SystemStringView pname,
                const std::vector<SystemString>& args,
                bool singleInstance=true);
 extern IApplication* APP;
@@ -68,8 +68,8 @@ extern IApplication* APP;
 static inline int
 ApplicationRun(IApplication::EPlatformType platform,
                IApplicationCallback& cb,
-               const SystemString& uniqueName,
-               const SystemString& friendlyName,
+               SystemStringView uniqueName,
+               SystemStringView friendlyName,
                int argc, const SystemChar** argv,
                bool singleInstance=true)
 {
@@ -87,9 +87,9 @@ using namespace Windows::ApplicationModel::Core;
 ref struct ViewProvider sealed : IFrameworkViewSource
 {
     ViewProvider(boo::IApplicationCallback& appCb,
-                 const SystemString& uniqueName,
-                 const SystemString& friendlyName,
-                 const SystemString& pname,
+                 SystemStringView uniqueName,
+                 SystemStringView friendlyName,
+                 SystemStringView pname,
                  Platform::Array<Platform::String^>^ params,
                  bool singleInstance)
     : m_appCb(appCb), m_uniqueName(uniqueName), m_friendlyName(friendlyName),

@@ -114,7 +114,7 @@ static Window GetWindowOfEvent(XEvent* event, bool& windowEvent)
     return 0;
 }
     
-std::shared_ptr<IWindow> _WindowXlibNew(const std::string& title,
+std::shared_ptr<IWindow> _WindowXlibNew(std::string_view title,
                          Display* display, void* xcbConn,
                          int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
                          GLXContext lastCtx, void* vulkanHandle, uint32_t drawSamples);

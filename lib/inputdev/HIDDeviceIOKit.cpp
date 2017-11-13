@@ -20,7 +20,7 @@ class HIDDeviceIOKit : public IHIDDevice
     bool m_runningTransferLoop = false;
     bool m_isBt = false;
 
-    const std::string& m_devPath;
+    std::string_view m_devPath;
     std::mutex m_initMutex;
     std::condition_variable m_initCond;
     std::thread m_thread;
@@ -91,14 +91,15 @@ class HIDDeviceIOKit : public IHIDDevice
     static void _threadProcUSBLL(std::shared_ptr<HIDDeviceIOKit> device)
     {
         char thrName[128];
-        snprintf(thrName, 128, "%s Transfer Thread", device->m_token.getProductName().c_str());
+        snprintf(thrName, 128, "%s Transfer Thread", device->m_token.getProductName().data());
         pthread_setname_np(thrName);
         char errStr[256];
         std::unique_lock<std::mutex> lk(device->m_initMutex);
 
         /* Get the HID element's parent (USB interrupt transfer-interface) */
         IOObjectPointer<io_iterator_t> devIter;
-        IOObjectPointer<io_registry_entry_t> devEntry = IORegistryEntryFromPath(kIOMasterPortDefault, device->m_devPath.c_str());
+        IOObjectPointer<io_registry_entry_t> devEntry = IORegistryEntryFromPath(kIOMasterPortDefault,
+                                                                                device->m_devPath.data());
         IORegistryEntryGetChildIterator(devEntry, kIOServicePlane, &devIter);
         IOObjectPointer<io_object_t> interfaceEntry;
         while (IOObjectPointer<io_service_t> obj = IOIteratorNext(devIter))
@@ -111,8 +112,8 @@ class HIDDeviceIOKit : public IHIDDevice
         if (!interfaceEntry)
         {
             snprintf(errStr, 256, "Unable to find interface for %s@%s\n",
-                     device->m_token.getProductName().c_str(),
-                     device->m_devPath.c_str());
+                     device->m_token.getProductName().data(),
+                     device->m_devPath.data());
             device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
@@ -131,7 +132,7 @@ class HIDDeviceIOKit : public IHIDDevice
         if (err)
         {
             snprintf(errStr, 256, "Unable to open %s@%s\n",
-                     device->m_token.getProductName().c_str(), device->m_devPath.c_str());
+                     device->m_token.getProductName().data(), device->m_devPath.data());
             device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
@@ -144,7 +145,7 @@ class HIDDeviceIOKit : public IHIDDevice
         if (err)
         {
             snprintf(errStr, 256, "Unable to open %s@%s\n",
-                     device->m_token.getProductName().c_str(), device->m_devPath.c_str());
+                     device->m_token.getProductName().data(), device->m_devPath.data());
             device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
@@ -159,13 +160,13 @@ class HIDDeviceIOKit : public IHIDDevice
             if (err == kIOReturnExclusiveAccess)
             {
                 snprintf(errStr, 256, "Unable to open %s@%s: someone else using it\n",
-                         device->m_token.getProductName().c_str(), device->m_devPath.c_str());
+                         device->m_token.getProductName().data(), device->m_devPath.data());
                 device->m_devImp->deviceError(errStr);
             }
             else
             {
                 snprintf(errStr, 256, "Unable to open %s@%s\n",
-                         device->m_token.getProductName().c_str(), device->m_devPath.c_str());
+                         device->m_token.getProductName().data(), device->m_devPath.data());
                 device->m_devImp->deviceError(errStr);
             }
             lk.unlock();
@@ -243,19 +244,19 @@ class HIDDeviceIOKit : public IHIDDevice
     static void _threadProcHID(std::shared_ptr<HIDDeviceIOKit> device)
     {
         char thrName[128];
-        snprintf(thrName, 128, "%s Transfer Thread", device->m_token.getProductName().c_str());
+        snprintf(thrName, 128, "%s Transfer Thread", device->m_token.getProductName().data());
         pthread_setname_np(thrName);
         char errStr[256];
         std::unique_lock<std::mutex> lk(device->m_initMutex);
 
         /* Get the HID element's object (HID device interface) */
         IOObjectPointer<io_service_t> interfaceEntry =
-            IORegistryEntryFromPath(kIOMasterPortDefault, device->m_devPath.c_str());
+            IORegistryEntryFromPath(kIOMasterPortDefault, device->m_devPath.data());
         if (!IOObjectConformsTo(interfaceEntry.get(), "IOHIDDevice"))
         {
             snprintf(errStr, 256, "Unable to find interface for %s@%s\n",
-                     device->m_token.getProductName().c_str(),
-                     device->m_devPath.c_str());
+                     device->m_token.getProductName().data(),
+                     device->m_devPath.data());
             device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
@@ -266,7 +267,7 @@ class HIDDeviceIOKit : public IHIDDevice
         if (!device->m_hidIntf)
         {
             snprintf(errStr, 256, "Unable to open %s@%s\n",
-                     device->m_token.getProductName().c_str(), device->m_devPath.c_str());
+                     device->m_token.getProductName().data(), device->m_devPath.data());
             device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
@@ -280,13 +281,13 @@ class HIDDeviceIOKit : public IHIDDevice
             if (err == kIOReturnExclusiveAccess)
             {
                 snprintf(errStr, 256, "Unable to open %s@%s: someone else using it\n",
-                         device->m_token.getProductName().c_str(), device->m_devPath.c_str());
+                         device->m_token.getProductName().data(), device->m_devPath.data());
                 device->m_devImp->deviceError(errStr);
             }
             else
             {
                 snprintf(errStr, 256, "Unable to open %s@%s\n",
-                         device->m_token.getProductName().c_str(), device->m_devPath.c_str());
+                         device->m_token.getProductName().data(), device->m_devPath.data());
                 device->m_devImp->deviceError(errStr);
             }
             lk.unlock();

@@ -253,7 +253,7 @@ class WindowUWP : public IWindow
 
 public:
 
-    WindowUWP(const SystemString& title, Boo3DAppContext& b3dCtx, uint32_t sampleCount)
+    WindowUWP(SystemStringView title, Boo3DAppContext& b3dCtx, uint32_t sampleCount)
     {
         IGraphicsContext::EGraphicsAPI api = IGraphicsContext::EGraphicsAPI::D3D11;
 #if _WIN32_WINNT_WIN10
@@ -296,9 +296,9 @@ public:
         return SystemString(m_appView->Title.Data());
     }
 
-    void setTitle(const SystemString& title)
+    void setTitle(SystemStringView title)
     {
-        m_appView->Title = title.c_str();
+        m_appView->Title = title.data();
     }
 
     void setCursor(EMouseCursor cursor)
@@ -459,7 +459,7 @@ public:
 
 };
 
-std::shared_ptr<IWindow> _WindowUAPNew(const SystemString& title, Boo3DAppContext& d3dCtx,
+std::shared_ptr<IWindow> _WindowUAPNew(SystemStringView title, Boo3DAppContext& d3dCtx,
                                        uint32_t sampleCount)
 {
     return std::make_shared<WindowUWP>(title, d3dCtx, sampleCount);

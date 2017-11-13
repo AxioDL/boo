@@ -55,7 +55,7 @@ namespace boo
 {
 static logvisor::Module Log("boo::ApplicationUWP");
 
-std::shared_ptr<IWindow> _WindowUWPNew(const SystemString& title, Boo3DAppContextUWP& d3dCtx,
+std::shared_ptr<IWindow> _WindowUWPNew(SystemStringView title, Boo3DAppContextUWP& d3dCtx,
                                        uint32_t sampleCount);
 
 class ApplicationUWP final : public IApplication
@@ -79,9 +79,9 @@ class ApplicationUWP final : public IApplication
 public:
 
     ApplicationUWP(IApplicationCallback& callback,
-                   const SystemString& uniqueName,
-                   const SystemString& friendlyName,
-                   const SystemString& pname,
+                   SystemStringView uniqueName,
+                   SystemStringView friendlyName,
+                   SystemStringView pname,
                    const std::vector<SystemString>& args,
                    bool singleInstance)
     : m_callback(callback),
@@ -266,17 +266,17 @@ public:
         return clientReturn;
     }
 
-    const SystemString& getUniqueName() const
+    SystemStringView getUniqueName() const
     {
         return m_uniqueName;
     }
 
-    const SystemString& getFriendlyName() const
+    SystemStringView getFriendlyName() const
     {
         return m_friendlyName;
     }
 
-    const SystemString& getProcessName() const
+    SystemStringView getProcessName() const
     {
         return m_pname;
     }
@@ -286,7 +286,7 @@ public:
         return m_args;
     }
 
-    std::shared_ptr<IWindow> newWindow(const SystemString& title, uint32_t sampleCount)
+    std::shared_ptr<IWindow> newWindow(SystemStringView title, uint32_t sampleCount)
     {
         if (!m_issuedWindow)
         {
@@ -309,9 +309,9 @@ ref class AppView sealed : public IFrameworkView
 
 internal:
     AppView(IApplicationCallback& callback,
-            const SystemString& uniqueName,
-            const SystemString& friendlyName,
-            const SystemString& pname,
+            SystemStringView uniqueName,
+            SystemStringView friendlyName,
+            SystemStringView pname,
             const std::vector<SystemString>& args,
             bool singleInstance)
     : m_app(callback, uniqueName, friendlyName, pname, args, singleInstance) { APP = &m_app; }

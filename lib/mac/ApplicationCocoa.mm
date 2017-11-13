@@ -30,7 +30,7 @@ namespace boo
 {
 static logvisor::Module Log("boo::ApplicationCocoa");
 
-std::shared_ptr<IWindow> _WindowCocoaNew(const SystemString& title, NSOpenGLContext* lastGLCtx,
+std::shared_ptr<IWindow> _WindowCocoaNew(SystemStringView title, NSOpenGLContext* lastGLCtx,
                                          MetalContext* metalCtx, uint32_t sampleCount);
 
 class ApplicationCocoa : public IApplication
@@ -58,9 +58,9 @@ private:
 
 public:
     ApplicationCocoa(IApplicationCallback& callback,
-                     const SystemString& uniqueName,
-                     const SystemString& friendlyName,
-                     const SystemString& pname,
+                     SystemStringView uniqueName,
+                     SystemStringView friendlyName,
+                     SystemStringView pname,
                      const std::vector<SystemString>& args)
     : m_callback(callback),
       m_uniqueName(uniqueName),
@@ -120,7 +120,7 @@ public:
         /* Spawn client thread */
         m_clientThread = std::thread([&]()
         {
-            std::string thrName = getFriendlyName() + " Client Thread";
+            std::string thrName = std::string(getFriendlyName()) + " Client Thread";
             logvisor::RegisterThreadName(thrName.c_str());
 
             /* Run app */
@@ -161,17 +161,17 @@ public:
         [NSApp terminate:nil];
     }
 
-    const SystemString& getUniqueName() const
+    SystemStringView getUniqueName() const
     {
         return m_uniqueName;
     }
 
-    const SystemString& getFriendlyName() const
+    SystemStringView getFriendlyName() const
     {
         return m_friendlyName;
     }
 
-    const SystemString& getProcessName() const
+    SystemStringView getProcessName() const
     {
         return m_pname;
     }
@@ -181,7 +181,7 @@ public:
         return m_args;
     }
 
-    std::shared_ptr<IWindow> newWindow(const std::string& title, uint32_t sampleCount)
+    std::shared_ptr<IWindow> newWindow(std::string_view title, uint32_t sampleCount)
     {
         auto newWindow = _WindowCocoaNew(title, m_lastGLCtx, &m_metalCtx, sampleCount);
         m_windows[newWindow->getPlatformHandle()] = newWindow;
@@ -200,13 +200,13 @@ void _CocoaUpdateLastGLCtx(NSOpenGLContext* lastGLCtx)
 IApplication* APP = nullptr;
 int ApplicationRun(IApplication::EPlatformType platform,
                    IApplicationCallback& cb,
-                   const SystemString& uniqueName,
-                   const SystemString& friendlyName,
-                   const SystemString& pname,
+                   SystemStringView uniqueName,
+                   SystemStringView friendlyName,
+                   SystemStringView pname,
                    const std::vector<SystemString>& args,
                    bool singleInstance)
 {
-    std::string thrName = friendlyName + " Main Thread";
+    std::string thrName = std::string(friendlyName) + " Main Thread";
     logvisor::RegisterThreadName(thrName.c_str());
     @autoreleasepool
     {
