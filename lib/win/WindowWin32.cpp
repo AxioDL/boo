@@ -972,7 +972,7 @@ public:
 
     WindowWin32(SystemStringView title, Boo3DAppContextWin32& b3dCtx, void* vulkanHandle, uint32_t sampleCount)
     {
-        m_hwnd = CreateWindowW(L"BooWindow", title.c_str(), WS_OVERLAPPEDWINDOW,
+        m_hwnd = CreateWindowW(L"BooWindow", title.data(), WS_OVERLAPPEDWINDOW,
                                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                                NULL, NULL, NULL, NULL);
         HINSTANCE wndInstance = HINSTANCE(GetWindowLongPtr(m_hwnd, GWLP_HINSTANCE));

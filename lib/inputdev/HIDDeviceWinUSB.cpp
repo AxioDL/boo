@@ -75,7 +75,7 @@ class HIDDeviceWinUSB final : public IHIDDevice
         std::unique_lock<std::mutex> lk(device->m_initMutex);
 
         /* POSIX.. who needs it?? -MS */
-        device->m_devHandle = CreateFileA(device->m_devPath.c_str(),
+        device->m_devHandle = CreateFileA(device->m_devPath.data(),
                                           GENERIC_WRITE | GENERIC_READ,
                                           FILE_SHARE_WRITE | FILE_SHARE_READ,
                                           NULL,
@@ -85,8 +85,8 @@ class HIDDeviceWinUSB final : public IHIDDevice
         if (INVALID_HANDLE_VALUE == device->m_devHandle)
         {
             _snprintf(errStr, 256, "Unable to open %s@%s: %d\n",
-                      device->m_token.getProductName().c_str(),
-                      device->m_devPath.c_str(), GetLastError());
+                      device->m_token.getProductName().data(),
+                      device->m_devPath.data(), GetLastError());
             device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
@@ -96,8 +96,8 @@ class HIDDeviceWinUSB final : public IHIDDevice
         if (!WinUsb_Initialize(device->m_devHandle, &device->m_usbHandle))
         {
             _snprintf(errStr, 256, "Unable to open %s@%s: %d\n",
-                      device->m_token.getProductName().c_str(),
-                      device->m_devPath.c_str(), GetLastError());
+                      device->m_token.getProductName().data(),
+                      device->m_devPath.data(), GetLastError());
             device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
@@ -110,8 +110,8 @@ class HIDDeviceWinUSB final : public IHIDDevice
         if (!WinUsb_QueryInterfaceSettings(device->m_usbHandle, 0, &ifDesc))
         {
             _snprintf(errStr, 256, "Unable to open %s@%s: %d\n",
-                      device->m_token.getProductName().c_str(),
-                      device->m_devPath.c_str(), GetLastError());
+                      device->m_token.getProductName().data(),
+                      device->m_devPath.data(), GetLastError());
             device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
@@ -177,7 +177,7 @@ class HIDDeviceWinUSB final : public IHIDDevice
 
         /* POSIX.. who needs it?? -MS */
         device->m_overlapped.hEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-        device->m_hidHandle = CreateFileA(device->m_devPath.c_str(),
+        device->m_hidHandle = CreateFileA(device->m_devPath.data(),
                                           GENERIC_WRITE | GENERIC_READ,
                                           FILE_SHARE_WRITE | FILE_SHARE_READ,
                                           NULL,
@@ -187,8 +187,8 @@ class HIDDeviceWinUSB final : public IHIDDevice
         if (INVALID_HANDLE_VALUE == device->m_hidHandle)
         {
             _snprintf(errStr, 256, "Unable to open %s@%s: %d\n",
-                      device->m_token.getProductName().c_str(),
-                      device->m_devPath.c_str(), GetLastError());
+                      device->m_token.getProductName().data(),
+                      device->m_devPath.data(), GetLastError());
             device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
@@ -198,8 +198,8 @@ class HIDDeviceWinUSB final : public IHIDDevice
         if (!HidD_GetPreparsedData(device->m_hidHandle, &device->m_preparsedData))
         {
             _snprintf(errStr, 256, "Unable get preparsed data of %s@%s: %d\n",
-                      device->m_token.getProductName().c_str(),
-                      device->m_devPath.c_str(), GetLastError());
+                      device->m_token.getProductName().data(),
+                      device->m_devPath.data(), GetLastError());
             device->m_devImp->deviceError(errStr);
             lk.unlock();
             device->m_initCond.notify_one();
