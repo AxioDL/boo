@@ -1037,7 +1037,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
             D3D11TextureR* ctarget = m_boundTarget.cast<D3D11TextureR>();
             int boundHeight = ctarget->m_height;
             D3D11_VIEWPORT vp = {FLOAT(rect.location[0]), FLOAT(boundHeight - rect.location[1] - rect.size[1]),
-                                 FLOAT(rect.size[0]), FLOAT(rect.size[1]), znear, zfar};
+                                 FLOAT(rect.size[0]), FLOAT(rect.size[1]), 1.f - zfar, 1.f - znear};
             m_deferredCtx->RSSetViewports(1, &vp);
         }
     }
