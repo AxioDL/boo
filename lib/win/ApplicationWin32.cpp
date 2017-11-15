@@ -395,7 +395,7 @@ public:
                 {
                     /* New-window message (coalesced onto main thread) */
                     std::unique_lock<std::mutex> lk(m_nwmt);
-                    const SystemString* title = reinterpret_cast<const SystemString*>(msg.wParam);
+                    SystemStringView* title = reinterpret_cast<SystemStringView*>(msg.wParam);
                     m_mwret = newWindow(*title, 1);
                     lk.unlock();
                     m_nwcv.notify_one();
