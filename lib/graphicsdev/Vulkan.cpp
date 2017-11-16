@@ -2547,6 +2547,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         {
             if (m_boundTarget)
             {
+                vk::CmdEndRenderPass(cmdBuf);
                 VulkanTextureR* btarget = m_boundTarget.cast<VulkanTextureR>();
                 SetImageLayout(cmdBuf, btarget->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
                                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
