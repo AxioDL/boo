@@ -608,6 +608,12 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
     samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
     ThrowIfFailed(vk::CreateSampler(m_dev, &samplerInfo, nullptr, &m_linearSamplers[1]));
 
+    /* Create shared edge-clamped sampler */
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    ThrowIfFailed(vk::CreateSampler(m_dev, &samplerInfo, nullptr, &m_linearSamplers[2]));
+
     /* images */
     sc.m_bufs.resize(swapchainImageCount);
     for (uint32_t i=0 ; i<swapchainImageCount ; ++i)
@@ -1033,6 +1039,11 @@ public:
             vk::FreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
     }
 
+    void setClampMode(TextureClampMode mode)
+    {
+        m_descInfo.sampler = m_ctx->m_linearSamplers[int(mode)];
+    }
+
     void deleteUploadObjects()
     {
         vk::DestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
@@ -1228,6 +1239,11 @@ public:
             vk::DestroyBuffer(m_ctx->m_dev, m_cpuBuf, nullptr);
         if (m_cpuMem)
             vk::FreeMemory(m_ctx->m_dev, m_cpuMem, nullptr);
+    }
+
+    void setClampMode(TextureClampMode mode)
+    {
+        m_descInfo.sampler = m_ctx->m_linearSamplers[int(mode)];
     }
 
     void deleteUploadObjects()
@@ -1437,6 +1453,12 @@ public:
     VkDeviceSize m_gpuOffset[2];
     VkDescriptorImageInfo m_descInfo[2];
     ~VulkanTextureD();
+
+    void setClampMode(TextureClampMode mode)
+    {
+        for (int i=0 ; i<2 ; ++i)
+            m_descInfo[i].sampler = m_ctx->m_linearSamplers[int(mode)];
+    }
 
     void load(const void* data, size_t sz);
     void* map(size_t sz);
@@ -1722,6 +1744,14 @@ public:
     VkImageLayout m_layout = VK_IMAGE_LAYOUT_UNDEFINED;
     VkImageLayout m_colorBindLayout[MAX_BIND_TEXS] = {};
     VkImageLayout m_depthBindLayout[MAX_BIND_TEXS] = {};
+
+    void setClampMode(TextureClampMode mode)
+    {
+        for (size_t i=0 ; i<m_colorBindCount ; ++i)
+            m_colorBindDescInfo[i].sampler = m_ctx->m_linearSamplers[int(mode)];
+        for (size_t i=0 ; i<m_depthBindCount ; ++i)
+            m_depthBindDescInfo[i].sampler = m_ctx->m_linearSamplers[int(mode)];
+    }
 
     void doDestroy();
     ~VulkanTextureR();

@@ -69,13 +69,18 @@ enum class TextureFormat
 enum class TextureClampMode
 {
     Repeat,
-    ClampToWhite
+    ClampToWhite,
+    ClampToEdge
 };
 
 /** Typeless texture */
 struct ITexture : IObj
 {
     TextureType type() const { return m_type; }
+
+    /* Only applies on GL and Vulkan. Use shader semantics on other platforms */
+    virtual void setClampMode(TextureClampMode mode) {}
+
 protected:
     TextureType m_type;
     explicit ITexture(TextureType type) : m_type(type) {}

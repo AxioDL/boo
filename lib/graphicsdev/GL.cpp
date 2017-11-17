@@ -172,6 +172,13 @@ static void SetClampMode(GLenum target, TextureClampMode clampMode)
         glTexParameterfv(target, GL_TEXTURE_BORDER_COLOR, color);
         break;
     }
+    case TextureClampMode::ClampToEdge:
+    {
+        glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(target, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+        break;
+    }
     }
 }
 
@@ -249,6 +256,12 @@ class GLTextureS : public GraphicsDataNode<ITextureS>
 public:
     ~GLTextureS() { glDeleteTextures(1, &m_tex); }
 
+    void setClampMode(TextureClampMode mode)
+    {
+        glBindTexture(GL_TEXTURE_2D, m_tex);
+        SetClampMode(GL_TEXTURE_2D, mode);
+    }
+
     void bind(size_t idx) const
     {
         glActiveTexture(GL_TEXTURE0 + idx);
@@ -305,6 +318,12 @@ class GLTextureSA : public GraphicsDataNode<ITextureSA>
     }
 public:
     ~GLTextureSA() { glDeleteTextures(1, &m_tex); }
+
+    void setClampMode(TextureClampMode mode)
+    {
+        glBindTexture(GL_TEXTURE_2D_ARRAY, m_tex);
+        SetClampMode(GL_TEXTURE_2D_ARRAY, mode);
+    }
 
     void bind(size_t idx) const
     {
@@ -389,6 +408,15 @@ public:
         m_validMask = 0;
     }
 
+    void setClampMode(TextureClampMode mode)
+    {
+        for (int i=0 ; i<3 ; ++i)
+        {
+            glBindTexture(GL_TEXTURE_2D, m_texs[i]);
+            SetClampMode(GL_TEXTURE_2D, mode);
+        }
+    }
+
     void bind(size_t idx, int b)
     {
         glActiveTexture(GL_TEXTURE0 + idx);
@@ -409,6 +437,8 @@ class GLTextureR : public GraphicsDataNode<ITextureR>
     size_t m_width = 0;
     size_t m_height = 0;
     size_t m_samples = 0;
+    size_t m_colorBindCount;
+    size_t m_depthBindCount;
     GLenum m_target;
     GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue* q, size_t width, size_t height, size_t samples,
                TextureClampMode clampMode, size_t colorBindCount, size_t depthBindCount);
@@ -418,6 +448,20 @@ public:
         glDeleteTextures(2, m_texs);
         glDeleteTextures(MAX_BIND_TEXS * 2, m_bindTexs[0]);
         glDeleteFramebuffers(1, &m_fbo);
+    }
+
+    void setClampMode(TextureClampMode mode)
+    {
+        for (int i=0 ; i<m_colorBindCount ; ++i)
+        {
+            glBindTexture(GL_TEXTURE_2D, m_bindTexs[0][i]);
+            SetClampMode(GL_TEXTURE_2D, mode);
+        }
+        for (int i=0 ; i<m_depthBindCount ; ++i)
+        {
+            glBindTexture(GL_TEXTURE_2D, m_bindTexs[1][i]);
+            SetClampMode(GL_TEXTURE_2D, mode);
+        }
     }
 
     void bind(size_t idx, int bindIdx, bool depth) const
@@ -1514,7 +1558,8 @@ GLDataFactory::Context::newDynamicTexture(size_t width, size_t height, TextureFo
 
 GLTextureR::GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue* q, size_t width, size_t height,
                        size_t samples, TextureClampMode clampMode, size_t colorBindingCount, size_t depthBindingCount)
-: GraphicsDataNode<ITextureR>(parent), m_q(q), m_width(width), m_height(height), m_samples(samples)
+: GraphicsDataNode<ITextureR>(parent), m_q(q), m_width(width), m_height(height), m_samples(samples),
+  m_colorBindCount(colorBindingCount), m_depthBindCount(depthBindingCount)
 {
     glGenTextures(2, m_texs);
     if (colorBindingCount)

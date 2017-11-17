@@ -139,6 +139,7 @@ public:
         }
     }
 
+    std::mutex m_callbackMutex;
     IWindowCallback* m_callback = nullptr;
     void waitForRetrace(IAudioVoiceEngine* voxEngine)
     {
@@ -222,6 +223,7 @@ public:
 
     void _setCallback(IWindowCallback* cb)
     {
+        std::lock_guard<std::mutex> lk(m_callbackMutex);
         m_callback = cb;
     }
 
@@ -380,6 +382,7 @@ public:
 
     void _setCallback(IWindowCallback* cb)
     {
+        std::lock_guard<std::mutex> lk(m_callbackMutex);
         m_callback = cb;
     }
 
@@ -481,6 +484,7 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (BOOL)hasMarkedText
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -492,6 +496,7 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (NSRange)markedRange
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -506,6 +511,7 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (NSRange)selectedRange
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -520,6 +526,7 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (void)setMarkedText:(id)aString selectedRange:(NSRange)selectedRange replacementRange:(NSRange)replacementRange
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -538,6 +545,7 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (void)unmarkText
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -560,6 +568,7 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (NSAttributedString*)attributedSubstringForProposedRange:(NSRange)aRange actualRange:(NSRangePointer)actualRange
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -581,6 +590,7 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (void)insertText:(id)aString replacementRange:(NSRange)replacementRange
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -598,6 +608,7 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (NSUInteger)characterIndexForPoint:(NSPoint)aPoint
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -616,6 +627,7 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 
 - (NSRect)firstRectForCharacterRange:(NSRange)aRange actualRange:(NSRangePointer)actualRange
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (booContext->m_callback)
     {
         boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
@@ -666,6 +678,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 
 - (void)mouseDown:(NSEvent*)theEvent
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (!booContext->m_callback)
         return;
     NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
@@ -684,6 +697,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 
 - (void)mouseUp:(NSEvent*)theEvent
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (!booContext->m_callback)
         return;
     NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
@@ -702,6 +716,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 
 - (void)rightMouseDown:(NSEvent*)theEvent
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (!booContext->m_callback)
         return;
     NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
@@ -720,6 +735,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 
 - (void)rightMouseUp:(NSEvent*)theEvent
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (!booContext->m_callback)
         return;
     NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
@@ -738,6 +754,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 
 - (void)otherMouseDown:(NSEvent*)theEvent
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (!booContext->m_callback)
         return;
     boo::EMouseButton button = getButton(theEvent);
@@ -758,6 +775,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 
 - (void)otherMouseUp:(NSEvent*)theEvent
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (!booContext->m_callback)
         return;
     boo::EMouseButton button = getButton(theEvent);
@@ -778,6 +796,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 
 - (void)mouseMoved:(NSEvent*)theEvent
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (!booContext->m_callback)
         return;
     NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
@@ -813,6 +832,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 
 - (void)mouseEntered:(NSEvent*)theEvent
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (!booContext->m_callback)
         return;
     NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
@@ -829,6 +849,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 
 - (void)mouseExited:(NSEvent*)theEvent
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (!booContext->m_callback)
         return;
     NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
@@ -845,6 +866,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 
 - (void)scrollWheel:(NSEvent*)theEvent
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (!booContext->m_callback)
         return;
     NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
@@ -867,6 +889,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 
 - (void)touchesBeganWithEvent:(NSEvent*)event
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (!booContext->m_callback)
         return;
     for (NSTouch* touch in [event touchesMatchingPhase:NSTouchPhaseBegan inView:nil])
@@ -882,6 +905,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 
 - (void)touchesEndedWithEvent:(NSEvent*)event
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (!booContext->m_callback)
         return;
     for (NSTouch* touch in [event touchesMatchingPhase:NSTouchPhaseEnded inView:nil])
@@ -897,6 +921,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 
 - (void)touchesMovedWithEvent:(NSEvent*)event
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (!booContext->m_callback)
         return;
     for (NSTouch* touch in [event touchesMatchingPhase:NSTouchPhaseMoved inView:nil])
@@ -912,6 +937,7 @@ static inline boo::EMouseButton getButton(NSEvent* event)
 
 - (void)touchesCancelledWithEvent:(NSEvent*)event
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (!booContext->m_callback)
         return;
     for (NSTouch* touch in [event touchesMatchingPhase:NSTouchPhaseCancelled inView:nil])
@@ -1035,6 +1061,7 @@ static boo::ESpecialKey translateKeycode(short code)
 
 - (void)keyDown:(NSEvent*)theEvent
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (!booContext->m_callback)
         return;
     boo::ESpecialKey special = translateKeycode(theEvent.keyCode);
@@ -1057,6 +1084,7 @@ static boo::ESpecialKey translateKeycode(short code)
 
 - (void)keyUp:(NSEvent*)theEvent
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (!booContext->m_callback)
         return;
     boo::ESpecialKey special = translateKeycode(theEvent.keyCode);
@@ -1077,6 +1105,7 @@ static boo::ESpecialKey translateKeycode(short code)
 
 - (void)flagsChanged:(NSEvent*)theEvent
 {
+    std::lock_guard<std::mutex> lk(booContext->m_callbackMutex);
     if (!booContext->m_callback)
         return;
     NSUInteger modFlags = theEvent.modifierFlags;
@@ -1147,6 +1176,7 @@ static boo::ESpecialKey translateKeycode(short code)
 
 - (void)reshape
 {
+    std::lock_guard<std::mutex> lk(resp->booContext->m_callbackMutex);
     NSRect frame = [self convertRectToBacking:self.frame];
     boo::SWindowRect rect = {int(frame.origin.x), int(frame.origin.y),
                              int(frame.size.width), int(frame.size.height)};
@@ -1223,6 +1253,7 @@ static boo::ESpecialKey translateKeycode(short code)
 
 - (void)reshapeHandler
 {
+    std::lock_guard<std::mutex> lk1(resp->booContext->m_callbackMutex);
     NSRect frame = [self convertRectToBacking:self.frame];
     boo::SWindowRect rect = {int(frame.origin.x), int(frame.origin.y),
                              int(frame.size.width), int(frame.size.height)};

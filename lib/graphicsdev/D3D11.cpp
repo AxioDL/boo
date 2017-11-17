@@ -1017,8 +1017,8 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         cbind->bind(m_deferredCtx.Get(), m_fillBuf);
         m_cmdLists[m_fillBuf].resTokens.push_back(binding.get());
 
-        ID3D11SamplerState* samp[] = {m_ctx->m_ss[0].Get(), m_ctx->m_ss[1].Get()};
-        m_deferredCtx->PSSetSamplers(0, 2, samp);
+        ID3D11SamplerState* samp[] = {m_ctx->m_ss[0].Get(), m_ctx->m_ss[1].Get(), m_ctx->m_ss[2].Get()};
+        m_deferredCtx->PSSetSamplers(0, 3, samp);
     }
 
     boo::ObjToken<ITextureR> m_boundTarget;

@@ -44,7 +44,7 @@ struct VulkanContext
     VkRenderPass m_pass;
     VkCommandPool m_loadPool;
     VkCommandBuffer m_loadCmdBuf;
-    VkSampler m_linearSamplers[2];
+    VkSampler m_linearSamplers[3];
     VkFormat m_displayFormat;
 
     struct Window

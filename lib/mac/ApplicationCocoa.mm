@@ -136,12 +136,12 @@ public:
             dispatch_sync(dispatch_get_main_queue(),
             ^{
                 /* Ends modal run loop and continues Cocoa termination */
-                [[NSApplication sharedApplication] replyToApplicationShouldTerminate:YES];
+                [NSApp replyToApplicationShouldTerminate:YES];
 
                 /* If this is reached, application didn't spawn any windows
                  * and must be explicitly terminated */
                 m_terminateNow = true;
-                [[NSApplication sharedApplication] terminate:nil];
+                [NSApp terminate:nil];
             });
 #else
             /* Return control to main() */
@@ -218,7 +218,7 @@ int ApplicationRun(IApplication::EPlatformType platform,
             /* Never deallocated to ensure window destructors have access */
             APP = new ApplicationCocoa(cb, uniqueName, friendlyName, pname, args);
         }
-        [[NSApplication sharedApplication] run];
+        [NSApp run];
         ApplicationCocoa* appCocoa = static_cast<ApplicationCocoa*>(APP);
         if (appCocoa->m_clientThread.joinable())
             appCocoa->m_clientThread.join();
