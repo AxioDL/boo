@@ -1350,6 +1350,7 @@ class VulkanTextureD : public GraphicsDataNode<ITextureD>
     size_t m_height;
     TextureFormat m_fmt;
     VulkanCommandQueue* m_q;
+    VulkanContext* m_ctx;
     std::unique_ptr<uint8_t[]> m_stagingBuf;
     size_t m_cpuSz;
     VkDeviceSize m_srcRowPitch;
@@ -1358,7 +1359,7 @@ class VulkanTextureD : public GraphicsDataNode<ITextureD>
     int m_validSlots = 0;
     VulkanTextureD(const boo::ObjToken<BaseGraphicsData>& parent, VulkanCommandQueue* q, VulkanContext* ctx,
                    size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode)
-    : GraphicsDataNode<ITextureD>(parent), m_width(width), m_height(height), m_fmt(fmt), m_q(q)
+    : GraphicsDataNode<ITextureD>(parent), m_width(width), m_height(height), m_fmt(fmt), m_q(q), m_ctx(ctx)
     {
         VkFormat pfmt;
         switch (fmt)
@@ -1702,11 +1703,12 @@ class VulkanTextureR : public GraphicsDataNode<ITextureR>
         m_passBeginInfo.pClearValues = nullptr;
     }
 
+    VulkanContext* m_ctx;
     VulkanCommandQueue* m_q;
     VulkanTextureR(const boo::ObjToken<BaseGraphicsData>& parent, VulkanContext* ctx, VulkanCommandQueue* q,
                    size_t width, size_t height, size_t samples, TextureClampMode clampMode,
                    size_t colorBindCount, size_t depthBindCount)
-    : GraphicsDataNode<ITextureR>(parent), m_q(q),
+    : GraphicsDataNode<ITextureR>(parent), m_ctx(ctx), m_q(q),
       m_width(width), m_height(height), m_samples(samples),
       m_clampMode(clampMode),
       m_colorBindCount(colorBindCount),
