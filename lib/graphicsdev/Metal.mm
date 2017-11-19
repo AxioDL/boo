@@ -1231,34 +1231,34 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         if (!m_running)
             return;
 
-        /* Update dynamic data here */
-        MetalDataFactoryImpl* gfxF = static_cast<MetalDataFactoryImpl*>(m_parent->getDataFactory());
-        std::unique_lock<std::recursive_mutex> datalk(gfxF->m_dataMutex);
-        if (gfxF->m_dataHead)
-        {
-            for (BaseGraphicsData& d : *gfxF->m_dataHead)
-            {
-                if (d.m_DBufs)
-                    for (IGraphicsBufferD& b : *d.m_DBufs)
-                        static_cast<MetalGraphicsBufferD<BaseGraphicsData>&>(b).update(m_fillBuf);
-                if (d.m_DTexs)
-                    for (ITextureD& t : *d.m_DTexs)
-                        static_cast<MetalTextureD&>(t).update(m_fillBuf);
-            }
-        }
-        if (gfxF->m_poolHead)
-        {
-            for (BaseGraphicsPool& p : *gfxF->m_poolHead)
-            {
-                if (p.m_DBufs)
-                    for (IGraphicsBufferD& b : *p.m_DBufs)
-                        static_cast<MetalGraphicsBufferD<BaseGraphicsData>&>(b).update(m_fillBuf);
-            }
-        }
-        datalk.unlock();
-
         @autoreleasepool
         {
+            /* Update dynamic data here */
+            MetalDataFactoryImpl* gfxF = static_cast<MetalDataFactoryImpl*>(m_parent->getDataFactory());
+            std::unique_lock<std::recursive_mutex> datalk(gfxF->m_dataMutex);
+            if (gfxF->m_dataHead)
+            {
+                for (BaseGraphicsData& d : *gfxF->m_dataHead)
+                {
+                    if (d.m_DBufs)
+                        for (IGraphicsBufferD& b : *d.m_DBufs)
+                            static_cast<MetalGraphicsBufferD<BaseGraphicsData>&>(b).update(m_fillBuf);
+                    if (d.m_DTexs)
+                        for (ITextureD& t : *d.m_DTexs)
+                            static_cast<MetalTextureD&>(t).update(m_fillBuf);
+                }
+            }
+            if (gfxF->m_poolHead)
+            {
+                for (BaseGraphicsPool& p : *gfxF->m_poolHead)
+                {
+                    if (p.m_DBufs)
+                        for (IGraphicsBufferD& b : *p.m_DBufs)
+                            static_cast<MetalGraphicsBufferD<BaseGraphicsData>&>(b).update(m_fillBuf);
+                }
+            }
+            datalk.unlock();
+
             [m_enc endEncoding];
             m_enc = nullptr;
 

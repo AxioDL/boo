@@ -10,8 +10,9 @@ namespace boo
 class IObj
 {
     std::atomic_int m_refCount = {0};
-public:
+protected:
     virtual ~IObj() = default;
+public:
     virtual std::unique_lock<std::recursive_mutex> destructorLock() { return {}; }
     void increment() { m_refCount++; }
     void decrement()
