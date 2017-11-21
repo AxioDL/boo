@@ -92,15 +92,21 @@ public:
 
         /* Determine which graphics API to use */
 #if BOO_HAS_METAL
+        bool useGL = false;
         for (const SystemString& arg : args)
-            if (!arg.compare("--metal"))
+            if (!arg.compare("--gl"))
             {
-                m_metalCtx.m_dev = MTLCreateSystemDefaultDevice();
-                m_metalCtx.m_q = [m_metalCtx.m_dev newCommandQueue];
-                Log.report(logvisor::Info, "using Metal renderer");
+                useGL = true;
                 break;
             }
-        if (!m_metalCtx.m_dev)
+        if (!useGL)
+            m_metalCtx.m_dev = MTLCreateSystemDefaultDevice();
+        if (m_metalCtx.m_dev)
+        {
+            m_metalCtx.m_q = [m_metalCtx.m_dev newCommandQueue];
+            Log.report(logvisor::Info, "using Metal renderer");
+        }
+        else
             Log.report(logvisor::Info, "using OpenGL renderer");
 #else
         Log.report(logvisor::Info, "using OpenGL renderer");
