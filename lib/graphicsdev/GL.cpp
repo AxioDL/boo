@@ -584,7 +584,7 @@ public:
                 glGetProgramiv(m_prog, GL_INFO_LOG_LENGTH, &logLen);
                 std::unique_ptr<char[]> log(new char[logLen]);
                 glGetProgramInfoLog(m_prog, logLen, nullptr, log.get());
-                Log.report(logvisor::Error, "unable to link shader program\n%s\n", log.get());
+                Log.report(logvisor::Fatal, "unable to link shader program\n%s\n", log.get());
                 return 0;
             }
 
@@ -724,7 +724,7 @@ ObjToken<IShaderPipeline> GLDataFactory::Context::newShaderPipeline
         GLuint sobj = glCreateShader(GL_VERTEX_SHADER);
         if (!sobj)
         {
-            Log.report(logvisor::Error, "unable to create vert shader");
+            Log.report(logvisor::Fatal, "unable to create vert shader");
             return {};
         }
 
@@ -737,7 +737,7 @@ ObjToken<IShaderPipeline> GLDataFactory::Context::newShaderPipeline
             glGetShaderiv(sobj, GL_INFO_LOG_LENGTH, &logLen);
             std::unique_ptr<char[]> log(new char[logLen]);
             glGetShaderInfoLog(sobj, logLen, nullptr, log.get());
-            Log.report(logvisor::Error, "unable to compile vert source\n%s\n%s\n", log.get(), vertSource);
+            Log.report(logvisor::Fatal, "unable to compile vert source\n%s\n%s\n", log.get(), vertSource);
             return {};
         }
 
@@ -756,7 +756,7 @@ ObjToken<IShaderPipeline> GLDataFactory::Context::newShaderPipeline
         GLuint sobj = glCreateShader(GL_FRAGMENT_SHADER);
         if (!sobj)
         {
-            Log.report(logvisor::Error, "unable to create frag shader");
+            Log.report(logvisor::Fatal, "unable to create frag shader");
             return {};
         }
 
@@ -769,7 +769,7 @@ ObjToken<IShaderPipeline> GLDataFactory::Context::newShaderPipeline
             glGetShaderiv(sobj, GL_INFO_LOG_LENGTH, &logLen);
             std::unique_ptr<char[]> log(new char[logLen]);
             glGetShaderInfoLog(sobj, logLen, nullptr, log.get());
-            Log.report(logvisor::Error, "unable to compile frag source\n%s\n%s\n", log.get(), fragSource);
+            Log.report(logvisor::Fatal, "unable to compile frag source\n%s\n%s\n", log.get(), fragSource);
             return {};
         }
 
