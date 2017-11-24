@@ -244,6 +244,7 @@ add_library(boo
             lib/inputdev/CafeProPad.cpp include/boo/inputdev/CafeProPad.hpp
             lib/inputdev/RevolutionPad.cpp include/boo/inputdev/RevolutionPad.hpp
             lib/inputdev/DolphinSmashAdapter.cpp include/boo/inputdev/DolphinSmashAdapter.hpp
+            lib/inputdev/NintendoPowerA.cpp include/boo/inputdev/NintendoPowerA.hpp
             lib/inputdev/DualshockPad.cpp include/boo/inputdev/DualshockPad.hpp
             include/boo/inputdev/XInputPad.hpp
             lib/inputdev/GenericPad.cpp include/boo/inputdev/GenericPad.hpp

@@ -105,17 +105,34 @@ class GenericPadCallback : public IGenericPadCallback
     }
 };
 
+class NintendoPowerACallback : public INintendoPowerACallback
+{
+    void controllerDisconnected()
+    {
+        fprintf(stderr, "CONTROLLER DISCONNECTED\n");
+    }
+    void controllerUpdate(const NintendoPowerAState& state)
+    {
+        fprintf(stderr, "%i %i\n"
+                        "%i %i\n",
+                state.leftX, state.leftY,
+                state.rightX, state.rightY);
+    }
+};
+
 class TestDeviceFinder : public DeviceFinder
 {
     std::shared_ptr<DolphinSmashAdapter> m_smashAdapter;
+    std::shared_ptr<NintendoPowerA> m_nintendoPowerA;
     std::shared_ptr<DualshockPad> m_ds3;
     std::shared_ptr<GenericPad> m_generic;
     DolphinSmashAdapterCallback m_cb;
+    NintendoPowerACallback m_nintendoPowerACb;
     DualshockPadCallback m_ds3CB;
     GenericPadCallback m_genericCb;
 public:
     TestDeviceFinder()
-    : DeviceFinder({typeid(DolphinSmashAdapter), typeid(GenericPad)})
+    : DeviceFinder({typeid(DolphinSmashAdapter), typeid(NintendoPowerA), typeid(GenericPad)})
     {}
     void deviceConnected(DeviceToken& tok)
     {
@@ -126,16 +143,24 @@ public:
             m_smashAdapter->startRumble(0);
             return;
         }
+        m_nintendoPowerA = std::dynamic_pointer_cast<NintendoPowerA>(tok.openAndGetDevice());
+        if (m_nintendoPowerA)
+        {
+            m_nintendoPowerA->setCallback(&m_nintendoPowerACb);
+            return;
+        }
         m_ds3 = std::dynamic_pointer_cast<DualshockPad>(tok.openAndGetDevice());
         if (m_ds3)
         {
             m_ds3->setCallback(&m_ds3CB);
             m_ds3->setLED(EDualshockLED::LED_1);
+            return;
         }
         m_generic = std::dynamic_pointer_cast<GenericPad>(tok.openAndGetDevice());
         if (m_generic)
         {
             m_generic->setCallback(&m_genericCb);
+            return;
         }
     }
     void deviceDisconnected(DeviceToken&, DeviceBase* device)
@@ -146,6 +171,8 @@ public:
             m_ds3.reset();
         if (m_generic.get() == device)
             m_generic.reset();
+        if (m_nintendoPowerA.get() == device)
+            m_nintendoPowerA.reset();
     }
 };
 
