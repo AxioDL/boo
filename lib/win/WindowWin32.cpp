@@ -497,22 +497,12 @@ public:
         m_pf = pf;
     }
 
-    bool initializeContext(void* getVkProc)
+    bool initializeContext(void*)
     {
-        vk::init_dispatch_table_top(PFN_vkGetInstanceProcAddr(getVkProc));
-        if (m_ctx->m_instance == VK_NULL_HANDLE)
-        {
-            auto appName = APP->getUniqueName();
-            m_ctx->initVulkan(WCSTMBS(appName.data()).c_str());
-        }
-
-        vk::init_dispatch_table_middle(m_ctx->m_instance, false);
-        if (!m_ctx->enumerateDevices())
-            return false;
-
         m_windowCtx =
             m_ctx->m_windows.emplace(std::make_pair(m_parentWindow,
             std::make_unique<VulkanContext::Window>())).first->second.get();
+        m_windowCtx->m_hwnd = m_hwnd;
 
         VkWin32SurfaceCreateInfoKHR surfaceInfo = {};
         surfaceInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
@@ -970,13 +960,23 @@ class WindowWin32 : public IWindow
 
 public:
 
-    WindowWin32(SystemStringView title, Boo3DAppContextWin32& b3dCtx, void* vulkanHandle, uint32_t sampleCount)
+    WindowWin32(SystemStringView title, Boo3DAppContextWin32& b3dCtx, uint32_t sampleCount)
     {
         m_hwnd = CreateWindowW(L"BooWindow", title.data(), WS_OVERLAPPEDWINDOW,
                                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                                NULL, NULL, NULL, NULL);
         HINSTANCE wndInstance = HINSTANCE(GetWindowLongPtr(m_hwnd, GWLP_HINSTANCE));
         m_imc = ImmGetContext(m_hwnd);
+
+#if BOO_HAS_VULKAN
+        if (b3dCtx.m_vulkanDxFactory)
+        {
+            m_gfxCtx.reset(new GraphicsContextWin32Vulkan(this, wndInstance, m_hwnd, &g_VulkanContext,
+                                                          b3dCtx, sampleCount));
+            if (m_gfxCtx->initializeContext(nullptr))
+                return;
+        }
+#endif
         IGraphicsContext::EGraphicsAPI api = IGraphicsContext::EGraphicsAPI::D3D11;
 #if _WIN32_WINNT_WIN10
         if (b3dCtx.m_ctx12.m_dev)
@@ -989,15 +989,6 @@ public:
             m_openGL = true;
             return;
         }
-#if BOO_HAS_VULKAN
-        else if (b3dCtx.m_vulkanDxFactory)
-        {
-            m_gfxCtx.reset(new GraphicsContextWin32Vulkan(this, wndInstance, m_hwnd, &g_VulkanContext,
-                                                          b3dCtx, sampleCount));
-            if (m_gfxCtx->initializeContext(vulkanHandle))
-                return;
-        }
-#endif
         m_gfxCtx.reset(new GraphicsContextWin32D3D(api, this, m_hwnd, b3dCtx, sampleCount));
     }
 
@@ -1583,9 +1574,9 @@ public:
 };
 
 std::shared_ptr<IWindow> _WindowWin32New(SystemStringView title, Boo3DAppContextWin32& d3dCtx,
-                                         void* vulkanHandle, uint32_t sampleCount)
+                                         uint32_t sampleCount)
 {
-    return std::make_shared<WindowWin32>(title, d3dCtx, vulkanHandle, sampleCount);
+    return std::make_shared<WindowWin32>(title, d3dCtx, sampleCount);
 }
 
 }

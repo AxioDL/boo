@@ -25,12 +25,11 @@ class VulkanDataFactoryImpl;
 
 struct VulkanShareableShader : IShareableShader<VulkanDataFactoryImpl, VulkanShareableShader>
 {
-    VkDevice m_dev;
     VkShaderModule m_shader;
     VulkanShareableShader(VulkanDataFactoryImpl& fac, uint64_t srcKey, uint64_t binKey,
-                          VkDevice dev, VkShaderModule s)
-    : IShareableShader(fac, srcKey, binKey), m_dev(dev), m_shader(s) {}
-    ~VulkanShareableShader() { vk::DestroyShaderModule(m_dev, m_shader, nullptr); }
+                          VkShaderModule s)
+    : IShareableShader(fac, srcKey, binKey), m_shader(s) {}
+    ~VulkanShareableShader() { vk::DestroyShaderModule(g_VulkanContext.m_dev, m_shader, nullptr); }
 };
 
 class VulkanDataFactoryImpl : public VulkanDataFactory, public GraphicsDataFactoryHead
@@ -260,10 +259,13 @@ static void demo_check_layers(const std::vector<VulkanContext::LayerProperties>&
     }
 }
 
-void VulkanContext::initVulkan(std::string_view appName)
+bool VulkanContext::initVulkan(std::string_view appName)
 {
     if (!glslang::InitializeProcess())
-        Log.report(logvisor::Fatal, "unable to initialize glslang");
+    {
+        Log.report(logvisor::Error, "unable to initialize glslang");
+        return false;
+    }
 
     uint32_t instanceLayerCount;
     VkLayerProperties* vkProps = nullptr;
@@ -367,16 +369,9 @@ void VulkanContext::initVulkan(std::string_view appName)
     VkResult instRes = vk::CreateInstance(&instInfo, nullptr, &m_instance);
     if (instRes != VK_SUCCESS)
     {
-#ifdef _WIN32
-        MessageBoxW(nullptr, L"Error creating Vulkan instance\n\n"
-                             L"The Vulkan runtime is installed, but there are no supported "
-                             L"hardware vendor interfaces present",
-                             L"Vulkan Error", MB_OK | MB_ICONERROR);
-#else
-        Log.report(logvisor::Fatal, "The Vulkan runtime is installed, but there are no supported "
+        Log.report(logvisor::Error, "The Vulkan runtime is installed, but there are no supported "
                                     "hardware vendor interfaces present");
-#endif
-        exit(1);
+        return false;
     }
 
 #ifndef NDEBUG
@@ -395,6 +390,8 @@ void VulkanContext::initVulkan(std::string_view appName)
     debugCreateInfo.pUserData = nullptr;
     ThrowIfFailed(createDebugReportCallback(m_instance, &debugCreateInfo, nullptr, &debugReportCallback));
 #endif
+
+    return true;
 }
 
 bool VulkanContext::enumerateDevices()
@@ -440,6 +437,11 @@ void VulkanContext::initDevice()
     queueInfo.pQueuePriorities = queuePriorities;
     queueInfo.queueFamilyIndex = m_graphicsQueueFamilyIndex;
 
+    vk::GetPhysicalDeviceFeatures(m_gpus[0], &m_features);
+    VkPhysicalDeviceFeatures features = {};
+    if (m_features.samplerAnisotropy)
+        features.samplerAnisotropy = VK_TRUE;
+
     VkDeviceCreateInfo deviceInfo = {};
     deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     deviceInfo.pNext = nullptr;
@@ -451,7 +453,7 @@ void VulkanContext::initDevice()
     deviceInfo.enabledExtensionCount = m_deviceExtensionNames.size();
     deviceInfo.ppEnabledExtensionNames =
         deviceInfo.enabledExtensionCount ? m_deviceExtensionNames.data() : nullptr;
-    deviceInfo.pEnabledFeatures = nullptr;
+    deviceInfo.pEnabledFeatures = &features;
 
     ThrowIfFailed(vk::CreateDevice(m_gpus[0], &deviceInfo, nullptr, &m_dev));
 
@@ -598,7 +600,8 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
     samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.maxAnisotropy = 1.f;
+    samplerInfo.maxAnisotropy = m_features.samplerAnisotropy ?
+                                m_gpuProps.limits.maxSamplerAnisotropy : 1.f;
     ThrowIfFailed(vk::CreateSampler(m_dev, &samplerInfo, nullptr, &m_linearSamplers[0]));
 
     /* Create shared white-clamped sampler */
@@ -3285,8 +3288,7 @@ boo::ObjToken<IShaderPipeline> VulkanDataFactory::Context::newShaderPipeline
 
         auto it =
         factory.m_sharedShaders.emplace(std::make_pair(binHashes[0],
-            std::make_unique<VulkanShareableShader>(factory, srcHashes[0], binHashes[0],
-                                                    factory.m_ctx->m_dev, vertModule))).first;
+            std::make_unique<VulkanShareableShader>(factory, srcHashes[0], binHashes[0], vertModule))).first;
         vertShader = it->second->lock();
     }
     auto fragFind = binHashes[1] ? factory.m_sharedShaders.find(binHashes[1]) :
@@ -3316,8 +3318,7 @@ boo::ObjToken<IShaderPipeline> VulkanDataFactory::Context::newShaderPipeline
 
         auto it =
         factory.m_sharedShaders.emplace(std::make_pair(binHashes[1],
-            std::make_unique<VulkanShareableShader>(factory, srcHashes[1], binHashes[1],
-                                                    factory.m_ctx->m_dev, fragModule))).first;
+            std::make_unique<VulkanShareableShader>(factory, srcHashes[1], binHashes[1], fragModule))).first;
         fragShader = it->second->lock();
     }
 

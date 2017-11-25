@@ -31,6 +31,7 @@ struct VulkanContext
     VkInstance m_instance = VK_NULL_HANDLE;
     std::vector<const char*> m_deviceExtensionNames;
     std::vector<VkPhysicalDevice> m_gpus;
+    VkPhysicalDeviceFeatures m_features;
     VkPhysicalDeviceProperties m_gpuProps;
     VkPhysicalDeviceMemoryProperties m_memoryProperties;
     VkDevice m_dev;
@@ -72,10 +73,19 @@ struct VulkanContext
             }
         } m_swapChains[2];
         uint32_t m_activeSwapChain = 0;
+
+#if _WIN32
+        HWND m_hwnd = 0;
+        bool m_fs = false;
+        LONG m_fsStyle;
+        LONG m_fsExStyle;
+        RECT m_fsRect;
+        int m_fsCountDown = 0;
+#endif
     };
     std::unordered_map<const boo::IWindow*, std::unique_ptr<Window>> m_windows;
 
-    void initVulkan(std::string_view appName);
+    bool initVulkan(std::string_view appName);
     bool enumerateDevices();
     void initDevice();
     void initSwapChain(Window& windowCtx, VkSurfaceKHR surface, VkFormat format, VkColorSpaceKHR colorspace);

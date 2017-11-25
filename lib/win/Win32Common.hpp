@@ -10,6 +10,10 @@
 #include "WinCommon.hpp"
 #include <windows.h>
 
+#if BOO_HAS_VULKAN
+#include "boo/graphicsdev/Vulkan.hpp"
+#endif
+
 extern DWORD g_mainThreadId;
 
 #if _WIN32_WINNT_WINBLUE
@@ -41,6 +45,45 @@ struct OGLContext
     std::unordered_map<const boo::IWindow*, Window> m_windows;
 };
 
+template <class W>
+static inline void SetFullscreen(W& win, bool fs)
+{
+    if (fs)
+    {
+        win.m_fsStyle = GetWindowLong(win.m_hwnd, GWL_STYLE);
+        win.m_fsExStyle = GetWindowLong(win.m_hwnd, GWL_EXSTYLE);
+        GetWindowRect(win.m_hwnd, &win.m_fsRect);
+
+        SetWindowLong(win.m_hwnd, GWL_STYLE,
+            win.m_fsStyle & ~(WS_CAPTION | WS_THICKFRAME));
+        SetWindowLong(win.m_hwnd, GWL_EXSTYLE,
+            win.m_fsExStyle & ~(WS_EX_DLGMODALFRAME |
+                WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE));
+
+        MONITORINFO monitor_info;
+        monitor_info.cbSize = sizeof(monitor_info);
+        GetMonitorInfo(MonitorFromWindow(win.m_hwnd, MONITOR_DEFAULTTONEAREST),
+            &monitor_info);
+        SetWindowPos(win.m_hwnd, NULL, monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
+            monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
+            monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
+            SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_ASYNCWINDOWPOS);
+
+        win.m_fs = true;
+    }
+    else
+    {
+        SetWindowLong(win.m_hwnd, GWL_STYLE, win.m_fsStyle);
+        SetWindowLong(win.m_hwnd, GWL_EXSTYLE, win.m_fsExStyle);
+
+        SetWindowPos(win.m_hwnd, NULL, win.m_fsRect.left, win.m_fsRect.top,
+            win.m_fsRect.right - win.m_fsRect.left, win.m_fsRect.bottom - win.m_fsRect.top,
+            SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_ASYNCWINDOWPOS);
+
+        win.m_fs = false;
+    }
+}
+
 struct Boo3DAppContextWin32 : Boo3DAppContext
 {
     OGLContext m_ctxOgl;
@@ -48,6 +91,14 @@ struct Boo3DAppContextWin32 : Boo3DAppContext
 
     bool isFullscreen(const boo::IWindow* window)
     {
+#if BOO_HAS_VULKAN
+        if (m_vulkanDxFactory)
+        {
+            boo::VulkanContext::Window& win = *boo::g_VulkanContext.m_windows[window];
+            return win.m_fs;
+        }
+#endif
+
 #if _WIN32_WINNT_WIN10
         if (m_ctx12.m_dev)
         {
@@ -70,6 +121,19 @@ struct Boo3DAppContextWin32 : Boo3DAppContext
 
     bool setFullscreen(boo::IWindow* window, bool fs)
     {
+#if BOO_HAS_VULKAN
+        if (m_vulkanDxFactory)
+        {
+            boo::VulkanContext::Window& win = *boo::g_VulkanContext.m_windows[window];
+            if (fs && win.m_fs)
+                return false;
+            else if (!fs && !win.m_fs)
+                return false;
+            SetFullscreen(win, fs);
+            return true;
+        }
+#endif
+
 #if _WIN32_WINNT_WIN10
         if (m_ctx12.m_dev)
         {
@@ -128,42 +192,7 @@ struct Boo3DAppContextWin32 : Boo3DAppContext
             return false;
         else if (!fs && !win.m_fs)
             return false;
-
-        if (fs)
-        {
-            win.m_fsStyle = GetWindowLong(win.m_hwnd, GWL_STYLE);
-            win.m_fsExStyle = GetWindowLong(win.m_hwnd, GWL_EXSTYLE);
-            GetWindowRect(win.m_hwnd, &win.m_fsRect);
-
-            SetWindowLong(win.m_hwnd, GWL_STYLE,
-                win.m_fsStyle & ~(WS_CAPTION | WS_THICKFRAME));
-            SetWindowLong(win.m_hwnd, GWL_EXSTYLE,
-                win.m_fsExStyle & ~(WS_EX_DLGMODALFRAME |
-                    WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE));
-
-            MONITORINFO monitor_info;
-            monitor_info.cbSize = sizeof(monitor_info);
-            GetMonitorInfo(MonitorFromWindow(win.m_hwnd, MONITOR_DEFAULTTONEAREST),
-                &monitor_info);
-            SetWindowPos(win.m_hwnd, NULL, monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
-                monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
-                monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
-                SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_ASYNCWINDOWPOS);
-
-            win.m_fs = true;
-        }
-        else
-        {
-            SetWindowLong(win.m_hwnd, GWL_STYLE, win.m_fsStyle);
-            SetWindowLong(win.m_hwnd, GWL_EXSTYLE, win.m_fsExStyle);
-
-            SetWindowPos(win.m_hwnd, NULL, win.m_fsRect.left, win.m_fsRect.top,
-                win.m_fsRect.right - win.m_fsRect.left, win.m_fsRect.bottom - win.m_fsRect.top,
-                SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_ASYNCWINDOWPOS);
-
-            win.m_fs = false;
-        }
-
+        SetFullscreen(win, fs);
         return true;
     }
 };
