@@ -123,19 +123,25 @@ size_t AudioVoiceMono::SRCCallback(AudioVoiceMono* ctx, int16_t** data, size_t f
         return ctx->m_cb->supplyAudio(*ctx, frames, scratchIn.data());
 }
 
-size_t AudioVoiceMono::pumpAndMix16(size_t frames)
+bool AudioVoiceMono::isSilent() const
 {
     if (m_sendMatrices.size())
     {
         for (auto& mtx : m_sendMatrices)
-            if (mtx.second.isSilent())
-                return 0;
+            if (!mtx.second.isSilent())
+                return false;
+        return true;
     }
     else
     {
-        if (DefaultMonoMtx.isSilent())
-            return 0;
+        return DefaultMonoMtx.isSilent();
     }
+}
+
+size_t AudioVoiceMono::pumpAndMix16(size_t frames)
+{
+    if (isSilent())
+        return 0;
 
     std::vector<int16_t>& scratch16Pre = m_root.m_scratch16Pre;
     if (scratch16Pre.size() < frames)
@@ -174,17 +180,8 @@ size_t AudioVoiceMono::pumpAndMix16(size_t frames)
 
 size_t AudioVoiceMono::pumpAndMix32(size_t frames)
 {
-    if (m_sendMatrices.size())
-    {
-        for (auto& mtx : m_sendMatrices)
-            if (mtx.second.isSilent())
-                return 0;
-    }
-    else
-    {
-        if (DefaultMonoMtx.isSilent())
-            return 0;
-    }
+    if (isSilent())
+        return 0;
 
     std::vector<int32_t>& scratch32Pre = m_root.m_scratch32Pre;
     if (scratch32Pre.size() < frames)
@@ -223,17 +220,8 @@ size_t AudioVoiceMono::pumpAndMix32(size_t frames)
 
 size_t AudioVoiceMono::pumpAndMixFlt(size_t frames)
 {
-    if (m_sendMatrices.size())
-    {
-        for (auto& mtx : m_sendMatrices)
-            if (mtx.second.isSilent())
-                return 0;
-    }
-    else
-    {
-        if (DefaultMonoMtx.isSilent())
-            return 0;
-    }
+    if (isSilent())
+        return 0;
 
     std::vector<float>& scratchFltPre = m_root.m_scratchFltPre;
     if (scratchFltPre.size() < frames)
@@ -360,19 +348,25 @@ size_t AudioVoiceStereo::SRCCallback(AudioVoiceStereo* ctx, int16_t** data, size
         return ctx->m_cb->supplyAudio(*ctx, frames, scratchIn.data());
 }
 
-size_t AudioVoiceStereo::pumpAndMix16(size_t frames)
+bool AudioVoiceStereo::isSilent() const
 {
     if (m_sendMatrices.size())
     {
         for (auto& mtx : m_sendMatrices)
-            if (mtx.second.isSilent())
-                return 0;
+            if (!mtx.second.isSilent())
+                return false;
+        return true;
     }
     else
     {
-        if (DefaultMonoMtx.isSilent())
-            return 0;
+        return DefaultStereoMtx.isSilent();
     }
+}
+
+size_t AudioVoiceStereo::pumpAndMix16(size_t frames)
+{
+    if (isSilent())
+        return 0;
 
     size_t samples = frames * 2;
 
@@ -413,17 +407,8 @@ size_t AudioVoiceStereo::pumpAndMix16(size_t frames)
 
 size_t AudioVoiceStereo::pumpAndMix32(size_t frames)
 {
-    if (m_sendMatrices.size())
-    {
-        for (auto& mtx : m_sendMatrices)
-            if (mtx.second.isSilent())
-                return 0;
-    }
-    else
-    {
-        if (DefaultMonoMtx.isSilent())
-            return 0;
-    }
+    if (isSilent())
+        return 0;
 
     size_t samples = frames * 2;
 
@@ -464,17 +449,8 @@ size_t AudioVoiceStereo::pumpAndMix32(size_t frames)
 
 size_t AudioVoiceStereo::pumpAndMixFlt(size_t frames)
 {
-    if (m_sendMatrices.size())
-    {
-        for (auto& mtx : m_sendMatrices)
-            if (mtx.second.isSilent())
-                return 0;
-    }
-    else
-    {
-        if (DefaultMonoMtx.isSilent())
-            return 0;
-    }
+    if (isSilent())
+        return 0;
 
     size_t samples = frames * 2;
 

@@ -89,6 +89,8 @@ class AudioVoiceMono : public AudioVoice
     static size_t SRCCallback(AudioVoiceMono* ctx,
                               int16_t** data, size_t requestedLen);
 
+    bool isSilent() const;
+
     size_t pumpAndMix16(size_t frames);
     size_t pumpAndMix32(size_t frames);
     size_t pumpAndMixFlt(size_t frames);
@@ -109,6 +111,8 @@ class AudioVoiceStereo : public AudioVoice
 
     static size_t SRCCallback(AudioVoiceStereo* ctx,
                               int16_t** data, size_t requestedLen);
+
+    bool isSilent() const;
 
     size_t pumpAndMix16(size_t frames);
     size_t pumpAndMix32(size_t frames);
