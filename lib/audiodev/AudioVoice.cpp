@@ -125,6 +125,18 @@ size_t AudioVoiceMono::SRCCallback(AudioVoiceMono* ctx, int16_t** data, size_t f
 
 size_t AudioVoiceMono::pumpAndMix16(size_t frames)
 {
+    if (m_sendMatrices.size())
+    {
+        for (auto& mtx : m_sendMatrices)
+            if (mtx.second.isSilent())
+                return 0;
+    }
+    else
+    {
+        if (DefaultMonoMtx.isSilent())
+            return 0;
+    }
+
     std::vector<int16_t>& scratch16Pre = m_root.m_scratch16Pre;
     if (scratch16Pre.size() < frames)
         scratch16Pre.resize(frames);
@@ -162,6 +174,18 @@ size_t AudioVoiceMono::pumpAndMix16(size_t frames)
 
 size_t AudioVoiceMono::pumpAndMix32(size_t frames)
 {
+    if (m_sendMatrices.size())
+    {
+        for (auto& mtx : m_sendMatrices)
+            if (mtx.second.isSilent())
+                return 0;
+    }
+    else
+    {
+        if (DefaultMonoMtx.isSilent())
+            return 0;
+    }
+
     std::vector<int32_t>& scratch32Pre = m_root.m_scratch32Pre;
     if (scratch32Pre.size() < frames)
         scratch32Pre.resize(frames);
@@ -199,6 +223,18 @@ size_t AudioVoiceMono::pumpAndMix32(size_t frames)
 
 size_t AudioVoiceMono::pumpAndMixFlt(size_t frames)
 {
+    if (m_sendMatrices.size())
+    {
+        for (auto& mtx : m_sendMatrices)
+            if (mtx.second.isSilent())
+                return 0;
+    }
+    else
+    {
+        if (DefaultMonoMtx.isSilent())
+            return 0;
+    }
+
     std::vector<float>& scratchFltPre = m_root.m_scratchFltPre;
     if (scratchFltPre.size() < frames)
         scratchFltPre.resize(frames + 2);
@@ -326,6 +362,18 @@ size_t AudioVoiceStereo::SRCCallback(AudioVoiceStereo* ctx, int16_t** data, size
 
 size_t AudioVoiceStereo::pumpAndMix16(size_t frames)
 {
+    if (m_sendMatrices.size())
+    {
+        for (auto& mtx : m_sendMatrices)
+            if (mtx.second.isSilent())
+                return 0;
+    }
+    else
+    {
+        if (DefaultMonoMtx.isSilent())
+            return 0;
+    }
+
     size_t samples = frames * 2;
 
     std::vector<int16_t>& scratch16Pre = m_root.m_scratch16Pre;
@@ -365,6 +413,18 @@ size_t AudioVoiceStereo::pumpAndMix16(size_t frames)
 
 size_t AudioVoiceStereo::pumpAndMix32(size_t frames)
 {
+    if (m_sendMatrices.size())
+    {
+        for (auto& mtx : m_sendMatrices)
+            if (mtx.second.isSilent())
+                return 0;
+    }
+    else
+    {
+        if (DefaultMonoMtx.isSilent())
+            return 0;
+    }
+
     size_t samples = frames * 2;
 
     std::vector<int32_t>& scratch32Pre = m_root.m_scratch32Pre;
@@ -404,6 +464,18 @@ size_t AudioVoiceStereo::pumpAndMix32(size_t frames)
 
 size_t AudioVoiceStereo::pumpAndMixFlt(size_t frames)
 {
+    if (m_sendMatrices.size())
+    {
+        for (auto& mtx : m_sendMatrices)
+            if (mtx.second.isSilent())
+                return 0;
+    }
+    else
+    {
+        if (DefaultMonoMtx.isSilent())
+            return 0;
+    }
+
     size_t samples = frames * 2;
 
     std::vector<float>& scratchFltPre = m_root.m_scratchFltPre;

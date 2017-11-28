@@ -5,6 +5,7 @@
 #include <vector>
 #include <stdint.h>
 #include <limits.h>
+#include <float.h>
 
 #if __SSE__
 #include <xmmintrin.h>
@@ -74,6 +75,18 @@ public:
                                const int32_t* dataIn, int32_t* dataOut, size_t samples);
     float* mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
                              const float* dataIn, float* dataOut, size_t samples);
+
+    bool isSilent() const
+    {
+        if (m_curSlewFrame < m_slewFrames)
+            for (int i=0 ; i<8 ; ++i)
+                if (m_oldCoefs.v[i] > FLT_EPSILON)
+                    return false;
+        for (int i=0 ; i<8 ; ++i)
+            if (m_coefs.v[i] > FLT_EPSILON)
+                return false;
+        return true;
+    }
 };
 
 class AudioMatrixStereo
@@ -124,6 +137,18 @@ public:
                                  const int32_t* dataIn, int32_t* dataOut, size_t frames);
     float* mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
                                const float* dataIn, float* dataOut, size_t frames);
+
+    bool isSilent() const
+    {
+        if (m_curSlewFrame < m_slewFrames)
+            for (int i=0 ; i<8 ; ++i)
+                if (m_oldCoefs.v[i][0] > FLT_EPSILON || m_oldCoefs.v[i][1] > FLT_EPSILON)
+                    return false;
+        for (int i=0 ; i<8 ; ++i)
+            if (m_coefs.v[i][0] > FLT_EPSILON || m_coefs.v[i][1] > FLT_EPSILON)
+                return false;
+        return true;
+    }
 };
 
 }
