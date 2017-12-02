@@ -289,16 +289,19 @@ class MetalTextureS : public GraphicsDataNode<ITextureS>
         MTLPixelFormat pfmt = MTLPixelFormatRGBA8Unorm;
         NSUInteger ppitchNum = 4;
         NSUInteger ppitchDenom = 1;
+        NSUInteger bytesPerRow = width * ppitchNum;
         switch (fmt)
         {
         case TextureFormat::I8:
             pfmt = MTLPixelFormatR8Unorm;
             ppitchNum = 1;
+            bytesPerRow = width * ppitchNum;
             break;
         case TextureFormat::DXT1:
             pfmt = MTLPixelFormatBC1_RGBA;
             ppitchNum = 1;
             ppitchDenom = 2;
+            bytesPerRow = width * 8 / 4; // Metal wants this in blocks, not bytes
         default: break;
         }
 
@@ -317,10 +320,13 @@ class MetalTextureS : public GraphicsDataNode<ITextureS>
                 [m_tex replaceRegion:MTLRegionMake2D(0, 0, width, height)
                          mipmapLevel:i
                            withBytes:dataIt
-                         bytesPerRow:width * ppitchNum / ppitchDenom];
+                         bytesPerRow:bytesPerRow];
                 dataIt += width * height * ppitchNum / ppitchDenom;
                 if (width > 1)
+                {
                     width /= 2;
+                    bytesPerRow /= 2;
+                }
                 if (height > 1)
                     height /= 2;
             }
