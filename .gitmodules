@@ -1,6 +1,6 @@
 [submodule "glslang"]
 	path = glslang
-	url = https://github.com/AxioDL/glslang.git
+	url = ../glslang.git
 [submodule "logvisor"]
 	path = logvisor
-	url = https://github.com/AxioDL/logvisor.git
+	url = ../logvisor.git
