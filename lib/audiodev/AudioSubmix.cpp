@@ -4,6 +4,9 @@
 #include <string.h>
 #include <algorithm>
 
+#undef min
+#undef max
+
 namespace boo
 {
 
