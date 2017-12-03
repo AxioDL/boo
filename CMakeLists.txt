@@ -269,6 +269,7 @@ add_library(boo
             lib/audiodev/MIDIDecoder.cpp
             lib/audiodev/MIDICommon.hpp
             lib/audiodev/MIDICommon.cpp
+            lib/Common.hpp
             include/boo/inputdev/IHIDListener.hpp
             include/boo/IGraphicsContext.hpp
             include/boo/graphicsdev/IGraphicsDataFactory.hpp

@@ -7,7 +7,9 @@
 #include <atomic>
 #include <vector>
 #include <mutex>
+#include <cassert>
 #include "boo/graphicsdev/IGraphicsDataFactory.hpp"
+#include "../Common.hpp"
 
 namespace boo
 {
@@ -24,34 +26,23 @@ struct GraphicsDataFactoryHead
     std::recursive_mutex m_dataMutex;
     BaseGraphicsData* m_dataHead = nullptr;
     BaseGraphicsPool* m_poolHead = nullptr;
-};
 
-/** Linked-list iterator shareable by data container types */
-template<class T>
-class DataIterator
-{
-    T* m_node;
-public:
-    using value_type = T;
-    using pointer = T*;
-    using reference = T&;
-    using iterator_category = std::bidirectional_iterator_tag;
-
-    explicit DataIterator(T* node) : m_node(node) {}
-    T& operator*() const { return *m_node; }
-    bool operator!=(const DataIterator& other) const { return m_node != other.m_node; }
-    DataIterator& operator++() { m_node = m_node->m_next; return *this; }
-    DataIterator& operator--() { m_node = m_node->m_prev; return *this; }
+    ~GraphicsDataFactoryHead()
+    {
+        assert(m_dataHead == nullptr && "Dangling graphics data pools detected");
+        assert(m_poolHead == nullptr && "Dangling graphics data pools detected");
+    }
 };
 
 /** Private generalized data container class.
  *  Keeps head pointers to all graphics objects by type
  */
-struct BaseGraphicsData : IObj
+struct BaseGraphicsData : ListNode<BaseGraphicsData, GraphicsDataFactoryHead*>
 {
-    GraphicsDataFactoryHead& m_head;
-    BaseGraphicsData* m_next;
-    BaseGraphicsData* m_prev = nullptr;
+    static BaseGraphicsData*& _getHeadPtr(GraphicsDataFactoryHead* head) { return head->m_dataHead; }
+    static std::unique_lock<std::recursive_mutex> _getHeadLock(GraphicsDataFactoryHead* head)
+    { return std::unique_lock<std::recursive_mutex>{head->m_dataMutex}; }
+
     GraphicsDataNode<IShaderPipeline, BaseGraphicsData>* m_SPs = nullptr;
     GraphicsDataNode<IShaderDataBinding, BaseGraphicsData>* m_SBinds = nullptr;
     GraphicsDataNode<IGraphicsBufferS, BaseGraphicsData>* m_SBufs = nullptr;
@@ -65,36 +56,11 @@ struct BaseGraphicsData : IObj
     template<class T> size_t countForward()
     { auto* head = getHead<T>(); return head ? head->countForward() : 0; }
     std::unique_lock<std::recursive_mutex> destructorLock() override
-    { return std::unique_lock<std::recursive_mutex>{m_head.m_dataMutex}; }
+    { return std::unique_lock<std::recursive_mutex>{m_head->m_dataMutex}; }
 
     explicit BaseGraphicsData(GraphicsDataFactoryHead& head)
-    : m_head(head)
-    {
-        std::lock_guard<std::recursive_mutex> lk(m_head.m_dataMutex);
-        m_next = head.m_dataHead;
-        if (m_next)
-            m_next->m_prev = this;
-        head.m_dataHead = this;
-    }
-    ~BaseGraphicsData()
-    {
-        if (m_prev)
-        {
-            if (m_next)
-                m_next->m_prev = m_prev;
-            m_prev->m_next = m_next;
-        }
-        else
-        {
-            if (m_next)
-                m_next->m_prev = nullptr;
-            m_head.m_dataHead = m_next;
-        }
-    }
-
-    using iterator = DataIterator<BaseGraphicsData>;
-    iterator begin() { return iterator(this); }
-    iterator end() { return iterator(nullptr); }
+    : ListNode<BaseGraphicsData, GraphicsDataFactoryHead*>(&head)
+    {}
 };
 
 template <> inline GraphicsDataNode<IShaderPipeline, BaseGraphicsData>*&
@@ -119,46 +85,22 @@ BaseGraphicsData::getHead<IVertexFormat>() { return m_VFmts; }
 /** Private generalized pool container class.
  *  Keeps head pointer to exactly one dynamic buffer while otherwise conforming to BaseGraphicsData
  */
-struct BaseGraphicsPool : IObj
+struct BaseGraphicsPool : ListNode<BaseGraphicsPool, GraphicsDataFactoryHead*>
 {
-    GraphicsDataFactoryHead& m_head;
-    BaseGraphicsPool* m_next;
-    BaseGraphicsPool* m_prev = nullptr;
+    static BaseGraphicsPool*& _getHeadPtr(GraphicsDataFactoryHead* head) { return head->m_poolHead; }
+    static std::unique_lock<std::recursive_mutex> _getHeadLock(GraphicsDataFactoryHead* head)
+    { return std::unique_lock<std::recursive_mutex>{head->m_dataMutex}; }
+
     GraphicsDataNode<IGraphicsBufferD, BaseGraphicsPool>* m_DBufs = nullptr;
     template<class T> GraphicsDataNode<T, BaseGraphicsPool>*& getHead();
     template<class T> size_t countForward()
     { auto* head = getHead<T>(); return head ? head->countForward() : 0; }
     std::unique_lock<std::recursive_mutex> destructorLock() override
-    { return std::unique_lock<std::recursive_mutex>{m_head.m_dataMutex}; }
+    { return std::unique_lock<std::recursive_mutex>{m_head->m_dataMutex}; }
 
     explicit BaseGraphicsPool(GraphicsDataFactoryHead& head)
-    : m_head(head)
-    {
-        std::lock_guard<std::recursive_mutex> lk(m_head.m_dataMutex);
-        m_next = head.m_poolHead;
-        if (m_next)
-            m_next->m_prev = this;
-        head.m_poolHead = this;
-    }
-    ~BaseGraphicsPool()
-    {
-        if (m_prev)
-        {
-            if (m_next)
-                m_next->m_prev = m_prev;
-            m_prev->m_next = m_next;
-        }
-        else
-        {
-            if (m_next)
-                m_next->m_prev = nullptr;
-            m_head.m_poolHead = m_next;
-        }
-    }
-
-    using iterator = DataIterator<BaseGraphicsPool>;
-    iterator begin() { return iterator(this); }
-    iterator end() { return iterator(nullptr); }
+    : ListNode<BaseGraphicsPool, GraphicsDataFactoryHead*>(&head)
+    {}
 };
 
 template <> inline GraphicsDataNode<IGraphicsBufferD, BaseGraphicsPool>*&
@@ -169,48 +111,25 @@ BaseGraphicsPool::getHead<IGraphicsBufferD>() { return m_DBufs; }
  *  as well as doubly-linked pointers to same-type sibling objects
  */
 template<class NodeCls, class DataCls>
-struct GraphicsDataNode : NodeCls
+struct GraphicsDataNode : ListNode<GraphicsDataNode<NodeCls, DataCls>, ObjToken<DataCls>, NodeCls>
 {
-    ObjToken<DataCls> m_data;
-    GraphicsDataNode<NodeCls, DataCls>* m_next;
-    GraphicsDataNode<NodeCls, DataCls>* m_prev = nullptr;
+    using base = ListNode<GraphicsDataNode<NodeCls, DataCls>, ObjToken<DataCls>, NodeCls>;
+    static GraphicsDataNode<NodeCls, DataCls>*& _getHeadPtr(ObjToken<DataCls>& head)
+    { return head->template getHead<NodeCls>(); }
+    static std::unique_lock<std::recursive_mutex> _getHeadLock(ObjToken<DataCls>& head)
+    { return std::unique_lock<std::recursive_mutex>{head->m_head->m_dataMutex}; }
+
     std::unique_lock<std::recursive_mutex> destructorLock() override
-    { return std::unique_lock<std::recursive_mutex>{m_data->m_head.m_dataMutex}; }
+    { return std::unique_lock<std::recursive_mutex>{base::m_head->m_head->m_dataMutex}; }
 
     explicit GraphicsDataNode(const ObjToken<DataCls>& data)
-    : m_data(data)
-    {
-        std::lock_guard<std::recursive_mutex> lk(m_data->m_head.m_dataMutex);
-        m_next = data->template getHead<NodeCls>();
-        if (m_next)
-            m_next->m_prev = this;
-        data->template getHead<NodeCls>() = this;
-    }
-    ~GraphicsDataNode()
-    {
-        if (m_prev)
-        {
-            if (m_next)
-                m_next->m_prev = m_prev;
-            m_prev->m_next = m_next;
-        }
-        else
-        {
-            if (m_next)
-                m_next->m_prev = nullptr;
-            m_data->template getHead<NodeCls>() = m_next;
-        }
-    }
+    : ListNode<GraphicsDataNode<NodeCls, DataCls>, ObjToken<DataCls>, NodeCls>(data)
+    {}
 
-    class iterator
+    class iterator : public std::iterator<std::bidirectional_iterator_tag, NodeCls>
     {
         GraphicsDataNode<NodeCls, DataCls>* m_node;
     public:
-        using value_type = NodeCls;
-        using pointer = NodeCls*;
-        using reference = NodeCls&;
-        using iterator_category = std::bidirectional_iterator_tag;
-
         explicit iterator(GraphicsDataNode<NodeCls, DataCls>* node) : m_node(node) {}
         NodeCls& operator*() const { return *m_node; }
         bool operator!=(const iterator& other) const { return m_node != other.m_node; }

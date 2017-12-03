@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include "boo/audiodev/IAudioVoice.hpp"
 #include "AudioMatrix.hpp"
+#include "Common.hpp"
+#include "AudioVoiceEngine.hpp"
 
 struct AudioUnitVoiceEngine;
 struct VSTVoiceEngine;
@@ -17,7 +19,7 @@ class BaseAudioVoiceEngine;
 struct AudioVoiceEngineMixInfo;
 struct IAudioSubmix;
 
-class AudioVoice : public IAudioVoice
+class AudioVoice : public ListNode<AudioVoice, BaseAudioVoiceEngine*, IAudioVoice>
 {
     friend class BaseAudioVoiceEngine;
     friend class AudioSubmix;
@@ -27,16 +29,6 @@ class AudioVoice : public IAudioVoice
     friend struct ::WAVOutVoiceEngine;
 
 protected:
-    /* Mixer-engine relationships */
-    BaseAudioVoiceEngine& m_root;
-    std::list<AudioVoice*>::iterator m_parentIt;
-    bool m_bound = false;
-    void bindVoice(std::list<AudioVoice*>::iterator pIt)
-    {
-        m_bound = true;
-        m_parentIt = pIt;
-    }
-
     /* Callback (audio source) */
     IAudioVoiceCallback* m_cb;
 
@@ -66,19 +58,26 @@ protected:
     virtual size_t pumpAndMix16(size_t frames)=0;
     virtual size_t pumpAndMix32(size_t frames)=0;
     virtual size_t pumpAndMixFlt(size_t frames)=0;
+    template <typename T> size_t pumpAndMix(size_t frames);
 
     AudioVoice(BaseAudioVoiceEngine& root, IAudioVoiceCallback* cb, bool dynamicRate);
 
 public:
+    static AudioVoice*& _getHeadPtr(BaseAudioVoiceEngine* head);
+    static std::unique_lock<std::recursive_mutex> _getHeadLock(BaseAudioVoiceEngine* head);
+
     ~AudioVoice();
     void resetSampleRate(double sampleRate);
     void setPitchRatio(double ratio, bool slew);
     void start();
     void stop();
-    void unbindVoice();
     double getSampleRateIn() const {return m_sampleRateIn;}
     double getSampleRateOut() const {return m_sampleRateOut;}
 };
+
+template <> inline size_t AudioVoice::pumpAndMix<int16_t>(size_t frames) { return pumpAndMix16(frames); }
+template <> inline size_t AudioVoice::pumpAndMix<int32_t>(size_t frames) { return pumpAndMix32(frames); }
+template <> inline size_t AudioVoice::pumpAndMix<float>(size_t frames) { return pumpAndMixFlt(frames); }
 
 class AudioVoiceMono : public AudioVoice
 {
@@ -91,9 +90,10 @@ class AudioVoiceMono : public AudioVoice
 
     bool isSilent() const;
 
-    size_t pumpAndMix16(size_t frames);
-    size_t pumpAndMix32(size_t frames);
-    size_t pumpAndMixFlt(size_t frames);
+    template <typename T> size_t _pumpAndMix(size_t frames);
+    size_t pumpAndMix16(size_t frames) { return _pumpAndMix<int16_t>(frames); }
+    size_t pumpAndMix32(size_t frames) { return _pumpAndMix<int32_t>(frames); }
+    size_t pumpAndMixFlt(size_t frames) { return _pumpAndMix<float>(frames); }
 
 public:
     AudioVoiceMono(BaseAudioVoiceEngine& root, IAudioVoiceCallback* cb,
@@ -114,9 +114,10 @@ class AudioVoiceStereo : public AudioVoice
 
     bool isSilent() const;
 
-    size_t pumpAndMix16(size_t frames);
-    size_t pumpAndMix32(size_t frames);
-    size_t pumpAndMixFlt(size_t frames);
+    template <typename T> size_t _pumpAndMix(size_t frames);
+    size_t pumpAndMix16(size_t frames) { return _pumpAndMix<int16_t>(frames); }
+    size_t pumpAndMix32(size_t frames) { return _pumpAndMix<int32_t>(frames); }
+    size_t pumpAndMixFlt(size_t frames) { return _pumpAndMix<float>(frames); }
 
 public:
     AudioVoiceStereo(BaseAudioVoiceEngine& root, IAudioVoiceCallback* cb,

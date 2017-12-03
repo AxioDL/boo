@@ -78,9 +78,6 @@ struct IAudioVoice
 
     /** Instructs platform to stop consuming sample data */
     virtual void stop()=0;
-
-    /** Invalidates this voice by removing it from the AudioVoiceEngine */
-    virtual void unbindVoice()=0;
 };
 
 struct IAudioVoiceCallback

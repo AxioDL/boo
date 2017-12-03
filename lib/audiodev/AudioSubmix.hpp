@@ -6,6 +6,7 @@
 #include <vector>
 #include  <array>
 #include <unordered_map>
+#include "Common.hpp"
 
 #if __SSE__
 #include <xmmintrin.h>
@@ -22,7 +23,7 @@ class AudioVoice;
 struct AudioVoiceEngineMixInfo;
 /* Output gains for each mix-send/channel */
 
-class AudioSubmix : public IAudioSubmix
+class AudioSubmix : public ListNode<AudioSubmix, BaseAudioVoiceEngine*, IAudioSubmix>
 {
     friend class BaseAudioVoiceEngine;
     friend class AudioVoiceMono;
@@ -33,16 +34,8 @@ class AudioSubmix : public IAudioSubmix
     friend struct ::WAVOutVoiceEngine;
 
     /* Mixer-engine relationships */
-    BaseAudioVoiceEngine& m_root;
     int m_busId;
-    std::list<AudioSubmix*>::iterator m_parentIt;
     bool m_mainOut;
-    bool m_bound = false;
-    void bindSubmix(std::list<AudioSubmix*>::iterator pIt)
-    {
-        m_bound = true;
-        m_parentIt = pIt;
-    }
 
     /* Callback (effect source, optional) */
     IAudioSubmixCallback* m_cb;
@@ -58,11 +51,13 @@ class AudioSubmix : public IAudioSubmix
     std::vector<int16_t> m_scratch16;
     std::vector<int32_t> m_scratch32;
     std::vector<float> m_scratchFlt;
+    template <typename T> std::vector<T>& _getScratch();
 
     /* Override scratch buffers with alternate destination */
     int16_t* m_redirect16 = nullptr;
     int32_t* m_redirect32 = nullptr;
     float* m_redirectFlt = nullptr;
+    template <typename T> T*& _getRedirect();
 
     /* C3-linearization support (to mitigate a potential diamond problem on 'clever' submix routes) */
     bool _isDirectDependencyOf(AudioSubmix* send);
@@ -71,33 +66,37 @@ class AudioSubmix : public IAudioSubmix
                          std::vector<std::list<AudioSubmix*>>& lists);
 
     /* Fill scratch buffers with silence for new mix cycle */
-    void _zeroFill16();
-    void _zeroFill32();
-    void _zeroFillFlt();
+    template <typename T> void _zeroFill();
 
     /* Receive audio from a single voice / submix */
-    int16_t* _getMergeBuf16(size_t frames);
-    int32_t* _getMergeBuf32(size_t frames);
-    float* _getMergeBufFlt(size_t frames);
+    template <typename T> T* _getMergeBuf(size_t frames);
 
     /* Mix scratch buffers into sends */
-    size_t _pumpAndMix16(size_t frames);
-    size_t _pumpAndMix32(size_t frames);
-    size_t _pumpAndMixFlt(size_t frames);
+    template <typename T> size_t _pumpAndMix(size_t frames);
 
     void _resetOutputSampleRate();
 
 public:
-    ~AudioSubmix();
+    static AudioSubmix*& _getHeadPtr(BaseAudioVoiceEngine* head);
+    static std::unique_lock<std::recursive_mutex> _getHeadLock(BaseAudioVoiceEngine* head);
+
     AudioSubmix(BaseAudioVoiceEngine& root, IAudioSubmixCallback* cb, int busId, bool mainOut);
+    ~AudioSubmix();
 
     void resetSendLevels();
     void setSendLevel(IAudioSubmix* submix, float level, bool slew);
-    void unbindSubmix();
     const AudioVoiceEngineMixInfo& mixInfo() const;
     double getSampleRate() const;
     SubmixFormat getSampleFormat() const;
 };
+
+template <> inline std::vector<int16_t>& AudioSubmix::_getScratch() { return m_scratch16; }
+template <> inline std::vector<int32_t>& AudioSubmix::_getScratch() { return m_scratch32; }
+template <> inline std::vector<float>& AudioSubmix::_getScratch() { return m_scratchFlt; }
+
+template <> inline int16_t*& AudioSubmix::_getRedirect<int16_t>() { return m_redirect16; }
+template <> inline int32_t*& AudioSubmix::_getRedirect<int32_t>() { return m_redirect32; }
+template <> inline float*& AudioSubmix::_getRedirect<float>() { return m_redirectFlt; }
 
 }
 

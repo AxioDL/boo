@@ -2,6 +2,8 @@
 #define BOO_AUDIOCOMMON_HPP
 
 #include <soxr.h>
+#include "../Common.hpp"
+#include "boo/audiodev/IAudioVoice.hpp"
 
 namespace boo
 {
