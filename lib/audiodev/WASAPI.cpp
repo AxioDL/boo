@@ -326,10 +326,12 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
          if (m_mixInfo.m_sampleFormat != oldFmt)
              Log.report(logvisor::Fatal, L"audio device sample format changed, boo doesn't support this!!");
 
-         for (AudioVoice* vox : m_activeVoices)
-             vox->_resetSampleRate(vox->m_sampleRateIn);
-         for (AudioSubmix* smx : m_activeSubmixes)
-             smx->_resetOutputSampleRate();
+         if (m_voiceHead)
+             for (AudioVoice& vox : *m_voiceHead)
+                 vox._resetSampleRate(vox.m_sampleRateIn);
+         if (m_submixHead)
+             for (AudioSubmix& smx : *m_submixHead)
+                 smx._resetOutputSampleRate();
     }
 
     void pumpAndMixVoices()
