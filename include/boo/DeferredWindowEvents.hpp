@@ -241,7 +241,7 @@ struct DeferredWindowEvents : public IWindowCallback
         m_cmds.back().m_mods = mod;
     }
 
-    ITextInputCallback* getTextInputCallback() {return m_rec.getTextInputCallback();}
+    ITextInputCallback* getTextInputCallback() { return m_rec.getTextInputCallback(); }
 
     void dispatchEvents()
     {

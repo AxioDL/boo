@@ -1,5 +1,5 @@
 #ifndef APPLICATION_UNIX_CPP
-#error This file may only be included from CApplicationUnix.cpp
+#error This file may only be included from ApplicationUnix.cpp
 #endif
 
 #include "boo/IApplication.hpp"

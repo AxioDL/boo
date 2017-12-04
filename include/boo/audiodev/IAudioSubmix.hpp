@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <memory>
+#include "boo/BooObject.hpp"
 
 namespace boo
 {
@@ -19,10 +20,8 @@ enum class SubmixFormat
     Float
 };
 
-struct IAudioSubmix
+struct IAudioSubmix : IObj
 {
-    virtual ~IAudioSubmix() = default;
-
     /** Reset channel-levels to silence; unbind all submixes */
     virtual void resetSendLevels()=0;
 

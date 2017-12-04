@@ -4,6 +4,7 @@
 #include "IAudioVoice.hpp"
 #include "IAudioSubmix.hpp"
 #include "IMIDIPort.hpp"
+#include "boo/BooObject.hpp"
 #include <memory>
 #include <vector>
 
@@ -36,17 +37,17 @@ struct IAudioVoiceEngine
      *  Client must be prepared to supply audio frames via the callback when this is called;
      *  the backing audio-buffers are primed with initial data for low-latency playback start
      */
-    virtual std::unique_ptr<IAudioVoice> allocateNewMonoVoice(double sampleRate,
-                                                              IAudioVoiceCallback* cb,
-                                                              bool dynamicPitch=false)=0;
+    virtual ObjToken<IAudioVoice> allocateNewMonoVoice(double sampleRate,
+                                                       IAudioVoiceCallback* cb,
+                                                       bool dynamicPitch=false)=0;
 
     /** Same as allocateNewMonoVoice, but source audio is stereo-interleaved */
-    virtual std::unique_ptr<IAudioVoice> allocateNewStereoVoice(double sampleRate,
-                                                                IAudioVoiceCallback* cb,
-                                                                bool dynamicPitch=false)=0;
+    virtual ObjToken<IAudioVoice> allocateNewStereoVoice(double sampleRate,
+                                                         IAudioVoiceCallback* cb,
+                                                         bool dynamicPitch=false)=0;
 
     /** Client calls this to allocate a Submix for gathering audio together for effects processing */
-    virtual std::unique_ptr<IAudioSubmix> allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb, int busId)=0;
+    virtual ObjToken<IAudioSubmix> allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb, int busId)=0;
 
     /** Client can register for key callback events from the mixing engine this way */
     virtual void setCallbackInterface(IAudioVoiceEngineCallback* cb)=0;

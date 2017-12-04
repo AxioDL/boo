@@ -27,7 +27,7 @@ class IApplication
     friend class WindowWin32;
     virtual void _deletedWindow(IWindow* window)=0;
 public:
-    virtual ~IApplication() {}
+    virtual ~IApplication() = default;
     
     enum class EPlatformType
     {

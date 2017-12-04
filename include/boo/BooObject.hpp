@@ -13,7 +13,7 @@ class IObj
 protected:
     virtual ~IObj() = default;
 public:
-    virtual std::unique_lock<std::recursive_mutex> destructorLock() { return {}; }
+    virtual std::unique_lock<std::recursive_mutex> destructorLock()=0;
     void increment() { m_refCount++; }
     void decrement()
     {

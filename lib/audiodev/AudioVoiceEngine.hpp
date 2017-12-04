@@ -56,15 +56,15 @@ protected:
 public:
     BaseAudioVoiceEngine() : m_mainSubmix(std::make_unique<AudioSubmix>(*this, nullptr, -1, false)) {}
     ~BaseAudioVoiceEngine();
-    std::unique_ptr<IAudioVoice> allocateNewMonoVoice(double sampleRate,
-                                                      IAudioVoiceCallback* cb,
-                                                      bool dynamicPitch=false);
+    ObjToken<IAudioVoice> allocateNewMonoVoice(double sampleRate,
+                                               IAudioVoiceCallback* cb,
+                                               bool dynamicPitch=false);
 
-    std::unique_ptr<IAudioVoice> allocateNewStereoVoice(double sampleRate,
-                                                        IAudioVoiceCallback* cb,
-                                                        bool dynamicPitch=false);
+    ObjToken<IAudioVoice> allocateNewStereoVoice(double sampleRate,
+                                                 IAudioVoiceCallback* cb,
+                                                 bool dynamicPitch=false);
 
-    std::unique_ptr<IAudioSubmix> allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb, int busId);
+    ObjToken<IAudioSubmix> allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb, int busId);
 
     void setCallbackInterface(IAudioVoiceEngineCallback* cb);
 

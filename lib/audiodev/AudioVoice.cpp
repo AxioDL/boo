@@ -22,6 +22,8 @@ AudioVoice::~AudioVoice()
 AudioVoice*& AudioVoice::_getHeadPtr(BaseAudioVoiceEngine* head) { return head->m_voiceHead; }
 std::unique_lock<std::recursive_mutex> AudioVoice::_getHeadLock(BaseAudioVoiceEngine* head)
 { return std::unique_lock<std::recursive_mutex>{head->m_dataMutex}; }
+std::unique_lock<std::recursive_mutex> AudioVoice::destructorLock()
+{ return std::unique_lock<std::recursive_mutex>{m_head->m_dataMutex}; }
 
 void AudioVoice::_setPitchRatio(double ratio, bool slew)
 {

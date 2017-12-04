@@ -79,6 +79,7 @@ class AudioSubmix : public ListNode<AudioSubmix, BaseAudioVoiceEngine*, IAudioSu
 public:
     static AudioSubmix*& _getHeadPtr(BaseAudioVoiceEngine* head);
     static std::unique_lock<std::recursive_mutex> _getHeadLock(BaseAudioVoiceEngine* head);
+    std::unique_lock<std::recursive_mutex> destructorLock();
 
     AudioSubmix(BaseAudioVoiceEngine& root, IAudioSubmixCallback* cb, int busId, bool mainOut);
     ~AudioSubmix();

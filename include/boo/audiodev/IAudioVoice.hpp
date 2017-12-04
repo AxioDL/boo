@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include "boo/BooObject.hpp"
 
 namespace boo
 {
@@ -54,10 +55,8 @@ static inline unsigned ChannelCount(AudioChannelSet layout)
     return 0;
 }
 
-struct IAudioVoice
+struct IAudioVoice : IObj
 {
-    virtual ~IAudioVoice() = default;
-
     /** Set sample rate into voice (may result in audio discontinuities) */
     virtual void resetSampleRate(double sampleRate)=0;
 

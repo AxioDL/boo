@@ -65,6 +65,7 @@ protected:
 public:
     static AudioVoice*& _getHeadPtr(BaseAudioVoiceEngine* head);
     static std::unique_lock<std::recursive_mutex> _getHeadLock(BaseAudioVoiceEngine* head);
+    std::unique_lock<std::recursive_mutex> destructorLock();
 
     ~AudioVoice();
     void resetSampleRate(double sampleRate);

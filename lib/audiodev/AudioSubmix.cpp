@@ -25,6 +25,8 @@ AudioSubmix::~AudioSubmix()
 AudioSubmix*& AudioSubmix::_getHeadPtr(BaseAudioVoiceEngine* head) { return head->m_submixHead; }
 std::unique_lock<std::recursive_mutex> AudioSubmix::_getHeadLock(BaseAudioVoiceEngine* head)
 { return std::unique_lock<std::recursive_mutex>{head->m_dataMutex}; }
+std::unique_lock<std::recursive_mutex> AudioSubmix::destructorLock()
+{ return std::unique_lock<std::recursive_mutex>{m_head->m_dataMutex}; }
 
 bool AudioSubmix::_isDirectDependencyOf(AudioSubmix* send)
 {

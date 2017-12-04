@@ -108,9 +108,9 @@ WindowedHilbert::~WindowedHilbert()
 {
     ippFree(m_spec);
     ippFree(m_buffer);
-    ippFree(m_inputBuf);
-    ippFree(m_outputBuf);
-    ippFree(m_hammingTable);
+    ippsFree(m_inputBuf);
+    ippsFree(m_outputBuf);
+    ippsFree(m_hammingTable);
 }
 
 void WindowedHilbert::_AddWindow()

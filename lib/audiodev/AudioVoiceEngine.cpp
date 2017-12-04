@@ -86,26 +86,26 @@ template void BaseAudioVoiceEngine::_pumpAndMixVoices<int16_t>(size_t frames, in
 template void BaseAudioVoiceEngine::_pumpAndMixVoices<int32_t>(size_t frames, int32_t* dataOut);
 template void BaseAudioVoiceEngine::_pumpAndMixVoices<float>(size_t frames, float* dataOut);
 
-std::unique_ptr<IAudioVoice>
+ObjToken<IAudioVoice>
 BaseAudioVoiceEngine::allocateNewMonoVoice(double sampleRate,
                                            IAudioVoiceCallback* cb,
                                            bool dynamicPitch)
 {
-    return std::make_unique<AudioVoiceMono>(*this, cb, sampleRate, dynamicPitch);
+    return {new AudioVoiceMono(*this, cb, sampleRate, dynamicPitch)};
 }
 
-std::unique_ptr<IAudioVoice>
+ObjToken<IAudioVoice>
 BaseAudioVoiceEngine::allocateNewStereoVoice(double sampleRate,
                                              IAudioVoiceCallback* cb,
                                              bool dynamicPitch)
 {
-    return std::make_unique<AudioVoiceStereo>(*this, cb, sampleRate, dynamicPitch);
+    return {new AudioVoiceStereo(*this, cb, sampleRate, dynamicPitch)};
 }
 
-std::unique_ptr<IAudioSubmix>
+ObjToken<IAudioSubmix>
 BaseAudioVoiceEngine::allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb, int busId)
 {
-    return std::make_unique<AudioSubmix>(*this, cb, busId, mainOut);
+    return {new AudioSubmix(*this, cb, busId, mainOut)};
 }
 
 void BaseAudioVoiceEngine::setCallbackInterface(IAudioVoiceEngineCallback* cb)
