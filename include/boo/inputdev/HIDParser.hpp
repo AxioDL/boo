@@ -181,9 +181,11 @@ private:
 
     ParserStatus m_status = ParserStatus::OK;
 #if _WIN32
+#if !WINDOWS_STORE
     std::vector<HIDMainItem> m_itemPool;
     mutable std::vector<HIDP_DATA> m_dataList;
     PHIDP_PREPARSED_DATA m_descriptorData = nullptr;
+#endif
 #else
     std::unique_ptr<HIDMainItem[]> m_itemPool;
     using Report = std::pair<uint32_t, std::pair<uint32_t, uint32_t>>;
@@ -201,7 +203,9 @@ private:
 
 public:
 #if _WIN32
+#if !WINDOWS_STORE
     ParserStatus Parse(const PHIDP_PREPARSED_DATA descriptorData);
+#endif
 #else
     ParserStatus Parse(const uint8_t* descriptorData, size_t len);
     static size_t CalculateMaxInputReportSize(const uint8_t* descriptorData, size_t len);

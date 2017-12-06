@@ -52,7 +52,9 @@ public:
 
     /* High-Level API */
 #if _WIN32
+#if !WINDOWS_STORE
     const PHIDP_PREPARSED_DATA getReportDescriptor();
+#endif
 #else
     std::vector<uint8_t> getReportDescriptor();
 #endif

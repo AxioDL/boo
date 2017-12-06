@@ -11,7 +11,7 @@ namespace boo
 
 DeviceFinder* DeviceFinder::skDevFinder = nullptr;
 
-#if _WIN32
+#if _WIN32 && !WINDOWS_STORE
 /* Windows-specific WM_DEVICECHANGED handler */
 LRESULT DeviceFinder::winDevChangedHandler(WPARAM wParam, LPARAM lParam)
 {

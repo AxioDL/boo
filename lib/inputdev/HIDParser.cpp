@@ -396,6 +396,7 @@ struct HIDReports
 };
 
 #if _WIN32
+#if !WINDOWS_STORE
 HIDParser::ParserStatus HIDParser::Parse(const PHIDP_PREPARSED_DATA descriptorData)
 {
     /* User mode HID report descriptor isn't available on Win32.
@@ -475,6 +476,7 @@ HIDParser::ParserStatus HIDParser::Parse(const PHIDP_PREPARSED_DATA descriptorDa
     m_status = ParserStatus::Done;
     return ParserStatus::Done;
 }
+#endif
 #else
 
 HIDParser::ParserStatus
@@ -721,6 +723,7 @@ std::pair<HIDUsagePage, HIDUsage> HIDParser::GetApplicationUsage(const uint8_t* 
 #if _WIN32
 void HIDParser::EnumerateValues(const std::function<bool(const HIDMainItem& item)>& valueCB) const
 {
+#if !WINDOWS_STORE
     if (m_status != ParserStatus::Done)
         return;
 
@@ -731,6 +734,7 @@ void HIDParser::EnumerateValues(const std::function<bool(const HIDMainItem& item
         if (!valueCB(item))
             return;
     }
+#endif
 }
 #else
 void HIDParser::EnumerateValues(const std::function<bool(const HIDMainItem& item)>& valueCB) const
@@ -757,6 +761,7 @@ void HIDParser::EnumerateValues(const std::function<bool(const HIDMainItem& item
 void HIDParser::ScanValues(const std::function<bool(const HIDMainItem& item, int32_t value)>& valueCB,
                            const uint8_t* data, size_t len) const
 {
+#if !WINDOWS_STORE
     if (m_status != ParserStatus::Done)
         return;
 
@@ -786,6 +791,7 @@ void HIDParser::ScanValues(const std::function<bool(const HIDMainItem& item, int
             return;
         ++idx;
     }
+#endif
 }
 #else
 

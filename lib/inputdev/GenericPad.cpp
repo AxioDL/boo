@@ -21,8 +21,10 @@ void GenericPad::deviceDisconnected()
 void GenericPad::initialCycle()
 {
 #if _WIN32
+#if !WINDOWS_STORE
     const PHIDP_PREPARSED_DATA reportDesc = getReportDescriptor();
     m_parser.Parse(reportDesc);
+#endif
 #else
     std::vector<uint8_t> reportDesc = getReportDescriptor();
     m_parser.Parse(reportDesc.data(), reportDesc.size());

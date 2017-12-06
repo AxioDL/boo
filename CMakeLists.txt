@@ -37,6 +37,7 @@ if(NOT GEKKO AND NOT CAFE AND NOT WINDOWS_STORE)
 list(APPEND PLAT_SRCS
     lib/graphicsdev/GL.cpp
     lib/graphicsdev/glew.c)
+list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_GL=1)
 
 list(APPEND PLAT_HDRS
      include/boo/graphicsdev/GLSLMacros.hpp
@@ -53,8 +54,8 @@ if(WINDOWS_STORE)
        lib/win/WindowUWP.cpp
        lib/win/WinCommon.hpp
        lib/win/UWPCommon.hpp
-       lib/inputdev/HIDListenerWinUSB.cpp
-       lib/inputdev/HIDDeviceWinUSB.cpp
+       lib/inputdev/HIDListenerUWP.cpp
+       lib/inputdev/HIDDeviceUWP.cpp
        lib/graphicsdev/D3D11.cpp
        lib/graphicsdev/D3D12.cpp
        lib/audiodev/WASAPI.cpp)

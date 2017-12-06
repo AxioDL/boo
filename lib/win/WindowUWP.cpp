@@ -8,7 +8,10 @@
 #include "boo/audiodev/IAudioVoiceEngine.hpp"
 
 using namespace Windows::UI::Core;
+using namespace Windows::UI::ViewManagement;
 using namespace Windows::System;
+using namespace Windows::Graphics::Display;
+using namespace Windows::Foundation;
 
 namespace boo
 {
@@ -178,67 +181,59 @@ public:
     }
 };
 
-static void genFrameDefault(MONITORINFO* screen, int& xOut, int& yOut, int& wOut, int& hOut)
-{
-    float width = screen->rcMonitor.right * 2.0 / 3.0;
-    float height = screen->rcMonitor.bottom * 2.0 / 3.0;
-    xOut = (screen->rcMonitor.right - width) / 2.0;
-    yOut = (screen->rcMonitor.bottom - height) / 2.0;
-    wOut = width;
-    hOut = height;
-}
-
-static uint32_t translateKeysym(VirtualKey sym, ESpecialKey& specialSym, EModifierKey& modifierSym)
+static uint32_t translateKeysym(CoreWindow^ window, VirtualKey sym,
+                                ESpecialKey& specialSym, EModifierKey& modifierSym)
 {
     specialSym = ESpecialKey::None;
     modifierSym = EModifierKey::None;
-    if (sym >= VirtualKey_F1 && sym <= VirtualKey_F12)
-        specialSym = ESpecialKey(uint32_t(ESpecialKey::F1) + sym - VirtualKey_F1);
-    else if (sym == VirtualKey_Escape)
+    if (sym >= VirtualKey::F1 && sym <= VirtualKey::F12)
+        specialSym = ESpecialKey(uint32_t(ESpecialKey::F1) + uint32_t(sym - VirtualKey::F1));
+    else if (sym == VirtualKey::Escape)
         specialSym = ESpecialKey::Esc;
-    else if (sym == VirtualKey_Enter)
+    else if (sym == VirtualKey::Enter)
         specialSym = ESpecialKey::Enter;
-    else if (sym == VirtualKey_Back)
+    else if (sym == VirtualKey::Back)
         specialSym = ESpecialKey::Backspace;
-    else if (sym == VirtualKey_Insert)
+    else if (sym == VirtualKey::Insert)
         specialSym = ESpecialKey::Insert;
-    else if (sym == VirtualKey_Delete)
+    else if (sym == VirtualKey::Delete)
         specialSym = ESpecialKey::Delete;
-    else if (sym == VirtualKey_Home)
+    else if (sym == VirtualKey::Home)
         specialSym = ESpecialKey::Home;
-    else if (sym == VirtualKey_End)
+    else if (sym == VirtualKey::End)
         specialSym = ESpecialKey::End;
-    else if (sym == VirtualKey_PageUp)
+    else if (sym == VirtualKey::PageUp)
         specialSym = ESpecialKey::PgUp;
-    else if (sym == VirtualKey_PageDown)
+    else if (sym == VirtualKey::PageDown)
         specialSym = ESpecialKey::PgDown;
-    else if (sym == VirtualKey_Left)
+    else if (sym == VirtualKey::Left)
         specialSym = ESpecialKey::Left;
-    else if (sym == VirtualKey_Right)
+    else if (sym == VirtualKey::Right)
         specialSym = ESpecialKey::Right;
-    else if (sym == VirtualKey_Up)
+    else if (sym == VirtualKey::Up)
         specialSym = ESpecialKey::Up;
-    else if (sym == VirtualKey_Down)
+    else if (sym == VirtualKey::Down)
         specialSym = ESpecialKey::Down;
-    else if (sym == VirtualKey_Shift)
+    else if (sym == VirtualKey::Shift)
         modifierSym = EModifierKey::Shift;
-    else if (sym == VirtualKey_Control)
+    else if (sym == VirtualKey::Control)
         modifierSym = EModifierKey::Ctrl;
-    else if (sym == VirtualKey_Menu)
+    else if (sym == VirtualKey::Menu)
         modifierSym = EModifierKey::Alt;
-    else if (sym >= VirtualKey_A && sym <= VirtualKey_Z)
-        return sym - VirtualKey_A + window->GetKeyState(VirtualKey_Shift) ? 'A' : 'a'
+    else if (sym >= VirtualKey::A && sym <= VirtualKey::Z)
+        return uint32_t(sym - VirtualKey::A) +
+                (window->GetKeyState(VirtualKey::Shift) != CoreVirtualKeyStates::None) ? 'A' : 'a';
     return 0;
 }
 
 static EModifierKey translateModifiers(CoreWindow^ window)
 {
     EModifierKey retval = EModifierKey::None;
-    if (window->GetKeyState(VirtualKey_Shift) != None)
+    if (window->GetKeyState(VirtualKey::Shift) != CoreVirtualKeyStates::None)
         retval |= EModifierKey::Shift;
-    if (window->GetKeyState(VirtualKey_Control) != None)
+    if (window->GetKeyState(VirtualKey::Control) != CoreVirtualKeyStates::None)
         retval |= EModifierKey::Ctrl;
-    if (window->GetKeyState(LefVirtualKey_Menu) != None)
+    if (window->GetKeyState(VirtualKey::Menu) != CoreVirtualKeyStates::None)
         retval |= EModifierKey::Alt;
     return retval;
 }
@@ -253,7 +248,36 @@ class WindowUWP : public IWindow
 
 public:
 
-    WindowUWP(SystemStringView title, Boo3DAppContext& b3dCtx, uint32_t sampleCount)
+    ref struct EventReceiver sealed
+    {
+        void OnKeyDown(CoreWindow^ window, KeyEventArgs^ keyEventArgs)
+        {
+            w.OnKeyDown(window, keyEventArgs);
+        }
+
+        void OnKeyUp(CoreWindow^ window, KeyEventArgs^ keyEventArgs)
+        {
+            w.OnKeyUp(window, keyEventArgs);
+        }
+
+        void OnClosed(CoreWindow^ sender, CoreWindowEventArgs^ args)
+        {
+            w.OnClosed(sender, args);
+        }
+
+    internal:
+        WindowUWP& w;
+        EventReceiver(WindowUWP& w) : w(w)
+        {
+            w.m_coreWindow->KeyDown += ref new TypedEventHandler<CoreWindow^, KeyEventArgs^>(this, &EventReceiver::OnKeyDown);
+            w.m_coreWindow->KeyUp += ref new TypedEventHandler<CoreWindow^, KeyEventArgs^>(this, &EventReceiver::OnKeyUp);
+            w.m_coreWindow->Closed += ref new TypedEventHandler<CoreWindow^, CoreWindowEventArgs^>(this, &EventReceiver::OnClosed);
+        }
+    };
+    EventReceiver^ m_eventReceiver;
+
+    WindowUWP(SystemStringView title, Boo3DAppContextUWP& b3dCtx, uint32_t sampleCount)
+    : m_eventReceiver(ref new EventReceiver(*this))
     {
         IGraphicsContext::EGraphicsAPI api = IGraphicsContext::EGraphicsAPI::D3D11;
 #if _WIN32_WINNT_WIN10
@@ -263,9 +287,6 @@ public:
         m_gfxCtx.reset(new GraphicsContextUWPD3D(api, this, m_coreWindow, b3dCtx, sampleCount));
 
         setTitle(title);
-        m_coreWindow->KeyDown += ref new TypedEventHandler<CoreWindow^, KeyEventArgs^>(this, &WindowUWP::OnKeyDown);
-        m_coreWindow->KeyUp += ref new TypedEventHandler<CoreWindow^, KeyEventArgs^>(this, &WindowUWP::OnKeyUp);
-        m_coreWindow->Closed += ref new TypedEventHandler<CoreWindow^, CoreWindowEventArgs^>(this, &WindowUWP::OnClosed);
     }
 
     ~WindowUWP()
@@ -293,12 +314,12 @@ public:
 
     SystemString getTitle()
     {
-        return SystemString(m_appView->Title.Data());
+        return SystemString(m_appView->Title->Data());
     }
 
     void setTitle(SystemStringView title)
     {
-        m_appView->Title = title.data();
+        m_appView->Title = ref new Platform::String(title.data());
     }
 
     void setCursor(EMouseCursor cursor)
@@ -315,18 +336,18 @@ public:
 
     void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const
     {
-        xOut = m_coreWindow->bounds.X;
-        yOut = m_coreWindow->bounds.Y;
-        wOut = m_coreWindow->bounds.Width;
-        hOut = m_coreWindow->bounds.Height;
+        xOut = m_coreWindow->Bounds.X;
+        yOut = m_coreWindow->Bounds.Y;
+        wOut = m_coreWindow->Bounds.Width;
+        hOut = m_coreWindow->Bounds.Height;
     }
 
     void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const
     {
-        xOut = m_coreWindow->bounds.X;
-        yOut = m_coreWindow->bounds.Y;
-        wOut = m_coreWindow->bounds.Width;
-        hOut = m_coreWindow->bounds.Height;
+        xOut = m_coreWindow->Bounds.X;
+        yOut = m_coreWindow->Bounds.Y;
+        wOut = m_coreWindow->Bounds.Width;
+        hOut = m_coreWindow->Bounds.Height;
     }
 
     void setWindowFrame(float x, float y, float w, float h)
@@ -339,8 +360,8 @@ public:
 
     float getVirtualPixelFactor() const
     {
-        DisplayInformation dispInfo = DisplayInformation::GetForCurrentView();
-        return dispInfo.LogicalDpi / 96.f;
+        DisplayInformation^ dispInfo = DisplayInformation::GetForCurrentView();
+        return dispInfo->LogicalDpi / 96.f;
     }
 
     bool isFullscreen() const
@@ -359,6 +380,7 @@ public:
 
     bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz)
     {
+        return false;
     }
 
     std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz)
@@ -384,37 +406,31 @@ public:
 
     void OnKeyDown(CoreWindow^ window, KeyEventArgs^ keyEventArgs)
     {
-        if (auto w = m_window.lock())
-        {
-            ESpecialKey specialKey;
-            EModifierKey modifierKey;
-            uint32_t charCode = translateKeysym(keyEventArgs->VirtualKey, specialKey, modifierKey);
-            EModifierKey modifierMask = translateModifiers(window);
-            bool repeat = keyEventArgs->KeyStatus.RepeatCount > 1;
-            if (charCode)
-                m_callback->charKeyDown(charCode, modifierMask, repeat);
-            else if (specialKey != ESpecialKey::None)
-                m_callback->specialKeyDown(specialKey, modifierMask, repeat);
-            else if (modifierKey != EModifierKey::None)
-                m_callback->modKeyDown(modifierKey, repeat);
-        }
+        ESpecialKey specialKey;
+        EModifierKey modifierKey;
+        uint32_t charCode = translateKeysym(m_coreWindow, keyEventArgs->VirtualKey, specialKey, modifierKey);
+        EModifierKey modifierMask = translateModifiers(window);
+        bool repeat = keyEventArgs->KeyStatus.RepeatCount > 1;
+        if (charCode)
+            m_callback->charKeyDown(charCode, modifierMask, repeat);
+        else if (specialKey != ESpecialKey::None)
+            m_callback->specialKeyDown(specialKey, modifierMask, repeat);
+        else if (modifierKey != EModifierKey::None)
+            m_callback->modKeyDown(modifierKey, repeat);
     }
 
     void OnKeyUp(CoreWindow^ window, KeyEventArgs^ keyEventArgs)
     {
-        if (auto w = m_window.lock())
-        {
-            ESpecialKey specialKey;
-            EModifierKey modifierKey;
-            uint32_t charCode = translateKeysym(keyEventArgs->VirtualKey, specialKey, modifierKey);
-            EModifierKey modifierMask = translateModifiers(window);
-            if (charCode)
-                m_callback->charKeyDown(charCode, modifierMask);
-            else if (specialKey != ESpecialKey::None)
-                m_callback->specialKeyDown(specialKey, modifierMask);
-            else if (modifierKey != EModifierKey::None)
-                m_callback->modKeyDown(modifierKey);
-        }
+        ESpecialKey specialKey;
+        EModifierKey modifierKey;
+        uint32_t charCode = translateKeysym(m_coreWindow, keyEventArgs->VirtualKey, specialKey, modifierKey);
+        EModifierKey modifierMask = translateModifiers(window);
+        if (charCode)
+            m_callback->charKeyUp(charCode, modifierMask);
+        else if (specialKey != ESpecialKey::None)
+            m_callback->specialKeyUp(specialKey, modifierMask);
+        else if (modifierKey != EModifierKey::None)
+            m_callback->modKeyUp(modifierKey);
     }
 
     void OnClosed(CoreWindow ^sender, CoreWindowEventArgs ^args)
@@ -459,7 +475,7 @@ public:
 
 };
 
-std::shared_ptr<IWindow> _WindowUAPNew(SystemStringView title, Boo3DAppContext& d3dCtx,
+std::shared_ptr<IWindow> _WindowUWPNew(SystemStringView title, Boo3DAppContextUWP& d3dCtx,
                                        uint32_t sampleCount)
 {
     return std::make_shared<WindowUWP>(title, d3dCtx, sampleCount);

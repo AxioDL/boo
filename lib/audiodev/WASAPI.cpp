@@ -8,8 +8,12 @@
 
 #include <iterator>
 
+#if !WINDOWS_STORE
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
+#else
+using namespace Windows::Media::Devices;
+#endif
 const IID IID_IAudioClient = __uuidof(IAudioClient);
 const IID IID_IAudioRenderClient = __uuidof(IAudioRenderClient);
 
@@ -23,14 +27,17 @@ static logvisor::Module Log("boo::WASAPI");
 
 struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
 {
+#if !WINDOWS_STORE
     ComPtr<IMMDeviceEnumerator> m_enumerator;
     ComPtr<IMMDevice> m_device;
+#endif
     ComPtr<IAudioClient> m_audClient;
     ComPtr<IAudioRenderClient> m_renderClient;
 
     size_t m_curBufFrame = 0;
     std::vector<float> m_5msBuffer;
 
+#if !WINDOWS_STORE
     struct NotificationClient : public IMMNotificationClient
     {
         WASAPIAudioVoiceEngine& m_parent;
@@ -122,9 +129,11 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
             return S_OK;
         }
     } m_notificationClient;
+#endif
 
     void _buildAudioRenderClient()
     {
+#if !WINDOWS_STORE
         if (FAILED(m_enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &m_device)))
         {
             Log.report(logvisor::Fatal, L"unable to obtain default audio device");
@@ -138,12 +147,15 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
             m_device.Reset();
             return;
         }
+#endif
 
         WAVEFORMATEXTENSIBLE* pwfx;
         if (FAILED(m_audClient->GetMixFormat((WAVEFORMATEX**)&pwfx)))
         {
             Log.report(logvisor::Fatal, L"unable to obtain audio mix format from device");
+#if !WINDOWS_STORE
             m_device.Reset();
+#endif
             return;
         }
 
@@ -226,7 +238,9 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
                    nullptr)))
         {
             Log.report(logvisor::Fatal, L"unable to initialize audio client");
+#if !WINDOWS_STORE
             m_device.Reset();
+#endif
             CoTaskMemFree(pwfx);
             return;
         }
@@ -251,7 +265,9 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
             else
             {
                 Log.report(logvisor::Fatal, L"unsupported bits-per-sample %d", pwfx->Format.wBitsPerSample);
+#if !WINDOWS_STORE
                 m_device.Reset();
+#endif
                 return;
             }
         }
@@ -266,7 +282,9 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
             else
             {
                 Log.report(logvisor::Fatal, L"unsupported floating-point bits-per-sample %d", pwfx->Format.wBitsPerSample);
+#if !WINDOWS_STORE
                 m_device.Reset();
+#endif
                 return;
             }
         }
@@ -277,7 +295,9 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         if (FAILED(m_audClient->GetBufferSize(&bufferFrameCount)))
         {
             Log.report(logvisor::Fatal, L"unable to get audio buffer frame count");
+#if !WINDOWS_STORE
             m_device.Reset();
+#endif
             return;
         }
         m_mixInfo.m_periodFrames = bufferFrameCount;
@@ -285,14 +305,78 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         if (FAILED(m_audClient->GetService(IID_IAudioRenderClient, &m_renderClient)))
         {
             Log.report(logvisor::Fatal, L"unable to create audio render client");
+#if !WINDOWS_STORE
             m_device.Reset();
+#endif
             return;
         }
     }
 
-    WASAPIAudioVoiceEngine()
-    : m_notificationClient(*this)
+#if WINDOWS_STORE
+    struct CompletionHandler : IActivateAudioInterfaceCompletionHandler
     {
+        WASAPIAudioVoiceEngine& e;
+        LONG _cRef = 1;
+
+        CompletionHandler(WASAPIAudioVoiceEngine& e) : e(e) {}
+        HRESULT ActivateCompleted(IActivateAudioInterfaceAsyncOperation* operation)
+        {
+            return e.ActivateCompleted(operation);
+        }
+
+        ULONG STDMETHODCALLTYPE AddRef()
+        {
+            return InterlockedIncrement(&_cRef);
+        }
+
+        ULONG STDMETHODCALLTYPE Release()
+        {
+            ULONG ulRef = InterlockedDecrement(&_cRef);
+            if (0 == ulRef)
+            {
+                delete this;
+            }
+            return ulRef;
+        }
+
+        HRESULT STDMETHODCALLTYPE QueryInterface(
+                                    REFIID riid, VOID **ppvInterface)
+        {
+            if (IID_IUnknown == riid)
+            {
+                AddRef();
+                *ppvInterface = (IUnknown*)this;
+            }
+            else if (__uuidof(IActivateAudioInterfaceCompletionHandler) == riid)
+            {
+                AddRef();
+                *ppvInterface = (IActivateAudioInterfaceCompletionHandler*)this;
+            }
+            else
+            {
+                *ppvInterface = NULL;
+                return E_NOINTERFACE;
+            }
+            return S_OK;
+        }
+    } m_completion = {*this};
+    HRESULT ActivateCompleted(IActivateAudioInterfaceAsyncOperation* operation)
+    {
+        ComPtr<IUnknown> punkAudioInterface;
+        HRESULT hrActivateResult;
+        operation->GetActivateResult(&hrActivateResult, &punkAudioInterface);
+        punkAudioInterface.As<IAudioClient>(&m_audClient);
+        _buildAudioRenderClient();
+        return ERROR_SUCCESS;
+    }
+#endif
+
+    WASAPIAudioVoiceEngine()
+#if !WINDOWS_STORE
+    : m_notificationClient(*this)
+#endif
+    {
+#if !WINDOWS_STORE
         /* Enumerate default audio device */
         if (FAILED(CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr,
                                     CLSCTX_ALL, IID_IMMDeviceEnumerator,
@@ -310,6 +394,11 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         }
 
         _buildAudioRenderClient();
+#else
+        auto deviceIdStr = MediaDevice::GetDefaultAudioRenderId(Windows::Media::Devices::AudioDeviceRole::Default);
+        ComPtr<IActivateAudioInterfaceAsyncOperation> asyncOp;
+        ActivateAudioInterfaceAsync(deviceIdStr->Data(), __uuidof(IAudioClient3), nullptr, &m_completion, &asyncOp);
+#endif
     }
 
     bool m_started = false;
@@ -411,6 +500,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         }
     }
 
+#if !WINDOWS_STORE
     std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const
     {
         std::vector<std::pair<std::string, std::string>> ret;
@@ -681,13 +771,53 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
     }
 
     bool useMIDILock() const {return true;}
+#else
+    std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const
+    {
+        return {};
+    }
+
+    std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver)
+    {
+        return {};
+    }
+
+    std::unique_ptr<IMIDIOut> newVirtualMIDIOut()
+    {
+        return {};
+    }
+
+    std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver)
+    {
+        return {};
+    }
+
+    std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver)
+    {
+        return {};
+    }
+
+    std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name)
+    {
+        return {};
+    }
+
+    std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver)
+    {
+        return {};
+    }
+
+    bool useMIDILock() const {return false;}
+#endif
 };
 
 std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine()
 {
     std::unique_ptr<IAudioVoiceEngine> ret = std::make_unique<WASAPIAudioVoiceEngine>();
+#if !WINDOWS_STORE
     if (!static_cast<WASAPIAudioVoiceEngine&>(*ret).m_device)
         return {};
+#endif
     return ret;
 }
 

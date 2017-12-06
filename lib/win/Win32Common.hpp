@@ -16,7 +16,7 @@
 
 extern DWORD g_mainThreadId;
 
-#if _WIN32_WINNT_WINBLUE
+#if _WIN32_WINNT_WINBLUE && !WINDOWS_STORE
 #include <ShellScalingApi.h>
 typedef HRESULT (WINAPI* PFN_SetProcessDpiAwareness)( _In_ PROCESS_DPI_AWARENESS );
 typedef HRESULT (WINAPI* PFN_GetScaleFactorForMonitor)( _In_ HMONITOR, _Out_ DEVICE_SCALE_FACTOR *);
@@ -187,12 +187,14 @@ struct Boo3DAppContextWin32 : Boo3DAppContext
             return true;
         }
 
+#if !WINDOWS_STORE
         OGLContext::Window& win = m_ctxOgl.m_windows[window];
         if (fs && win.m_fs)
             return false;
         else if (!fs && !win.m_fs)
             return false;
         SetFullscreen(win, fs);
+#endif
         return true;
     }
 };

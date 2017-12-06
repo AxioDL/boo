@@ -55,12 +55,14 @@ size_t DeviceBase::receiveUSBInterruptTransfer(uint8_t* data, size_t length)
 }
 
 #if _WIN32
+#if !WINDOWS_STORE
 const PHIDP_PREPARSED_DATA DeviceBase::getReportDescriptor()
 {
     if (m_hidDev)
         return m_hidDev->_getReportDescriptor();
     return {};
 }
+#endif
 #else
 std::vector<uint8_t> DeviceBase::getReportDescriptor()
 {

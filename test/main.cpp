@@ -336,6 +336,7 @@ struct TestApplicationCallback : IApplicationCallback
             /* Make shader pipeline */
             boo::ObjToken<IShaderPipeline> pipeline;
             auto plat = ctx.platform();
+#if BOO_HAS_GL
             if (plat == IGraphicsDataFactory::Platform::OpenGL)
             {
                 GLDataFactory::Context& glF = dynamic_cast<GLDataFactory::Context&>(ctx);
@@ -369,9 +370,10 @@ struct TestApplicationCallback : IApplicationCallback
                                                  BlendFactor::One, BlendFactor::Zero,
                                                  Primitive::TriStrips, boo::ZTest::LEqual,
                                                  true, true, false, CullMode::None);
-            }
+            } else
+#endif
 #if BOO_HAS_VULKAN
-            else if (plat == IGraphicsDataFactory::Platform::Vulkan)
+            if (plat == IGraphicsDataFactory::Platform::Vulkan)
             {
                 VulkanDataFactory::Context& vkF = dynamic_cast<VulkanDataFactory::Context&>(ctx);
 
@@ -402,11 +404,11 @@ struct TestApplicationCallback : IApplicationCallback
                 pipeline = vkF.newShaderPipeline(VS, FS, vfmt, BlendFactor::One, BlendFactor::Zero,
                                                  Primitive::TriStrips, boo::ZTest::LEqual,
                                                  true, true, false, CullMode::None);
-            }
+            } else
 #endif
 #if _WIN32
-            else if (plat == IGraphicsDataFactory::Platform::D3D12 ||
-                     plat == IGraphicsDataFactory::Platform::D3D11)
+            if (plat == IGraphicsDataFactory::Platform::D3D12 ||
+                plat == IGraphicsDataFactory::Platform::D3D11)
             {
                 ID3DDataFactory::Context& d3dF = dynamic_cast<ID3DDataFactory::Context&>(ctx);
 
@@ -434,9 +436,9 @@ struct TestApplicationCallback : IApplicationCallback
                                                   BlendFactor::One, BlendFactor::Zero,
                                                   Primitive::TriStrips, boo::ZTest::LEqual,
                                                   true, true, false, CullMode::None);
-            }
+            } else
 #elif BOO_HAS_METAL
-            else if (plat == IGraphicsDataFactory::Platform::Metal)
+            if (plat == IGraphicsDataFactory::Platform::Metal)
             {
                 MetalDataFactory::Context& metalF = dynamic_cast<MetalDataFactory::Context&>(ctx);
 
@@ -466,8 +468,9 @@ struct TestApplicationCallback : IApplicationCallback
                 pipeline = metalF.newShaderPipeline(VS, FS, nullptr, nullptr, vfmt, 1,
                                                     BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
                                                     boo::ZTest::LEqual, true, true, true, boo::CullMode::None);
-            }
+            } else
 #endif
+            {}
 
             /* Make shader data binding */
             self->m_binding =
@@ -581,6 +584,7 @@ struct TestApplicationCallback : IApplicationCallback
 
 }
 
+#if !WINDOWS_STORE
 #if _WIN32
 int wmain(int argc, const boo::SystemChar** argv)
 #else
@@ -596,7 +600,7 @@ int main(int argc, const boo::SystemChar** argv)
     return ret;
 }
 
-#if WINAPI_FAMILY && !WINAPI_PARTITION_DESKTOP
+#else
 using namespace Windows::ApplicationModel::Core;
 
 [Platform::MTAThread]
@@ -605,12 +609,14 @@ int WINAPIV main(Platform::Array<Platform::String^>^ params)
     logvisor::RegisterStandardExceptions();
     logvisor::RegisterConsoleLogger();
     boo::TestApplicationCallback appCb;
-    auto viewProvider = ref new ViewProvider(appCb, _S("boo"), _S("boo"), params, false);
+    boo::ViewProvider^ viewProvider =
+        ref new boo::ViewProvider(appCb, _S("boo"), _S("boo"), _S("boo"), params, false);
     CoreApplication::Run(viewProvider);
     return 0;
 }
+#endif
 
-#elif _WIN32
+#if _WIN32 && !WINDOWS_STORE
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int)
 {
     int argc = 0;

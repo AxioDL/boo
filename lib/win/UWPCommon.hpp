@@ -3,8 +3,6 @@
 
 #include "WinCommon.hpp"
 
-using namespace Windows::ApplicationModel::Core;
-
 struct Boo3DAppContextUWP : Boo3DAppContext
 {
     bool isFullscreen(const boo::IWindow* window)

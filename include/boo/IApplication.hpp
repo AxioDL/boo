@@ -81,11 +81,12 @@ ApplicationRun(IApplication::EPlatformType platform,
     return ApplicationRun(platform, cb, uniqueName, friendlyName, argv[0], args, singleInstance);
 }
 
-#if WINAPI_FAMILY && WINAPI_FAMILY != WINAPI_FAMILY_DESKTOP_APP
+#if WINDOWS_STORE
 using namespace Windows::ApplicationModel::Core;
 
 ref struct ViewProvider sealed : IFrameworkViewSource
 {
+internal:
     ViewProvider(boo::IApplicationCallback& appCb,
                  SystemStringView uniqueName,
                  SystemStringView friendlyName,
@@ -97,13 +98,15 @@ ref struct ViewProvider sealed : IFrameworkViewSource
     {
         SystemChar selfPath[1024];
         GetModuleFileNameW(nullptr, selfPath, 1024);
-        m_args.reserve(params.size() + 1);
+        m_args.reserve(params->Length + 1);
         m_args.emplace_back(selfPath);
         for (Platform::String^ str : params)
-            m_args.emplace_back(str.Data());
+            m_args.emplace_back(str->Data());
     }
-    IFrameworkView^ CreateView();
+public:
+    virtual IFrameworkView^ CreateView();
 
+internal:
     boo::IApplicationCallback& m_appCb;
     SystemString m_uniqueName;
     SystemString m_friendlyName;

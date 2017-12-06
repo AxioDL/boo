@@ -25,30 +25,9 @@ pD3DCreateBlob D3DCreateBlobPROC = nullptr;
 
 static bool FindBestD3DCompile()
 {
-    HMODULE d3dCompilelib = LoadLibraryW(L"D3DCompiler_47.dll");
-    if (!d3dCompilelib)
-    {
-        d3dCompilelib = LoadLibraryW(L"D3DCompiler_46.dll");
-        if (!d3dCompilelib)
-        {
-            d3dCompilelib = LoadLibraryW(L"D3DCompiler_45.dll");
-            if (!d3dCompilelib)
-            {
-                d3dCompilelib = LoadLibraryW(L"D3DCompiler_44.dll");
-                if (!d3dCompilelib)
-                {
-                    d3dCompilelib = LoadLibraryW(L"D3DCompiler_43.dll");
-                }
-            }
-        }
-    }
-    if (d3dCompilelib)
-    {
-        D3DCompilePROC = (pD3DCompile)GetProcAddress(d3dCompilelib, "D3DCompile");
-        D3DCreateBlobPROC = (pD3DCreateBlob)GetProcAddress(d3dCompilelib, "D3DCreateBlob");
-        return D3DCompilePROC != nullptr && D3DCreateBlobPROC != nullptr;
-    }
-    return false;
+    D3DCompilePROC = D3DCompile;
+    D3DCreateBlobPROC = D3DCreateBlob;
+    return D3DCompilePROC != nullptr && D3DCreateBlobPROC != nullptr;
 }
 
 namespace boo
@@ -91,14 +70,8 @@ public:
       m_args(args),
       m_singleInstance(singleInstance)
     {
-        HMODULE dxgilib = LoadLibraryW(L"dxgi.dll");
-        if (!dxgilib)
-            Log.report(logvisor::Fatal, "unable to load dxgi.dll");
-
         typedef HRESULT(WINAPI*CreateDXGIFactory1PROC)(REFIID riid, _COM_Outptr_ void **ppFactory);
-        CreateDXGIFactory1PROC MyCreateDXGIFactory1 = (CreateDXGIFactory1PROC)GetProcAddress(dxgilib, "CreateDXGIFactory1");
-        if (!MyCreateDXGIFactory1)
-            Log.report(logvisor::Fatal, "unable to find CreateDXGIFactory1 in DXGI.dll\n");
+        CreateDXGIFactory1PROC MyCreateDXGIFactory1 = CreateDXGIFactory1;
 
         bool no12 = false;
         for (const SystemString& arg : args)
@@ -106,30 +79,15 @@ public:
                 no12 = true;
 
 #if _WIN32_WINNT_WIN10
-        HMODULE d3d12lib = LoadLibraryW(L"D3D12.dll");
-        if (!no12 && d3d12lib)
+        if (!no12)
         {   
-#if _DEBUG
-            {
-                PFN_D3D12_GET_DEBUG_INTERFACE MyD3D12GetDebugInterface =
-                (PFN_D3D12_GET_DEBUG_INTERFACE)GetProcAddress(d3d12lib, "D3D12GetDebugInterface");
-                ComPtr<ID3D12Debug> debugController;
-                if (SUCCEEDED(MyD3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
-                {
-                    debugController->EnableDebugLayer();
-                }
-            }
-#endif
             if (!FindBestD3DCompile())
                 Log.report(logvisor::Fatal, "unable to find D3DCompile_[43-47].dll");
 
-            D3D12SerializeRootSignaturePROC =
-            (PFN_D3D12_SERIALIZE_ROOT_SIGNATURE)GetProcAddress(d3d12lib, "D3D12SerializeRootSignature");
+            D3D12SerializeRootSignaturePROC = D3D12SerializeRootSignature;
 
             /* Create device */
-            PFN_D3D12_CREATE_DEVICE MyD3D12CreateDevice = (PFN_D3D12_CREATE_DEVICE)GetProcAddress(d3d12lib, "D3D12CreateDevice");
-            if (!MyD3D12CreateDevice)
-                Log.report(logvisor::Fatal, "unable to find D3D12CreateDevice in D3D12.dll");
+            PFN_D3D12_CREATE_DEVICE MyD3D12CreateDevice = D3D12CreateDevice;
 
             /* Obtain DXGI Factory */
             HRESULT hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory2), &m_3dCtx.m_ctx12.m_dxFactory);
@@ -191,16 +149,12 @@ public:
             }
         }
 #endif
-        HMODULE d3d11lib = LoadLibraryW(L"D3D11.dll");
-        if (d3d11lib)
         {
             if (!FindBestD3DCompile())
                 Log.report(logvisor::Fatal, "unable to find D3DCompile_[43-47].dll");
 
             /* Create device proc */
-            PFN_D3D11_CREATE_DEVICE MyD3D11CreateDevice = (PFN_D3D11_CREATE_DEVICE)GetProcAddress(d3d11lib, "D3D11CreateDevice");
-            if (!MyD3D11CreateDevice)
-                Log.report(logvisor::Fatal, "unable to find D3D11CreateDevice in D3D11.dll");
+            PFN_D3D11_CREATE_DEVICE MyD3D11CreateDevice = D3D11CreateDevice;
 
             /* Create device */
             D3D_FEATURE_LEVEL level = D3D_FEATURE_LEVEL_11_0;
@@ -215,9 +169,6 @@ public:
                 FAILED(tempCtx.As<ID3D11DeviceContext1>(&m_3dCtx.m_ctx11.m_devCtx)) || !m_3dCtx.m_ctx11.m_devCtx ||
                 FAILED(m_3dCtx.m_ctx11.m_dev.As<IDXGIDevice2>(&device)) || !device)
             {
-                MessageBoxW(nullptr, L"Windows 7 users should install 'Platform Update for Windows 7':\n"
-                                     L"https://www.microsoft.com/en-us/download/details.aspx?id=36805",
-                                     L"IDXGIDevice2 interface error", MB_OK | MB_ICONERROR);
                 exit(1);
             }
 
@@ -256,7 +207,7 @@ public:
         int clientReturn = 0;
         std::thread clientThread([&]()
         {
-            std::string thrName = WCSTMBS(getFriendlyName().c_str()) + " Client Thread";
+            std::string thrName = WCSTMBS(getFriendlyName().data()) + " Client Thread";
             logvisor::RegisterThreadName(thrName.c_str());
             clientReturn = m_callback.appMain(this);
         });

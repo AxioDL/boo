@@ -2,6 +2,13 @@
 #define BOO_SYSTEM_HPP
 
 #ifdef _WIN32
+#include <winapifamily.h>
+#if defined(WINAPI_FAMILY) && WINAPI_FAMILY != WINAPI_FAMILY_DESKTOP_APP
+#define WINDOWS_STORE 1
+#else
+#define WINDOWS_STORE 0
+#endif
+
 #include <windows.h>
 #include <D3Dcommon.h>
 #include <wrl/client.h>

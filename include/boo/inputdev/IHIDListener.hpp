@@ -15,7 +15,7 @@ class DeviceFinder;
 class IHIDListener
 {
 public:
-    virtual ~IHIDListener() {}
+    virtual ~IHIDListener() = default;
     
     /* Automatic device scanning */
     virtual bool startScanning()=0;
@@ -24,7 +24,7 @@ public:
     /* Manual device scanning */
     virtual bool scanNow()=0;
 
-#if _WIN32
+#if _WIN32 && !WINDOWS_STORE
     /* External listener implementation (for Windows) */
     virtual bool _extDevConnect(const char* path)=0;
     virtual bool _extDevDisconnect(const char* path)=0;

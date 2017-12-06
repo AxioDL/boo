@@ -20,7 +20,9 @@ class IHIDDevice : public std::enable_shared_from_this<IHIDDevice>
     virtual bool _sendUSBInterruptTransfer(const uint8_t* data, size_t length)=0;
     virtual size_t _receiveUSBInterruptTransfer(uint8_t* data, size_t length)=0;
 #if _WIN32
+#if !WINDOWS_STORE
     virtual const PHIDP_PREPARSED_DATA _getReportDescriptor()=0;
+#endif
 #else
     virtual std::vector<uint8_t> _getReportDescriptor()=0;
 #endif

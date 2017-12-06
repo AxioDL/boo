@@ -41,7 +41,11 @@ static inline void ThrowIfFailed(HRESULT hr)
     if (FAILED(hr))
     {
         // Set a breakpoint on this line to catch Win32 API errors.
+#if !WINDOWS_STORE
         _com_error err(hr);
+#else
+        _com_error err(hr, L"D3D11 fail");
+#endif
         LPCTSTR errMsg = err.ErrorMessage();
         Log.report(logvisor::Fatal, errMsg);
     }
