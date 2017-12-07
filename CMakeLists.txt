@@ -61,6 +61,7 @@ if(WINDOWS_STORE)
        lib/audiodev/WASAPI.cpp)
 
   list(APPEND PLAT_HDRS
+        include/boo/UWPViewProvider.hpp
         include/boo/graphicsdev/D3D.hpp)
 
   list(APPEND _BOO_SYS_DEFINES -DUNICODE -D_UNICODE)
@@ -295,3 +296,7 @@ add_library(boo
             ${PLAT_HDRS})
 
 add_subdirectory(test)
+
+if(WINDOWS_STORE)
+  set_property(TARGET boo booTest PROPERTY VS_WINRT_COMPONENT TRUE)
+endif()

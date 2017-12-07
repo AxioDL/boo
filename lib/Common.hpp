@@ -9,10 +9,16 @@ namespace boo
 
 /** Linked-list iterator shareable by ListNode types. */
 template <class T>
-class ListIterator : public std::iterator<std::bidirectional_iterator_tag, T>
+class ListIterator
 {
     T* m_node;
 public:
+    using iterator_category = std::bidirectional_iterator_tag;
+    using value_type = T;
+    using difference_type = std::ptrdiff_t;
+    using pointer = T*;
+    using reference = T&;
+
     explicit ListIterator(T* node) : m_node(node) {}
     T& operator*() const { return *m_node; }
     bool operator!=(const ListIterator& other) const { return m_node != other.m_node; }

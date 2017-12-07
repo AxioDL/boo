@@ -3,6 +3,7 @@
 using namespace Windows::Foundation;
 using namespace Windows::UI::Core;
 using namespace Windows::ApplicationModel::Activation;
+using namespace Windows::ApplicationModel::Core;
 using namespace Platform;
 
 #if _DEBUG
@@ -16,6 +17,7 @@ using namespace Platform;
 #include "boo/inputdev/DeviceFinder.hpp"
 #include "boo/graphicsdev/D3D.hpp"
 #include "logvisor/logvisor.hpp"
+#include "boo/UWPViewProvider.hpp"
 
 #if _WIN32_WINNT_WIN10
 PFN_D3D12_SERIALIZE_ROOT_SIGNATURE D3D12SerializeRootSignaturePROC = nullptr;

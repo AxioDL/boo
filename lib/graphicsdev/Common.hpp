@@ -126,10 +126,16 @@ struct GraphicsDataNode : ListNode<GraphicsDataNode<NodeCls, DataCls>, ObjToken<
     : ListNode<GraphicsDataNode<NodeCls, DataCls>, ObjToken<DataCls>, NodeCls>(data)
     {}
 
-    class iterator : public std::iterator<std::bidirectional_iterator_tag, NodeCls>
+    class iterator
     {
         GraphicsDataNode<NodeCls, DataCls>* m_node;
     public:
+        using iterator_category = std::bidirectional_iterator_tag;
+        using value_type = NodeCls;
+        using difference_type = std::ptrdiff_t;
+        using pointer = NodeCls*;
+        using reference = NodeCls&;
+
         explicit iterator(GraphicsDataNode<NodeCls, DataCls>* node) : m_node(node) {}
         NodeCls& operator*() const { return *m_node; }
         bool operator!=(const iterator& other) const { return m_node != other.m_node; }
