@@ -70,7 +70,7 @@ public:
 #if !WINDOWS_STORE
         scDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 #else
-		scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 #endif
         scDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
@@ -250,9 +250,9 @@ class WindowUWP : public IWindow
 {
     friend struct GraphicsContextUWP;
     ApplicationView^ m_appView = ApplicationView::GetForCurrentView();
-	Platform::Agile<CoreWindow> m_coreWindow;
-	Rect m_bounds;
-	float m_dispInfoDpiFactor = 1.f;
+    Platform::Agile<CoreWindow> m_coreWindow;
+    Rect m_bounds;
+    float m_dispInfoDpiFactor = 1.f;
     std::unique_ptr<GraphicsContextUWP> m_gfxCtx;
     IWindowCallback* m_callback = nullptr;
 
@@ -270,52 +270,52 @@ public:
             w.OnKeyUp(window, keyEventArgs);
         }
 
-		void OnPointerEntered(CoreWindow^ window, PointerEventArgs^ args)
-		{
-			w.OnPointerEntered(window, args);
-		}
+        void OnPointerEntered(CoreWindow^ window, PointerEventArgs^ args)
+        {
+            w.OnPointerEntered(window, args);
+        }
 
-		void OnPointerExited(CoreWindow^ window, PointerEventArgs^ args)
-		{
-			w.OnPointerExited(window, args);
-		}
+        void OnPointerExited(CoreWindow^ window, PointerEventArgs^ args)
+        {
+            w.OnPointerExited(window, args);
+        }
 
-		void OnPointerMoved(CoreWindow^ window, PointerEventArgs^ args)
-		{
-			w.OnPointerMoved(window, args);
-		}
+        void OnPointerMoved(CoreWindow^ window, PointerEventArgs^ args)
+        {
+            w.OnPointerMoved(window, args);
+        }
 
-		void OnPointerPressed(CoreWindow^ window, PointerEventArgs^ args)
-		{
-			w.OnPointerPressed(window, args);
-		}
+        void OnPointerPressed(CoreWindow^ window, PointerEventArgs^ args)
+        {
+            w.OnPointerPressed(window, args);
+        }
 
-		void OnPointerReleased(CoreWindow^ window, PointerEventArgs^ args)
-		{
-			w.OnPointerReleased(window, args);
-		}
+        void OnPointerReleased(CoreWindow^ window, PointerEventArgs^ args)
+        {
+            w.OnPointerReleased(window, args);
+        }
 
-		void OnPointerWheelChanged(CoreWindow^ window, PointerEventArgs^ args)
-		{
-			w.OnPointerWheelChanged(window, args);
-		}
+        void OnPointerWheelChanged(CoreWindow^ window, PointerEventArgs^ args)
+        {
+            w.OnPointerWheelChanged(window, args);
+        }
 
         void OnClosed(CoreWindow^ sender, CoreWindowEventArgs^ args)
         {
             w.OnClosed(sender, args);
         }
 
-		void SizeChanged(CoreWindow^ window, WindowSizeChangedEventArgs^)
-		{
-			w.m_bounds = window->Bounds;
-			w._resized();
-		}
+        void SizeChanged(CoreWindow^ window, WindowSizeChangedEventArgs^)
+        {
+            w.m_bounds = window->Bounds;
+            w._resized();
+        }
 
-		void DisplayInfoChanged(DisplayInformation^ di, Object^)
-		{
-			w.m_dispInfoDpiFactor = di->LogicalDpi / 96.f;
-			w._resized();
-		}
+        void DisplayInfoChanged(DisplayInformation^ di, Object^)
+        {
+            w.m_dispInfoDpiFactor = di->LogicalDpi / 96.f;
+            w._resized();
+        }
 
     internal:
         WindowUWP& w;
@@ -323,16 +323,16 @@ public:
         {
             w.m_coreWindow->KeyDown += ref new TypedEventHandler<CoreWindow^, KeyEventArgs^>(this, &EventReceiver::OnKeyDown);
             w.m_coreWindow->KeyUp += ref new TypedEventHandler<CoreWindow^, KeyEventArgs^>(this, &EventReceiver::OnKeyUp);
-			w.m_coreWindow->PointerEntered += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerEntered);
-			w.m_coreWindow->PointerExited += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerExited);
-			w.m_coreWindow->PointerMoved += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerMoved);
-			w.m_coreWindow->PointerPressed += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerPressed);
-			w.m_coreWindow->PointerReleased += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerReleased);
-			w.m_coreWindow->PointerWheelChanged += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerWheelChanged);
+            w.m_coreWindow->PointerEntered += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerEntered);
+            w.m_coreWindow->PointerExited += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerExited);
+            w.m_coreWindow->PointerMoved += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerMoved);
+            w.m_coreWindow->PointerPressed += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerPressed);
+            w.m_coreWindow->PointerReleased += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerReleased);
+            w.m_coreWindow->PointerWheelChanged += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerWheelChanged);
             w.m_coreWindow->Closed += ref new TypedEventHandler<CoreWindow^, CoreWindowEventArgs^>(this, &EventReceiver::OnClosed);
-			w.m_coreWindow->SizeChanged += ref new TypedEventHandler<CoreWindow^, WindowSizeChangedEventArgs^>(this, &EventReceiver::SizeChanged);
-			DisplayInformation::GetForCurrentView()->DpiChanged +=
-				ref new TypedEventHandler<DisplayInformation^, Object^>(this, &EventReceiver::DisplayInfoChanged);
+            w.m_coreWindow->SizeChanged += ref new TypedEventHandler<CoreWindow^, WindowSizeChangedEventArgs^>(this, &EventReceiver::SizeChanged);
+            DisplayInformation::GetForCurrentView()->DpiChanged +=
+                ref new TypedEventHandler<DisplayInformation^, Object^>(this, &EventReceiver::DisplayInfoChanged);
         }
     };
     EventReceiver^ m_eventReceiver;
@@ -349,23 +349,23 @@ public:
         m_gfxCtx.reset(new GraphicsContextUWPD3D(api, this, m_coreWindow, b3dCtx, sampleCount));
 
         setTitle(title);
-		m_bounds = m_coreWindow->Bounds;
-		m_dispInfoDpiFactor = DisplayInformation::GetForCurrentView()->LogicalDpi / 96.f;
-		if (auto titleBar = ApplicationView::GetForCurrentView()->TitleBar)
-		{
-			Color grey = { 0xFF, 0x33, 0x33, 0x33 };
-			Color transWhite = { 0xFF, 0x88, 0x88, 0x88 };
+        m_bounds = m_coreWindow->Bounds;
+        m_dispInfoDpiFactor = DisplayInformation::GetForCurrentView()->LogicalDpi / 96.f;
+        if (auto titleBar = ApplicationView::GetForCurrentView()->TitleBar)
+        {
+            Color grey = { 0xFF, 0x33, 0x33, 0x33 };
+            Color transWhite = { 0xFF, 0x88, 0x88, 0x88 };
 
-			titleBar->ButtonBackgroundColor = grey;
-			titleBar->ButtonForegroundColor = Colors::White;
-			titleBar->BackgroundColor = grey;
-			titleBar->ForegroundColor = Colors::White;
+            titleBar->ButtonBackgroundColor = grey;
+            titleBar->ButtonForegroundColor = Colors::White;
+            titleBar->BackgroundColor = grey;
+            titleBar->ForegroundColor = Colors::White;
 
-			titleBar->ButtonInactiveBackgroundColor = grey;
-			titleBar->ButtonInactiveForegroundColor = transWhite;
-			titleBar->InactiveBackgroundColor = grey;
-			titleBar->InactiveForegroundColor = transWhite;
-		}
+            titleBar->ButtonInactiveBackgroundColor = grey;
+            titleBar->ButtonInactiveForegroundColor = transWhite;
+            titleBar->InactiveBackgroundColor = grey;
+            titleBar->InactiveForegroundColor = transWhite;
+        }
     }
 
     ~WindowUWP()
@@ -444,15 +444,15 @@ public:
 
     bool isFullscreen() const
     {
-		return ApplicationView::GetForCurrentView()->IsFullScreenMode;
+        return ApplicationView::GetForCurrentView()->IsFullScreenMode;
     }
 
     void setFullscreen(bool fs)
     {
-		if (fs)
-			ApplicationView::GetForCurrentView()->TryEnterFullScreenMode();
-		else
-			ApplicationView::GetForCurrentView()->ExitFullScreenMode();
+        if (fs)
+            ApplicationView::GetForCurrentView()->TryEnterFullScreenMode();
+        else
+            ApplicationView::GetForCurrentView()->ExitFullScreenMode();
     }
 
     void claimKeyboardFocus(const int coord[2])
@@ -514,81 +514,81 @@ public:
             m_callback->modKeyUp(modifierKey);
     }
 
-	SWindowCoord GetCursorCoords(const Point& point)
-	{
-		SWindowCoord coord = {
-			point.X * m_dispInfoDpiFactor, (m_bounds.Height - point.Y) * m_dispInfoDpiFactor,
-			point.X, m_bounds.Height - point.Y, point.X / m_bounds.Width,
-			(m_bounds.Height - point.Y) / m_bounds.Height
-		};
-		return coord;
-	}
+    SWindowCoord GetCursorCoords(const Point& point)
+    {
+        SWindowCoord coord = {
+            point.X * m_dispInfoDpiFactor, (m_bounds.Height - point.Y) * m_dispInfoDpiFactor,
+            point.X, m_bounds.Height - point.Y, point.X / m_bounds.Width,
+            (m_bounds.Height - point.Y) / m_bounds.Height
+        };
+        return coord;
+    }
 
-	void OnPointerEntered(CoreWindow^ window, PointerEventArgs^ args)
-	{
-		m_callback->mouseEnter(GetCursorCoords(args->CurrentPoint->Position));
-	}
-	
-	void OnPointerExited(CoreWindow^ window, PointerEventArgs^ args)
-	{
-		m_callback->mouseLeave(GetCursorCoords(args->CurrentPoint->Position));
-	}
+    void OnPointerEntered(CoreWindow^ window, PointerEventArgs^ args)
+    {
+        m_callback->mouseEnter(GetCursorCoords(args->CurrentPoint->Position));
+    }
 
-	void OnPointerMoved(CoreWindow^ window, PointerEventArgs^ args)
-	{
-		m_callback->mouseMove(GetCursorCoords(args->CurrentPoint->Position));
-	}
+    void OnPointerExited(CoreWindow^ window, PointerEventArgs^ args)
+    {
+        m_callback->mouseLeave(GetCursorCoords(args->CurrentPoint->Position));
+    }
 
-	boo::EMouseButton m_pressedButton = boo::EMouseButton::None;
-	void OnPointerPressed(CoreWindow^ window, PointerEventArgs^ args)
-	{
-		auto properties = args->CurrentPoint->Properties;
-		boo::EMouseButton button = boo::EMouseButton::None;
-		if (properties->IsLeftButtonPressed)
-			button = boo::EMouseButton::Primary;
-		else if (properties->IsMiddleButtonPressed)
-			button = boo::EMouseButton::Middle;
-		else if (properties->IsRightButtonPressed)
-			button = boo::EMouseButton::Secondary;
-		else if (properties->IsXButton1Pressed)
-			button = boo::EMouseButton::Aux1;
-		else if (properties->IsXButton2Pressed)
-			button = boo::EMouseButton::Aux2;
-		m_callback->mouseDown(GetCursorCoords(args->CurrentPoint->Position),
-			                  button, translateModifiers(m_coreWindow.Get()));
-		m_pressedButton = button;
-	}
+    void OnPointerMoved(CoreWindow^ window, PointerEventArgs^ args)
+    {
+        m_callback->mouseMove(GetCursorCoords(args->CurrentPoint->Position));
+    }
 
-	void OnPointerReleased(CoreWindow^ window, PointerEventArgs^ args)
-	{
-		auto properties = args->CurrentPoint->Properties;
-		m_callback->mouseUp(GetCursorCoords(args->CurrentPoint->Position),
-			                m_pressedButton, translateModifiers(m_coreWindow.Get()));
-	}
+    boo::EMouseButton m_pressedButton = boo::EMouseButton::None;
+    void OnPointerPressed(CoreWindow^ window, PointerEventArgs^ args)
+    {
+        auto properties = args->CurrentPoint->Properties;
+        boo::EMouseButton button = boo::EMouseButton::None;
+        if (properties->IsLeftButtonPressed)
+            button = boo::EMouseButton::Primary;
+        else if (properties->IsMiddleButtonPressed)
+            button = boo::EMouseButton::Middle;
+        else if (properties->IsRightButtonPressed)
+            button = boo::EMouseButton::Secondary;
+        else if (properties->IsXButton1Pressed)
+            button = boo::EMouseButton::Aux1;
+        else if (properties->IsXButton2Pressed)
+            button = boo::EMouseButton::Aux2;
+        m_callback->mouseDown(GetCursorCoords(args->CurrentPoint->Position),
+                              button, translateModifiers(m_coreWindow.Get()));
+        m_pressedButton = button;
+    }
 
-	void OnPointerWheelChanged(CoreWindow^ window, PointerEventArgs^ args)
-	{
-		auto properties = args->CurrentPoint->Properties;
-		SScrollDelta scroll = {};
-		scroll.delta[1] = properties->MouseWheelDelta / double(WHEEL_DELTA);
-		m_callback->scroll(GetCursorCoords(args->CurrentPoint->Position), scroll);
-	}
+    void OnPointerReleased(CoreWindow^ window, PointerEventArgs^ args)
+    {
+        auto properties = args->CurrentPoint->Properties;
+        m_callback->mouseUp(GetCursorCoords(args->CurrentPoint->Position),
+                            m_pressedButton, translateModifiers(m_coreWindow.Get()));
+    }
+
+    void OnPointerWheelChanged(CoreWindow^ window, PointerEventArgs^ args)
+    {
+        auto properties = args->CurrentPoint->Properties;
+        SScrollDelta scroll = {};
+        scroll.delta[1] = properties->MouseWheelDelta / double(WHEEL_DELTA);
+        m_callback->scroll(GetCursorCoords(args->CurrentPoint->Position), scroll);
+    }
 
     void OnClosed(CoreWindow^ sender, CoreWindowEventArgs^ args)
     {
-		if (m_callback)
-			m_callback->destroyed();
+        if (m_callback)
+            m_callback->destroyed();
     }
 
-	void _resized()
-	{
-		boo::SWindowRect rect(
-			m_bounds.X * m_dispInfoDpiFactor, m_bounds.Y * m_dispInfoDpiFactor,
-			m_bounds.Width * m_dispInfoDpiFactor, m_bounds.Height * m_dispInfoDpiFactor);
-		m_gfxCtx->resized(rect);
-		if (m_callback)
-			m_callback->resized(rect, false);
-	}
+    void _resized()
+    {
+        boo::SWindowRect rect(
+            m_bounds.X * m_dispInfoDpiFactor, m_bounds.Y * m_dispInfoDpiFactor,
+            m_bounds.Width * m_dispInfoDpiFactor, m_bounds.Height * m_dispInfoDpiFactor);
+        m_gfxCtx->resized(rect);
+        if (m_callback)
+            m_callback->resized(rect, false);
+    }
 
     ETouchType getTouchType() const
     {

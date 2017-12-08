@@ -209,24 +209,24 @@ public:
     {
         /* Spawn client thread */
         int clientReturn = 0;
-		m_clientThread = std::thread([&]()
+        m_clientThread = std::thread([&]()
         {
             std::string thrName = WCSTMBS(getFriendlyName().data()) + " Client Thread";
             logvisor::RegisterThreadName(thrName.c_str());
             clientReturn = m_callback.appMain(this);
         });
 
-		CoreWindow::GetForCurrentThread()->Activate();
-		CoreWindow::GetForCurrentThread()->Dispatcher->ProcessEvents(CoreProcessEventsOption::ProcessUntilQuit);
-		return 0;
+        CoreWindow::GetForCurrentThread()->Activate();
+        CoreWindow::GetForCurrentThread()->Dispatcher->ProcessEvents(CoreProcessEventsOption::ProcessUntilQuit);
+        return 0;
     }
 
-	void quit()
-	{
-		m_callback.appQuitting(this);
-		if (m_clientThread.joinable())
-			m_clientThread.join();
-	}
+    void quit()
+    {
+        m_callback.appQuitting(this);
+        if (m_clientThread.joinable())
+            m_clientThread.join();
+    }
 
     SystemStringView getUniqueName() const
     {
@@ -301,7 +301,7 @@ public:
 
     virtual void Uninitialize()
     {
-		m_app.quit();
+        m_app.quit();
     }
 
     void OnActivated(CoreApplicationView^ applicationView, IActivatedEventArgs^ args)
