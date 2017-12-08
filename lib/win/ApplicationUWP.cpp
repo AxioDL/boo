@@ -75,10 +75,10 @@ public:
         typedef HRESULT(WINAPI*CreateDXGIFactory1PROC)(REFIID riid, _COM_Outptr_ void **ppFactory);
         CreateDXGIFactory1PROC MyCreateDXGIFactory1 = CreateDXGIFactory1;
 
-        bool no12 = false;
+        bool no12 = true;
         for (const SystemString& arg : args)
-            if (!arg.compare(L"--d3d11"))
-                no12 = true;
+            if (!arg.compare(L"--d3d12"))
+                no12 = false;
 
 #if _WIN32_WINNT_WIN10
         if (!no12)
@@ -203,21 +203,30 @@ public:
         return EPlatformType::UWP;
     }
 
+
+	std::thread m_clientThread;
     int run()
     {
         /* Spawn client thread */
         int clientReturn = 0;
-        std::thread clientThread([&]()
+		m_clientThread = std::thread([&]()
         {
             std::string thrName = WCSTMBS(getFriendlyName().data()) + " Client Thread";
             logvisor::RegisterThreadName(thrName.c_str());
             clientReturn = m_callback.appMain(this);
         });
 
-        m_callback.appQuitting(this);
-        clientThread.join();
-        return clientReturn;
+		CoreWindow::GetForCurrentThread()->Activate();
+		CoreWindow::GetForCurrentThread()->Dispatcher->ProcessEvents(CoreProcessEventsOption::ProcessUntilQuit);
+		return 0;
     }
+
+	void quit()
+	{
+		m_callback.appQuitting(this);
+		if (m_clientThread.joinable())
+			m_clientThread.join();
+	}
 
     SystemStringView getUniqueName() const
     {
@@ -292,7 +301,7 @@ public:
 
     virtual void Uninitialize()
     {
-
+		m_app.quit();
     }
 
     void OnActivated(CoreApplicationView^ applicationView, IActivatedEventArgs^ args)

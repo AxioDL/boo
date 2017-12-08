@@ -7,11 +7,15 @@
 #include "boo/graphicsdev/D3D.hpp"
 #include "boo/audiodev/IAudioVoiceEngine.hpp"
 
+using namespace Windows::UI;
 using namespace Windows::UI::Core;
 using namespace Windows::UI::ViewManagement;
 using namespace Windows::System;
 using namespace Windows::Graphics::Display;
 using namespace Windows::Foundation;
+using namespace Platform;
+
+#include <agile.h>
 
 namespace boo
 {
@@ -53,7 +57,7 @@ struct GraphicsContextUWPD3D : GraphicsContextUWP
 public:
     IWindowCallback* m_callback;
 
-    GraphicsContextUWPD3D(EGraphicsAPI api, IWindow* parentWindow, CoreWindow^ coreWindow,
+    GraphicsContextUWPD3D(EGraphicsAPI api, IWindow* parentWindow, Agile<CoreWindow>& coreWindow,
                           Boo3DAppContextUWP& b3dCtx, uint32_t sampleCount)
     : GraphicsContextUWP(api, parentWindow, b3dCtx)
     {
@@ -63,10 +67,14 @@ public:
         scDesc.SampleDesc.Count = 1;
         scDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
         scDesc.BufferCount = 2;
+#if !WINDOWS_STORE
         scDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+#else
+		scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+#endif
         scDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
-        IUnknown* cw = reinterpret_cast<IUnknown*>(coreWindow);
+        IUnknown* cw = reinterpret_cast<IUnknown*>(coreWindow.Get());
 
 #if _WIN32_WINNT_WIN10
         if (b3dCtx.m_ctx12.m_dev)
@@ -242,7 +250,9 @@ class WindowUWP : public IWindow
 {
     friend struct GraphicsContextUWP;
     ApplicationView^ m_appView = ApplicationView::GetForCurrentView();
-    CoreWindow^ m_coreWindow = CoreWindow::GetForCurrentThread();
+	Platform::Agile<CoreWindow> m_coreWindow;
+	Rect m_bounds;
+	float m_dispInfoDpiFactor = 1.f;
     std::unique_ptr<GraphicsContextUWP> m_gfxCtx;
     IWindowCallback* m_callback = nullptr;
 
@@ -260,10 +270,52 @@ public:
             w.OnKeyUp(window, keyEventArgs);
         }
 
+		void OnPointerEntered(CoreWindow^ window, PointerEventArgs^ args)
+		{
+			w.OnPointerEntered(window, args);
+		}
+
+		void OnPointerExited(CoreWindow^ window, PointerEventArgs^ args)
+		{
+			w.OnPointerExited(window, args);
+		}
+
+		void OnPointerMoved(CoreWindow^ window, PointerEventArgs^ args)
+		{
+			w.OnPointerMoved(window, args);
+		}
+
+		void OnPointerPressed(CoreWindow^ window, PointerEventArgs^ args)
+		{
+			w.OnPointerPressed(window, args);
+		}
+
+		void OnPointerReleased(CoreWindow^ window, PointerEventArgs^ args)
+		{
+			w.OnPointerReleased(window, args);
+		}
+
+		void OnPointerWheelChanged(CoreWindow^ window, PointerEventArgs^ args)
+		{
+			w.OnPointerWheelChanged(window, args);
+		}
+
         void OnClosed(CoreWindow^ sender, CoreWindowEventArgs^ args)
         {
             w.OnClosed(sender, args);
         }
+
+		void SizeChanged(CoreWindow^ window, WindowSizeChangedEventArgs^)
+		{
+			w.m_bounds = window->Bounds;
+			w._resized();
+		}
+
+		void DisplayInfoChanged(DisplayInformation^ di, Object^)
+		{
+			w.m_dispInfoDpiFactor = di->LogicalDpi / 96.f;
+			w._resized();
+		}
 
     internal:
         WindowUWP& w;
@@ -271,13 +323,23 @@ public:
         {
             w.m_coreWindow->KeyDown += ref new TypedEventHandler<CoreWindow^, KeyEventArgs^>(this, &EventReceiver::OnKeyDown);
             w.m_coreWindow->KeyUp += ref new TypedEventHandler<CoreWindow^, KeyEventArgs^>(this, &EventReceiver::OnKeyUp);
+			w.m_coreWindow->PointerEntered += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerEntered);
+			w.m_coreWindow->PointerExited += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerExited);
+			w.m_coreWindow->PointerMoved += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerMoved);
+			w.m_coreWindow->PointerPressed += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerPressed);
+			w.m_coreWindow->PointerReleased += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerReleased);
+			w.m_coreWindow->PointerWheelChanged += ref new TypedEventHandler<CoreWindow^, PointerEventArgs^>(this, &EventReceiver::OnPointerWheelChanged);
             w.m_coreWindow->Closed += ref new TypedEventHandler<CoreWindow^, CoreWindowEventArgs^>(this, &EventReceiver::OnClosed);
+			w.m_coreWindow->SizeChanged += ref new TypedEventHandler<CoreWindow^, WindowSizeChangedEventArgs^>(this, &EventReceiver::SizeChanged);
+			DisplayInformation::GetForCurrentView()->DpiChanged +=
+				ref new TypedEventHandler<DisplayInformation^, Object^>(this, &EventReceiver::DisplayInfoChanged);
         }
     };
     EventReceiver^ m_eventReceiver;
 
     WindowUWP(SystemStringView title, Boo3DAppContextUWP& b3dCtx, uint32_t sampleCount)
-    : m_eventReceiver(ref new EventReceiver(*this))
+    : m_coreWindow(CoreWindow::GetForCurrentThread()),
+      m_eventReceiver(ref new EventReceiver(*this))
     {
         IGraphicsContext::EGraphicsAPI api = IGraphicsContext::EGraphicsAPI::D3D11;
 #if _WIN32_WINNT_WIN10
@@ -287,6 +349,23 @@ public:
         m_gfxCtx.reset(new GraphicsContextUWPD3D(api, this, m_coreWindow, b3dCtx, sampleCount));
 
         setTitle(title);
+		m_bounds = m_coreWindow->Bounds;
+		m_dispInfoDpiFactor = DisplayInformation::GetForCurrentView()->LogicalDpi / 96.f;
+		if (auto titleBar = ApplicationView::GetForCurrentView()->TitleBar)
+		{
+			Color grey = { 0xFF, 0x33, 0x33, 0x33 };
+			Color transWhite = { 0xFF, 0x88, 0x88, 0x88 };
+
+			titleBar->ButtonBackgroundColor = grey;
+			titleBar->ButtonForegroundColor = Colors::White;
+			titleBar->BackgroundColor = grey;
+			titleBar->ForegroundColor = Colors::White;
+
+			titleBar->ButtonInactiveBackgroundColor = grey;
+			titleBar->ButtonInactiveForegroundColor = transWhite;
+			titleBar->InactiveBackgroundColor = grey;
+			titleBar->InactiveForegroundColor = transWhite;
+		}
     }
 
     ~WindowUWP()
@@ -336,18 +415,18 @@ public:
 
     void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const
     {
-        xOut = m_coreWindow->Bounds.X;
-        yOut = m_coreWindow->Bounds.Y;
-        wOut = m_coreWindow->Bounds.Width;
-        hOut = m_coreWindow->Bounds.Height;
+        xOut = m_bounds.X * m_dispInfoDpiFactor;
+        yOut = m_bounds.Y * m_dispInfoDpiFactor;
+        wOut = m_bounds.Width * m_dispInfoDpiFactor;
+        hOut = m_bounds.Height * m_dispInfoDpiFactor;
     }
 
     void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const
     {
-        xOut = m_coreWindow->Bounds.X;
-        yOut = m_coreWindow->Bounds.Y;
-        wOut = m_coreWindow->Bounds.Width;
-        hOut = m_coreWindow->Bounds.Height;
+        xOut = m_bounds.X * m_dispInfoDpiFactor;
+        yOut = m_bounds.Y * m_dispInfoDpiFactor;
+        wOut = m_bounds.Width * m_dispInfoDpiFactor;
+        hOut = m_bounds.Height * m_dispInfoDpiFactor;
     }
 
     void setWindowFrame(float x, float y, float w, float h)
@@ -360,18 +439,20 @@ public:
 
     float getVirtualPixelFactor() const
     {
-        DisplayInformation^ dispInfo = DisplayInformation::GetForCurrentView();
-        return dispInfo->LogicalDpi / 96.f;
+        return m_dispInfoDpiFactor;
     }
 
     bool isFullscreen() const
     {
-        return m_gfxCtx->m_3dCtx.isFullscreen(this);
+		return ApplicationView::GetForCurrentView()->IsFullScreenMode;
     }
 
     void setFullscreen(bool fs)
     {
-        m_gfxCtx->m_3dCtx.setFullscreen(this, fs);
+		if (fs)
+			ApplicationView::GetForCurrentView()->TryEnterFullScreenMode();
+		else
+			ApplicationView::GetForCurrentView()->ExitFullScreenMode();
     }
 
     void claimKeyboardFocus(const int coord[2])
@@ -408,7 +489,7 @@ public:
     {
         ESpecialKey specialKey;
         EModifierKey modifierKey;
-        uint32_t charCode = translateKeysym(m_coreWindow, keyEventArgs->VirtualKey, specialKey, modifierKey);
+        uint32_t charCode = translateKeysym(m_coreWindow.Get(), keyEventArgs->VirtualKey, specialKey, modifierKey);
         EModifierKey modifierMask = translateModifiers(window);
         bool repeat = keyEventArgs->KeyStatus.RepeatCount > 1;
         if (charCode)
@@ -423,7 +504,7 @@ public:
     {
         ESpecialKey specialKey;
         EModifierKey modifierKey;
-        uint32_t charCode = translateKeysym(m_coreWindow, keyEventArgs->VirtualKey, specialKey, modifierKey);
+        uint32_t charCode = translateKeysym(m_coreWindow.Get(), keyEventArgs->VirtualKey, specialKey, modifierKey);
         EModifierKey modifierMask = translateModifiers(window);
         if (charCode)
             m_callback->charKeyUp(charCode, modifierMask);
@@ -433,9 +514,81 @@ public:
             m_callback->modKeyUp(modifierKey);
     }
 
-    void OnClosed(CoreWindow ^sender, CoreWindowEventArgs ^args)
+	SWindowCoord GetCursorCoords(const Point& point)
+	{
+		SWindowCoord coord = {
+			point.X * m_dispInfoDpiFactor, (m_bounds.Height - point.Y) * m_dispInfoDpiFactor,
+			point.X, m_bounds.Height - point.Y, point.X / m_bounds.Width,
+			(m_bounds.Height - point.Y) / m_bounds.Height
+		};
+		return coord;
+	}
+
+	void OnPointerEntered(CoreWindow^ window, PointerEventArgs^ args)
+	{
+		m_callback->mouseEnter(GetCursorCoords(args->CurrentPoint->Position));
+	}
+	
+	void OnPointerExited(CoreWindow^ window, PointerEventArgs^ args)
+	{
+		m_callback->mouseLeave(GetCursorCoords(args->CurrentPoint->Position));
+	}
+
+	void OnPointerMoved(CoreWindow^ window, PointerEventArgs^ args)
+	{
+		m_callback->mouseMove(GetCursorCoords(args->CurrentPoint->Position));
+	}
+
+	boo::EMouseButton m_pressedButton = boo::EMouseButton::None;
+	void OnPointerPressed(CoreWindow^ window, PointerEventArgs^ args)
+	{
+		auto properties = args->CurrentPoint->Properties;
+		boo::EMouseButton button = boo::EMouseButton::None;
+		if (properties->IsLeftButtonPressed)
+			button = boo::EMouseButton::Primary;
+		else if (properties->IsMiddleButtonPressed)
+			button = boo::EMouseButton::Middle;
+		else if (properties->IsRightButtonPressed)
+			button = boo::EMouseButton::Secondary;
+		else if (properties->IsXButton1Pressed)
+			button = boo::EMouseButton::Aux1;
+		else if (properties->IsXButton2Pressed)
+			button = boo::EMouseButton::Aux2;
+		m_callback->mouseDown(GetCursorCoords(args->CurrentPoint->Position),
+			                  button, translateModifiers(m_coreWindow.Get()));
+		m_pressedButton = button;
+	}
+
+	void OnPointerReleased(CoreWindow^ window, PointerEventArgs^ args)
+	{
+		auto properties = args->CurrentPoint->Properties;
+		m_callback->mouseUp(GetCursorCoords(args->CurrentPoint->Position),
+			                m_pressedButton, translateModifiers(m_coreWindow.Get()));
+	}
+
+	void OnPointerWheelChanged(CoreWindow^ window, PointerEventArgs^ args)
+	{
+		auto properties = args->CurrentPoint->Properties;
+		SScrollDelta scroll = {};
+		scroll.delta[1] = properties->MouseWheelDelta / double(WHEEL_DELTA);
+		m_callback->scroll(GetCursorCoords(args->CurrentPoint->Position), scroll);
+	}
+
+    void OnClosed(CoreWindow^ sender, CoreWindowEventArgs^ args)
     {
+		if (m_callback)
+			m_callback->destroyed();
     }
+
+	void _resized()
+	{
+		boo::SWindowRect rect(
+			m_bounds.X * m_dispInfoDpiFactor, m_bounds.Y * m_dispInfoDpiFactor,
+			m_bounds.Width * m_dispInfoDpiFactor, m_bounds.Height * m_dispInfoDpiFactor);
+		m_gfxCtx->resized(rect);
+		if (m_callback)
+			m_callback->resized(rect, false);
+	}
 
     ETouchType getTouchType() const
     {

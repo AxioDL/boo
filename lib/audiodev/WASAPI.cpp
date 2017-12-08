@@ -30,6 +30,8 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
 #if !WINDOWS_STORE
     ComPtr<IMMDeviceEnumerator> m_enumerator;
     ComPtr<IMMDevice> m_device;
+#else
+	bool m_ready = false;
 #endif
     ComPtr<IAudioClient> m_audClient;
     ComPtr<IAudioRenderClient> m_renderClient;
@@ -367,6 +369,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         operation->GetActivateResult(&hrActivateResult, &punkAudioInterface);
         punkAudioInterface.As<IAudioClient>(&m_audClient);
         _buildAudioRenderClient();
+		m_ready = true;
         return ERROR_SUCCESS;
     }
 #endif
@@ -425,6 +428,11 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
 
     void pumpAndMixVoices()
     {
+#if WINDOWS_STORE
+		if (!m_ready)
+			return;
+#endif
+		
         int attempt = 0;
         while (true)
         {
