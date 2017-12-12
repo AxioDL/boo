@@ -294,6 +294,9 @@ add_library(boo
             InputDeviceClasses.cpp
             ${PLAT_SRCS}
             ${PLAT_HDRS})
+if(COMMAND add_sanitizers)
+  add_sanitizers(boo)
+endif()
 
 add_subdirectory(test)
 
