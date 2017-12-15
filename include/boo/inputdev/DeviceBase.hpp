@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <memory>
 #include <vector>
+#include <mutex>
 #include "boo/System.hpp"
 
 #if _WIN32
@@ -33,10 +34,10 @@ class DeviceBase : public std::enable_shared_from_this<DeviceBase>
     class DeviceToken* m_token;
     std::shared_ptr<IHIDDevice> m_hidDev;
     void _deviceDisconnected();
-    
+
 public:
     DeviceBase(DeviceToken* token);
-    virtual ~DeviceBase();
+    virtual ~DeviceBase() = default;
     void closeDevice();
     
     /* Callbacks */
@@ -61,6 +62,21 @@ public:
     bool sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message=0);
     size_t receiveHIDReport(uint8_t* data, size_t length, HIDReportType tp, uint32_t message=0); // Prefer callback version
     virtual void receivedHIDReport(const uint8_t* /*data*/, size_t /*length*/, HIDReportType /*tp*/, uint32_t /*message*/) {}
+};
+
+template <class CB>
+class TDeviceBase : public DeviceBase
+{
+protected:
+    std::mutex m_callbackLock;
+    CB* m_callback = nullptr;
+public:
+    TDeviceBase(DeviceToken* token) : DeviceBase(token) {}
+    void setCallback(CB* cb)
+    {
+        std::lock_guard<std::mutex> lk(m_callbackLock);
+        m_callback = cb;
+    }
 };
 
 }

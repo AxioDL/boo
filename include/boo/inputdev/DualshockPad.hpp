@@ -122,9 +122,8 @@ struct IDualshockPadCallback
     virtual void controllerUpdate(DualshockPad&, const DualshockPadState&) {}
 };
 
-class DualshockPad final : public DeviceBase
+class DualshockPad final : public TDeviceBase<IDualshockPadCallback>
 {
-    IDualshockPadCallback* m_callback;
     EDualshockMotor m_rumbleRequest;
     EDualshockMotor m_rumbleState;
     uint8_t m_rumbleDuration[2];
@@ -139,8 +138,6 @@ class DualshockPad final : public DeviceBase
 public:
     DualshockPad(DeviceToken* token);
     ~DualshockPad();
-
-    void setCallback(IDualshockPadCallback* cb) { m_callback = cb; }
 
     void startRumble(EDualshockMotor motor, uint8_t duration = 254, uint8_t intensity=255)
     {

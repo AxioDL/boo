@@ -60,9 +60,10 @@ struct IDolphinSmashAdapterCallback
                                   const DolphinControllerState& state) {(void)idx;(void)type;(void)state;}
 };
 
-class DolphinSmashAdapter final : public DeviceBase
+class DolphinSmashAdapter final : public TDeviceBase<IDolphinSmashAdapterCallback>
 {
-    IDolphinSmashAdapterCallback* m_callback = nullptr;
+    int16_t m_leftStickCal[2] = {0x7f};
+    int16_t m_rightStickCal[2] = {0x7f};
     uint8_t m_knownControllers = 0;
     uint8_t m_rumbleRequest = 0;
     bool m_hardStop[4] = {false};
@@ -76,7 +77,10 @@ public:
     ~DolphinSmashAdapter();
     
     void setCallback(IDolphinSmashAdapterCallback* cb)
-    {m_callback = cb; m_knownControllers = 0;}
+    {
+        TDeviceBase<IDolphinSmashAdapterCallback>::setCallback(cb);
+        m_knownControllers = 0;
+    }
     void startRumble(unsigned idx)
     {if (idx >= 4) return; m_rumbleRequest |= 1<<idx;}
     void stopRumble(unsigned idx, bool hard=false)

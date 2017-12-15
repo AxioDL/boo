@@ -5,7 +5,7 @@ namespace boo
 {
 
 GenericPad::GenericPad(DeviceToken* token)
-: DeviceBase(token)
+: TDeviceBase<IGenericPadCallback>(token)
 {
 
 }
@@ -14,8 +14,9 @@ GenericPad::~GenericPad() {}
 
 void GenericPad::deviceDisconnected()
 {
-    if (m_cb)
-        m_cb->controllerDisconnected();
+    std::lock_guard<std::mutex> lk(m_callbackLock);
+    if (m_callback)
+        m_callback->controllerDisconnected();
 }
 
 void GenericPad::initialCycle()
@@ -29,18 +30,20 @@ void GenericPad::initialCycle()
     std::vector<uint8_t> reportDesc = getReportDescriptor();
     m_parser.Parse(reportDesc.data(), reportDesc.size());
 #endif
-    if (m_cb)
-        m_cb->controllerConnected();
+    std::lock_guard<std::mutex> lk(m_callbackLock);
+    if (m_callback)
+        m_callback->controllerConnected();
 }
 
 void GenericPad::receivedHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message)
 {
-    if (length == 0 || tp != HIDReportType::Input || !m_cb)
+    std::lock_guard<std::mutex> lk(m_callbackLock);
+    if (length == 0 || tp != HIDReportType::Input || !m_callback)
         return;
     std::function<bool(const HIDMainItem&, int32_t)> func =
     [this](const HIDMainItem& item, int32_t value)
     {
-        m_cb->valueUpdate(item, value);
+        m_callback->valueUpdate(item, value);
         return true;
     };
     m_parser.ScanValues(func, data, length);

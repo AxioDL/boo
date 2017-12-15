@@ -7,6 +7,7 @@
 #include <IOKit/IOKitLib.h>
 #include <IOKit/usb/IOUSBLib.h>
 #include <IOKit/IOCFPlugIn.h>
+#include <sys/utsname.h>
 #include "IOKitPointer.hpp"
 #include "CFPointer.hpp"
 
@@ -67,10 +68,11 @@ class HIDListenerIOKit : public IHIDListener
     IONotificationPortRef m_llPort;
     IOObjectPointer<io_iterator_t> m_llAddNotif, m_llRemoveNotif;
     IOObjectPointer<io_iterator_t> m_hidAddNotif, m_hidRemoveNotif;
+    const char* m_usbClass;
     bool m_scanningEnabled;
     
     static void devicesConnectedUSBLL(HIDListenerIOKit* listener,
-                                      io_iterator_t      iterator)
+                                      io_iterator_t     iterator)
     {
         while (IOObjectPointer<io_service_t> obj = IOIteratorNext(iterator))
         {
@@ -118,7 +120,7 @@ class HIDListenerIOKit : public IHIDListener
             listener->m_finder._insertToken(std::make_unique<DeviceToken>(DeviceType::USB,
                                             vid, pid, vstr, pstr, devPath));
 
-            //printf("ADDED %08X %s\n", obj, devPath);
+            //printf("ADDED %08X %s\n", obj.get(), devPath);
         }
     }
     
@@ -139,7 +141,7 @@ class HIDListenerIOKit : public IHIDListener
             if (IORegistryEntryGetPath(obj.get(), kIOServicePlane, devPath) != 0)
                 continue;
             listener->m_finder._removeToken(devPath);
-            //printf("REMOVED %08X %s\n", obj, devPath);
+            //printf("REMOVED %08X %s\n", obj.get(), devPath);
         }
     }
 
@@ -244,6 +246,11 @@ public:
     HIDListenerIOKit(DeviceFinder& finder)
     : m_finder(finder)
     {
+        struct utsname kernInfo;
+        uname(&kernInfo);
+        int release = atoi(kernInfo.release);
+        m_usbClass = release >= 15 ? "IOUSBHostDevice" : kIOUSBDeviceClassName;
+
         m_listenerRunLoop = CFRunLoopGetMain();
         m_llPort = IONotificationPortCreate(kIOMasterPortDefault);
         CFRunLoopSourceRef rlSrc = IONotificationPortGetRunLoopSource(m_llPort);
@@ -270,7 +277,7 @@ public:
 
         /* Register Low-Level USB Matcher */
         {
-            CFMutableDictionaryRef matchDict = IOServiceMatching(kIOUSBDeviceClassName);
+            CFMutableDictionaryRef matchDict = IOServiceMatching(m_usbClass);
             CFRetain(matchDict);
 
             kern_return_t llRet =
@@ -312,7 +319,7 @@ public:
     {
         IOObjectPointer<io_iterator_t> iter;
         if (IOServiceGetMatchingServices(kIOMasterPortDefault,
-                                         IOServiceMatching(kIOUSBDeviceClassName), &iter) == kIOReturnSuccess)
+                                         IOServiceMatching(m_usbClass), &iter) == kIOReturnSuccess)
         {
             devicesConnectedUSBLL(this, iter.get());
         }

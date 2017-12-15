@@ -8,7 +8,7 @@ namespace boo
  * Reference: https://github.com/ToadKing/wii-u-gc-adapter/blob/master/wii-u-gc-adapter.c
  */
 
-DolphinSmashAdapter::DolphinSmashAdapter(DeviceToken* token) : DeviceBase(token) {}
+DolphinSmashAdapter::DolphinSmashAdapter(DeviceToken* token) : TDeviceBase<IDolphinSmashAdapterCallback>(token) {}
 
 DolphinSmashAdapter::~DolphinSmashAdapter() {}
 
@@ -61,6 +61,7 @@ void DolphinSmashAdapter::transferCycle()
 
     // printf("RECEIVED DATA %zu %02X\n", recvSz, payload[0]);
 
+    std::lock_guard<std::mutex> lk(m_callbackLock);
     if (!m_callback)
         return;
 
@@ -74,6 +75,10 @@ void DolphinSmashAdapter::transferCycle()
         EDolphinControllerType type = parseState(&state, controller, rumble);
         if (type != EDolphinControllerType::None && !(m_knownControllers & 1 << i))
         {
+            m_leftStickCal[0] = reinterpret_cast<uint8_t&>(state.m_leftStick[0]);
+            m_leftStickCal[1] = reinterpret_cast<uint8_t&>(state.m_leftStick[1]);
+            m_rightStickCal[0] = reinterpret_cast<uint8_t&>(state.m_rightStick[0]);
+            m_rightStickCal[1] = reinterpret_cast<uint8_t&>(state.m_rightStick[1]);
             m_knownControllers |= 1 << i;
             m_callback->controllerConnected(i, type);
         }
@@ -83,7 +88,13 @@ void DolphinSmashAdapter::transferCycle()
             m_callback->controllerDisconnected(i);
         }
         if (m_knownControllers & 1 << i)
+        {
+            state.m_leftStick[0] = int8_t(reinterpret_cast<uint8_t&>(state.m_leftStick[0]) - m_leftStickCal[0]);
+            state.m_leftStick[1] = int8_t(reinterpret_cast<uint8_t&>(state.m_leftStick[1]) - m_leftStickCal[1]);
+            state.m_rightStick[0] = int8_t(reinterpret_cast<uint8_t&>(state.m_rightStick[0]) - m_rightStickCal[0]);
+            state.m_rightStick[1] = int8_t(reinterpret_cast<uint8_t&>(state.m_rightStick[1]) - m_rightStickCal[1]);
             m_callback->controllerUpdate(i, type, state);
+        }
         rumbleMask |= rumble ? 1 << i : 0;
     }
 
@@ -115,14 +126,14 @@ void DolphinSmashAdapter::finalCycle()
 
 void DolphinSmashAdapter::deviceDisconnected()
 {
-    if (!m_callback)
-        return;
     for (uint32_t i = 0; i < 4; i++)
     {
         if (m_knownControllers & 1 << i)
         {
             m_knownControllers &= ~(1 << i);
-            m_callback->controllerDisconnected(i);
+            std::lock_guard<std::mutex> lk(m_callbackLock);
+            if (m_callback)
+                m_callback->controllerDisconnected(i);
         }
     }
 }

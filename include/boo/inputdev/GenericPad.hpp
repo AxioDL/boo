@@ -16,15 +16,13 @@ struct IGenericPadCallback
     virtual void valueUpdate(const HIDMainItem& item, int32_t value) {}
 };
 
-class GenericPad final : public DeviceBase
+class GenericPad final : public TDeviceBase<IGenericPadCallback>
 {
     HIDParser m_parser;
-    IGenericPadCallback* m_cb = nullptr;
 public:
     GenericPad(DeviceToken* token);
     ~GenericPad();
 
-    void setCallback(IGenericPadCallback* cb) { m_cb = cb; }
     void deviceDisconnected();
     void initialCycle();
     void receivedHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message);

@@ -100,14 +100,15 @@ class HIDDeviceIOKit : public IHIDDevice
         IOObjectPointer<io_iterator_t> devIter;
         IOObjectPointer<io_registry_entry_t> devEntry = IORegistryEntryFromPath(kIOMasterPortDefault,
                                                                                 device->m_devPath.data());
-        IORegistryEntryGetChildIterator(devEntry, kIOServicePlane, &devIter);
         IOObjectPointer<io_object_t> interfaceEntry;
-        while (IOObjectPointer<io_service_t> obj = IOIteratorNext(devIter))
+        IORegistryEntryGetChildIterator(devEntry.get(), kIOServicePlane, &devIter);
+        while (IOObjectPointer<io_service_t> obj = IOIteratorNext(devIter.get()))
         {
-            if (IOObjectConformsTo(obj, kIOUSBInterfaceClassName))
+            if (IOObjectConformsTo(obj.get(), kIOUSBInterfaceClassName))
+            {
                 interfaceEntry = obj;
-            else
-                IOObjectRelease(obj);
+                break;
+            }
         }
         if (!interfaceEntry)
         {
@@ -124,7 +125,7 @@ class HIDDeviceIOKit : public IHIDDevice
         IOCFPluginPointer   iodev;
         SInt32              score;
         IOReturn            err;
-        err = IOCreatePlugInInterfaceForService(interfaceEntry,
+        err = IOCreatePlugInInterfaceForService(interfaceEntry.get(),
                                                 kIOUSBInterfaceUserClientTypeID,
                                                 kIOCFPlugInInterfaceID,
                                                 &iodev,

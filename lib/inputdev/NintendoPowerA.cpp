@@ -3,7 +3,7 @@
 namespace boo
 {
 NintendoPowerA::NintendoPowerA(DeviceToken* token)
-    : DeviceBase(token)
+    : TDeviceBase<INintendoPowerACallback>(token)
 {
 
 }
@@ -14,6 +14,7 @@ NintendoPowerA::~NintendoPowerA()
 
 void NintendoPowerA::deviceDisconnected()
 {
+    std::lock_guard<std::mutex> lk(m_callbackLock);
     if (m_callback)
         m_callback->controllerDisconnected();
 }
@@ -29,6 +30,7 @@ void NintendoPowerA::transferCycle()
 
     NintendoPowerAState state = *reinterpret_cast<NintendoPowerAState*>(&payload);
 
+    std::lock_guard<std::mutex> lk(m_callbackLock);
     if (state != m_last && m_callback)
         m_callback->controllerUpdate(state);
     m_last = state;

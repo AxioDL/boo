@@ -29,8 +29,7 @@ static const uint8_t defaultReport[49] = {
 };
 
 DualshockPad::DualshockPad(DeviceToken* token)
-    : DeviceBase(token),
-      m_callback(nullptr),
+    : TDeviceBase<IDualshockPadCallback>(token),
       m_rumbleRequest(EDualshockMotor::None),
       m_rumbleState(EDualshockMotor::None)
 {
@@ -44,6 +43,7 @@ DualshockPad::~DualshockPad()
 
 void DualshockPad::deviceDisconnected()
 {
+    std::lock_guard<std::mutex> lk(m_callbackLock);
     if (m_callback)
         m_callback->controllerDisconnected();
 }
@@ -95,8 +95,11 @@ void DualshockPad::receivedHIDReport(const uint8_t* data, size_t length, HIDRepo
     state.accYaw = (atan2(accXval, accZval) + M_PI) * RAD_TO_DEG;
     state.gyroZ = (state.m_gyrometerZ / 1023.f);
 
-    if (m_callback)
-        m_callback->controllerUpdate(*this, state);
+    {
+        std::lock_guard<std::mutex> lk(m_callbackLock);
+        if (m_callback)
+            m_callback->controllerUpdate(*this, state);
+    }
 
     if (m_rumbleRequest != m_rumbleState)
     {

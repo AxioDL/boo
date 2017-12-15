@@ -37,9 +37,8 @@ struct INintendoPowerACallback
     virtual void controllerUpdate(const NintendoPowerAState& state) {}
 };
 
-class NintendoPowerA final : public DeviceBase
+class NintendoPowerA final : public TDeviceBase<INintendoPowerACallback>
 {
-    INintendoPowerACallback* m_callback = nullptr;
     NintendoPowerAState m_last;
     void deviceDisconnected();
     void initialCycle();
@@ -49,8 +48,6 @@ class NintendoPowerA final : public DeviceBase
 public:
     NintendoPowerA(DeviceToken*);
     ~NintendoPowerA();
-
-    void setCallback(INintendoPowerACallback* cb) { m_callback = cb; }
 };
 }
 

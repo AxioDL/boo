@@ -33,17 +33,16 @@ struct IXInputPadCallback
     virtual void controllerUpdate(XInputPad& pad, const XInputPadState&) {}
 };
 
-class XInputPad final : public DeviceBase
+class XInputPad final : public TDeviceBase<IXInputPadCallback>
 {
     friend class HIDListenerWinUSB;
-    IXInputPadCallback* m_callback;
     uint16_t m_rumbleRequest[2] = {};
     uint16_t m_rumbleState[2] = {};
 public:
-    XInputPad(DeviceToken* token) : DeviceBase(token) {}
-    void setCallback(IXInputPadCallback* cb) { m_callback = cb; }
+    XInputPad(DeviceToken* token) : TDeviceBase<IXInputPadCallback>(token) {}
     void deviceDisconnected()
     {
+        std::lock_guard<std::mutex> lk(m_callbackLock);
         if (m_callback)
             m_callback->controllerDisconnected();
     }

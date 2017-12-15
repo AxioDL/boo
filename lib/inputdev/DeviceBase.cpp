@@ -11,10 +11,6 @@ DeviceBase::DeviceBase(DeviceToken* token)
 {
 }
 
-DeviceBase::~DeviceBase()
-{
-}
-
 void DeviceBase::_deviceDisconnected()
 {
     deviceDisconnected();

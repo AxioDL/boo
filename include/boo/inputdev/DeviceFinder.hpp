@@ -112,7 +112,7 @@ public:
             }
         }
     }
-    ~DeviceFinder()
+    virtual ~DeviceFinder()
     {
         if (m_listener)
             m_listener->stopScanning();

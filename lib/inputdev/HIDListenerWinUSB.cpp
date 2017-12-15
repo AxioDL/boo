@@ -218,6 +218,7 @@ class HIDListenerWinUSB final : public IHIDListener
                         if (tok.m_connectedDev)
                         {
                             XInputPad& pad = static_cast<XInputPad&>(*tok.m_connectedDev);
+                            std::lock_guard<std::mutex> lk(pad.m_callbackLock);
                             if (pad.m_callback)
                                 pad.m_callback->controllerUpdate(pad, ConvertXInputState(state.Gamepad));
                         }
