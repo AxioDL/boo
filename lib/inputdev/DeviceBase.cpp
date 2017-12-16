@@ -50,6 +50,34 @@ size_t DeviceBase::receiveUSBInterruptTransfer(uint8_t* data, size_t length)
     return false;
 }
 
+unsigned DeviceBase::getVendorId()
+{
+    if (m_token)
+        return m_token->getVendorId();
+    return -1;
+}
+
+unsigned DeviceBase::getProductId()
+{
+    if (m_token)
+        return m_token->getProductId();
+    return -1;
+}
+
+std::string_view DeviceBase::getVendorName()
+{
+    if (m_token)
+        return m_token->getVendorName();
+    return {};
+}
+
+std::string_view DeviceBase::getProductName()
+{
+    if (m_token)
+        return m_token->getProductName();
+    return {};
+}
+
 #if _WIN32
 #if !WINDOWS_STORE
 const PHIDP_PREPARSED_DATA DeviceBase::getReportDescriptor()

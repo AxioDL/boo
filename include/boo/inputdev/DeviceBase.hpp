@@ -51,6 +51,11 @@ public:
     bool sendUSBInterruptTransfer(const uint8_t* data, size_t length);
     size_t receiveUSBInterruptTransfer(uint8_t* data, size_t length);
 
+    inline unsigned getVendorId();
+    inline unsigned getProductId();
+    inline std::string_view getVendorName();
+    inline std::string_view getProductName();
+
     /* High-Level API */
 #if _WIN32
 #if !WINDOWS_STORE
