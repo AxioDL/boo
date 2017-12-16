@@ -19,6 +19,7 @@ find_package(IPP)
 if (IPP_FOUND)
   list(APPEND _BOO_SYS_DEFINES -DINTEL_IPP=1)
   include_directories(${IPP_INCLUDE_DIRS})
+  list(APPEND _BOO_SYS_INCLUDES ${IPP_INCLUDE_DIRS})
   list(APPEND _BOO_SYS_LIBS ${IPP_LIBRARIES})
 endif ()
 
