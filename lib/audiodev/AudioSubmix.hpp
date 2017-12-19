@@ -9,7 +9,7 @@
 #include "Common.hpp"
 
 #if __SSE__
-#include <xmmintrin.h>
+#include <immintrin.h>
 #endif
 
 struct AudioUnitVoiceEngine;

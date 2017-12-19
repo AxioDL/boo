@@ -8,7 +8,7 @@
 #include <float.h>
 
 #if __SSE__
-#include <xmmintrin.h>
+#include <immintrin.h>
 #endif
 
 namespace boo
