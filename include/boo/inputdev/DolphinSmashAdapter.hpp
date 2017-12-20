@@ -35,9 +35,9 @@ ENABLE_BITWISE_ENUM(EDolphinControllerButtons)
 
 struct DolphinControllerState
 {
-    int8_t m_leftStick[2] = {0};
-    int8_t m_rightStick[2] = {0};
-    uint8_t m_analogTriggers[2] = {0};
+    int16_t m_leftStick[2] = {0};
+    int16_t m_rightStick[2] = {0};
+    int16_t m_analogTriggers[2] = {0};
     uint16_t m_btns = 0;
     void reset()
     {
@@ -64,6 +64,7 @@ class DolphinSmashAdapter final : public TDeviceBase<IDolphinSmashAdapterCallbac
 {
     int16_t m_leftStickCal[2] = {0x7f};
     int16_t m_rightStickCal[2] = {0x7f};
+    int16_t m_triggersCal[2] = {0x0};
     uint8_t m_knownControllers = 0;
     uint8_t m_rumbleRequest = 0;
     bool m_hardStop[4] = {false};

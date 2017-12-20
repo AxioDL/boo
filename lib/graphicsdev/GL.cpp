@@ -128,7 +128,7 @@ public:
     }
     void* map(size_t sz)
     {
-        if (sz < m_cpuSz)
+        if (sz > m_cpuSz)
             return nullptr;
         return m_cpuBuf.get();
     }

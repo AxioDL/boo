@@ -36,10 +36,10 @@ static inline EDolphinControllerType parseState(DolphinControllerState* stateOut
 
     stateOut->m_btns = (uint16_t)payload[1] << 8 | (uint16_t)payload[2];
 
-    stateOut->m_leftStick[0] = int8_t(payload[3]);
-    stateOut->m_leftStick[1] = int8_t(payload[4]);
-    stateOut->m_rightStick[0] = int8_t(payload[5]);
-    stateOut->m_rightStick[1] = int8_t(payload[6]);
+    stateOut->m_leftStick[0] = payload[3];
+    stateOut->m_leftStick[1] = payload[4];
+    stateOut->m_rightStick[0] = payload[5];
+    stateOut->m_rightStick[1] = payload[6];
     stateOut->m_analogTriggers[0] = payload[7];
     stateOut->m_analogTriggers[1] = payload[8];
 
@@ -75,10 +75,12 @@ void DolphinSmashAdapter::transferCycle()
         EDolphinControllerType type = parseState(&state, controller, rumble);
         if (type != EDolphinControllerType::None && !(m_knownControllers & 1 << i))
         {
-            m_leftStickCal[0] = reinterpret_cast<uint8_t&>(state.m_leftStick[0]);
-            m_leftStickCal[1] = reinterpret_cast<uint8_t&>(state.m_leftStick[1]);
-            m_rightStickCal[0] = reinterpret_cast<uint8_t&>(state.m_rightStick[0]);
-            m_rightStickCal[1] = reinterpret_cast<uint8_t&>(state.m_rightStick[1]);
+            m_leftStickCal[0] = state.m_leftStick[0];
+            m_leftStickCal[1] = state.m_leftStick[1];
+            m_rightStickCal[0] = state.m_rightStick[0];
+            m_rightStickCal[1] = state.m_rightStick[1];
+            m_triggersCal[0] = state.m_analogTriggers[0];
+            m_triggersCal[1] = state.m_analogTriggers[1];
             m_knownControllers |= 1 << i;
             m_callback->controllerConnected(i, type);
         }
@@ -89,10 +91,12 @@ void DolphinSmashAdapter::transferCycle()
         }
         if (m_knownControllers & 1 << i)
         {
-            state.m_leftStick[0] = int8_t(reinterpret_cast<uint8_t&>(state.m_leftStick[0]) - m_leftStickCal[0]);
-            state.m_leftStick[1] = int8_t(reinterpret_cast<uint8_t&>(state.m_leftStick[1]) - m_leftStickCal[1]);
-            state.m_rightStick[0] = int8_t(reinterpret_cast<uint8_t&>(state.m_rightStick[0]) - m_rightStickCal[0]);
-            state.m_rightStick[1] = int8_t(reinterpret_cast<uint8_t&>(state.m_rightStick[1]) - m_rightStickCal[1]);
+            state.m_leftStick[0] = state.m_leftStick[0] - m_leftStickCal[0];
+            state.m_leftStick[1] = state.m_leftStick[1] - m_leftStickCal[1];
+            state.m_rightStick[0] = state.m_rightStick[0] - m_rightStickCal[0];
+            state.m_rightStick[1] = state.m_rightStick[1] - m_rightStickCal[1];
+            state.m_analogTriggers[0] = state.m_analogTriggers[0] - m_triggersCal[0];
+            state.m_analogTriggers[1] = state.m_analogTriggers[1] - m_triggersCal[1];
             m_callback->controllerUpdate(i, type, state);
         }
         rumbleMask |= rumble ? 1 << i : 0;
@@ -162,9 +166,9 @@ void DolphinSmashAdapter::deviceDisconnected()
  *    distribution.
  */
 
-static uint8_t pad_clampregion[8] = {30, 180, 15, 72, 40, 15, 59, 31};
+static int16_t pad_clampregion[8] = {30, 180, 15, 72, 40, 15, 59, 31};
 
-static void pad_clampstick(int8_t& px, int8_t& py, int8_t max, int8_t xy, int8_t min)
+static void pad_clampstick(int16_t& px, int16_t& py, int16_t max, int16_t xy, int16_t min)
 {
     int x = px;
     int y = py;
@@ -217,8 +221,8 @@ static void pad_clampstick(int8_t& px, int8_t& py, int8_t max, int8_t xy, int8_t
         d = xy * x + (max - xy) * y;
         if (xy * max < d)
         {
-            x = int8_t(xy * max * x / d);
-            y = int8_t(xy * max * y / d);
+            x = int16_t(xy * max * x / d);
+            y = int16_t(xy * max * y / d);
         }
     }
     else
@@ -226,18 +230,18 @@ static void pad_clampstick(int8_t& px, int8_t& py, int8_t max, int8_t xy, int8_t
         d = xy * y + (max - xy) * x;
         if (xy * max < d)
         {
-            x = int8_t(xy * max * x / d);
-            y = int8_t(xy * max * y / d);
+            x = int16_t(xy * max * x / d);
+            y = int16_t(xy * max * y / d);
         }
     }
 
-    px = int8_t(signX * x);
-    py = int8_t(signY * y);
+    px = int16_t(signX * x);
+    py = int16_t(signY * y);
 }
 
-static void pad_clamptrigger(uint8_t& trigger)
+static void pad_clamptrigger(int16_t& trigger)
 {
-    uint8_t min, max;
+    int16_t min, max;
 
     min = pad_clampregion[0];
     max = pad_clampregion[1];
@@ -253,8 +257,8 @@ static void pad_clamptrigger(uint8_t& trigger)
 
 void DolphinControllerState::clamp()
 {
-    pad_clampstick(m_leftStick[0], m_leftStick[1], int8_t(pad_clampregion[3]), int8_t(pad_clampregion[4]), int8_t(pad_clampregion[2]));
-    pad_clampstick(m_rightStick[0], m_rightStick[1], int8_t(pad_clampregion[6]), int8_t(pad_clampregion[7]), int8_t(pad_clampregion[5]));
+    pad_clampstick(m_leftStick[0], m_leftStick[1], pad_clampregion[3], pad_clampregion[4], pad_clampregion[2]);
+    pad_clampstick(m_rightStick[0], m_rightStick[1], pad_clampregion[6], pad_clampregion[7], pad_clampregion[5]);
     pad_clamptrigger(m_analogTriggers[0]);
     pad_clamptrigger(m_analogTriggers[1]);
 }
