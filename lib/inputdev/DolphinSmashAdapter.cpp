@@ -250,7 +250,7 @@ static void pad_clamptrigger(int16_t& trigger)
     else
     {
         if (max < trigger)
-            trigger = max - min;
+            trigger = max;
         trigger -= min;
     }
 }
