@@ -1,9 +1,9 @@
 #ifndef BOO_IAUDIOVOICE_HPP
 #define BOO_IAUDIOVOICE_HPP
 
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include "boo/BooObject.hpp"
 
 namespace boo

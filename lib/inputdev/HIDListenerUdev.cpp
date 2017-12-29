@@ -2,8 +2,8 @@
 #include "boo/inputdev/DeviceFinder.hpp"
 #include "boo/inputdev/HIDParser.hpp"
 #include <libudev.h>
-#include <string.h>
-#include <stdio.h>
+#include <cstring>
+#include <cstdio>
 #include <signal.h>
 #include <fcntl.h>
 #include <linux/hidraw.h>

@@ -1,6 +1,6 @@
 #ifndef CDUALSHOCKPAD_HPP
 #define CDUALSHOCKPAD_HPP
-#include <stdint.h>
+#include <cstdint>
 #include <type_traits>
 #include "DeviceBase.hpp"
 #include "boo/System.hpp"

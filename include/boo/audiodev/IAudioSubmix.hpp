@@ -1,8 +1,8 @@
 #ifndef BOO_IAUDIOSUBMIX_HPP
 #define BOO_IAUDIOSUBMIX_HPP
 
-#include <stddef.h>
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include "boo/BooObject.hpp"
 

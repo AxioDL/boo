@@ -1,8 +1,8 @@
 #include "boo/inputdev/DualshockPad.hpp"
 #define _USE_MATH_DEFINES
-#include <math.h>
+#include <cmath>
 #include <iostream>
-#include <stdio.h>
+#include <cstdio>
 #include <memory.h>
 
 #ifdef _WIN32

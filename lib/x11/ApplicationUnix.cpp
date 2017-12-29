@@ -8,7 +8,7 @@
 
 #include <memory>
 #include <dbus/dbus.h>
-#include <stdio.h>
+#include <cstdio>
 
 DBusConnection* RegisterDBus(const char* appName, bool& isFirst)
 {

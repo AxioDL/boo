@@ -1,5 +1,5 @@
-#include <stdio.h>
-#include <math.h>
+#include <cstdio>
+#include <cmath>
 #include <boo/boo.hpp>
 #include <boo/graphicsdev/GL.hpp>
 #include <boo/graphicsdev/Vulkan.hpp>

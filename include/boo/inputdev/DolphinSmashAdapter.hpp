@@ -1,7 +1,7 @@
 #ifndef CDOLPHINSMASHADAPTER_HPP
 #define CDOLPHINSMASHADAPTER_HPP
 
-#include <stdint.h>
+#include <cstdint>
 #include "DeviceBase.hpp"
 #include "../System.hpp"
 

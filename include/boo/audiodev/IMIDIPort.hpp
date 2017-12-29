@@ -4,7 +4,7 @@
 #include <string>
 #include <functional>
 #include <vector>
-#include <stdint.h>
+#include <cstdint>
 
 namespace boo
 {

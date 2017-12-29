@@ -1,8 +1,8 @@
 #ifndef BOO_IMIDIREADER_HPP
 #define BOO_IMIDIREADER_HPP
 
-#include <stdlib.h>
-#include <stdint.h>
+#include <cstdlib>
+#include <cstdint>
 
 namespace boo
 {

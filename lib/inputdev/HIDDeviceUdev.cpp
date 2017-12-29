@@ -5,7 +5,7 @@
 #include <mutex>
 #include <condition_variable>
 
-#include <stdio.h>
+#include <cstdio>
 #include <libudev.h>
 #include <stropts.h>
 #include <linux/usb/ch9.h>
@@ -15,7 +15,7 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
-#include <string.h>
+#include <cstring>
 #include "boo/inputdev/HIDParser.hpp"
 
 namespace boo

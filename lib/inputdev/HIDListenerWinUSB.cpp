@@ -2,7 +2,7 @@
 #include "boo/inputdev/IHIDListener.hpp"
 #include "boo/inputdev/DeviceFinder.hpp"
 #include "boo/inputdev/XInputPad.hpp"
-#include <string.h>
+#include <cstring>
 #include <thread>
 
 #ifndef WIN32_LEAN_AND_MEAN

@@ -7,8 +7,8 @@
 #include "DeviceToken.hpp"
 #include "IHIDListener.hpp"
 #include "DeviceSignature.hpp"
-#include <string.h>
-#include <stdio.h>
+#include <cstring>
+#include <cstdio>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN

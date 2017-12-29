@@ -1,9 +1,9 @@
 #ifndef CDEVICEBASE
 #define CDEVICEBASE
 
-#include <stdint.h>
-#include <stdlib.h>
-#include <stdio.h>
+#include <cstdint>
+#include <cstdlib>
+#include <cstdio>
 #include <memory>
 #include <vector>
 #include <mutex>

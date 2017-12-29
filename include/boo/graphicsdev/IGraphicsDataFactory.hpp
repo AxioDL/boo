@@ -3,7 +3,7 @@
 
 #include <memory>
 #include <functional>
-#include <stdint.h>
+#include <cstdint>
 #include "boo/System.hpp"
 #include "boo/ThreadLocalPtr.hpp"
 #include "boo/BooObject.hpp"

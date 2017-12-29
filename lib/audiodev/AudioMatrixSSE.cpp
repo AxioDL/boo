@@ -1,6 +1,6 @@
 #include "AudioMatrix.hpp"
 #include "AudioVoiceEngine.hpp"
-#include <string.h>
+#include <cstring>
 
 #include <immintrin.h>
 

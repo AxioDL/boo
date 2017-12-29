@@ -2,7 +2,7 @@
 #define IGFXCONTEXT_HPP
 
 #include <memory>
-#include <stdint.h>
+#include <cstdint>
 
 namespace boo
 {

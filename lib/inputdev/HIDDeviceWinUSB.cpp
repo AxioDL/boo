@@ -5,8 +5,8 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
-#include <string.h>
-#include <stdio.h>
+#include <cstring>
+#include <cstdio>
 #include <algorithm>
 
 #ifndef WIN32_LEAN_AND_MEAN

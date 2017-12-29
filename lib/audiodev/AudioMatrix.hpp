@@ -3,9 +3,9 @@
 
 #include "boo/audiodev/IAudioVoice.hpp"
 #include <vector>
-#include <stdint.h>
+#include <cstdint>
 #include <limits.h>
-#include <float.h>
+#include <cfloat>
 
 #if __SSE__
 #include <immintrin.h>
