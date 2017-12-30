@@ -13,7 +13,11 @@ static inline uint16_t bswap16(uint16_t val) {return __builtin_bswap16(val); }
 static inline uint16_t bswap16(uint16_t val) {return __builtin_byteswap(val);}
 #endif
 
-#define RAD_TO_DEG (180.0/M_PI)
+#ifndef M_PIF
+#define M_PIF 3.14159265358979323846f /* pi */
+#endif
+
+#define RAD_TO_DEG (180.f/M_PIF)
 
 namespace boo
 {
@@ -91,8 +95,8 @@ void DualshockPad::receivedHIDReport(const uint8_t* data, size_t length, HIDRepo
     float accXval = -((double)state.m_accelerometer[0] - zeroG);
     float accYval = -((double)state.m_accelerometer[1] - zeroG);
     float accZval = -((double)state.m_accelerometer[2] - zeroG);
-    state.accPitch = (atan2(accYval, accZval) + M_PI) * RAD_TO_DEG;
-    state.accYaw = (atan2(accXval, accZval) + M_PI) * RAD_TO_DEG;
+    state.accPitch = (atan2(accYval, accZval) + M_PIF) * RAD_TO_DEG;
+    state.accYaw = (atan2(accXval, accZval) + M_PIF) * RAD_TO_DEG;
     state.gyroZ = (state.m_gyrometerZ / 1023.f);
 
     {

@@ -76,7 +76,7 @@ elseif(WIN32)
     message(STATUS "Enabling Vulkan support")
     list(GET VULKAN_SDK_DIRS 0 VULKAN_SDK_DIR)
     include_directories("${VULKAN_SDK_DIR}/Include")
-    list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_VULKAN=1)
+    list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_VULKAN=1 -DVK_USE_PLATFORM_WIN32_KHR=1)
     list(APPEND _BOO_SYS_INCLUDES "${VULKAN_SDK_DIR}/Include")
     list(APPEND PLAT_SRCS lib/graphicsdev/Vulkan.cpp
          lib/graphicsdev/VulkanDispatchTable.cpp)
@@ -204,7 +204,7 @@ else(NOT GEKKO)
           lib/inputdev/HIDDeviceUdev.cpp
           lib/graphicsdev/Vulkan.cpp
           lib/graphicsdev/VulkanDispatchTable.cpp)
-      list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_VULKAN=1)
+      list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_VULKAN=1 -DVK_USE_PLATFORM_XCB_KHR=1)
       list(APPEND _BOO_SYS_LIBS xcb X11-xcb dl udev)
   else()
       list(APPEND PLAT_SRCS
