@@ -10,6 +10,10 @@
 #include <dbus/dbus.h>
 #include <cstdio>
 
+/* No icon by default */
+extern "C" const uint8_t MAINICON_NETWM[] __attribute__ ((weak)) = {};
+extern "C" const size_t MAINICON_NETWM_SZ __attribute__ ((weak)) = 0;
+
 DBusConnection* RegisterDBus(const char* appName, bool& isFirst)
 {
     isFirst = true;

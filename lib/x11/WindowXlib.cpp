@@ -107,10 +107,6 @@ static const int ContextAttribList[7][7] =
 extern "C" const uint8_t MAINICON_NETWM[];
 extern "C" const size_t MAINICON_NETWM_SZ;
 
-/* No icon by default */
-extern const uint8_t MAINICON_NETWM[] __attribute__ ((weak)) = {};
-extern const size_t MAINICON_NETWM_SZ __attribute__ ((weak)) = 0;
-
 namespace boo
 {
 static logvisor::Module Log("boo::WindowXlib");
@@ -1051,7 +1047,7 @@ public:
             /* Add window icon */
             if (MAINICON_NETWM_SZ && S_ATOMS->m_netwmIcon)
             {
-                XChangeProperty(display, m_windowId, S_ATOMS->m_netwmIcon, XA_CARDINAL,
+                XChangeProperty(m_xDisp, m_windowId, S_ATOMS->m_netwmIcon, XA_CARDINAL,
                                 32, PropModeReplace, MAINICON_NETWM, MAINICON_NETWM_SZ / sizeof(unsigned long));
             }
 
