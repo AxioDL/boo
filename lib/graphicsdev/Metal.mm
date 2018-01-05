@@ -857,22 +857,6 @@ static id<MTLBuffer> GetBufferGPUResource(const ObjToken<IGraphicsBuffer>& buf, 
     }
 }
 
-static id<MTLBuffer> GetBufferGPUResource(const ObjToken<IGraphicsBuffer>& buf, int idx, size_t& strideOut)
-{
-    if (buf->dynamic())
-    {
-        const MetalGraphicsBufferD<BaseGraphicsData>* cbuf = buf.cast<MetalGraphicsBufferD<BaseGraphicsData>>();
-        strideOut = cbuf->m_stride;
-        return cbuf->m_bufs[idx];
-    }
-    else
-    {
-        const MetalGraphicsBufferS* cbuf = buf.cast<MetalGraphicsBufferS>();
-        strideOut = cbuf->m_stride;
-        return cbuf->m_buf;
-    }
-}
-
 static id<MTLTexture> GetTextureGPUResource(const ObjToken<ITexture>& tex, int idx, int bindIdx, bool depth)
 {
     switch (tex->type())
@@ -979,16 +963,15 @@ struct MetalShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
     {
         m_pipeline.cast<MetalShaderPipeline>()->bind(enc);
 
-        size_t stride;
         if (m_vbuf)
         {
-            id<MTLBuffer> buf = GetBufferGPUResource(m_vbuf, b, stride);
-            [enc setVertexBuffer:buf offset:stride * m_baseVert atIndex:0];
+            id<MTLBuffer> buf = GetBufferGPUResource(m_vbuf, b);
+            [enc setVertexBuffer:buf offset:0 atIndex:0];
         }
         if (m_instVbo)
         {
-            id<MTLBuffer> buf = GetBufferGPUResource(m_instVbo, b, stride);
-            [enc setVertexBuffer:buf offset:stride * m_baseInst atIndex:1];
+            id<MTLBuffer> buf = GetBufferGPUResource(m_instVbo, b);
+            [enc setVertexBuffer:buf offset:0 atIndex:1];
         }
         if (m_ubufOffs.size())
             for (size_t i=0 ; i<m_ubufs.size() ; ++i)
@@ -1147,7 +1130,9 @@ struct MetalCommandQueue : IGraphicsCommandQueue
 
     void draw(size_t start, size_t count)
     {
-        [m_enc drawPrimitives:m_currentPrimitive vertexStart:start vertexCount:count];
+        [m_enc drawPrimitives:m_currentPrimitive
+                  vertexStart:start + m_boundData->m_baseVert
+                  vertexCount:count];
     }
 
     void drawIndexed(size_t start, size_t count)
@@ -1156,13 +1141,19 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                           indexCount:count
                            indexType:MTLIndexTypeUInt32
                          indexBuffer:GetBufferGPUResource(m_boundData->m_ibuf, m_fillBuf)
-                   indexBufferOffset:start*4];
+                   indexBufferOffset:start*4
+                       instanceCount:1
+                          baseVertex:m_boundData->m_baseVert
+                        baseInstance:0];
     }
 
     void drawInstances(size_t start, size_t count, size_t instCount)
     {
         [m_enc drawPrimitives:m_currentPrimitive
-                  vertexStart:start vertexCount:count instanceCount:instCount];
+                  vertexStart:start + m_boundData->m_baseVert
+                  vertexCount:count
+                instanceCount:instCount
+                 baseInstance:m_boundData->m_baseInst];
     }
 
     void drawInstancesIndexed(size_t start, size_t count, size_t instCount)
@@ -1172,7 +1163,9 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                            indexType:MTLIndexTypeUInt32
                          indexBuffer:GetBufferGPUResource(m_boundData->m_ibuf, m_fillBuf)
                    indexBufferOffset:start*4
-                       instanceCount:instCount];
+                       instanceCount:instCount
+                          baseVertex:m_boundData->m_baseVert
+                        baseInstance:m_boundData->m_baseInst];
     }
 
     void resolveBindTexture(const ObjToken<ITextureR>& texture, const SWindowRect& rect, bool tlOrigin,
