@@ -1112,7 +1112,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
     }
 
     void resolveBindTexture(const boo::ObjToken<ITextureR>& texture, const SWindowRect& rect,
-                            bool tlOrigin, int bindIdx, bool color, bool depth)
+                            bool tlOrigin, int bindIdx, bool color, bool depth, bool clearDepth)
     {
         const D3D11TextureR* tex = texture.cast<D3D11TextureR>();
         if (color && tex->m_colorBindCount)
@@ -1135,6 +1135,9 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         {
             m_deferredCtx->CopyResource(tex->m_depthBindTex[bindIdx].Get(), tex->m_depthTex.Get());
         }
+
+        if (clearDepth)
+            m_deferredCtx->ClearDepthStencilView(tex->m_dsv.Get(), D3D11_CLEAR_DEPTH, 0.0f, 0);
     }
 
     boo::ObjToken<ITextureR> m_doPresent;

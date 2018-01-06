@@ -1404,7 +1404,7 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
 
     void resolveBindTexture(const boo::ObjToken<ITextureR>& texture,
                             const SWindowRect& rect, bool tlOrigin,
-                            int bindIdx, bool color, bool depth)
+                            int bindIdx, bool color, bool depth, bool clearDepth)
     {
         D3D12TextureR* tex = texture.cast<D3D12TextureR>();
 
@@ -1467,6 +1467,12 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
                     D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
             };
             m_cmdList->ResourceBarrier(2, copyTeardown);
+        }
+
+        if (clearDepth)
+        {
+            CD3DX12_CPU_DESCRIPTOR_HANDLE handle(tex->m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
+            m_cmdList->ClearDepthStencilView(handle, D3D12_CLEAR_FLAG_DEPTH, 0.0f, 0, 0, nullptr);
         }
     }
 

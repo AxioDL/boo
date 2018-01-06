@@ -2791,7 +2791,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
 
     void resolveBindTexture(const boo::ObjToken<ITextureR>& texture,
                             const SWindowRect& rect, bool tlOrigin,
-                            int bindIdx, bool color, bool depth)
+                            int bindIdx, bool color, bool depth, bool clearDepth)
     {
         VkCommandBuffer cmdBuf = m_cmdBufs[m_fillBuf];
         VulkanTextureR* ctexture = texture.cast<VulkanTextureR>();
@@ -2867,6 +2867,19 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         }
 
         vk::CmdBeginRenderPass(cmdBuf, &m_boundTarget.cast<VulkanTextureR>()->m_passBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        if (clearDepth)
+        {
+            VkClearAttachment clr = {};
+            VkClearRect rect = {};
+            rect.layerCount = 1;
+            rect.rect.extent.width = ctexture->m_width;
+            rect.rect.extent.height = ctexture->m_height;
+
+            clr.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            clr.clearValue.depthStencil.depth = 1.f;
+            vk::CmdClearAttachments(cmdBuf, 1, &clr, 1, &rect);
+        }
     }
 
     void execute();

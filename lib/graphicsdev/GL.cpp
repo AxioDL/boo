@@ -1076,6 +1076,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
         int bindIdx;
         bool resolveColor : 1;
         bool resolveDepth : 1;
+        bool clearDepth   : 1;
         Command(Op op) : m_op(op) {}
         Command(const Command&) = delete;
         Command& operator=(const Command&) = delete;
@@ -1308,6 +1309,12 @@ struct GLCommandQueue : IGraphicsCommandQueue
                                             cmd.viewport.rect.location[0], cmd.viewport.rect.location[1],
                                             cmd.viewport.rect.size[0], cmd.viewport.rect.size[1]);
                     }
+                    if (cmd.clearDepth)
+                    {
+                        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex->m_fbo);
+                        glDepthMask(GL_TRUE);
+                        glClear(GL_DEPTH_BUFFER_BIT);
+                    }
                     break;
                 }
                 case Command::Op::Present:
@@ -1456,7 +1463,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
     }
 
     void resolveBindTexture(const ObjToken<ITextureR>& texture, const SWindowRect& rect, bool tlOrigin,
-                            int bindIdx, bool color, bool depth)
+                            int bindIdx, bool color, bool depth, bool clearDepth)
     {
         GLTextureR* tex = texture.cast<GLTextureR>();
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
@@ -1465,6 +1472,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
         cmds.back().bindIdx = bindIdx;
         cmds.back().resolveColor = color;
         cmds.back().resolveDepth = depth;
+        cmds.back().clearDepth = clearDepth;
         SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, tex->m_width, tex->m_height));
         SWindowRect& targetRect = cmds.back().viewport.rect;
         targetRect.location[0] = intersectRect.location[0];

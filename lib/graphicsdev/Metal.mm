@@ -1169,7 +1169,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     }
 
     void resolveBindTexture(const ObjToken<ITextureR>& texture, const SWindowRect& rect, bool tlOrigin,
-                            int bindIdx, bool color, bool depth)
+                            int bindIdx, bool color, bool depth, bool clearDepth)
     {
         MetalTextureR* tex = texture.cast<MetalTextureR>();
         @autoreleasepool
@@ -1208,7 +1208,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             }
 
             [blitEnc endEncoding];
-            m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:tex->m_passDesc];
+            m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:clearDepth ? tex->m_clearDepthPassDesc : tex->m_passDesc];
             [m_enc setFrontFacingWinding:MTLWindingCounterClockwise];
 
             if (m_boundVp.width || m_boundVp.height)
