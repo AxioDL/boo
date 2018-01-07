@@ -32,6 +32,8 @@ public:
                         std::string_view friendlyName,
                         std::string_view pname,
                         const std::vector<std::string>& args,
+                        uint32_t samples,
+                        uint32_t anisotropy,
                         bool singleInstance)
     : m_callback(callback),
       m_uniqueName(uniqueName),
@@ -71,7 +73,7 @@ public:
         return m_args;
     }
     
-    std::shared_ptr<IWindow> newWindow(std::string_view title, uint32_t drawSamples)
+    std::shared_ptr<IWindow> newWindow(std::string_view title)
     {
         return _WindowWaylandNew(title);
     }

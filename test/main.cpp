@@ -497,7 +497,7 @@ struct TestApplicationCallback : IApplicationCallback
 
     int appMain(IApplication* app)
     {
-        mainWindow = app->newWindow(_S("YAY!"), 1);
+        mainWindow = app->newWindow(_S("YAY!"));
         mainWindow->setCallback(&windowCallback);
         mainWindow->showWindow();
         windowCallback.m_lastRect = mainWindow->getWindowFrame();

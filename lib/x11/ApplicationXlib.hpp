@@ -3,6 +3,7 @@
 #endif
 
 #include "boo/IApplication.hpp"
+#include "boo/graphicsdev/GL.hpp"
 
 #include <X11/Xlib.h>
 #include <X11/XKBlib.h>
@@ -117,7 +118,7 @@ static Window GetWindowOfEvent(XEvent* event, bool& windowEvent)
 std::shared_ptr<IWindow> _WindowXlibNew(std::string_view title,
                          Display* display, void* xcbConn,
                          int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
-                         GLXContext lastCtx, void* vulkanHandle, uint32_t drawSamples);
+                         GLXContext lastCtx, void* vulkanHandle, GLContext* glCtx);
 
 static XIMStyle ChooseBetterStyle(XIMStyle style1, XIMStyle style2)
 {
@@ -162,6 +163,7 @@ class ApplicationXlib final : public IApplication
     const std::string m_friendlyName;
     const std::string m_pname;
     const std::vector<std::string> m_args;
+    GLContext m_glContext;
 
     /* DBus single-instance */
     bool m_singleInstance;
@@ -223,6 +225,8 @@ public:
                     std::string_view friendlyName,
                     std::string_view pname,
                     const std::vector<std::string>& args,
+                    uint32_t samples,
+                    uint32_t anisotropy,
                     bool singleInstance)
     : m_callback(callback),
       m_uniqueName(uniqueName),
@@ -231,6 +235,8 @@ public:
       m_args(args),
       m_singleInstance(singleInstance)
     {
+        m_glContext.m_sampleCount = samples;
+        m_glContext.m_anisotropy = anisotropy;
 #if BOO_HAS_VULKAN
         /* Check for Vulkan presence and preference */
         bool tryVulkan = true;
@@ -527,14 +533,14 @@ public:
         return m_args;
     }
     
-    std::shared_ptr<IWindow> newWindow(std::string_view title, uint32_t drawSamples)
+    std::shared_ptr<IWindow> newWindow(std::string_view title)
     {
 #if BOO_HAS_VULKAN
         std::shared_ptr<IWindow> newWindow = _WindowXlibNew(title, m_xDisp, m_xcbConn, m_xDefaultScreen, m_xIM,
-                                             m_bestStyle, m_fontset, m_lastGlxCtx, (void*)m_getVkProc, drawSamples);
+                                             m_bestStyle, m_fontset, m_lastGlxCtx, (void*)m_getVkProc, &m_glContext);
 #else
         std::shared_ptr<IWindow> newWindow = _WindowXlibNew(title, m_xDisp, nullptr, m_xDefaultScreen, m_xIM,
-                                             m_bestStyle, m_fontset, m_lastGlxCtx, nullptr, drawSamples);
+                                             m_bestStyle, m_fontset, m_lastGlxCtx, nullptr, &m_glCtx);
 #endif
         m_windows[(Window)newWindow->getPlatformHandle()] = newWindow;
         return newWindow;

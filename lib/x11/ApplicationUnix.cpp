@@ -58,6 +58,8 @@ int ApplicationRun(IApplication::EPlatformType platform,
                    std::string_view friendlyName,
                    std::string_view pname,
                    const std::vector<std::string>& args,
+                   uint32_t samples,
+                   uint32_t anisotropy,
                    bool singleInstance)
 {
     std::string thrName = std::string(friendlyName) + " Main Thread";
@@ -65,10 +67,10 @@ int ApplicationRun(IApplication::EPlatformType platform,
     if (APP)
         return 1;
     if (platform == IApplication::EPlatformType::Wayland)
-        APP = new ApplicationWayland(cb, uniqueName, friendlyName, pname, args, singleInstance);
+        APP = new ApplicationWayland(cb, uniqueName, friendlyName, pname, args, samples, anisotropy, singleInstance);
     else if (platform == IApplication::EPlatformType::Xlib ||
              platform == IApplication::EPlatformType::Auto)
-        APP = new ApplicationXlib(cb, uniqueName, friendlyName, pname, args, singleInstance);
+        APP = new ApplicationXlib(cb, uniqueName, friendlyName, pname, args, samples, anisotropy, singleInstance);
     else
         return 1;
     return APP->run();
