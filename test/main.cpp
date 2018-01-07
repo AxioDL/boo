@@ -458,9 +458,10 @@ struct TestApplicationCallback : IApplicationCallback
                 static const char* FS =
                 "#include <metal_stdlib>\n"
                 "using namespace metal;\n"
-                "constexpr sampler samp(address::repeat);\n"
                 "struct VertToFrag {float4 out_pos [[ position ]]; float2 out_uv;};\n"
-                "fragment float4 fmain(VertToFrag d [[ stage_in ]], texture2d<float> tex [[ texture(0) ]])\n"
+                "fragment float4 fmain(VertToFrag d [[ stage_in ]],\n"
+                "                      sampler samp [[ sampler(0) ]],\n"
+                "                      texture2d<float> tex [[ texture(0) ]])\n"
                 "{\n"
                 "    return tex.sample(samp, d.out_uv);\n"
                 "}\n";

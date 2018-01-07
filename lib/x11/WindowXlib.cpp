@@ -110,8 +110,8 @@ extern "C" const size_t MAINICON_NETWM_SZ;
 namespace boo
 {
 static logvisor::Module Log("boo::WindowXlib");
-IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent);
-IGraphicsDataFactory* _NewGLDataFactory(IGraphicsContext* parent, uint32_t drawSamples);
+IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent, GLContext* glCtx);
+IGraphicsDataFactory* _NewGLDataFactory(IGraphicsContext* parent, GLContext* glCtx);
 #if BOO_HAS_VULKAN
 IGraphicsCommandQueue* _NewVulkanCommandQueue(VulkanContext* ctx,
                                               VulkanContext::Window* windowCtx,

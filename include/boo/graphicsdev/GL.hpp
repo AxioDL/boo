@@ -11,6 +11,12 @@ namespace boo
 {
 struct BaseGraphicsData;
 
+struct GLContext
+{
+    uint32_t m_sampleCount = 1;
+    uint32_t m_anisotropy = 1;
+};
+
 class GLDataFactory : public IGraphicsDataFactory
 {
 public:

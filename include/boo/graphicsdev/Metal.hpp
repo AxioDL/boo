@@ -45,7 +45,7 @@ public:
         ObjToken<IShaderPipeline> newShaderPipeline(const char* vertSource, const char* fragSource,
                                                     std::vector<uint8_t>* vertBlobOut,
                                                     std::vector<uint8_t>* fragBlobOut,
-                                                    const ObjToken<IVertexFormat>& vtxFmt, unsigned targetSamples,
+                                                    const ObjToken<IVertexFormat>& vtxFmt,
                                                     BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                                                     ZTest depthTest, bool depthWrite, bool colorWrite,
                                                     bool alphaWrite, CullMode culling);

@@ -185,12 +185,11 @@ class GraphicsContextCocoaMetal;
 namespace boo
 {
 static logvisor::Module Log("boo::WindowCocoa");
-IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent);
-IGraphicsDataFactory* _NewGLDataFactory(IGraphicsContext* parent, uint32_t drawSamples);
+IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent, GLContext* glCtx);
+IGraphicsDataFactory* _NewGLDataFactory(IGraphicsContext* parent, GLContext* glCtx);
 IGraphicsCommandQueue* _NewMetalCommandQueue(MetalContext* ctx, IWindow* parentWindow,
                                              IGraphicsContext* parent);
-IGraphicsDataFactory* _NewMetalDataFactory(IGraphicsContext* parent,
-                                           MetalContext* ctx, uint32_t sampleCount);
+IGraphicsDataFactory* _NewMetalDataFactory(IGraphicsContext* parent, MetalContext* ctx);
 void _CocoaUpdateLastGLCtx(NSOpenGLContext* lastGLCtx);
 
 class GraphicsContextCocoaGL : public GraphicsContextCocoa
@@ -203,14 +202,15 @@ class GraphicsContextCocoaGL : public GraphicsContextCocoa
     NSOpenGLContext* m_loadCtx = nullptr;
 
 public:
-    NSOpenGLContext* m_lastCtx = nullptr;
+    NSOpenGLContext* m_lastCtx;
+    GLContext* m_glCtx;
 
     GraphicsContextCocoaGL(EGraphicsAPI api, IWindow* parentWindow,
-                           NSOpenGLContext* lastGLCtx, uint32_t sampleCount)
+                           NSOpenGLContext* lastGLCtx, GLContext* glCtx)
     : GraphicsContextCocoa(api, EPixelFormat::RGBA8, parentWindow),
-      m_lastCtx(lastGLCtx)
+      m_lastCtx(lastGLCtx), m_glCtx(glCtx)
     {
-        m_dataFactory = _NewGLDataFactory(this, sampleCount);
+        m_dataFactory = _NewGLDataFactory(this, glCtx);
     }
 
     ~GraphicsContextCocoaGL()
@@ -253,7 +253,7 @@ public:
         CVDisplayLinkCreateWithActiveCGDisplays(&m_dispLink);
         CVDisplayLinkSetOutputCallback(m_dispLink, (CVDisplayLinkOutputCallback)DLCallback, this);
         CVDisplayLinkStart(m_dispLink);
-        m_commandQueue = _NewGLCommandQueue(this);
+        m_commandQueue = _NewGLCommandQueue(this, m_glCtx);
         return true;
     }
 
@@ -318,7 +318,7 @@ public:
 
 IGraphicsContext* _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI api,
                                              IWindow* parentWindow, NSOpenGLContext* lastGLCtx,
-                                             uint32_t sampleCount)
+                                             GLContext* glCtx)
 {
     if (api != IGraphicsContext::EGraphicsAPI::OpenGL3_3 && api != IGraphicsContext::EGraphicsAPI::OpenGL4_2)
         return NULL;
@@ -349,7 +349,7 @@ IGraphicsContext* _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI api,
         if (api == IGraphicsContext::EGraphicsAPI::OpenGL4_2)
             return NULL;
 
-    return new GraphicsContextCocoaGL(api, parentWindow, lastGLCtx, sampleCount);
+    return new GraphicsContextCocoaGL(api, parentWindow, lastGLCtx, glCtx);
 }
 
 #if BOO_HAS_METAL
@@ -364,12 +364,11 @@ public:
     IWindow* m_parentWindow;
     MetalContext* m_metalCtx;
 
-    GraphicsContextCocoaMetal(EGraphicsAPI api, IWindow* parentWindow,
-                              MetalContext* metalCtx, uint32_t sampleCount)
+    GraphicsContextCocoaMetal(EGraphicsAPI api, IWindow* parentWindow, MetalContext* metalCtx)
     : GraphicsContextCocoa(api, EPixelFormat::RGBA8, parentWindow),
       m_parentWindow(parentWindow), m_metalCtx(metalCtx)
     {
-        m_dataFactory = _NewMetalDataFactory(this, metalCtx, sampleCount);
+        m_dataFactory = _NewMetalDataFactory(this, metalCtx);
     }
 
     ~GraphicsContextCocoaMetal()
@@ -461,12 +460,11 @@ public:
 
 IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI api,
                                                 IWindow* parentWindow,
-                                                MetalContext* metalCtx,
-                                                uint32_t sampleCount)
+                                                MetalContext* metalCtx)
 {
     if (api != IGraphicsContext::EGraphicsAPI::Metal)
         return nullptr;
-    return new GraphicsContextCocoaMetal(api, parentWindow, metalCtx, sampleCount);
+    return new GraphicsContextCocoaMetal(api, parentWindow, metalCtx);
 }
 #endif
 
@@ -1302,7 +1300,7 @@ class WindowCocoa : public IWindow
 
 public:
 
-    void setup(std::string_view title, NSOpenGLContext* lastGLCtx, MetalContext* metalCtx, uint32_t sampleCount)
+    void setup(std::string_view title, NSOpenGLContext* lastGLCtx, MetalContext* metalCtx, GLContext* glCtx)
     {
         dispatch_sync(dispatch_get_main_queue(),
         ^{
@@ -1313,12 +1311,12 @@ public:
             if (metalCtx->m_dev)
                 m_gfxCtx = static_cast<GraphicsContextCocoa*>(
                     _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI::Metal,
-                                                  this, metalCtx, sampleCount));
+                                                  this, metalCtx));
             else
 #endif
                 m_gfxCtx = static_cast<GraphicsContextCocoa*>(
                     _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI::OpenGL3_3,
-                                               this, lastGLCtx, sampleCount));
+                                               this, lastGLCtx, glCtx));
             m_gfxCtx->initializeContext(nullptr);
         });
         m_gfxCtx->getMainContextDataFactory();
@@ -1591,10 +1589,10 @@ public:
 };
 
 std::shared_ptr<IWindow> _WindowCocoaNew(SystemStringView title, NSOpenGLContext* lastGLCtx,
-                                         MetalContext* metalCtx, uint32_t sampleCount)
+                                         MetalContext* metalCtx, GLContext* glCtx)
 {
     auto ret = std::make_shared<WindowCocoa>();
-    ret->setup(title, lastGLCtx, metalCtx, sampleCount);
+    ret->setup(title, lastGLCtx, metalCtx, glCtx);
     return ret;
 }
 

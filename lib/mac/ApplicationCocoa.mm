@@ -3,7 +3,9 @@
 
 #include "boo/IApplication.hpp"
 #include "boo/graphicsdev/Metal.hpp"
+#include "boo/graphicsdev/GL.hpp"
 #include "CocoaCommon.hpp"
+#include "../Common.hpp"
 
 #include "logvisor/logvisor.hpp"
 
@@ -31,7 +33,7 @@ namespace boo
 static logvisor::Module Log("boo::ApplicationCocoa");
 
 std::shared_ptr<IWindow> _WindowCocoaNew(SystemStringView title, NSOpenGLContext* lastGLCtx,
-                                         MetalContext* metalCtx, uint32_t sampleCount);
+                                         MetalContext* metalCtx, GLContext* glCtx);
 
 class ApplicationCocoa : public IApplication
 {
@@ -50,6 +52,7 @@ private:
     std::unordered_map<uintptr_t, std::weak_ptr<IWindow>> m_windows;
 
     MetalContext m_metalCtx;
+    GLContext m_glCtx;
 
     void _deletedWindow(IWindow* window)
     {
@@ -61,13 +64,20 @@ public:
                      SystemStringView uniqueName,
                      SystemStringView friendlyName,
                      SystemStringView pname,
-                     const std::vector<SystemString>& args)
+                     const std::vector<SystemString>& args,
+                     uint32_t samples,
+                     uint32_t anisotropy)
     : m_callback(callback),
       m_uniqueName(uniqueName),
       m_friendlyName(friendlyName),
       m_pname(pname),
       m_args(args)
     {
+        m_metalCtx.m_sampleCount = samples;
+        m_metalCtx.m_anisotropy = anisotropy;
+        m_glCtx.m_sampleCount = samples;
+        m_glCtx.m_anisotropy = anisotropy;
+
         [[NSApplication sharedApplication] setActivationPolicy:NSApplicationActivationPolicyRegular];
 
         /* Delegate (OS X callbacks) */
@@ -104,6 +114,8 @@ public:
         if (m_metalCtx.m_dev)
         {
             m_metalCtx.m_q = [m_metalCtx.m_dev newCommandQueue];
+            while (![m_metalCtx.m_dev supportsTextureSampleCount:m_metalCtx.m_sampleCount])
+                m_metalCtx.m_sampleCount = flp2(m_metalCtx.m_sampleCount - 1);
             Log.report(logvisor::Info, "using Metal renderer");
         }
         else
@@ -187,9 +199,9 @@ public:
         return m_args;
     }
 
-    std::shared_ptr<IWindow> newWindow(std::string_view title, uint32_t sampleCount)
+    std::shared_ptr<IWindow> newWindow(std::string_view title)
     {
-        auto newWindow = _WindowCocoaNew(title, m_lastGLCtx, &m_metalCtx, sampleCount);
+        auto newWindow = _WindowCocoaNew(title, m_lastGLCtx, &m_metalCtx, &m_glCtx);
         m_windows[newWindow->getPlatformHandle()] = newWindow;
         return newWindow;
     }
@@ -210,6 +222,8 @@ int ApplicationRun(IApplication::EPlatformType platform,
                    SystemStringView friendlyName,
                    SystemStringView pname,
                    const std::vector<SystemString>& args,
+                   uint32_t samples,
+                   uint32_t anisotropy,
                    bool singleInstance)
 {
     std::string thrName = std::string(friendlyName) + " Main Thread";
@@ -222,7 +236,7 @@ int ApplicationRun(IApplication::EPlatformType platform,
                 platform != IApplication::EPlatformType::Auto)
                 return 1;
             /* Never deallocated to ensure window destructors have access */
-            APP = new ApplicationCocoa(cb, uniqueName, friendlyName, pname, args);
+            APP = new ApplicationCocoa(cb, uniqueName, friendlyName, pname, args, samples, anisotropy);
         }
         [NSApp run];
         ApplicationCocoa* appCocoa = static_cast<ApplicationCocoa*>(APP);

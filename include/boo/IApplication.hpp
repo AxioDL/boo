@@ -51,8 +51,7 @@ public:
     virtual const std::vector<SystemString>& getArgs() const=0;
     
     /* Constructors/initializers for sub-objects */
-    virtual std::shared_ptr<IWindow> newWindow(SystemStringView title, uint32_t drawSamples)=0;
-    
+    virtual std::shared_ptr<IWindow> newWindow(SystemStringView title)=0;
 };
 
 int
@@ -62,6 +61,8 @@ ApplicationRun(IApplication::EPlatformType platform,
                SystemStringView friendlyName,
                SystemStringView pname,
                const std::vector<SystemString>& args,
+               uint32_t samples = 1,
+               uint32_t anisotropy = 1,
                bool singleInstance=true);
 extern IApplication* APP;
     
@@ -71,6 +72,8 @@ ApplicationRun(IApplication::EPlatformType platform,
                SystemStringView uniqueName,
                SystemStringView friendlyName,
                int argc, const SystemChar** argv,
+               uint32_t samples = 1,
+               uint32_t anisotropy = 1,
                bool singleInstance=true)
 {
     if (APP)
@@ -78,7 +81,8 @@ ApplicationRun(IApplication::EPlatformType platform,
     std::vector<SystemString> args;
     for (int i=1 ; i<argc ; ++i)
         args.push_back(argv[i]);
-    return ApplicationRun(platform, cb, uniqueName, friendlyName, argv[0], args, singleInstance);
+    return ApplicationRun(platform, cb, uniqueName, friendlyName, argv[0], args,
+                          samples, anisotropy, singleInstance);
 }
     
 }

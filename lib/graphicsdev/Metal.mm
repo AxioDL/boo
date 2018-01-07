@@ -37,15 +37,14 @@ class MetalDataFactoryImpl : public MetalDataFactory, public GraphicsDataFactory
     IGraphicsContext* m_parent;
     std::unordered_map<uint64_t, std::unique_ptr<MetalShareableShader>> m_sharedShaders;
     struct MetalContext* m_ctx;
-    uint32_t m_sampleCount;
 
 public:
     std::unordered_map<uint64_t, uint64_t> m_sourceToBinary;
     char m_libfile[MAXPATHLEN];
     bool m_hasCompiler = false;
 
-    MetalDataFactoryImpl(IGraphicsContext* parent, MetalContext* ctx, uint32_t sampleCount)
-    : m_parent(parent), m_ctx(ctx), m_sampleCount(sampleCount)
+    MetalDataFactoryImpl(IGraphicsContext* parent, MetalContext* ctx)
+    : m_parent(parent), m_ctx(ctx)
     {
         snprintf(m_libfile, MAXPATHLEN, "%sboo_metal_shader.metallib", getenv("TMPDIR"));
         for (auto& arg : APP->getArgs())
@@ -524,14 +523,28 @@ class MetalTextureR : public GraphicsDataNode<ITextureR>
             {
                 desc.pixelFormat = MTLPixelFormatBGRA8Unorm;
                 for (int i=0 ; i<m_colorBindCount ; ++i)
+                {
                     m_colorBindTex[i] = [ctx->m_dev newTextureWithDescriptor:desc];
+                    m_blitColor[i] = [MTLRenderPassDescriptor renderPassDescriptor];
+                    m_blitColor[i].colorAttachments[0].texture = m_colorTex;
+                    m_blitColor[i].colorAttachments[0].loadAction = MTLLoadActionLoad;
+                    m_blitColor[i].colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
+                    m_blitColor[i].colorAttachments[0].resolveTexture = m_colorBindTex[i];
+                }
             }
 
             if (m_depthBindCount)
             {
                 desc.pixelFormat = MTLPixelFormatDepth32Float;
                 for (int i=0 ; i<m_depthBindCount ; ++i)
+                {
                     m_depthBindTex[i] = [ctx->m_dev newTextureWithDescriptor:desc];
+                    m_blitDepth[i] = [MTLRenderPassDescriptor renderPassDescriptor];
+                    m_blitDepth[i].depthAttachment.texture = m_colorTex;
+                    m_blitDepth[i].depthAttachment.loadAction = MTLLoadActionLoad;
+                    m_blitDepth[i].depthAttachment.storeAction = MTLStoreActionMultisampleResolve;
+                    m_blitDepth[i].depthAttachment.resolveTexture = m_depthBindTex[i];
+                }
             }
 
             {
@@ -609,6 +622,8 @@ public:
     MTLRenderPassDescriptor* m_clearDepthPassDesc;
     MTLRenderPassDescriptor* m_clearColorPassDesc;
     MTLRenderPassDescriptor* m_clearBothPassDesc;
+    MTLRenderPassDescriptor* m_blitColor[MAX_BIND_TEXS] = {};
+    MTLRenderPassDescriptor* m_blitDepth[MAX_BIND_TEXS] = {};
     ~MetalTextureR() = default;
 
     void resize(MetalContext* ctx, size_t width, size_t height)
@@ -1004,6 +1019,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     IGraphicsContext* m_parent;
     id<MTLCommandBuffer> m_cmdBuf;
     id<MTLRenderCommandEncoder> m_enc;
+    id<MTLSamplerState> m_samplers[3];
     bool m_running = true;
 
     int m_fillBuf = 0;
@@ -1015,6 +1031,27 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         @autoreleasepool
         {
             m_cmdBuf = [ctx->m_q commandBuffer];
+
+            MTLSamplerDescriptor* sampDesc = [MTLSamplerDescriptor new];
+            sampDesc.rAddressMode = MTLSamplerAddressModeRepeat;
+            sampDesc.sAddressMode = MTLSamplerAddressModeRepeat;
+            sampDesc.tAddressMode = MTLSamplerAddressModeRepeat;
+            sampDesc.minFilter = MTLSamplerMinMagFilterLinear;
+            sampDesc.magFilter = MTLSamplerMinMagFilterLinear;
+            sampDesc.mipFilter = MTLSamplerMipFilterLinear;
+            sampDesc.maxAnisotropy = ctx->m_anisotropy;
+            sampDesc.borderColor = MTLSamplerBorderColorOpaqueWhite;
+            m_samplers[0] = [ctx->m_dev newSamplerStateWithDescriptor:sampDesc];
+
+            sampDesc.rAddressMode = MTLSamplerAddressModeClampToBorderColor;
+            sampDesc.sAddressMode = MTLSamplerAddressModeClampToBorderColor;
+            sampDesc.tAddressMode = MTLSamplerAddressModeClampToBorderColor;
+            m_samplers[1] = [ctx->m_dev newSamplerStateWithDescriptor:sampDesc];
+
+            sampDesc.rAddressMode = MTLSamplerAddressModeClampToEdge;
+            sampDesc.sAddressMode = MTLSamplerAddressModeClampToEdge;
+            sampDesc.tAddressMode = MTLSamplerAddressModeClampToEdge;
+            m_samplers[2] = [ctx->m_dev newSamplerStateWithDescriptor:sampDesc];
         }
     }
 
@@ -1040,6 +1077,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             cbind->bind(m_enc, m_fillBuf);
             m_boundData = cbind;
             m_currentPrimitive = cbind->m_pipeline.cast<MetalShaderPipeline>()->m_drawPrim;
+            [m_enc setFragmentSamplerStates:m_samplers withRange:NSMakeRange(0, 3)];
         }
     }
 
@@ -1175,39 +1213,11 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         @autoreleasepool
         {
             [m_enc endEncoding];
-            SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, tex->m_width, tex->m_height));
-            NSUInteger y = tlOrigin ? intersectRect.location[1] : int(tex->m_height) -
-                    intersectRect.location[1] - intersectRect.size[1];
-            MTLOrigin origin = {NSUInteger(intersectRect.location[0]), y, 0};
-            id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf blitCommandEncoder];
-
             if (color && tex->m_colorBindTex[bindIdx])
-            {
-                [blitEnc copyFromTexture:tex->m_colorTex
-                             sourceSlice:0
-                             sourceLevel:0
-                            sourceOrigin:origin
-                              sourceSize:MTLSizeMake(intersectRect.size[0], intersectRect.size[1], 1)
-                               toTexture:tex->m_colorBindTex[bindIdx]
-                        destinationSlice:0
-                        destinationLevel:0
-                       destinationOrigin:origin];
-            }
-
+                [[m_cmdBuf renderCommandEncoderWithDescriptor:tex->m_blitColor[bindIdx]] endEncoding];
             if (depth && tex->m_depthBindTex[bindIdx])
-            {
-                [blitEnc copyFromTexture:tex->m_depthTex
-                             sourceSlice:0
-                             sourceLevel:0
-                            sourceOrigin:origin
-                              sourceSize:MTLSizeMake(intersectRect.size[0], intersectRect.size[1], 1)
-                               toTexture:tex->m_depthBindTex[bindIdx]
-                        destinationSlice:0
-                        destinationLevel:0
-                       destinationOrigin:origin];
-            }
+                [[m_cmdBuf renderCommandEncoderWithDescriptor:tex->m_blitDepth[bindIdx]] endEncoding];
 
-            [blitEnc endEncoding];
             m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:clearDepth ? tex->m_clearDepthPassDesc : tex->m_passDesc];
             [m_enc setFrontFacingWinding:MTLWindingCounterClockwise];
 
@@ -1225,6 +1235,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     }
 
     bool m_inProgress = false;
+    std::unordered_map<uintptr_t, MTLRenderPassDescriptor*> m_resolvePasses;
     void execute()
     {
         if (!m_running)
@@ -1297,20 +1308,21 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                 {
                     MetalTextureR* src = m_needsDisplay.cast<MetalTextureR>();
                     id<MTLTexture> dest = drawable.texture;
+                    uintptr_t key = uintptr_t(src->m_colorTex) ^ uintptr_t(dest);
+                    auto passSearch = m_resolvePasses.find(key);
+                    if (passSearch == m_resolvePasses.end())
+                    {
+                        MTLRenderPassDescriptor* desc = [MTLRenderPassDescriptor renderPassDescriptor];
+                        desc.colorAttachments[0].texture = src->m_colorTex;
+                        desc.colorAttachments[0].loadAction = MTLLoadActionLoad;
+                        desc.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
+                        desc.colorAttachments[0].resolveTexture = dest;
+                        passSearch = m_resolvePasses.insert(std::make_pair(key, desc)).first;
+                    }
                     if (src->m_colorTex.width == dest.width &&
                         src->m_colorTex.height == dest.height)
                     {
-                        id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf blitCommandEncoder];
-                        [blitEnc copyFromTexture:src->m_colorTex
-                                     sourceSlice:0
-                                     sourceLevel:0
-                                    sourceOrigin:MTLOriginMake(0, 0, 0)
-                                      sourceSize:MTLSizeMake(dest.width, dest.height, 1)
-                                       toTexture:dest
-                                destinationSlice:0
-                                destinationLevel:0
-                               destinationOrigin:MTLOriginMake(0, 0, 0)];
-                        [blitEnc endEncoding];
+                        [[m_cmdBuf renderCommandEncoderWithDescriptor:passSearch->second] endEncoding];
                         [m_cmdBuf presentDrawable:drawable];
                     }
                 }
@@ -1392,7 +1404,7 @@ MetalDataFactory::Context::newRenderTexture(size_t width, size_t height, Texture
     @autoreleasepool
     {
         MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
-        return {new MetalTextureR(m_data, factory.m_ctx, width, height, factory.m_sampleCount,
+        return {new MetalTextureR(m_data, factory.m_ctx, width, height, factory.m_ctx->m_sampleCount,
                                   colorBindCount, depthBindCount)};
     }
 }
@@ -1411,7 +1423,7 @@ ObjToken<IShaderPipeline>
 MetalDataFactory::Context::newShaderPipeline(const char* vertSource, const char* fragSource,
                                              std::vector<uint8_t>* vertBlobOut,
                                              std::vector<uint8_t>* fragBlobOut,
-                                             const ObjToken<IVertexFormat>& vtxFmt, unsigned targetSamples,
+                                             const ObjToken<IVertexFormat>& vtxFmt,
                                              BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                                              ZTest depthTest, bool depthWrite, bool colorWrite,
                                              bool alphaWrite, CullMode culling)
@@ -1420,7 +1432,7 @@ MetalDataFactory::Context::newShaderPipeline(const char* vertSource, const char*
     {
         MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
         MTLCompileOptions* compOpts = [MTLCompileOptions new];
-        compOpts.languageVersion = MTLLanguageVersion1_2;
+        compOpts.languageVersion = MTLLanguageVersion1_1;
         NSError* err = nullptr;
 
         XXH64_state_t hashState;
@@ -1541,7 +1553,7 @@ MetalDataFactory::Context::newShaderPipeline(const char* vertSource, const char*
         }
 
         return {new MetalShaderPipeline(m_data, factory.m_ctx, std::move(vertShader), std::move(fragShader),
-                                        vtxFmt, targetSamples, srcFac, dstFac, prim, depthTest, depthWrite,
+                                        vtxFmt, factory.m_ctx->m_sampleCount, srcFac, dstFac, prim, depthTest, depthWrite,
                                         colorWrite, alphaWrite, culling)};
     }
 }
@@ -1588,9 +1600,9 @@ IGraphicsCommandQueue* _NewMetalCommandQueue(MetalContext* ctx, IWindow* parentW
     return new struct MetalCommandQueue(ctx, parentWindow, parent);
 }
 
-IGraphicsDataFactory* _NewMetalDataFactory(IGraphicsContext* parent, MetalContext* ctx, uint32_t sampleCount)
+IGraphicsDataFactory* _NewMetalDataFactory(IGraphicsContext* parent, MetalContext* ctx)
 {
-    return new class MetalDataFactoryImpl(parent, ctx, sampleCount);
+    return new class MetalDataFactoryImpl(parent, ctx);
 }
 
 }

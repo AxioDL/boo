@@ -36,11 +36,11 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead
     friend struct GLCommandQueue;
     friend class GLDataFactory::Context;
     IGraphicsContext* m_parent;
-    uint32_t m_drawSamples;
+    GLContext* m_glCtx;
     std::unordered_map<uint64_t, std::unique_ptr<GLShareableShader>> m_sharedShaders;
 public:
-    GLDataFactoryImpl(IGraphicsContext* parent, uint32_t drawSamples)
-    : m_parent(parent), m_drawSamples(drawSamples) {}
+    GLDataFactoryImpl(IGraphicsContext* parent, GLContext* glCtx)
+    : m_parent(parent), m_glCtx(glCtx) {}
 
     Platform platform() const { return Platform::OpenGL; }
     const SystemChar* platformName() const { return _S("OpenGL"); }
@@ -187,7 +187,7 @@ class GLTextureS : public GraphicsDataNode<ITextureS>
     friend class GLDataFactory;
     GLuint m_tex;
     GLTextureS(const ObjToken<BaseGraphicsData>& parent, size_t width, size_t height, size_t mips,
-               TextureFormat fmt, TextureClampMode clampMode, const void* data, size_t sz)
+               TextureFormat fmt, TextureClampMode clampMode, GLint aniso, const void* data, size_t sz)
     : GraphicsDataNode<ITextureS>(parent)
     {
         const uint8_t* dataIt = static_cast<const uint8_t*>(data);
@@ -196,11 +196,14 @@ class GLTextureS : public GraphicsDataNode<ITextureS>
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         if (mips > 1)
         {
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mips-1);
         }
         else
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+        if (GLEW_EXT_texture_filter_anisotropic)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, aniso);
 
         SetClampMode(GL_TEXTURE_2D, clampMode);
 
@@ -274,7 +277,7 @@ class GLTextureSA : public GraphicsDataNode<ITextureSA>
     friend class GLDataFactory;
     GLuint m_tex;
     GLTextureSA(const ObjToken<BaseGraphicsData>& parent, size_t width, size_t height, size_t layers, size_t mips,
-                TextureFormat fmt, TextureClampMode clampMode, const void* data, size_t sz)
+                TextureFormat fmt, TextureClampMode clampMode, GLint aniso, const void* data, size_t sz)
     : GraphicsDataNode<ITextureSA>(parent)
     {
         const uint8_t* dataIt = static_cast<const uint8_t*>(data);
@@ -288,6 +291,9 @@ class GLTextureSA : public GraphicsDataNode<ITextureSA>
         }
         else
             glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+        if (GLEW_EXT_texture_filter_anisotropic)
+            glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAX_ANISOTROPY_EXT, aniso);
 
         SetClampMode(GL_TEXTURE_2D_ARRAY, clampMode);
 
@@ -433,13 +439,13 @@ class GLTextureR : public GraphicsDataNode<ITextureR>
     struct GLCommandQueue* m_q;
     GLuint m_texs[2] = {};
     GLuint m_bindTexs[2][MAX_BIND_TEXS] = {};
+    GLuint m_bindFBOs[2][MAX_BIND_TEXS] = {};
     GLuint m_fbo = 0;
     size_t m_width = 0;
     size_t m_height = 0;
     size_t m_samples = 0;
     size_t m_colorBindCount;
     size_t m_depthBindCount;
-    GLenum m_target;
     GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue* q, size_t width, size_t height, size_t samples,
                TextureClampMode clampMode, size_t colorBindCount, size_t depthBindCount);
 public:
@@ -447,6 +453,8 @@ public:
     {
         glDeleteTextures(2, m_texs);
         glDeleteTextures(MAX_BIND_TEXS * 2, m_bindTexs[0]);
+        if (m_samples > 1)
+            glDeleteFramebuffers(MAX_BIND_TEXS * 2, m_bindFBOs[0]);
         glDeleteFramebuffers(1, &m_fbo);
     }
 
@@ -467,7 +475,7 @@ public:
     void bind(size_t idx, int bindIdx, bool depth) const
     {
         glActiveTexture(GL_TEXTURE0 + idx);
-        glBindTexture(m_target, m_bindTexs[depth][bindIdx]);
+        glBindTexture(GL_TEXTURE_2D, m_bindTexs[depth][bindIdx]);
     }
 
     void resize(size_t width, size_t height)
@@ -518,7 +526,9 @@ ObjToken<ITextureS>
 GLDataFactory::Context::newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
                                          TextureClampMode clampMode, const void* data, size_t sz)
 {
-    return {new GLTextureS(m_data, width, height, mips, fmt, clampMode, data, sz)};
+    GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
+    return {new GLTextureS(m_data, width, height, mips, fmt, clampMode,
+                           factory.m_glCtx->m_anisotropy, data, sz)};
 }
 
 ObjToken<ITextureSA>
@@ -526,7 +536,9 @@ GLDataFactory::Context::newStaticArrayTexture(size_t width, size_t height, size_
                                               TextureFormat fmt, TextureClampMode clampMode,
                                               const void *data, size_t sz)
 {
-    return {new GLTextureSA(m_data, width, height, layers, mips, fmt, clampMode, data, sz)};
+    GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
+    return {new GLTextureSA(m_data, width, height, layers, mips, fmt, clampMode,
+                            factory.m_glCtx->m_anisotropy, data, sz)};
 }
 
 class GLShaderPipeline : public GraphicsDataNode<IShaderPipeline>
@@ -1028,6 +1040,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
     Platform platform() const { return IGraphicsDataFactory::Platform::OpenGL; }
     const SystemChar* platformName() const { return _S("OpenGL"); }
     IGraphicsContext* m_parent = nullptr;
+    GLContext* m_glCtx = nullptr;
 
     std::mutex m_mt;
     std::condition_variable m_cv;
@@ -1167,8 +1180,31 @@ struct GLCommandQueue : IGraphicsCommandQueue
     {
         glGenFramebuffers(1, &tex->m_fbo);
         glBindFramebuffer(GL_FRAMEBUFFER, tex->m_fbo);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex->m_texs[0], 0);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex->m_texs[1], 0);
+        GLenum target = tex->m_samples > 1 ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, target, tex->m_texs[0], 0);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, target, tex->m_texs[1], 0);
+
+        if (tex->m_samples > 1)
+        {
+            if (tex->m_colorBindCount)
+            {
+                glGenFramebuffers(tex->m_colorBindCount, tex->m_bindFBOs[0]);
+                for (int i=0 ; i<tex->m_colorBindCount ; ++i)
+                {
+                    glBindFramebuffer(GL_FRAMEBUFFER, tex->m_bindFBOs[0][i]);
+                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex->m_bindTexs[0][i], 0);
+                }
+            }
+            if (tex->m_depthBindCount)
+            {
+                glGenFramebuffers(tex->m_depthBindCount, tex->m_bindFBOs[1]);
+                for (int i=0 ; i<tex->m_depthBindCount ; ++i)
+                {
+                    glBindFramebuffer(GL_FRAMEBUFFER, tex->m_bindFBOs[1][i]);
+                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex->m_bindTexs[1][i], 0);
+                }
+            }
+        }
     }
 
     static void RenderingWorker(GLCommandQueue* self)
@@ -1188,6 +1224,17 @@ struct GLCommandQueue : IGraphicsCommandQueue
             Log.report(logvisor::Info, "OpenGL Version: %s", version);
             self->m_parent->postInit();
             glClearColor(0.f, 0.f, 0.f, 0.f);
+            if (GLEW_EXT_texture_filter_anisotropic)
+            {
+                GLint maxAniso;
+                glGetIntegerv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &maxAniso);
+                self->m_glCtx->m_anisotropy = std::min(uint32_t(maxAniso), self->m_glCtx->m_anisotropy);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, maxAniso);
+            }
+            GLint maxSamples;
+            glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+            self->m_glCtx->m_sampleCount =
+                flp2(std::min(uint32_t(maxSamples), std::max(uint32_t(1), self->m_glCtx->m_sampleCount)) - 1);
         }
         self->m_initcv.notify_one();
         while (self->m_running)
@@ -1229,6 +1276,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
             std::vector<Command>& cmds = self->m_cmdBufs[self->m_drawBuf];
             GLenum currentPrim = GL_TRIANGLES;
             const GLShaderDataBinding* curBinding = nullptr;
+            GLuint curFBO = 0;
             for (const Command& cmd : cmds)
             {
                 switch (cmd.m_op)
@@ -1244,10 +1292,8 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 case Command::Op::SetRenderTarget:
                 {
                     const GLTextureR* tex = cmd.target.cast<GLTextureR>();
-                    if (!tex)
-                        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-                    else
-                        glBindFramebuffer(GL_FRAMEBUFFER, tex->m_fbo);
+                    curFBO = (!tex) ? 0 : tex->m_fbo;
+                    glBindFramebuffer(GL_FRAMEBUFFER, curFBO);
                     break;
                 }
                 case Command::Op::SetViewport:
@@ -1291,23 +1337,49 @@ struct GLCommandQueue : IGraphicsCommandQueue
                     break;
                 case Command::Op::ResolveBindTexture:
                 {
+                    const SWindowRect& rect = cmd.viewport.rect;
                     const GLTextureR* tex = cmd.resolveTex.cast<GLTextureR>();
-                    GLenum target = (tex->m_samples > 1) ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, tex->m_fbo);
-                    glActiveTexture(GL_TEXTURE9);
-                    if (cmd.resolveColor && tex->m_bindTexs[0][cmd.bindIdx])
+                    if (tex->m_samples <= 1)
                     {
-                        glBindTexture(target, tex->m_bindTexs[0][cmd.bindIdx]);
-                        glCopyTexSubImage2D(target, 0, cmd.viewport.rect.location[0], cmd.viewport.rect.location[1],
-                                            cmd.viewport.rect.location[0], cmd.viewport.rect.location[1],
-                                            cmd.viewport.rect.size[0], cmd.viewport.rect.size[1]);
+                        glActiveTexture(GL_TEXTURE9);
+                        if (cmd.resolveColor && tex->m_bindTexs[0][cmd.bindIdx])
+                        {
+                            glBindTexture(GL_TEXTURE_2D, tex->m_bindTexs[0][cmd.bindIdx]);
+                            glCopyTexSubImage2D(GL_TEXTURE_2D, 0,
+                                                rect.location[0], rect.location[1],
+                                                rect.location[0], rect.location[1],
+                                                rect.size[0], rect.size[1]);
+                        }
+                        if (cmd.resolveDepth && tex->m_bindTexs[1][cmd.bindIdx])
+                        {
+                            glBindTexture(GL_TEXTURE_2D, tex->m_bindTexs[1][cmd.bindIdx]);
+                            glCopyTexSubImage2D(GL_TEXTURE_2D, 0,
+                                                rect.location[0], rect.location[1],
+                                                rect.location[0], rect.location[1],
+                                                rect.size[0], rect.size[1]);
+                        }
                     }
-                    if (cmd.resolveDepth && tex->m_bindTexs[1][cmd.bindIdx])
+                    else
                     {
-                        glBindTexture(target, tex->m_bindTexs[1][cmd.bindIdx]);
-                        glCopyTexSubImage2D(target, 0, cmd.viewport.rect.location[0], cmd.viewport.rect.location[1],
-                                            cmd.viewport.rect.location[0], cmd.viewport.rect.location[1],
-                                            cmd.viewport.rect.size[0], cmd.viewport.rect.size[1]);
+                        if (cmd.resolveColor && tex->m_bindTexs[0][cmd.bindIdx])
+                        {
+                            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex->m_bindFBOs[0][cmd.bindIdx]);
+                            glBlitFramebuffer(rect.location[0], rect.location[1],
+                                              rect.location[0] + rect.size[0], rect.location[1] + rect.size[1],
+                                              rect.location[0], rect.location[1],
+                                              rect.location[0] + rect.size[0], rect.location[1] + rect.size[1],
+                                              GL_COLOR_BUFFER_BIT, GL_NEAREST);
+                        }
+                        if (cmd.resolveDepth && tex->m_bindTexs[1][cmd.bindIdx])
+                        {
+                            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex->m_bindFBOs[1][cmd.bindIdx]);
+                            glBlitFramebuffer(rect.location[0], rect.location[1],
+                                              rect.location[0] + rect.size[0], rect.location[1] + rect.size[1],
+                                              rect.location[0], rect.location[1],
+                                              rect.location[0] + rect.size[0], rect.location[1] + rect.size[1],
+                                              GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+                        }
                     }
                     if (cmd.clearDepth)
                     {
@@ -1315,6 +1387,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
                         glDepthMask(GL_TRUE);
                         glClear(GL_DEPTH_BUFFER_BIT);
                     }
+                    glBindFramebuffer(GL_FRAMEBUFFER, curFBO);
                     break;
                 }
                 case Command::Op::Present:
@@ -1338,8 +1411,9 @@ struct GLCommandQueue : IGraphicsCommandQueue
         }
     }
 
-    GLCommandQueue(IGraphicsContext* parent)
+    GLCommandQueue(IGraphicsContext* parent, GLContext* glCtx)
     : m_parent(parent),
+      m_glCtx(glCtx),
       m_initlk(m_initmt),
       m_thr(RenderingWorker, this)
     {
@@ -1585,7 +1659,6 @@ GLTextureR::GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue*
 
     if (samples > 1)
     {
-        m_target = GL_TEXTURE_2D_MULTISAMPLE;
         glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[0]);
         glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGBA, width, height, GL_FALSE);
         glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[1]);
@@ -1593,7 +1666,6 @@ GLTextureR::GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue*
     }
     else
     {
-        m_target = GL_TEXTURE_2D;
         glBindTexture(GL_TEXTURE_2D, m_texs[0]);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
         glBindTexture(GL_TEXTURE_2D, m_texs[1]);
@@ -1626,7 +1698,7 @@ GLDataFactory::Context::newRenderTexture(size_t width, size_t height, TextureCla
 {
     GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
     GLCommandQueue* q = static_cast<GLCommandQueue*>(factory.m_parent->getCommandQueue());
-    ObjToken<ITextureR> retval(new GLTextureR(m_data, q, width, height, factory.m_drawSamples, clampMode,
+    ObjToken<ITextureR> retval(new GLTextureR(m_data, q, width, height, factory.m_glCtx->m_sampleCount, clampMode,
                                               colorBindingCount, depthBindingCount));
     q->resizeRenderTexture(retval, width, height);
     return retval;
@@ -1653,14 +1725,14 @@ ObjToken<IVertexFormat> GLDataFactory::Context::newVertexFormat
     return {new GLVertexFormat(m_data, q, elementCount, elements, baseVert, baseInst)};
 }
 
-IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent)
+IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent, GLContext* glCtx)
 {
-    return new struct GLCommandQueue(parent);
+    return new struct GLCommandQueue(parent, glCtx);
 }
 
-IGraphicsDataFactory* _NewGLDataFactory(IGraphicsContext* parent, uint32_t drawSamples)
+IGraphicsDataFactory* _NewGLDataFactory(IGraphicsContext* parent, GLContext* glCtx)
 {
-    return new class GLDataFactoryImpl(parent, drawSamples);
+    return new class GLDataFactoryImpl(parent, glCtx);
 }
 
 }
