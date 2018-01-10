@@ -113,9 +113,11 @@ public:
         m_3dCtx.m_ctx12.m_anisotropy = anisotropy;
         m_3dCtx.m_ctxOgl.m_glCtx.m_sampleCount = samples;
         m_3dCtx.m_ctxOgl.m_glCtx.m_anisotropy = anisotropy;
+#if BOO_HAS_VULKAN
         g_VulkanContext.m_sampleCountColor = samples;
         g_VulkanContext.m_sampleCountDepth = samples;
         g_VulkanContext.m_anisotropy = anisotropy;
+#endif
 
         HMODULE dxgilib = LoadLibraryW(L"dxgi.dll");
         if (!dxgilib)
@@ -149,9 +151,9 @@ public:
                 useVulkan = false;
             }
 #else
-            if (!gfxApi.compare(L"D3D12"))
+            if (!gfxApi.compare("D3D12"))
                 yes12 = true;
-            if (!gfxApi.compare(L"OpenGL"))
+            if (!gfxApi.compare("OpenGL"))
                 noD3d = true;
 #endif
         }
