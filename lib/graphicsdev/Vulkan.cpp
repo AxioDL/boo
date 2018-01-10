@@ -40,12 +40,11 @@ class VulkanDataFactoryImpl : public VulkanDataFactory, public GraphicsDataFacto
     friend struct VulkanPool;
     IGraphicsContext* m_parent;
     VulkanContext* m_ctx;
-    uint32_t m_drawSamples;
     std::unordered_map<uint64_t, std::unique_ptr<VulkanShareableShader>> m_sharedShaders;
     std::vector<int> m_texUnis;
 public:
     std::unordered_map<uint64_t, uint64_t> m_sourceToBinary;
-    VulkanDataFactoryImpl(IGraphicsContext* parent, VulkanContext* ctx, uint32_t drawSamples);
+    VulkanDataFactoryImpl(IGraphicsContext* parent, VulkanContext* ctx);
 
     Platform platform() const {return Platform::Vulkan;}
     const SystemChar* platformName() const {return _S("Vulkan");}
@@ -441,6 +440,10 @@ void VulkanContext::initDevice()
     VkPhysicalDeviceFeatures features = {};
     if (m_features.samplerAnisotropy)
         features.samplerAnisotropy = VK_TRUE;
+    if (!m_features.textureCompressionBC)
+        Log.report(logvisor::Fatal,
+                   "Vulkan device does not support DXT-format textures");
+    features.textureCompressionBC = VK_TRUE;
 
     VkDeviceCreateInfo deviceInfo = {};
     deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -469,7 +472,8 @@ void VulkanContext::initDevice()
                m_gpuProps.driverVersion & 0b111111111111);
 }
 
-void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR surface, VkFormat format, VkColorSpaceKHR colorspace)
+void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR surface,
+                                  VkFormat format, VkColorSpaceKHR colorspace)
 {
     m_displayFormat = format;
     VkSurfaceCapabilitiesKHR surfCapabilities;
@@ -590,32 +594,13 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
     cmdBufBeginInfo.flags = 0;
     ThrowIfFailed(vk::BeginCommandBuffer(m_loadCmdBuf, &cmdBufBeginInfo));
 
-    /* Create shared linear sampler */
-    VkSamplerCreateInfo samplerInfo = {};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.pNext = nullptr;
-    samplerInfo.magFilter = VK_FILTER_LINEAR;
-    samplerInfo.minFilter = VK_FILTER_LINEAR;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.maxAnisotropy = m_features.samplerAnisotropy ?
-                                m_gpuProps.limits.maxSamplerAnisotropy : 1.f;
-    ThrowIfFailed(vk::CreateSampler(m_dev, &samplerInfo, nullptr, &m_linearSamplers[0]));
+    m_sampleCountColor = flp2(std::min(m_gpuProps.limits.framebufferColorSampleCounts, m_sampleCountColor));
+    m_sampleCountDepth = flp2(std::min(m_gpuProps.limits.framebufferDepthSampleCounts, m_sampleCountDepth));
 
-    /* Create shared white-clamped sampler */
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-    ThrowIfFailed(vk::CreateSampler(m_dev, &samplerInfo, nullptr, &m_linearSamplers[1]));
-
-    /* Create shared edge-clamped sampler */
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    ThrowIfFailed(vk::CreateSampler(m_dev, &samplerInfo, nullptr, &m_linearSamplers[2]));
+    if (m_features.samplerAnisotropy)
+        m_anisotropy = std::min(m_gpuProps.limits.maxSamplerAnisotropy, m_anisotropy);
+    else
+        m_anisotropy = 1;
 
     /* images */
     sc.m_bufs.resize(swapchainImageCount);
@@ -936,6 +921,50 @@ public:
     }
 };
 
+static void MakeSampler(VulkanContext* ctx, VkSampler& sampOut, TextureClampMode mode, int mips)
+{
+    uint32_t key = (uint32_t(mode) << 16) | mips;
+    auto search = ctx->m_samplers.find(key);
+    if (search != ctx->m_samplers.end())
+    {
+        sampOut = search->second;
+        return;
+    }
+
+    /* Create linear sampler */
+    VkSamplerCreateInfo samplerInfo = {};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.pNext = nullptr;
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.anisotropyEnable = ctx->m_features.samplerAnisotropy;
+    samplerInfo.maxAnisotropy = ctx->m_anisotropy;
+    samplerInfo.maxLod = mips - 1;
+    switch (mode)
+    {
+    case TextureClampMode::Repeat:
+    default:
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        break;
+    case TextureClampMode::ClampToWhite:
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+        samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+        break;
+    case TextureClampMode::ClampToEdge:
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        break;
+    }
+    ThrowIfFailed(vk::CreateSampler(ctx->m_dev, &samplerInfo, nullptr, &sampOut));
+    ctx->m_samplers[key] = sampOut;
+}
+
 class VulkanTextureS : public GraphicsDataNode<ITextureS>
 {
     friend class VulkanDataFactory;
@@ -1022,7 +1051,7 @@ class VulkanTextureS : public GraphicsDataNode<ITextureS>
         texCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex));
 
-        m_descInfo.sampler = ctx->m_linearSamplers[int(clampMode)];
+        setClampMode(clampMode);
         m_descInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 public:
@@ -1030,6 +1059,7 @@ public:
     VkDeviceMemory m_cpuMem;
     VkImage m_gpuTex;
     VkImageView m_gpuView = VK_NULL_HANDLE;
+    VkSampler m_sampler = VK_NULL_HANDLE;
     VkDescriptorImageInfo m_descInfo;
     VkDeviceSize m_gpuOffset;
     ~VulkanTextureS()
@@ -1044,7 +1074,8 @@ public:
 
     void setClampMode(TextureClampMode mode)
     {
-        m_descInfo.sampler = m_ctx->m_linearSamplers[int(mode)];
+        MakeSampler(m_ctx, m_sampler, mode, m_mips);
+        m_descInfo.sampler = m_sampler;
     }
 
     void deleteUploadObjects()
@@ -1106,7 +1137,7 @@ public:
         size_t offset = 0;
         for (int i=0 ; i<regionCount ; ++i)
         {
-            size_t srcRowPitch = width * m_pixelPitchNum / m_pixelPitchDenom;
+            size_t regionPitch = width * height * m_pixelPitchNum / m_pixelPitchDenom;
 
             copyRegions[i].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             copyRegions[i].imageSubresource.mipLevel = i;
@@ -1121,7 +1152,7 @@ public:
                 width /= 2;
             if (height > 1)
                 height /= 2;
-            offset += srcRowPitch;
+            offset += regionPitch;
         }
 
         /* Put the copy command into the command buffer */
@@ -1224,7 +1255,7 @@ class VulkanTextureSA : public GraphicsDataNode<ITextureSA>
         texCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex));
 
-        m_descInfo.sampler = ctx->m_linearSamplers[int(clampMode)];
+        setClampMode(clampMode);
         m_descInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 public:
@@ -1232,6 +1263,7 @@ public:
     VkDeviceMemory m_cpuMem;
     VkImage m_gpuTex;
     VkImageView m_gpuView = VK_NULL_HANDLE;
+    VkSampler m_sampler = VK_NULL_HANDLE;
     VkDescriptorImageInfo m_descInfo;
     VkDeviceSize m_gpuOffset;
     ~VulkanTextureSA()
@@ -1246,7 +1278,8 @@ public:
 
     void setClampMode(TextureClampMode mode)
     {
-        m_descInfo.sampler = m_ctx->m_linearSamplers[int(mode)];
+        MakeSampler(m_ctx, m_sampler, mode, m_mips);
+        m_descInfo.sampler = m_sampler;
     }
 
     void deleteUploadObjects()
@@ -1308,7 +1341,7 @@ public:
         size_t offset = 0;
         for (int i=0 ; i<regionCount ; ++i)
         {
-            size_t srcRowPitch = width * m_layers * m_pixelPitchNum / m_pixelPitchDenom;
+            size_t regionPitch = width * height * m_layers * m_pixelPitchNum / m_pixelPitchDenom;
 
             copyRegions[i].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             copyRegions[i].imageSubresource.mipLevel = i;
@@ -1323,7 +1356,7 @@ public:
                 width /= 2;
             if (height > 1)
                 height /= 2;
-            offset += srcRowPitch;
+            offset += regionPitch;
         }
 
         /* Put the copy command into the command buffer */
@@ -1356,7 +1389,6 @@ class VulkanTextureD : public GraphicsDataNode<ITextureD>
     VulkanContext* m_ctx;
     std::unique_ptr<uint8_t[]> m_stagingBuf;
     size_t m_cpuSz;
-    VkDeviceSize m_srcRowPitch;
     VkDeviceSize m_cpuOffsets[2];
     VkFormat m_vkFmt;
     int m_validSlots = 0;
@@ -1369,13 +1401,11 @@ class VulkanTextureD : public GraphicsDataNode<ITextureD>
         {
         case TextureFormat::RGBA8:
             pfmt = VK_FORMAT_R8G8B8A8_UNORM;
-            m_srcRowPitch = width * 4;
-            m_cpuSz = m_srcRowPitch * height;
+            m_cpuSz = width * height * 4;
             break;
         case TextureFormat::I8:
             pfmt = VK_FORMAT_R8_UNORM;
-            m_srcRowPitch = width;
-            m_cpuSz = m_srcRowPitch * height;
+            m_cpuSz = width * height;
             break;
         default:
             Log.report(logvisor::Fatal, "unsupported tex format");
@@ -1436,6 +1466,7 @@ class VulkanTextureD : public GraphicsDataNode<ITextureD>
         texCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         texCreateInfo.flags = 0;
 
+        setClampMode(clampMode);
         for (int i=0 ; i<2 ; ++i)
         {
             /* bind cpu memory */
@@ -1444,7 +1475,7 @@ class VulkanTextureD : public GraphicsDataNode<ITextureD>
             /* create gpu image */
             ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_gpuTex[i]));
 
-            m_descInfo[i].sampler = ctx->m_linearSamplers[int(clampMode)];
+            m_descInfo[i].sampler = m_sampler;
             m_descInfo[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
     }
@@ -1454,14 +1485,16 @@ public:
     VkDeviceMemory m_cpuMem;
     VkImage m_gpuTex[2];
     VkImageView m_gpuView[2];
+    VkSampler m_sampler = VK_NULL_HANDLE;
     VkDeviceSize m_gpuOffset[2];
     VkDescriptorImageInfo m_descInfo[2];
     ~VulkanTextureD();
 
     void setClampMode(TextureClampMode mode)
     {
+        MakeSampler(m_ctx, m_sampler, mode, 1);
         for (int i=0 ; i<2 ; ++i)
-            m_descInfo[i].sampler = m_ctx->m_linearSamplers[int(mode)];
+            m_descInfo[i].sampler = m_sampler;
     }
 
     void load(const void* data, size_t sz);
@@ -1526,7 +1559,7 @@ class VulkanTextureR : public GraphicsDataNode<ITextureR>
     friend struct VulkanCommandQueue;
     size_t m_width = 0;
     size_t m_height = 0;
-    size_t m_samples = 0;
+    VkSampleCountFlags m_samplesColor, m_samplesDepth;
 
     TextureClampMode m_clampMode;
     size_t m_colorBindCount;
@@ -1549,7 +1582,7 @@ class VulkanTextureR : public GraphicsDataNode<ITextureR>
         texCreateInfo.extent.depth = 1;
         texCreateInfo.mipLevels = 1;
         texCreateInfo.arrayLayers = 1;
-        texCreateInfo.samples = VkSampleCountFlagBits(m_samples);
+        texCreateInfo.samples = VkSampleCountFlagBits(m_samplesColor);
         texCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         texCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         texCreateInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
@@ -1560,6 +1593,7 @@ class VulkanTextureR : public GraphicsDataNode<ITextureR>
         ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_colorTex));
 
         /* depth target */
+        texCreateInfo.samples = VkSampleCountFlagBits(m_samplesDepth);
         texCreateInfo.format = VK_FORMAT_D32_SFLOAT;
         texCreateInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
         ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_depthTex));
@@ -1603,7 +1637,7 @@ class VulkanTextureR : public GraphicsDataNode<ITextureR>
             memAlloc.allocationSize += memReqs.size;
             memTypeBits &= memReqs.memoryTypeBits;
 
-            m_colorBindDescInfo[i].sampler = ctx->m_linearSamplers[int(m_clampMode)];
+            m_colorBindDescInfo[i].sampler = m_sampler;
             m_colorBindDescInfo[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
 
@@ -1620,7 +1654,7 @@ class VulkanTextureR : public GraphicsDataNode<ITextureR>
             memAlloc.allocationSize += memReqs.size;
             memTypeBits &= memReqs.memoryTypeBits;
 
-            m_depthBindDescInfo[i].sampler = ctx->m_linearSamplers[int(m_clampMode)];
+            m_depthBindDescInfo[i].sampler = m_sampler;
             m_depthBindDescInfo[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
 
@@ -1709,10 +1743,12 @@ class VulkanTextureR : public GraphicsDataNode<ITextureR>
     VulkanContext* m_ctx;
     VulkanCommandQueue* m_q;
     VulkanTextureR(const boo::ObjToken<BaseGraphicsData>& parent, VulkanContext* ctx, VulkanCommandQueue* q,
-                   size_t width, size_t height, size_t samples, TextureClampMode clampMode,
+                   size_t width, size_t height, TextureClampMode clampMode,
                    size_t colorBindCount, size_t depthBindCount)
     : GraphicsDataNode<ITextureR>(parent), m_ctx(ctx), m_q(q),
-      m_width(width), m_height(height), m_samples(samples),
+      m_width(width), m_height(height),
+      m_samplesColor(ctx->m_sampleCountColor),
+      m_samplesDepth(ctx->m_sampleCountDepth),
       m_clampMode(clampMode),
       m_colorBindCount(colorBindCount),
       m_depthBindCount(depthBindCount)
@@ -1722,11 +1758,12 @@ class VulkanTextureR : public GraphicsDataNode<ITextureR>
         if (depthBindCount > MAX_BIND_TEXS)
             Log.report(logvisor::Fatal, "too many depth bindings for render texture");
 
-        if (samples == 0) m_samples = 1;
+        if (m_samplesColor == 0) m_samplesColor = 1;
+        if (m_samplesDepth == 0) m_samplesDepth = 1;
+        setClampMode(m_clampMode);
         Setup(ctx);
     }
 public:
-    size_t samples() const {return m_samples;}
     VkDeviceMemory m_gpuMem = VK_NULL_HANDLE;
 
     VkImage m_colorTex = VK_NULL_HANDLE;
@@ -1750,12 +1787,15 @@ public:
     VkImageLayout m_colorBindLayout[MAX_BIND_TEXS] = {};
     VkImageLayout m_depthBindLayout[MAX_BIND_TEXS] = {};
 
+    VkSampler m_sampler = VK_NULL_HANDLE;
+
     void setClampMode(TextureClampMode mode)
     {
+        MakeSampler(m_ctx, m_sampler, mode, 1);
         for (size_t i=0 ; i<m_colorBindCount ; ++i)
-            m_colorBindDescInfo[i].sampler = m_ctx->m_linearSamplers[int(mode)];
+            m_colorBindDescInfo[i].sampler = m_sampler;
         for (size_t i=0 ; i<m_depthBindCount ; ++i)
-            m_depthBindDescInfo[i].sampler = m_ctx->m_linearSamplers[int(mode)];
+            m_depthBindDescInfo[i].sampler = m_sampler;
     }
 
     void doDestroy();
@@ -2006,7 +2046,7 @@ public:
             multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
             multisampleInfo.pNext = nullptr;
             multisampleInfo.flags = 0;
-            multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+            multisampleInfo.rasterizationSamples = VkSampleCountFlagBits(m_ctx->m_sampleCountColor);
 
             VkPipelineDepthStencilStateCreateInfo depthStencilInfo = {};
             depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -2738,7 +2778,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
             SetImageLayout(cmdBuf, csource->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
                            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
 
-        if (csource->m_samples > 1)
+        if (csource->m_samplesColor > 1)
         {
             VkImageResolve resolveInfo = {};
             resolveInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -2798,72 +2838,176 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
 
         vk::CmdEndRenderPass(cmdBuf);
 
-        VkImageCopy copyInfo = {};
-        SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, ctexture->m_width, ctexture->m_height));
-        copyInfo.srcOffset.y = tlOrigin ? intersectRect.location[1] :
-            (ctexture->m_height - intersectRect.size[1] - intersectRect.location[1]);
-        copyInfo.srcOffset.x = intersectRect.location[0];
-        copyInfo.dstOffset = copyInfo.srcOffset;
-        copyInfo.extent.width = intersectRect.size[0];
-        copyInfo.extent.height = intersectRect.size[1];
-        copyInfo.extent.depth = 1;
-        copyInfo.dstSubresource.mipLevel = 0;
-        copyInfo.dstSubresource.baseArrayLayer = 0;
-        copyInfo.dstSubresource.layerCount = 1;
-        copyInfo.srcSubresource.mipLevel = 0;
-        copyInfo.srcSubresource.baseArrayLayer = 0;
-        copyInfo.srcSubresource.layerCount = 1;
-
         if (color && ctexture->m_colorBindCount)
         {
-            if (ctexture == m_boundTarget.get())
-                SetImageLayout(cmdBuf, ctexture->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
-                               VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
+            if (ctexture->m_samplesColor <= 1)
+            {
+                VkImageCopy copyInfo = {};
+                SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, ctexture->m_width, ctexture->m_height));
+                copyInfo.srcOffset.y = tlOrigin ? intersectRect.location[1] :
+                    (ctexture->m_height - intersectRect.size[1] - intersectRect.location[1]);
+                copyInfo.srcOffset.x = intersectRect.location[0];
+                copyInfo.dstOffset = copyInfo.srcOffset;
+                copyInfo.extent.width = intersectRect.size[0];
+                copyInfo.extent.height = intersectRect.size[1];
+                copyInfo.extent.depth = 1;
+                copyInfo.dstSubresource.mipLevel = 0;
+                copyInfo.dstSubresource.baseArrayLayer = 0;
+                copyInfo.dstSubresource.layerCount = 1;
+                copyInfo.srcSubresource.mipLevel = 0;
+                copyInfo.srcSubresource.baseArrayLayer = 0;
+                copyInfo.srcSubresource.layerCount = 1;
 
-            SetImageLayout(cmdBuf, ctexture->m_colorBindTex[bindIdx], VK_IMAGE_ASPECT_COLOR_BIT,
-                           ctexture->m_colorBindLayout[bindIdx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
+                if (ctexture == m_boundTarget.get())
+                    SetImageLayout(cmdBuf, ctexture->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
+                                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
 
-            copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                SetImageLayout(cmdBuf, ctexture->m_colorBindTex[bindIdx], VK_IMAGE_ASPECT_COLOR_BIT,
+                               ctexture->m_colorBindLayout[bindIdx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
 
-            vk::CmdCopyImage(cmdBuf,
-                             ctexture->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                             ctexture->m_colorBindTex[bindIdx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                             1, &copyInfo);
+                copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                copyInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
-            if (ctexture == m_boundTarget.get())
-                SetImageLayout(cmdBuf, ctexture->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
-                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
+                vk::CmdCopyImage(cmdBuf,
+                                 ctexture->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                 ctexture->m_colorBindTex[bindIdx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                 1, &copyInfo);
 
-            SetImageLayout(cmdBuf, ctexture->m_colorBindTex[bindIdx], VK_IMAGE_ASPECT_COLOR_BIT,
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, 1);
-            ctexture->m_colorBindLayout[bindIdx] = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                if (ctexture == m_boundTarget.get())
+                    SetImageLayout(cmdBuf, ctexture->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
+                                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
+
+                SetImageLayout(cmdBuf, ctexture->m_colorBindTex[bindIdx], VK_IMAGE_ASPECT_COLOR_BIT,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, 1);
+                ctexture->m_colorBindLayout[bindIdx] = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            }
+            else
+            {
+                VkImageResolve resolveInfo = {};
+                SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, ctexture->m_width, ctexture->m_height));
+                resolveInfo.srcOffset.y = tlOrigin ? intersectRect.location[1] :
+                    (ctexture->m_height - intersectRect.size[1] - intersectRect.location[1]);
+                resolveInfo.srcOffset.x = intersectRect.location[0];
+                resolveInfo.dstOffset = resolveInfo.srcOffset;
+                resolveInfo.extent.width = intersectRect.size[0];
+                resolveInfo.extent.height = intersectRect.size[1];
+                resolveInfo.extent.depth = 1;
+                resolveInfo.dstSubresource.mipLevel = 0;
+                resolveInfo.dstSubresource.baseArrayLayer = 0;
+                resolveInfo.dstSubresource.layerCount = 1;
+                resolveInfo.srcSubresource.mipLevel = 0;
+                resolveInfo.srcSubresource.baseArrayLayer = 0;
+                resolveInfo.srcSubresource.layerCount = 1;
+
+                if (ctexture == m_boundTarget.get())
+                    SetImageLayout(cmdBuf, ctexture->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
+                                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
+
+                SetImageLayout(cmdBuf, ctexture->m_colorBindTex[bindIdx], VK_IMAGE_ASPECT_COLOR_BIT,
+                               ctexture->m_colorBindLayout[bindIdx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
+
+                resolveInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                resolveInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+                vk::CmdResolveImage(cmdBuf,
+                                    ctexture->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                    ctexture->m_colorBindTex[bindIdx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                    1, &resolveInfo);
+
+                if (ctexture == m_boundTarget.get())
+                    SetImageLayout(cmdBuf, ctexture->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
+                                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
+
+                SetImageLayout(cmdBuf, ctexture->m_colorBindTex[bindIdx], VK_IMAGE_ASPECT_COLOR_BIT,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, 1);
+                ctexture->m_colorBindLayout[bindIdx] = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            }
         }
 
         if (depth && ctexture->m_depthBindCount)
         {
-            if (ctexture == m_boundTarget.get())
-                SetImageLayout(cmdBuf, ctexture->m_depthTex, VK_IMAGE_ASPECT_DEPTH_BIT,
-                               VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
+            if (ctexture->m_samplesDepth <= 1)
+            {
+                VkImageCopy copyInfo = {};
+                SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, ctexture->m_width, ctexture->m_height));
+                copyInfo.srcOffset.y = tlOrigin ? intersectRect.location[1] :
+                    (ctexture->m_height - intersectRect.size[1] - intersectRect.location[1]);
+                copyInfo.srcOffset.x = intersectRect.location[0];
+                copyInfo.dstOffset = copyInfo.srcOffset;
+                copyInfo.extent.width = intersectRect.size[0];
+                copyInfo.extent.height = intersectRect.size[1];
+                copyInfo.extent.depth = 1;
+                copyInfo.dstSubresource.mipLevel = 0;
+                copyInfo.dstSubresource.baseArrayLayer = 0;
+                copyInfo.dstSubresource.layerCount = 1;
+                copyInfo.srcSubresource.mipLevel = 0;
+                copyInfo.srcSubresource.baseArrayLayer = 0;
+                copyInfo.srcSubresource.layerCount = 1;
 
-            SetImageLayout(cmdBuf, ctexture->m_depthBindTex[bindIdx], VK_IMAGE_ASPECT_DEPTH_BIT,
-                           ctexture->m_depthBindLayout[bindIdx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
+                if (ctexture == m_boundTarget.get())
+                    SetImageLayout(cmdBuf, ctexture->m_depthTex, VK_IMAGE_ASPECT_DEPTH_BIT,
+                                   VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
 
-            copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-            copyInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+                SetImageLayout(cmdBuf, ctexture->m_depthBindTex[bindIdx], VK_IMAGE_ASPECT_DEPTH_BIT,
+                               ctexture->m_depthBindLayout[bindIdx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
 
-            vk::CmdCopyImage(cmdBuf,
-                             ctexture->m_depthTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                             ctexture->m_depthBindTex[bindIdx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                             1, &copyInfo);
+                copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+                copyInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 
-            if (ctexture == m_boundTarget.get())
-                SetImageLayout(cmdBuf, ctexture->m_depthTex, VK_IMAGE_ASPECT_DEPTH_BIT,
-                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, 1);
+                vk::CmdCopyImage(cmdBuf,
+                                 ctexture->m_depthTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                 ctexture->m_depthBindTex[bindIdx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                 1, &copyInfo);
 
-            SetImageLayout(cmdBuf, ctexture->m_depthBindTex[bindIdx], VK_IMAGE_ASPECT_DEPTH_BIT,
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, 1);
-            ctexture->m_depthBindLayout[bindIdx] = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                if (ctexture == m_boundTarget.get())
+                    SetImageLayout(cmdBuf, ctexture->m_depthTex, VK_IMAGE_ASPECT_DEPTH_BIT,
+                                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, 1);
+
+                SetImageLayout(cmdBuf, ctexture->m_depthBindTex[bindIdx], VK_IMAGE_ASPECT_DEPTH_BIT,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, 1);
+                ctexture->m_depthBindLayout[bindIdx] = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            }
+            else
+            {
+                VkImageResolve resolveInfo = {};
+                SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, ctexture->m_width, ctexture->m_height));
+                resolveInfo.srcOffset.y = tlOrigin ? intersectRect.location[1] :
+                    (ctexture->m_height - intersectRect.size[1] - intersectRect.location[1]);
+                resolveInfo.srcOffset.x = intersectRect.location[0];
+                resolveInfo.dstOffset = resolveInfo.srcOffset;
+                resolveInfo.extent.width = intersectRect.size[0];
+                resolveInfo.extent.height = intersectRect.size[1];
+                resolveInfo.extent.depth = 1;
+                resolveInfo.dstSubresource.mipLevel = 0;
+                resolveInfo.dstSubresource.baseArrayLayer = 0;
+                resolveInfo.dstSubresource.layerCount = 1;
+                resolveInfo.srcSubresource.mipLevel = 0;
+                resolveInfo.srcSubresource.baseArrayLayer = 0;
+                resolveInfo.srcSubresource.layerCount = 1;
+
+                if (ctexture == m_boundTarget.get())
+                    SetImageLayout(cmdBuf, ctexture->m_depthTex, VK_IMAGE_ASPECT_DEPTH_BIT,
+                                   VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
+
+                SetImageLayout(cmdBuf, ctexture->m_depthBindTex[bindIdx], VK_IMAGE_ASPECT_DEPTH_BIT,
+                               ctexture->m_depthBindLayout[bindIdx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
+
+                resolveInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+                resolveInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+
+                vk::CmdResolveImage(cmdBuf,
+                                    ctexture->m_depthTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                    ctexture->m_depthBindTex[bindIdx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                    1, &resolveInfo);
+
+                if (ctexture == m_boundTarget.get())
+                    SetImageLayout(cmdBuf, ctexture->m_depthTex, VK_IMAGE_ASPECT_DEPTH_BIT,
+                                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, 1);
+
+                SetImageLayout(cmdBuf, ctexture->m_depthBindTex[bindIdx], VK_IMAGE_ASPECT_DEPTH_BIT,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, 1);
+                ctexture->m_depthBindLayout[bindIdx] = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            }
         }
 
         vk::CmdBeginRenderPass(cmdBuf, &m_boundTarget.cast<VulkanTextureR>()->m_passBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -3083,9 +3227,8 @@ void VulkanTextureD::unmap()
     m_validSlots = 0;
 }
 
-VulkanDataFactoryImpl::VulkanDataFactoryImpl(IGraphicsContext* parent,
-                                             VulkanContext* ctx, uint32_t drawSamples)
-: m_parent(parent), m_ctx(ctx), m_drawSamples(drawSamples)
+VulkanDataFactoryImpl::VulkanDataFactoryImpl(IGraphicsContext* parent, VulkanContext* ctx)
+: m_parent(parent), m_ctx(ctx)
 {
     VkDescriptorSetLayoutBinding layoutBindings[BOO_GLSL_MAX_UNIFORM_COUNT + BOO_GLSL_MAX_TEXTURE_COUNT];
     for (int i=0 ; i<BOO_GLSL_MAX_UNIFORM_COUNT ; ++i)
@@ -3124,7 +3267,7 @@ VulkanDataFactoryImpl::VulkanDataFactoryImpl(IGraphicsContext* parent,
 
     /* color attachment */
     attachments[0].format = ctx->m_displayFormat;
-    attachments[0].samples = VkSampleCountFlagBits(drawSamples);
+    attachments[0].samples = VkSampleCountFlagBits(m_ctx->m_sampleCountColor);
     attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
     attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -3135,7 +3278,7 @@ VulkanDataFactoryImpl::VulkanDataFactoryImpl(IGraphicsContext* parent,
 
     /* depth attachment */
     attachments[1].format = VK_FORMAT_D32_SFLOAT;
-    attachments[1].samples = VkSampleCountFlagBits(drawSamples);
+    attachments[1].samples = VkSampleCountFlagBits(m_ctx->m_sampleCountDepth);
     attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
     attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -3422,7 +3565,7 @@ VulkanDataFactory::Context::newRenderTexture(size_t width, size_t height, Textur
 {
     VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
     VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(factory.m_parent->getCommandQueue());
-    return {new VulkanTextureR(m_data, factory.m_ctx, q, width, height, factory.m_drawSamples,
+    return {new VulkanTextureR(m_data, factory.m_ctx, q, width, height,
                                clampMode, colorBindCount, depthBindCount)};
 }
 
@@ -3489,6 +3632,8 @@ void VulkanDataFactoryImpl::commitTransaction
         for (ITextureD& tex : *data->m_DTexs)
             texMemSize = static_cast<VulkanTextureD&>(tex).sizeForGPU(m_ctx, texMemTypeBits, texMemSize);
 
+    std::unique_lock<std::mutex> qlk(m_ctx->m_queueLock);
+
     /* allocate memory and place textures */
     if (bufMemSize)
     {
@@ -3546,7 +3691,6 @@ void VulkanDataFactoryImpl::commitTransaction
     submitInfo.pCommandBuffers = &m_ctx->m_loadCmdBuf;
 
     /* Take exclusive lock here and submit queue */
-    std::unique_lock<std::mutex> qlk(m_ctx->m_queueLock);
     ThrowIfFailed(vk::QueueWaitIdle(m_ctx->m_queue));
     ThrowIfFailed(vk::QueueSubmit(m_ctx->m_queue, 1, &submitInfo, VK_NULL_HANDLE));
 
@@ -3751,10 +3895,9 @@ IGraphicsCommandQueue* _NewVulkanCommandQueue(VulkanContext* ctx, VulkanContext:
     return new struct VulkanCommandQueue(ctx, windowCtx, parent);
 }
 
-IGraphicsDataFactory* _NewVulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx,
-                                            uint32_t drawSamples)
+IGraphicsDataFactory* _NewVulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx)
 {
-    return new class VulkanDataFactoryImpl(parent, ctx, drawSamples);
+    return new class VulkanDataFactoryImpl(parent, ctx);
 }
 
 }

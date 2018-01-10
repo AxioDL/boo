@@ -13,12 +13,12 @@
 #if BOO_HAS_VULKAN
 #include "boo/graphicsdev/Vulkan.hpp"
 #endif
+#include "boo/graphicsdev/GL.hpp"
 
 extern DWORD g_mainThreadId;
 
 #if _WIN32_WINNT_WINBLUE && !WINDOWS_STORE
 #include <ShellScalingApi.h>
-typedef HRESULT (WINAPI* PFN_SetProcessDpiAwareness)( _In_ PROCESS_DPI_AWARENESS );
 typedef HRESULT (WINAPI* PFN_GetScaleFactorForMonitor)( _In_ HMONITOR, _Out_ DEVICE_SCALE_FACTOR *);
 extern PFN_GetScaleFactorForMonitor MyGetScaleFactorForMonitor;
 #endif
@@ -43,6 +43,8 @@ struct OGLContext
         int m_fsCountDown = 0;
     };
     std::unordered_map<const boo::IWindow*, Window> m_windows;
+
+    boo::GLContext m_glCtx;
 };
 
 template <class W>

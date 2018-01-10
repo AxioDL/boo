@@ -44,6 +44,9 @@ struct D3D12Context
         size_t width, height;
     };
     std::unordered_map<const boo::IWindow*, Window> m_windows;
+
+    uint32_t m_sampleCount = 1;
+    uint32_t m_anisotropy = 1;
 };
 
 struct D3D11Context
@@ -63,6 +66,9 @@ struct D3D11Context
         DXGI_MODE_DESC m_fsdesc = {};
     };
     std::unordered_map<const boo::IWindow*, Window> m_windows;
+
+    uint32_t m_sampleCount = 1;
+    uint32_t m_anisotropy = 1;
 };
 
 struct Boo3DAppContext

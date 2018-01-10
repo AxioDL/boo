@@ -61,6 +61,7 @@ ApplicationRun(IApplication::EPlatformType platform,
                SystemStringView friendlyName,
                SystemStringView pname,
                const std::vector<SystemString>& args,
+               std::string_view gfxApi = {},
                uint32_t samples = 1,
                uint32_t anisotropy = 1,
                bool singleInstance=true);
@@ -72,6 +73,7 @@ ApplicationRun(IApplication::EPlatformType platform,
                SystemStringView uniqueName,
                SystemStringView friendlyName,
                int argc, const SystemChar** argv,
+               std::string_view gfxApi = {},
                uint32_t samples = 1,
                uint32_t anisotropy = 1,
                bool singleInstance=true)
@@ -82,7 +84,7 @@ ApplicationRun(IApplication::EPlatformType platform,
     for (int i=1 ; i<argc ; ++i)
         args.push_back(argv[i]);
     return ApplicationRun(platform, cb, uniqueName, friendlyName, argv[0], args,
-                          samples, anisotropy, singleInstance);
+                          gfxApi, samples, anisotropy, singleInstance);
 }
     
 }

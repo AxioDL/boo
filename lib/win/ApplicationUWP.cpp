@@ -36,8 +36,7 @@ namespace boo
 {
 static logvisor::Module Log("boo::ApplicationUWP");
 
-std::shared_ptr<IWindow> _WindowUWPNew(SystemStringView title, Boo3DAppContextUWP& d3dCtx,
-                                       uint32_t sampleCount);
+std::shared_ptr<IWindow> _WindowUWPNew(SystemStringView title, Boo3DAppContextUWP& d3dCtx);
 
 class ApplicationUWP final : public IApplication
 {
@@ -260,7 +259,7 @@ public:
 
     void _setWindow(CoreWindow^ window)
     {
-        m_window = _WindowUWPNew(m_friendlyName, m_3dCtx, 1);
+        m_window = _WindowUWPNew(m_friendlyName, m_3dCtx);
     }
 };
 

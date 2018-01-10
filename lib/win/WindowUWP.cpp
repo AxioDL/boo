@@ -58,7 +58,7 @@ public:
     IWindowCallback* m_callback;
 
     GraphicsContextUWPD3D(EGraphicsAPI api, IWindow* parentWindow, Agile<CoreWindow>& coreWindow,
-                          Boo3DAppContextUWP& b3dCtx, uint32_t sampleCount)
+                          Boo3DAppContextUWP& b3dCtx)
     : GraphicsContextUWP(api, parentWindow, b3dCtx)
     {
         /* Create Swap Chain */
@@ -83,7 +83,7 @@ public:
             D3D12Context::Window& w = insIt.first->second;
 
             ID3D12CommandQueue* cmdQueue;
-            m_dataFactory = _NewD3D12DataFactory(&b3dCtx.m_ctx12, this, sampleCount);
+            m_dataFactory = _NewD3D12DataFactory(&b3dCtx.m_ctx12, this);
             m_commandQueue = _NewD3D12CommandQueue(&b3dCtx.m_ctx12, &w, this, &cmdQueue);
 
             scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
@@ -120,7 +120,7 @@ public:
             fbRes->GetDesc(&resDesc);
             w.width = resDesc.Width;
             w.height = resDesc.Height;
-            m_dataFactory = _NewD3D11DataFactory(&b3dCtx.m_ctx11, this, sampleCount);
+            m_dataFactory = _NewD3D11DataFactory(&b3dCtx.m_ctx11, this);
             m_commandQueue = _NewD3D11CommandQueue(&b3dCtx.m_ctx11, &insIt.first->second, this);
 
             if (FAILED(m_swapChain->GetContainingOutput(&m_output)))
@@ -337,7 +337,7 @@ public:
     };
     EventReceiver^ m_eventReceiver;
 
-    WindowUWP(SystemStringView title, Boo3DAppContextUWP& b3dCtx, uint32_t sampleCount)
+    WindowUWP(SystemStringView title, Boo3DAppContextUWP& b3dCtx)
     : m_coreWindow(CoreWindow::GetForCurrentThread()),
       m_eventReceiver(ref new EventReceiver(*this))
     {
@@ -346,7 +346,7 @@ public:
         if (b3dCtx.m_ctx12.m_dev)
             api = IGraphicsContext::EGraphicsAPI::D3D12;
 #endif
-        m_gfxCtx.reset(new GraphicsContextUWPD3D(api, this, m_coreWindow, b3dCtx, sampleCount));
+        m_gfxCtx.reset(new GraphicsContextUWPD3D(api, this, m_coreWindow, b3dCtx));
 
         setTitle(title);
         m_bounds = m_coreWindow->Bounds;
@@ -628,10 +628,9 @@ public:
 
 };
 
-std::shared_ptr<IWindow> _WindowUWPNew(SystemStringView title, Boo3DAppContextUWP& d3dCtx,
-                                       uint32_t sampleCount)
+std::shared_ptr<IWindow> _WindowUWPNew(SystemStringView title, Boo3DAppContextUWP& d3dCtx)
 {
-    return std::make_shared<WindowUWP>(title, d3dCtx, sampleCount);
+    return std::make_shared<WindowUWP>(title, d3dCtx);
 }
 
 }

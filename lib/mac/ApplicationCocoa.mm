@@ -222,6 +222,7 @@ int ApplicationRun(IApplication::EPlatformType platform,
                    SystemStringView friendlyName,
                    SystemStringView pname,
                    const std::vector<SystemString>& args,
+                   std::string_view gfxApi,
                    uint32_t samples,
                    uint32_t anisotropy,
                    bool singleInstance)

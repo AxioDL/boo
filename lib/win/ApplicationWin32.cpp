@@ -67,8 +67,7 @@ namespace boo
 static logvisor::Module Log("boo::ApplicationWin32");
 Win32Cursors WIN32_CURSORS;
 
-std::shared_ptr<IWindow> _WindowWin32New(SystemStringView title, Boo3DAppContextWin32& d3dCtx,
-                                         uint32_t sampleCount);
+std::shared_ptr<IWindow> _WindowWin32New(SystemStringView title, Boo3DAppContextWin32& d3dCtx);
 
 class ApplicationWin32 final : public IApplication
 {
@@ -97,6 +96,9 @@ public:
                      SystemStringView friendlyName,
                      SystemStringView pname,
                      const std::vector<SystemString>& args,
+                     std::string_view gfxApi,
+                     uint32_t samples,
+                     uint32_t anisotropy,
                      bool singleInstance)
     : m_callback(callback),
       m_uniqueName(uniqueName),
@@ -105,6 +107,16 @@ public:
       m_args(args),
       m_singleInstance(singleInstance)
     {
+        m_3dCtx.m_ctx11.m_sampleCount = samples;
+        m_3dCtx.m_ctx11.m_anisotropy = anisotropy;
+        m_3dCtx.m_ctx12.m_sampleCount = samples;
+        m_3dCtx.m_ctx12.m_anisotropy = anisotropy;
+        m_3dCtx.m_ctxOgl.m_glCtx.m_sampleCount = samples;
+        m_3dCtx.m_ctxOgl.m_glCtx.m_anisotropy = anisotropy;
+        g_VulkanContext.m_sampleCountColor = samples;
+        g_VulkanContext.m_sampleCountDepth = samples;
+        g_VulkanContext.m_anisotropy = anisotropy;
+
         HMODULE dxgilib = LoadLibraryW(L"dxgi.dll");
         if (!dxgilib)
             Log.report(logvisor::Fatal, "unable to load dxgi.dll");
@@ -119,6 +131,30 @@ public:
 #if BOO_HAS_VULKAN
         bool useVulkan = true;
 #endif
+        if (!gfxApi.empty())
+        {
+#if BOO_HAS_VULKAN
+            if (!gfxApi.compare("D3D12"))
+            {
+                useVulkan = false;
+                yes12 = true;
+            }
+            if (!gfxApi.compare("Vulkan"))
+            {
+                noD3d = true;
+            }
+            if (!gfxApi.compare("OpenGL"))
+            {
+                noD3d = true;
+                useVulkan = false;
+            }
+#else
+            if (!gfxApi.compare(L"D3D12"))
+                yes12 = true;
+            if (!gfxApi.compare(L"OpenGL"))
+                noD3d = true;
+#endif
+        }
         for (const SystemString& arg : args)
         {
 #if BOO_HAS_VULKAN
@@ -127,9 +163,9 @@ public:
                 useVulkan = false;
                 yes12 = true;
             }
-            if (!arg.compare(L"--d3d11"))
+            if (!arg.compare(L"--vulkan"))
             {
-                useVulkan = false;
+                noD3d = true;
             }
             if (!arg.compare(L"--gl"))
             {
@@ -143,40 +179,6 @@ public:
                 noD3d = true;
 #endif
         }
-
-#if BOO_HAS_VULKAN
-        if (useVulkan)
-        {
-            HMODULE vulkanLib = LoadLibraryW(L"vulkan-1.dll");
-            if (vulkanLib)
-            {
-                m_getVkProc = (PFN_vkGetInstanceProcAddr)GetProcAddress(vulkanLib, "vkGetInstanceProcAddr");
-                if (m_getVkProc)
-                {
-                    /* Check device support for vulkan */
-                    vk::init_dispatch_table_top(PFN_vkGetInstanceProcAddr(m_getVkProc));
-                    if (g_VulkanContext.m_instance == VK_NULL_HANDLE)
-                    {
-                        auto appName = getUniqueName();
-                        if (g_VulkanContext.initVulkan(WCSTMBS(appName.data()).c_str()))
-                        {
-                            vk::init_dispatch_table_middle(g_VulkanContext.m_instance, false);
-                            if (g_VulkanContext.enumerateDevices())
-                            {
-                                /* Obtain DXGI Factory */
-                                HRESULT hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory1), &m_3dCtx.m_vulkanDxFactory);
-                                if (FAILED(hr))
-                                    Log.report(logvisor::Fatal, "unable to create DXGI factory");
-
-                                Log.report(logvisor::Info, "initialized Vulkan renderer");
-                                return;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-#endif
 
 #if _WIN32_WINNT_WIN10
         HMODULE d3d12lib = nullptr;
@@ -303,11 +305,15 @@ public:
             device->GetParent(__uuidof(IDXGIAdapter), &adapter);
             adapter->GetParent(__uuidof(IDXGIFactory2), &m_3dCtx.m_ctx11.m_dxFactory);
 
+            m_3dCtx.m_ctx11.m_anisotropy = std::min(m_3dCtx.m_ctx11.m_anisotropy, uint32_t(16));
+
             /* Build default sampler here */
             CD3D11_SAMPLER_DESC sampDesc(D3D11_DEFAULT);
             sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
             sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
             sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+            sampDesc.Filter = D3D11_FILTER_ANISOTROPIC;
+            sampDesc.MaxAnisotropy = m_3dCtx.m_ctx11.m_anisotropy;
             m_3dCtx.m_ctx11.m_dev->CreateSamplerState(&sampDesc, &m_3dCtx.m_ctx11.m_ss[0]);
 
             sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
@@ -323,6 +329,40 @@ public:
             Log.report(logvisor::Info, "initialized D3D11 renderer");
             return;
         }
+
+#if BOO_HAS_VULKAN
+        if (useVulkan)
+        {
+            HMODULE vulkanLib = LoadLibraryW(L"vulkan-1.dll");
+            if (vulkanLib)
+            {
+                m_getVkProc = (PFN_vkGetInstanceProcAddr)GetProcAddress(vulkanLib, "vkGetInstanceProcAddr");
+                if (m_getVkProc)
+                {
+                    /* Check device support for vulkan */
+                    vk::init_dispatch_table_top(PFN_vkGetInstanceProcAddr(m_getVkProc));
+                    if (g_VulkanContext.m_instance == VK_NULL_HANDLE)
+                    {
+                        auto appName = getUniqueName();
+                        if (g_VulkanContext.initVulkan(WCSTMBS(appName.data()).c_str()))
+                        {
+                            vk::init_dispatch_table_middle(g_VulkanContext.m_instance, false);
+                            if (g_VulkanContext.enumerateDevices())
+                            {
+                                /* Obtain DXGI Factory */
+                                HRESULT hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory1), &m_3dCtx.m_vulkanDxFactory);
+                                if (FAILED(hr))
+                                    Log.report(logvisor::Fatal, "unable to create DXGI factory");
+
+                                Log.report(logvisor::Info, "initialized Vulkan renderer");
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+#endif
 
         /* Finally try OpenGL */
         {
@@ -425,7 +465,7 @@ public:
                     /* New-window message (coalesced onto main thread) */
                     std::unique_lock<std::mutex> lk(m_nwmt);
                     SystemStringView* title = reinterpret_cast<SystemStringView*>(msg.wParam);
-                    m_mwret = newWindow(*title, 1);
+                    m_mwret = newWindow(*title);
                     lk.unlock();
                     m_nwcv.notify_one();
                     continue;
@@ -481,7 +521,7 @@ public:
     std::mutex m_nwmt;
     std::condition_variable m_nwcv;
     std::shared_ptr<IWindow> m_mwret;
-    std::shared_ptr<IWindow> newWindow(SystemStringView title, uint32_t sampleCount)
+    std::shared_ptr<IWindow> newWindow(SystemStringView title)
     {
         if (GetCurrentThreadId() != g_mainThreadId)
         {
@@ -494,7 +534,7 @@ public:
             return ret;
         }
 
-        std::shared_ptr<IWindow> window = _WindowWin32New(title, m_3dCtx, sampleCount);
+        std::shared_ptr<IWindow> window = _WindowWin32New(title, m_3dCtx);
         HWND hwnd = HWND(window->getPlatformHandle());
         m_allWindows[hwnd] = window;
         return window;
@@ -508,6 +548,9 @@ int ApplicationRun(IApplication::EPlatformType platform,
                    SystemStringView friendlyName,
                    SystemStringView pname,
                    const std::vector<SystemString>& args,
+                   std::string_view gfxApi,
+                   uint32_t samples,
+                   uint32_t anisotropy,
                    bool singleInstance)
 {
     std::string thrName = WCSTMBS(friendlyName.data()) + " Main Thread";
@@ -522,15 +565,8 @@ int ApplicationRun(IApplication::EPlatformType platform,
     /* HI-DPI support */
     HMODULE shcoreLib = LoadLibraryW(L"Shcore.dll");
     if (shcoreLib)
-    {
-        PFN_SetProcessDpiAwareness MySetProcessDpiAwareness =
-            (PFN_SetProcessDpiAwareness)GetProcAddress(shcoreLib, "SetProcessDpiAwareness");
-        if (MySetProcessDpiAwareness)
-            MySetProcessDpiAwareness(PROCESS_SYSTEM_DPI_AWARE);
-
         MyGetScaleFactorForMonitor =
             (PFN_GetScaleFactorForMonitor)GetProcAddress(shcoreLib, "GetScaleFactorForMonitor");
-    }
 #endif
 
     WIN32_CURSORS.m_arrow = LoadCursor(nullptr, IDC_ARROW);
@@ -558,7 +594,8 @@ int ApplicationRun(IApplication::EPlatformType platform,
     wndClass.hCursor = WIN32_CURSORS.m_arrow;
     ATOM a = RegisterClassW(&wndClass);
 
-    APP = new ApplicationWin32(cb, uniqueName, friendlyName, pname, args, singleInstance);
+    APP = new ApplicationWin32(cb, uniqueName, friendlyName, pname, args,
+                               gfxApi, samples, anisotropy, singleInstance);
     return APP->run();
 }
 

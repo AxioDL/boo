@@ -45,7 +45,6 @@ struct VulkanContext
     VkRenderPass m_pass;
     VkCommandPool m_loadPool;
     VkCommandBuffer m_loadCmdBuf;
-    VkSampler m_linearSamplers[3];
     VkFormat m_displayFormat;
 
     struct Window
@@ -84,6 +83,12 @@ struct VulkanContext
 #endif
     };
     std::unordered_map<const boo::IWindow*, std::unique_ptr<Window>> m_windows;
+
+    VkSampleCountFlags m_sampleCountColor = VK_SAMPLE_COUNT_1_BIT;
+    VkSampleCountFlags m_sampleCountDepth = VK_SAMPLE_COUNT_1_BIT;
+    float m_anisotropy = 1.f;
+
+    std::unordered_map<uint32_t, VkSampler> m_samplers;
 
     bool initVulkan(std::string_view appName);
     bool enumerateDevices();

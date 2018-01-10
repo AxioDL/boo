@@ -158,6 +158,8 @@ class D3D11TextureS : public GraphicsDataNode<ITextureS>
             upData[i].pSysMem = dataIt;
             upData[i].SysMemPitch = width * pxPitchNum / pxPitchDenom;
             upData[i].SysMemSlicePitch = upData[i].SysMemPitch * height;
+            if (compressed)
+                upData[i].SysMemPitch = width * 2;
             dataIt += upData[i].SysMemSlicePitch;
             if (width > 1)
                 width /= 2;
@@ -1119,7 +1121,8 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         {
             if (tex->m_samples > 1)
             {
-                m_deferredCtx->CopyResource(tex->m_colorBindTex[bindIdx].Get(), tex->m_colorTex.Get());
+                m_deferredCtx->ResolveSubresource(tex->m_colorBindTex[bindIdx].Get(), 0, tex->m_colorTex.Get(), 0,
+                                                  DXGI_FORMAT_R8G8B8A8_UNORM);
             }
             else
             {
@@ -1133,7 +1136,15 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         }
         if (depth && tex->m_depthBindCount)
         {
-            m_deferredCtx->CopyResource(tex->m_depthBindTex[bindIdx].Get(), tex->m_depthTex.Get());
+            if (tex->m_samples > 1)
+            {
+                m_deferredCtx->ResolveSubresource(tex->m_depthBindTex[bindIdx].Get(), 0, tex->m_depthTex.Get(), 0,
+                                                  DXGI_FORMAT_D24_UNORM_S8_UINT);
+            }
+            else
+            {
+                m_deferredCtx->CopyResource(tex->m_depthBindTex[bindIdx].Get(), tex->m_depthTex.Get());
+            }
         }
 
         if (clearDepth)
@@ -1230,12 +1241,16 @@ class D3D11DataFactory : public ID3DDataFactory, public GraphicsDataFactoryHead
     struct D3D11Context* m_ctx;
     std::unordered_map<uint64_t, std::unique_ptr<D3D11ShareableShader>> m_sharedShaders;
     std::unordered_map<uint64_t, uint64_t> m_sourceToBinary;
-    uint32_t m_sampleCount;
 
 public:
-    D3D11DataFactory(IGraphicsContext* parent, D3D11Context* ctx, uint32_t sampleCount)
-    : m_parent(parent), m_ctx(ctx), m_sampleCount(sampleCount)
-    {}
+    D3D11DataFactory(IGraphicsContext* parent, D3D11Context* ctx)
+    : m_parent(parent), m_ctx(ctx)
+    {
+        UINT qLevels;
+        while (SUCCEEDED(ctx->m_dev->CheckMultisampleQualityLevels
+                         (DXGI_FORMAT_R8G8B8A8_UNORM, m_ctx->m_sampleCount, &qLevels)) && !qLevels)
+            m_ctx->m_sampleCount = flp2(m_ctx->m_sampleCount - 1);
+    }
 
     Platform platform() const {return Platform::D3D11;}
     const SystemChar* platformName() const {return _S("D3D11");}
@@ -1283,7 +1298,7 @@ public:
         boo::ObjToken<ITextureR> newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
                                     size_t colorBindCount, size_t depthBindCount)
         {
-            return {new D3D11TextureR(m_data, m_parent.m_ctx, width, height, m_parent.m_sampleCount,
+            return {new D3D11TextureR(m_data, m_parent.m_ctx, width, height, m_parent.m_ctx->m_sampleCount,
                                       colorBindCount, depthBindCount)};
         }
 
@@ -1293,7 +1308,7 @@ public:
             return {new struct D3D11VertexFormat(m_data, elementCount, elements)};
         }
 
-#if _DEBUG
+#if _DEBUG && 0
 #define BOO_D3DCOMPILE_FLAG D3DCOMPILE_DEBUG | D3DCOMPILE_OPTIMIZATION_LEVEL0
 #else
 #define BOO_D3DCOMPILE_FLAG D3DCOMPILE_OPTIMIZATION_LEVEL3
@@ -1546,9 +1561,9 @@ IGraphicsCommandQueue* _NewD3D11CommandQueue(D3D11Context* ctx, D3D11Context::Wi
     return new D3D11CommandQueue(ctx, windowCtx, parent);
 }
 
-IGraphicsDataFactory* _NewD3D11DataFactory(D3D11Context* ctx, IGraphicsContext* parent, uint32_t sampleCount)
+IGraphicsDataFactory* _NewD3D11DataFactory(D3D11Context* ctx, IGraphicsContext* parent)
 {
-    return new D3D11DataFactory(parent, ctx, sampleCount);
+    return new D3D11DataFactory(parent, ctx);
 }
 
 }

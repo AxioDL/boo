@@ -228,6 +228,8 @@ class D3D12TextureS : public GraphicsDataNode<ITextureS>
             upData[i].pData = dataIt;
             upData[i].RowPitch = width * pxPitchNum / pxPitchDenom;
             upData[i].SlicePitch = upData[i].RowPitch * height;
+            if (compressed)
+                upData[i].RowPitch = width * 2;
             dataIt += upData[i].SlicePitch;
             if (width > 1)
                 width /= 2;
@@ -446,9 +448,11 @@ class D3D12TextureR : public GraphicsDataNode<ITextureR>
             rtvDim = D3D12_RTV_DIMENSION_TEXTURE2DMS;
             dsvDim = D3D12_DSV_DIMENSION_TEXTURE2DMS;
             rtvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, m_width, m_height, 1, 1, m_samples,
-                0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT);
+                D3D11_STANDARD_MULTISAMPLE_PATTERN, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, D3D12_TEXTURE_LAYOUT_UNKNOWN,
+                D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT);
             dsvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R24G8_TYPELESS, m_width, m_height, 1, 1, m_samples,
-                0, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT);
+                D3D11_STANDARD_MULTISAMPLE_PATTERN, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL, D3D12_TEXTURE_LAYOUT_UNKNOWN,
+                D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT);
         }
         else
         {
@@ -744,7 +748,8 @@ class D3D12ShaderPipeline : public GraphicsDataNode<IShaderPipeline>
         desc.NumRenderTargets = 1;
         desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
         desc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
-        desc.SampleDesc.Count = 1;
+        desc.SampleDesc.Count = ctx->m_sampleCount;
+        desc.SampleDesc.Quality = D3D11_STANDARD_MULTISAMPLE_PATTERN;
         if (pipeline)
         {
             desc.CachedPSO.pCachedBlob = pipeline->GetBufferPointer();
@@ -1670,12 +1675,22 @@ class D3D12DataFactory : public ID3DDataFactory, public GraphicsDataFactoryHead
     struct D3D12Context* m_ctx;
     std::unordered_map<uint64_t, std::unique_ptr<D3D12ShareableShader>> m_sharedShaders;
     std::unordered_map<uint64_t, uint64_t> m_sourceToBinary;
-    uint32_t m_sampleCount;
 
 public:
-    D3D12DataFactory(IGraphicsContext* parent, D3D12Context* ctx, uint32_t sampleCount)
-    : m_parent(parent), m_ctx(ctx), m_sampleCount(sampleCount)
+    D3D12DataFactory(IGraphicsContext* parent, D3D12Context* ctx)
+    : m_parent(parent), m_ctx(ctx)
     {
+        D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS qLevels = {};
+        qLevels.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        qLevels.SampleCount = m_ctx->m_sampleCount;
+        while (SUCCEEDED(ctx->m_dev->CheckFeatureSupport
+                         (D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &qLevels, sizeof(qLevels))) &&
+               !qLevels.NumQualityLevels)
+            qLevels.SampleCount = flp2(qLevels.SampleCount - 1);
+        m_ctx->m_sampleCount = qLevels.SampleCount;
+
+        m_ctx->m_anisotropy = std::min(m_ctx->m_anisotropy, uint32_t(16));
+
         CD3DX12_DESCRIPTOR_RANGE ranges[] =
         {
             {D3D12_DESCRIPTOR_RANGE_TYPE_CBV, MAX_UNIFORM_COUNT, 0},
@@ -1689,11 +1704,12 @@ public:
 
         D3D12_STATIC_SAMPLER_DESC samplers[] =
         {
-            CD3DX12_STATIC_SAMPLER_DESC(0),
+            CD3DX12_STATIC_SAMPLER_DESC(0, D3D12_FILTER_ANISOTROPIC, D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+                D3D12_TEXTURE_ADDRESS_MODE_WRAP, D3D12_TEXTURE_ADDRESS_MODE_WRAP, 0.f, m_ctx->m_anisotropy),
             CD3DX12_STATIC_SAMPLER_DESC(1, D3D12_FILTER_ANISOTROPIC, D3D12_TEXTURE_ADDRESS_MODE_BORDER,
-                D3D12_TEXTURE_ADDRESS_MODE_BORDER, D3D12_TEXTURE_ADDRESS_MODE_BORDER),
+                D3D12_TEXTURE_ADDRESS_MODE_BORDER, D3D12_TEXTURE_ADDRESS_MODE_BORDER, 0.f, m_ctx->m_anisotropy),
             CD3DX12_STATIC_SAMPLER_DESC(2, D3D12_FILTER_ANISOTROPIC, D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-                D3D12_TEXTURE_ADDRESS_MODE_CLAMP, D3D12_TEXTURE_ADDRESS_MODE_CLAMP)
+                D3D12_TEXTURE_ADDRESS_MODE_CLAMP, D3D12_TEXTURE_ADDRESS_MODE_CLAMP, 0.f, m_ctx->m_anisotropy)
         };
 
         ThrowIfFailed(D3D12SerializeRootSignaturePROC(
@@ -1758,7 +1774,7 @@ public:
                          size_t colorBindCount, size_t depthBindCount)
         {
             D3D12CommandQueue* q = static_cast<D3D12CommandQueue*>(m_parent.m_parent->getCommandQueue());
-            return {new D3D12TextureR(m_data, m_parent.m_ctx, q, width, height, m_parent.m_sampleCount,
+            return {new D3D12TextureR(m_data, m_parent.m_ctx, q, width, height, m_parent.m_ctx->m_sampleCount,
                                       colorBindCount, depthBindCount)};
         }
 
@@ -1769,7 +1785,7 @@ public:
             return {new struct D3D12VertexFormat(m_data, elementCount, elements)};
         }
 
-#if _DEBUG
+#if _DEBUG && 0
 #define BOO_D3DCOMPILE_FLAG D3DCOMPILE_DEBUG | D3DCOMPILE_OPTIMIZATION_LEVEL0
 #else
 #define BOO_D3DCOMPILE_FLAG D3DCOMPILE_OPTIMIZATION_LEVEL3
@@ -2175,9 +2191,9 @@ IGraphicsCommandQueue* _NewD3D12CommandQueue(D3D12Context* ctx, D3D12Context::Wi
     return new struct D3D12CommandQueue(ctx, windowCtx, parent, cmdQueueOut);
 }
 
-IGraphicsDataFactory* _NewD3D12DataFactory(D3D12Context* ctx, IGraphicsContext* parent, uint32_t sampleCount)
+IGraphicsDataFactory* _NewD3D12DataFactory(D3D12Context* ctx, IGraphicsContext* parent)
 {
-    return new D3D12DataFactory(parent, ctx, sampleCount);
+    return new D3D12DataFactory(parent, ctx);
 }
 
 }
