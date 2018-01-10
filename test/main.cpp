@@ -466,7 +466,7 @@ struct TestApplicationCallback : IApplicationCallback
                 "    return tex.sample(samp, d.out_uv);\n"
                 "}\n";
 
-                pipeline = metalF.newShaderPipeline(VS, FS, nullptr, nullptr, vfmt, 1,
+                pipeline = metalF.newShaderPipeline(VS, FS, nullptr, nullptr, vfmt,
                                                     BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
                                                     boo::ZTest::LEqual, true, true, true, boo::CullMode::None);
             } else

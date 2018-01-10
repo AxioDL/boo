@@ -65,6 +65,7 @@ public:
                      SystemStringView friendlyName,
                      SystemStringView pname,
                      const std::vector<SystemString>& args,
+                     std::string_view gfxApi,
                      uint32_t samples,
                      uint32_t anisotropy)
     : m_callback(callback),
@@ -103,6 +104,8 @@ public:
         /* Determine which graphics API to use */
 #if BOO_HAS_METAL
         bool useGL = false;
+        if (!gfxApi.compare("OpenGL"))
+            useGL = true;
         for (const SystemString& arg : args)
             if (!arg.compare("--gl"))
             {
@@ -237,7 +240,7 @@ int ApplicationRun(IApplication::EPlatformType platform,
                 platform != IApplication::EPlatformType::Auto)
                 return 1;
             /* Never deallocated to ensure window destructors have access */
-            APP = new ApplicationCocoa(cb, uniqueName, friendlyName, pname, args, samples, anisotropy);
+            APP = new ApplicationCocoa(cb, uniqueName, friendlyName, pname, args, gfxApi, samples, anisotropy);
         }
         [NSApp run];
         ApplicationCocoa* appCocoa = static_cast<ApplicationCocoa*>(APP);
