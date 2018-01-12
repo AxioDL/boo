@@ -225,6 +225,7 @@ public:
                     std::string_view friendlyName,
                     std::string_view pname,
                     const std::vector<std::string>& args,
+                    std::string_view gfxApi,
                     uint32_t samples,
                     uint32_t anisotropy,
                     bool singleInstance)
@@ -240,6 +241,8 @@ public:
 #if BOO_HAS_VULKAN
         /* Check for Vulkan presence and preference */
         bool tryVulkan = true;
+        if (!gfxApi.compare("OpenGL"))
+            tryVulkan = false;
         for (const std::string& arg : args)
         {
             if (!arg.compare("--gl"))

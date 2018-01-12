@@ -131,7 +131,7 @@ public:
         bool yes12 = false;
         bool noD3d = false;
 #if BOO_HAS_VULKAN
-        bool useVulkan = true;
+        bool useVulkan = false;
 #endif
         if (!gfxApi.empty())
         {
@@ -144,6 +144,7 @@ public:
             if (!gfxApi.compare("Vulkan"))
             {
                 noD3d = true;
+                useVulkan = true;
             }
             if (!gfxApi.compare("OpenGL"))
             {
@@ -164,6 +165,13 @@ public:
             {
                 useVulkan = false;
                 yes12 = true;
+                noD3d = false;
+            }
+            if (!arg.compare(L"--d3d11"))
+            {
+                useVulkan = false;
+                yes12 = false;
+                noD3d = false;
             }
             if (!arg.compare(L"--vulkan"))
             {
@@ -176,7 +184,15 @@ public:
             }
 #else
             if (!arg.compare(L"--d3d12"))
+            {
                 yes12 = true;
+                noD3d = false;
+            }
+            if (!arg.compare(L"--d3d11"))
+            {
+                yes12 = false;
+                noD3d = false;
+            }
             if (!arg.compare(L"--gl"))
                 noD3d = true;
 #endif
