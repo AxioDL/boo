@@ -525,11 +525,14 @@ class MetalTextureR : public GraphicsDataNode<ITextureR>
                 for (int i=0 ; i<m_colorBindCount ; ++i)
                 {
                     m_colorBindTex[i] = [ctx->m_dev newTextureWithDescriptor:desc];
-                    m_blitColor[i] = [MTLRenderPassDescriptor renderPassDescriptor];
-                    m_blitColor[i].colorAttachments[0].texture = m_colorTex;
-                    m_blitColor[i].colorAttachments[0].loadAction = MTLLoadActionLoad;
-                    m_blitColor[i].colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
-                    m_blitColor[i].colorAttachments[0].resolveTexture = m_colorBindTex[i];
+                    if (m_samples > 1)
+                    {
+                        m_blitColor[i] = [MTLRenderPassDescriptor renderPassDescriptor];
+                        m_blitColor[i].colorAttachments[0].texture = m_colorTex;
+                        m_blitColor[i].colorAttachments[0].loadAction = MTLLoadActionLoad;
+                        m_blitColor[i].colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
+                        m_blitColor[i].colorAttachments[0].resolveTexture = m_colorBindTex[i];
+                    }
                 }
             }
 
@@ -539,11 +542,14 @@ class MetalTextureR : public GraphicsDataNode<ITextureR>
                 for (int i=0 ; i<m_depthBindCount ; ++i)
                 {
                     m_depthBindTex[i] = [ctx->m_dev newTextureWithDescriptor:desc];
-                    m_blitDepth[i] = [MTLRenderPassDescriptor renderPassDescriptor];
-                    m_blitDepth[i].depthAttachment.texture = m_colorTex;
-                    m_blitDepth[i].depthAttachment.loadAction = MTLLoadActionLoad;
-                    m_blitDepth[i].depthAttachment.storeAction = MTLStoreActionMultisampleResolve;
-                    m_blitDepth[i].depthAttachment.resolveTexture = m_depthBindTex[i];
+                    if (m_samples > 1)
+                    {
+                        m_blitDepth[i] = [MTLRenderPassDescriptor renderPassDescriptor];
+                        m_blitDepth[i].depthAttachment.texture = m_colorTex;
+                        m_blitDepth[i].depthAttachment.loadAction = MTLLoadActionLoad;
+                        m_blitDepth[i].depthAttachment.storeAction = MTLStoreActionMultisampleResolve;
+                        m_blitDepth[i].depthAttachment.resolveTexture = m_depthBindTex[i];
+                    }
                 }
             }
 
@@ -1213,10 +1219,50 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         @autoreleasepool
         {
             [m_enc endEncoding];
-            if (color && tex->m_colorBindTex[bindIdx])
-                [[m_cmdBuf renderCommandEncoderWithDescriptor:tex->m_blitColor[bindIdx]] endEncoding];
-            if (depth && tex->m_depthBindTex[bindIdx])
-                [[m_cmdBuf renderCommandEncoderWithDescriptor:tex->m_blitDepth[bindIdx]] endEncoding];
+
+            if (tex->samples() > 1)
+            {
+                if (color && tex->m_colorBindTex[bindIdx])
+                    [[m_cmdBuf renderCommandEncoderWithDescriptor:tex->m_blitColor[bindIdx]] endEncoding];
+                if (depth && tex->m_depthBindTex[bindIdx])
+                    [[m_cmdBuf renderCommandEncoderWithDescriptor:tex->m_blitDepth[bindIdx]] endEncoding];
+            }
+            else
+            {
+                SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, tex->m_width, tex->m_height));
+                NSUInteger y = tlOrigin ? intersectRect.location[1] : int(tex->m_height) -
+                               intersectRect.location[1] - intersectRect.size[1];
+                MTLOrigin origin = {NSUInteger(intersectRect.location[0]), y, 0};
+                id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf blitCommandEncoder];
+
+                if (color && tex->m_colorBindTex[bindIdx])
+                {
+                    [blitEnc copyFromTexture:tex->m_colorTex
+                    sourceSlice:0
+                    sourceLevel:0
+                    sourceOrigin:origin
+                    sourceSize:MTLSizeMake(intersectRect.size[0], intersectRect.size[1], 1)
+                    toTexture:tex->m_colorBindTex[bindIdx]
+                    destinationSlice:0
+                    destinationLevel:0
+                    destinationOrigin:origin];
+                }
+
+                if (depth && tex->m_depthBindTex[bindIdx])
+                {
+                    [blitEnc copyFromTexture:tex->m_depthTex
+                    sourceSlice:0
+                    sourceLevel:0
+                    sourceOrigin:origin
+                    sourceSize:MTLSizeMake(intersectRect.size[0], intersectRect.size[1], 1)
+                    toTexture:tex->m_depthBindTex[bindIdx]
+                    destinationSlice:0
+                    destinationLevel:0
+                    destinationOrigin:origin];
+                }
+
+                [blitEnc endEncoding];
+            }
 
             m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:clearDepth ? tex->m_clearDepthPassDesc : tex->m_passDesc];
             [m_enc setFrontFacingWinding:MTLWindingCounterClockwise];
@@ -1308,21 +1354,38 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                 {
                     MetalTextureR* src = m_needsDisplay.cast<MetalTextureR>();
                     id<MTLTexture> dest = drawable.texture;
-                    uintptr_t key = uintptr_t(src->m_colorTex) ^ uintptr_t(dest);
-                    auto passSearch = m_resolvePasses.find(key);
-                    if (passSearch == m_resolvePasses.end())
-                    {
-                        MTLRenderPassDescriptor* desc = [MTLRenderPassDescriptor renderPassDescriptor];
-                        desc.colorAttachments[0].texture = src->m_colorTex;
-                        desc.colorAttachments[0].loadAction = MTLLoadActionLoad;
-                        desc.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
-                        desc.colorAttachments[0].resolveTexture = dest;
-                        passSearch = m_resolvePasses.insert(std::make_pair(key, desc)).first;
-                    }
                     if (src->m_colorTex.width == dest.width &&
                         src->m_colorTex.height == dest.height)
                     {
-                        [[m_cmdBuf renderCommandEncoderWithDescriptor:passSearch->second] endEncoding];
+                        if (src->samples() > 1)
+                        {
+                            uintptr_t key = uintptr_t(src->m_colorTex) ^ uintptr_t(dest);
+                            auto passSearch = m_resolvePasses.find(key);
+                            if (passSearch == m_resolvePasses.end())
+                            {
+                                MTLRenderPassDescriptor* desc = [MTLRenderPassDescriptor renderPassDescriptor];
+                                desc.colorAttachments[0].texture = src->m_colorTex;
+                                desc.colorAttachments[0].loadAction = MTLLoadActionLoad;
+                                desc.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
+                                desc.colorAttachments[0].resolveTexture = dest;
+                                passSearch = m_resolvePasses.insert(std::make_pair(key, desc)).first;
+                            }
+                            [[m_cmdBuf renderCommandEncoderWithDescriptor:passSearch->second] endEncoding];
+                        }
+                        else
+                        {
+                            id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf blitCommandEncoder];
+                            [blitEnc copyFromTexture:src->m_colorTex
+                                         sourceSlice:0
+                                         sourceLevel:0
+                                        sourceOrigin:MTLOriginMake(0, 0, 0)
+                                          sourceSize:MTLSizeMake(dest.width, dest.height, 1)
+                                           toTexture:dest
+                                    destinationSlice:0
+                                    destinationLevel:0
+                                   destinationOrigin:MTLOriginMake(0, 0, 0)];
+                            [blitEnc endEncoding];
+                        }
                         [m_cmdBuf presentDrawable:drawable];
                     }
                 }
