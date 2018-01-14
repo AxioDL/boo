@@ -169,7 +169,7 @@ size_t AudioVoiceMono::_pumpAndMix(size_t frames)
         }
         else
         {
-            AudioSubmix& smx = reinterpret_cast<AudioSubmix&>(m_head->m_mainSubmix);
+            AudioSubmix& smx = *m_head->m_mainSubmix;
             m_cb->routeAudio(oDone, 1, dt, m_head->m_mainSubmix->m_busId, scratchPre.data(), scratchPost.data());
             DefaultMonoMtx.mixMonoSampleData(m_head->clientMixInfo(), scratchPost.data(),
                                              smx._getMergeBuf<T>(oDone), oDone);
@@ -319,7 +319,7 @@ size_t AudioVoiceStereo::_pumpAndMix(size_t frames)
         }
         else
         {
-            AudioSubmix& smx = reinterpret_cast<AudioSubmix&>(m_head->m_mainSubmix);
+            AudioSubmix& smx = *m_head->m_mainSubmix;
             m_cb->routeAudio(oDone, 2, dt, m_head->m_mainSubmix->m_busId, scratchPre.data(), scratchPost.data());
             DefaultStereoMtx.mixStereoSampleData(m_head->clientMixInfo(), scratchPost.data(),
                                                  smx._getMergeBuf<T>(oDone), oDone);

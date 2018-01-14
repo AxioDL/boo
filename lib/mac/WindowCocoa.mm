@@ -15,7 +15,7 @@
 #endif
 
 namespace boo {class WindowCocoa; class GraphicsContextCocoa;}
-@interface WindowCocoaInternal : NSWindow
+@interface WindowCocoaInternal : NSWindow <NSWindowDelegate>
 {
     std::shared_ptr<boo::WindowCocoa> booWindow;
     id touchBarProvider;
@@ -1608,10 +1608,22 @@ std::shared_ptr<IWindow> _WindowCocoaNew(SystemStringView title, NSOpenGLContext
                                      NSWindowStyleMaskResizable
                              backing:NSBackingStoreBuffered
                                defer:YES];
+    self.delegate = self;
     self.releasedWhenClosed = NO;
     self.title = [NSString stringWithUTF8String:title.data()];
+
+    NSString* titleImgPath = [[NSBundle mainBundle] pathForResource:@"mainicon" ofType:@"icns"];
+    NSImage* titleImg = [[NSImage alloc] initByReferencingFile:titleImgPath];
+    [self setRepresentedURL:[NSURL URLWithString:@""]];
+    NSButton* iconButton = [self standardWindowButton:NSWindowDocumentIconButton];
+    [iconButton setImage:titleImg];
+
     booWindow = bw;
     return self;
+}
+- (BOOL)window:(NSWindow*)window shouldPopUpDocumentPathMenu:(NSMenu*)menu
+{
+    return NO;
 }
 - (void)setFrameDefault
 {
