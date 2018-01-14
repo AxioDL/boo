@@ -32,6 +32,7 @@ public:
                         std::string_view friendlyName,
                         std::string_view pname,
                         const std::vector<std::string>& args,
+                        std::string_view gfxApi,
                         uint32_t samples,
                         uint32_t anisotropy,
                         bool singleInstance)
