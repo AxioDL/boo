@@ -67,7 +67,8 @@ public:
                      const std::vector<SystemString>& args,
                      std::string_view gfxApi,
                      uint32_t samples,
-                     uint32_t anisotropy)
+                     uint32_t anisotropy,
+                     bool deepColor)
     : m_callback(callback),
       m_uniqueName(uniqueName),
       m_friendlyName(friendlyName),
@@ -76,8 +77,10 @@ public:
     {
         m_metalCtx.m_sampleCount = samples;
         m_metalCtx.m_anisotropy = anisotropy;
+        m_metalCtx.m_pixelFormat = deepColor ? MTLPixelFormatRGBA16Float : MTLPixelFormatBGRA8Unorm;
         m_glCtx.m_sampleCount = samples;
         m_glCtx.m_anisotropy = anisotropy;
+        m_glCtx.m_deepColor = deepColor;
 
         [[NSApplication sharedApplication] setActivationPolicy:NSApplicationActivationPolicyRegular];
 
@@ -228,6 +231,7 @@ int ApplicationRun(IApplication::EPlatformType platform,
                    std::string_view gfxApi,
                    uint32_t samples,
                    uint32_t anisotropy,
+                   bool deepColor,
                    bool singleInstance)
 {
     std::string thrName = std::string(friendlyName) + " Main Thread";
@@ -240,7 +244,8 @@ int ApplicationRun(IApplication::EPlatformType platform,
                 platform != IApplication::EPlatformType::Auto)
                 return 1;
             /* Never deallocated to ensure window destructors have access */
-            APP = new ApplicationCocoa(cb, uniqueName, friendlyName, pname, args, gfxApi, samples, anisotropy);
+            APP = new ApplicationCocoa(cb, uniqueName, friendlyName, pname, args,
+                                       gfxApi, samples, anisotropy, deepColor);
         }
         [NSApp run];
         ApplicationCocoa* appCocoa = static_cast<ApplicationCocoa*>(APP);

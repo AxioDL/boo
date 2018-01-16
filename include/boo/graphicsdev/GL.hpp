@@ -15,6 +15,7 @@ struct GLContext
 {
     uint32_t m_sampleCount = 1;
     uint32_t m_anisotropy = 1;
+    bool m_deepColor = false;
 };
 
 class GLDataFactory : public IGraphicsDataFactory

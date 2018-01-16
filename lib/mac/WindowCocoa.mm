@@ -42,6 +42,16 @@ static const NSOpenGLPixelFormatAttribute PF_RGBA8_ATTRS[] =
     0, 0
 };
 
+static const NSOpenGLPixelFormatAttribute PF_RGBA16_ATTRS[] =
+{
+    NSOpenGLPFAAccelerated,
+    NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion3_2Core,
+    NSOpenGLPFADoubleBuffer,
+    NSOpenGLPFAColorSize, 48,
+    NSOpenGLPFAAlphaSize, 16,
+    0, 0
+};
+
 static const NSOpenGLPixelFormatAttribute PF_RGBA8_Z24_ATTRS[] =
 {
     NSOpenGLPFAAccelerated,
@@ -80,6 +90,7 @@ static const NSOpenGLPixelFormatAttribute* PF_TABLE[] =
 {
     NULL,
     PF_RGBA8_ATTRS,
+    PF_RGBA16_ATTRS,
     PF_RGBA8_Z24_ATTRS,
     PF_RGBAF32_ATTRS,
     PF_RGBAF32_Z24_ATTRS
@@ -207,7 +218,8 @@ public:
 
     GraphicsContextCocoaGL(EGraphicsAPI api, IWindow* parentWindow,
                            NSOpenGLContext* lastGLCtx, GLContext* glCtx)
-    : GraphicsContextCocoa(api, EPixelFormat::RGBA8, parentWindow),
+    : GraphicsContextCocoa(api, glCtx->m_deepColor ?
+      EPixelFormat::RGBA16 : EPixelFormat::RGBA8, parentWindow),
       m_lastCtx(lastGLCtx), m_glCtx(glCtx)
     {
         m_dataFactory = _NewGLDataFactory(this, glCtx);
@@ -365,7 +377,9 @@ public:
     MetalContext* m_metalCtx;
 
     GraphicsContextCocoaMetal(EGraphicsAPI api, IWindow* parentWindow, MetalContext* metalCtx)
-    : GraphicsContextCocoa(api, EPixelFormat::RGBA8, parentWindow),
+    : GraphicsContextCocoa(api,
+      (metalCtx->m_pixelFormat == MTLPixelFormatRGBA16Float) ?
+      EPixelFormat::RGBA16 : EPixelFormat::RGBA8, parentWindow),
       m_parentWindow(parentWindow), m_metalCtx(metalCtx)
     {
         m_dataFactory = _NewMetalDataFactory(this, metalCtx);
@@ -1229,7 +1243,8 @@ static boo::ESpecialKey translateKeycode(short code)
 {
     CAMetalLayer* layer = [CAMetalLayer new];
     layer.device = m_ctx->m_dev;
-    layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+    layer.pixelFormat = m_ctx->m_pixelFormat;
+    layer.colorspace = CGColorSpaceCreateDeviceRGB();
     layer.framebufferOnly = NO;
     return layer;
 }

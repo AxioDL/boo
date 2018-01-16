@@ -444,10 +444,12 @@ class GLTextureR : public GraphicsDataNode<ITextureR>
     size_t m_width = 0;
     size_t m_height = 0;
     size_t m_samples = 0;
+    GLenum m_colorFormat;
     size_t m_colorBindCount;
     size_t m_depthBindCount;
-    GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue* q, size_t width, size_t height, size_t samples,
-               TextureClampMode clampMode, size_t colorBindCount, size_t depthBindCount);
+    GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue* q, size_t width, size_t height,
+               size_t samples, GLenum colorFormat, TextureClampMode clampMode,
+               size_t colorBindCount, size_t depthBindCount);
 public:
     ~GLTextureR()
     {
@@ -486,14 +488,14 @@ public:
         if (m_samples > 1)
         {
             glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[0]);
-            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_samples, GL_RGBA, width, height, GL_FALSE);
+            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_samples, m_colorFormat, width, height, GL_FALSE);
             glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[1]);
             glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_samples, GL_DEPTH_COMPONENT24, width, height, GL_FALSE);
         }
         else
         {
             glBindTexture(GL_TEXTURE_2D, m_texs[0]);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            glTexImage2D(GL_TEXTURE_2D, 0, m_colorFormat, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
             glBindTexture(GL_TEXTURE_2D, m_texs[1]);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
 
@@ -507,7 +509,7 @@ public:
             if (m_bindTexs[0][i])
             {
                 glBindTexture(GL_TEXTURE_2D, m_bindTexs[0][i]);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                glTexImage2D(GL_TEXTURE_2D, 0, m_colorFormat, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
             }
         }
 
@@ -1639,9 +1641,10 @@ GLDataFactory::Context::newDynamicTexture(size_t width, size_t height, TextureFo
 }
 
 GLTextureR::GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue* q, size_t width, size_t height,
-                       size_t samples, TextureClampMode clampMode, size_t colorBindingCount, size_t depthBindingCount)
+                       size_t samples, GLenum colorFormat, TextureClampMode clampMode,
+                       size_t colorBindingCount, size_t depthBindingCount)
 : GraphicsDataNode<ITextureR>(parent), m_q(q), m_width(width), m_height(height), m_samples(samples),
-  m_colorBindCount(colorBindingCount), m_depthBindCount(depthBindingCount)
+  m_colorFormat(colorFormat), m_colorBindCount(colorBindingCount), m_depthBindCount(depthBindingCount)
 {
     glGenTextures(2, m_texs);
     if (colorBindingCount)
@@ -1660,14 +1663,14 @@ GLTextureR::GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue*
     if (samples > 1)
     {
         glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[0]);
-        glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGBA, width, height, GL_FALSE);
+        glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, colorFormat, width, height, GL_FALSE);
         glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[1]);
         glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_DEPTH_COMPONENT24, width, height, GL_FALSE);
     }
     else
     {
         glBindTexture(GL_TEXTURE_2D, m_texs[0]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, colorFormat, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
         glBindTexture(GL_TEXTURE_2D, m_texs[1]);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
     }
@@ -1675,7 +1678,7 @@ GLTextureR::GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue*
     for (int i=0 ; i<colorBindingCount ; ++i)
     {
         glBindTexture(GL_TEXTURE_2D, m_bindTexs[0][i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, colorFormat, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         SetClampMode(GL_TEXTURE_2D, clampMode);
@@ -1698,7 +1701,8 @@ GLDataFactory::Context::newRenderTexture(size_t width, size_t height, TextureCla
 {
     GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
     GLCommandQueue* q = static_cast<GLCommandQueue*>(factory.m_parent->getCommandQueue());
-    ObjToken<ITextureR> retval(new GLTextureR(m_data, q, width, height, factory.m_glCtx->m_sampleCount, clampMode,
+    ObjToken<ITextureR> retval(new GLTextureR(m_data, q, width, height, factory.m_glCtx->m_sampleCount,
+                                              factory.m_glCtx->m_deepColor ? GL_RGBA16 : GL_RGBA8, clampMode,
                                               colorBindingCount, depthBindingCount));
     q->resizeRenderTexture(retval, width, height);
     return retval;

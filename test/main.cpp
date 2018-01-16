@@ -302,12 +302,21 @@ struct TestApplicationCallback : IApplicationCallback
                 float pos[3];
                 float uv[2];
             };
+            /*
             static const Vert quad[4] =
             {
                 {{0.5,0.5},{1.0,1.0}},
                 {{-0.5,0.5},{0.0,1.0}},
                 {{0.5,-0.5},{1.0,0.0}},
                 {{-0.5,-0.5},{0.0,0.0}}
+            };
+             */
+            static const Vert quad[4] =
+            {
+                {{1.0,1.0},{1.0,1.0}},
+                {{-1.0,1.0},{0.0,1.0}},
+                {{1.0,-1.0},{1.0,0.0}},
+                {{-1.0,-1.0},{0.0,0.0}}
             };
             auto vbo = ctx.newStaticBuffer(BufferUse::Vertex, quad, sizeof(Vert), 4);
 
@@ -361,7 +370,8 @@ struct TestApplicationCallback : IApplicationCallback
                 "in vec2 out_uv;\n"
                 "void main()\n"
                 "{\n"
-                "    out_frag = texture(tex, out_uv);\n"
+                "    //out_frag = texture(tex, out_uv);\n"
+                "    out_frag = vec4(out_uv.xy, 0.0, 1.0);\n"
                 "}\n";
 
                 static const char* texName = "tex";
@@ -541,7 +551,7 @@ struct TestApplicationCallback : IApplicationCallback
             gfxQ->setViewport(r);
             gfxQ->setScissor(r);
             float rgba[] = {std::max(0.f, sinf(frameIdx / 60.0)), std::max(0.f, cosf(frameIdx / 60.0)), 0.0, 1.0};
-            gfxQ->setClearColor(rgba);
+            //gfxQ->setClearColor(rgba);
             gfxQ->clearTarget();
 
             gfxQ->setShaderDataBinding(m_binding);
@@ -596,7 +606,7 @@ int main(int argc, const boo::SystemChar** argv)
     logvisor::RegisterConsoleLogger();
     boo::TestApplicationCallback appCb;
     int ret = ApplicationRun(boo::IApplication::EPlatformType::Auto,
-        appCb, _S("boo"), _S("boo"), argc, argv);
+        appCb, _S("boo"), _S("boo"), argc, argv, {}, 1, 1, false);
     printf("IM DYING!!\n");
     return ret;
 }

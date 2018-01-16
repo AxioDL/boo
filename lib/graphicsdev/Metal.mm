@@ -490,7 +490,7 @@ class MetalTextureR : public GraphicsDataNode<ITextureR>
         @autoreleasepool
         {
             MTLTextureDescriptor* desc =
-            [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+            [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:ctx->m_pixelFormat
                                                                width:m_width height:m_height
                                                            mipmapped:NO];
             desc.storageMode = MTLStorageModePrivate;
@@ -521,7 +521,7 @@ class MetalTextureR : public GraphicsDataNode<ITextureR>
             desc.usage = MTLTextureUsageShaderRead;
             if (m_colorBindCount)
             {
-                desc.pixelFormat = MTLPixelFormatBGRA8Unorm;
+                desc.pixelFormat = ctx->m_pixelFormat;
                 for (int i=0 ; i<m_colorBindCount ; ++i)
                 {
                     m_colorBindTex[i] = [ctx->m_dev newTextureWithDescriptor:desc];
@@ -799,7 +799,7 @@ class MetalShaderPipeline : public GraphicsDataNode<IShaderPipeline>
         desc.fragmentFunction = m_frag.get().m_shader;
         desc.vertexDescriptor = vtxFmt.cast<MetalVertexFormat>()->m_vdesc;
         desc.sampleCount = targetSamples;
-        desc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+        desc.colorAttachments[0].pixelFormat = ctx->m_pixelFormat;
         desc.colorAttachments[0].writeMask = (colorWrite ? COLOR_WRITE_MASK : 0) |
                                              (alphaWrite ? MTLColorWriteMaskAlpha : 0);
         desc.colorAttachments[0].blendingEnabled = dstFac != BlendFactor::Zero;

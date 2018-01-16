@@ -61,6 +61,7 @@ int ApplicationRun(IApplication::EPlatformType platform,
                    std::string_view gfxApi,
                    uint32_t samples,
                    uint32_t anisotropy,
+                   bool deepColor,
                    bool singleInstance)
 {
     std::string thrName = std::string(friendlyName) + " Main Thread";

@@ -34,9 +34,10 @@ public:
     {
         None        = 0,
         RGBA8       = 1, /* Default */
-        RGBA8_Z24   = 2,
-        RGBAF32     = 3,
-        RGBAF32_Z24 = 4
+        RGBA16      = 2,
+        RGBA8_Z24   = 3,
+        RGBAF32     = 4,
+        RGBAF32_Z24 = 5
     };
     
     virtual ~IGraphicsContext() {}

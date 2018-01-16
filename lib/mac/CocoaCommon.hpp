@@ -30,6 +30,7 @@ struct MetalContext
     std::unordered_map<IWindow*, Window> m_windows;
     uint32_t m_sampleCount = 1;
     uint32_t m_anisotropy = 1;
+    MTLPixelFormat m_pixelFormat = MTLPixelFormatBGRA8Unorm;
 };
 }
 

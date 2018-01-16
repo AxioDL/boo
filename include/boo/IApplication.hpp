@@ -64,6 +64,7 @@ ApplicationRun(IApplication::EPlatformType platform,
                std::string_view gfxApi = {},
                uint32_t samples = 1,
                uint32_t anisotropy = 1,
+               bool deepColor = false,
                bool singleInstance=true);
 extern IApplication* APP;
     
@@ -76,6 +77,7 @@ ApplicationRun(IApplication::EPlatformType platform,
                std::string_view gfxApi = {},
                uint32_t samples = 1,
                uint32_t anisotropy = 1,
+               bool deepColor = false,
                bool singleInstance=true)
 {
     if (APP)
@@ -84,7 +86,7 @@ ApplicationRun(IApplication::EPlatformType platform,
     for (int i=1 ; i<argc ; ++i)
         args.push_back(argv[i]);
     return ApplicationRun(platform, cb, uniqueName, friendlyName, argv[0], args,
-                          gfxApi, samples, anisotropy, singleInstance);
+                          gfxApi, samples, anisotropy, deepColor, singleInstance);
 }
     
 }
