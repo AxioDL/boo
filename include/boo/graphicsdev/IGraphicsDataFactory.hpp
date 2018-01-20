@@ -61,6 +61,7 @@ enum class TextureFormat
 {
     RGBA8,
     I8,
+    I16,
     DXT1,
     PVRTC4
 };

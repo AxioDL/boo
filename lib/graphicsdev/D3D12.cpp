@@ -447,7 +447,7 @@ class D3D12TextureR : public GraphicsDataNode<ITextureR>
         {
             rtvDim = D3D12_RTV_DIMENSION_TEXTURE2DMS;
             dsvDim = D3D12_DSV_DIMENSION_TEXTURE2DMS;
-            rtvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, m_width, m_height, 1, 1, m_samples,
+            rtvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(ctx->RGBATex2DFBViewDesc.Format, m_width, m_height, 1, 1, m_samples,
                 D3D11_STANDARD_MULTISAMPLE_PATTERN, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, D3D12_TEXTURE_LAYOUT_UNKNOWN,
                 D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT);
             dsvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R24G8_TYPELESS, m_width, m_height, 1, 1, m_samples,
@@ -458,19 +458,19 @@ class D3D12TextureR : public GraphicsDataNode<ITextureR>
         {
             rtvDim = D3D12_RTV_DIMENSION_TEXTURE2D;
             dsvDim = D3D12_DSV_DIMENSION_TEXTURE2D;
-            rtvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, m_width, m_height, 1, 1, 1,
+            rtvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(ctx->RGBATex2DFBViewDesc.Format, m_width, m_height, 1, 1, 1,
                 0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
             dsvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R24G8_TYPELESS, m_width, m_height, 1, 1, 1,
                 0, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
         }
 
-        cbindresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, m_width, m_height, 1, 1, 1,
+        cbindresdesc = CD3DX12_RESOURCE_DESC::Tex2D(ctx->RGBATex2DFBViewDesc.Format, m_width, m_height, 1, 1, 1,
             0, D3D12_RESOURCE_FLAG_NONE);
         dbindresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R24G8_TYPELESS, m_width, m_height, 1, 1, 1,
             0, D3D12_RESOURCE_FLAG_NONE);
 
         D3D12_CLEAR_VALUE colorClear = {};
-        colorClear.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        colorClear.Format = ctx->RGBATex2DFBViewDesc.Format;
         ThrowIfFailed(ctx->m_dev->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE,
             &rtvresdesc, D3D12_RESOURCE_STATE_RENDER_TARGET, &colorClear,
             __uuidof(ID3D12Resource), &m_colorTex));
@@ -481,7 +481,7 @@ class D3D12TextureR : public GraphicsDataNode<ITextureR>
             &dsvresdesc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &depthClear,
             __uuidof(ID3D12Resource), &m_depthTex));
 
-        D3D12_RENDER_TARGET_VIEW_DESC rtvvdesc = {DXGI_FORMAT_R8G8B8A8_UNORM, rtvDim};
+        D3D12_RENDER_TARGET_VIEW_DESC rtvvdesc = {ctx->RGBATex2DFBViewDesc.Format, rtvDim};
         ctx->m_dev->CreateRenderTargetView(m_colorTex.Get(), &rtvvdesc, m_rtvHeap->GetCPUDescriptorHandleForHeapStart());
 
         D3D12_DEPTH_STENCIL_VIEW_DESC dsvvdesc = {DXGI_FORMAT_D24_UNORM_S8_UINT, dsvDim};
@@ -746,7 +746,7 @@ class D3D12ShaderPipeline : public GraphicsDataNode<IShaderPipeline>
         desc.SampleMask = UINT_MAX;
         desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
         desc.NumRenderTargets = 1;
-        desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.RTVFormats[0] = ctx->RGBATex2DFBViewDesc.Format;
         desc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
         desc.SampleDesc.Count = ctx->m_sampleCount;
         desc.SampleDesc.Quality = D3D11_STANDARD_MULTISAMPLE_PATTERN;
@@ -851,17 +851,6 @@ static ID3D12Resource* GetBufferGPUResource(const IGraphicsBuffer* buf, int idx,
     }
 }
 
-static const struct RGBATex2DNoMipViewDesc : D3D12_SHADER_RESOURCE_VIEW_DESC
-{
-    RGBATex2DNoMipViewDesc()
-    {
-        Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-        Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        Texture2D = {UINT(0), UINT(1), UINT(0), 0.0f};
-    }
-} RGBATex2DNoMipViewDesc;
-
 static const struct RGBATex2DDepthViewDesc : D3D12_SHADER_RESOURCE_VIEW_DESC
 {
     RGBATex2DDepthViewDesc()
@@ -928,7 +917,7 @@ static const struct GreyTex2DArrayViewDesc : D3D12_SHADER_RESOURCE_VIEW_DESC
     }
 } GreyTex2DArrayViewDesc;
 
-static ID3D12Resource* GetTextureGPUResource(const ITexture* tex, int idx, int bindIdx, bool depth,
+static ID3D12Resource* GetTextureGPUResource(D3D12Context* ctx, const ITexture* tex, int idx, int bindIdx, bool depth,
                                              D3D12_SHADER_RESOURCE_VIEW_DESC& descOut)
 {
     switch (tex->type())
@@ -994,7 +983,7 @@ static ID3D12Resource* GetTextureGPUResource(const ITexture* tex, int idx, int b
         }
         else
         {
-            descOut = RGBATex2DNoMipViewDesc;
+            descOut = ctx->RGBATex2DFBViewDesc;
             return ctex->m_colorBindTex[bindIdx].Get();
         }
     }
@@ -1131,7 +1120,7 @@ struct D3D12ShaderDataBinding : public GraphicsDataNode<IShaderDataBinding>
                 if (i<m_texs.size() && m_texs[i].tex)
                 {
                     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
-                    ID3D12Resource* res = GetTextureGPUResource(m_texs[i].tex.get(), b, m_texs[i].idx,
+                    ID3D12Resource* res = GetTextureGPUResource(ctx, m_texs[i].tex.get(), b, m_texs[i].idx,
                                                                 m_texs[i].depth, srvDesc);
                     m_knownViewHandles[b][i] = res;
                     ctx->m_dev->CreateShaderResourceView(res, &srvDesc, handle);
@@ -1178,7 +1167,7 @@ struct D3D12ShaderDataBinding : public GraphicsDataNode<IShaderDataBinding>
                                 heapStart = m_descHeap[b]->GetCPUDescriptorHandleForHeapStart();
                             }
                             m_knownViewHandles[b][i] = res;
-                            ctx->m_dev->CreateShaderResourceView(res, &RGBATex2DNoMipViewDesc,
+                            ctx->m_dev->CreateShaderResourceView(res, &ctx->RGBATex2DFBViewDesc,
                                 CD3DX12_CPU_DESCRIPTOR_HANDLE(heapStart, MAX_UNIFORM_COUNT + i, incSz));
                         }
                     }
@@ -1294,6 +1283,8 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
         ThrowIfFailed(ctx->m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_dynamicCmdAlloc[0].Get(),
                                                     nullptr, __uuidof(ID3D12GraphicsCommandList), &m_dynamicCmdList));
     }
+
+    void startRenderer() {}
 
     void stopRenderer()
     {
@@ -1491,7 +1482,7 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
             UINT nodeMasks[] = {0,0};
             IUnknown* const queues[] = {m_ctx->m_q.Get(), m_ctx->m_q.Get()};
             m_windowCtx->m_swapChain->ResizeBuffers1(2, m_windowCtx->width, m_windowCtx->height,
-                DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH, nodeMasks, queues);
+                m_ctx->RGBATex2DFBViewDesc.Format, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH, nodeMasks, queues);
             m_windowCtx->m_backBuf = m_windowCtx->m_swapChain->GetCurrentBackBufferIndex();
             m_windowCtx->m_needsResize = false;
         }
@@ -1515,7 +1506,7 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
             };
             m_cmdList->ResourceBarrier(2, msaaSetup);
 
-            m_cmdList->ResolveSubresource(dest.Get(), 0, src, 0, DXGI_FORMAT_R8G8B8A8_UNORM);
+            m_cmdList->ResolveSubresource(dest.Get(), 0, src, 0, m_ctx->RGBATex2DFBViewDesc.Format);
 
             D3D12_RESOURCE_BARRIER msaaTeardown[] =
             {
@@ -1681,7 +1672,7 @@ public:
     : m_parent(parent), m_ctx(ctx)
     {
         D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS qLevels = {};
-        qLevels.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        qLevels.Format = m_ctx->RGBATex2DFBViewDesc.Format;
         qLevels.SampleCount = m_ctx->m_sampleCount;
         while (SUCCEEDED(ctx->m_dev->CheckFeatureSupport
                          (D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &qLevels, sizeof(qLevels))) &&

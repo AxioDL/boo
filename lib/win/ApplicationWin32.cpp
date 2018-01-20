@@ -99,6 +99,7 @@ public:
                      std::string_view gfxApi,
                      uint32_t samples,
                      uint32_t anisotropy,
+                     bool deepColor,
                      bool singleInstance)
     : m_callback(callback),
       m_uniqueName(uniqueName),
@@ -109,14 +110,20 @@ public:
     {
         m_3dCtx.m_ctx11.m_sampleCount = samples;
         m_3dCtx.m_ctx11.m_anisotropy = anisotropy;
+        m_3dCtx.m_ctx11.m_fbFormat = deepColor ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
+        //m_3dCtx.m_ctx11.m_fbFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
         m_3dCtx.m_ctx12.m_sampleCount = samples;
         m_3dCtx.m_ctx12.m_anisotropy = anisotropy;
+        m_3dCtx.m_ctx12.RGBATex2DFBViewDesc.Format = deepColor ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
+        //m_3dCtx.m_ctx12.RGBATex2DFBViewDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         m_3dCtx.m_ctxOgl.m_glCtx.m_sampleCount = samples;
         m_3dCtx.m_ctxOgl.m_glCtx.m_anisotropy = anisotropy;
+        m_3dCtx.m_ctxOgl.m_glCtx.m_deepColor = deepColor;
 #if BOO_HAS_VULKAN
         g_VulkanContext.m_sampleCountColor = samples;
         g_VulkanContext.m_sampleCountDepth = samples;
         g_VulkanContext.m_anisotropy = anisotropy;
+        g_VulkanContext.m_deepColor = deepColor;
 #endif
 
         HMODULE dxgilib = LoadLibraryW(L"dxgi.dll");
@@ -176,6 +183,7 @@ public:
             if (!arg.compare(L"--vulkan"))
             {
                 noD3d = true;
+                useVulkan = true;
             }
             if (!arg.compare(L"--gl"))
             {
@@ -614,7 +622,7 @@ int ApplicationRun(IApplication::EPlatformType platform,
     ATOM a = RegisterClassW(&wndClass);
 
     APP = new ApplicationWin32(cb, uniqueName, friendlyName, pname, args,
-                               gfxApi, samples, anisotropy, singleInstance);
+                               gfxApi, samples, anisotropy, deepColor, singleInstance);
     return APP->run();
 }
 

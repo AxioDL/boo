@@ -278,6 +278,7 @@ add_library(boo
             include/boo/graphicsdev/IGraphicsDataFactory.hpp
             include/boo/graphicsdev/IGraphicsCommandQueue.hpp
             lib/graphicsdev/Common.hpp
+            lib/graphicsdev/Common.cpp
             include/boo/audiodev/IAudioSubmix.hpp
             include/boo/audiodev/IAudioVoice.hpp
             include/boo/audiodev/IMIDIPort.hpp

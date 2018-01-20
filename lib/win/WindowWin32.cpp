@@ -15,6 +15,10 @@
 #include "boo/graphicsdev/Vulkan.hpp"
 #endif
 
+#if _WIN32_WINNT_WIN10
+#include <dxgi1_5.h>
+#endif
+
 static const int ContextAttribs[] =
 {
     WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
@@ -79,7 +83,6 @@ public:
     {
         /* Create Swap Chain */
         DXGI_SWAP_CHAIN_DESC1 scDesc = {};
-        scDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         scDesc.SampleDesc.Count = 1;
         scDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
         scDesc.BufferCount = 2;
@@ -96,6 +99,7 @@ public:
             m_dataFactory = _NewD3D12DataFactory(&b3dCtx.m_ctx12, this);
             m_commandQueue = _NewD3D12CommandQueue(&b3dCtx.m_ctx12, &w, this, &cmdQueue);
 
+            scDesc.Format = b3dCtx.m_ctx12.RGBATex2DFBViewDesc.Format;
             scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
             HRESULT hr = b3dCtx.m_ctx12.m_dxFactory->CreateSwapChainForHwnd(cmdQueue,
                 hwnd, &scDesc, nullptr, nullptr, &m_swapChain);
@@ -117,6 +121,7 @@ public:
         else
 #endif
         {
+            scDesc.Format = b3dCtx.m_ctx11.m_fbFormat;
             if (FAILED(b3dCtx.m_ctx11.m_dxFactory->CreateSwapChainForHwnd(b3dCtx.m_ctx11.m_dev.Get(),
                 hwnd, &scDesc, nullptr, nullptr, &m_swapChain)))
                 Log.report(logvisor::Fatal, "unable to create swap chain");
@@ -257,9 +262,7 @@ public:
                 PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,    //Flags
                 PFD_TYPE_RGBA,            //The kind of framebuffer. RGBA or palette.
                 32,                        //Colordepth of the framebuffer.
-                0, 0, 0, 0, 0, 0,
-                0,
-                0,
+                0, 0, 0, 0, 0, 0, 0, 0,
                 0,
                 0, 0, 0, 0,
                 24,                        //Number of bits for the depthbuffer
@@ -272,8 +275,46 @@ public:
 
             int pf = ChoosePixelFormat(w.m_deviceContext, &pfd);
             SetPixelFormat(w.m_deviceContext, pf, &pfd);
+
+#if 0
+            HGLRC tmpCtx = wglCreateContext(w.m_deviceContext);
+            wglMakeCurrent(w.m_deviceContext, tmpCtx);
+            wglCreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC)
+                wglGetProcAddress("wglCreateContextAttribsARB");
+            wglChoosePixelFormatARB = (PFNWGLCHOOSEPIXELFORMATARBPROC)
+                wglGetProcAddress("wglChoosePixelFormatARB");
+            wglMakeCurrent(w.m_deviceContext, 0);
+            wglDeleteContext(tmpCtx);
+
+            if (b3dCtx.m_ctxOgl.m_glCtx.m_deepColor)
+            {
+                const int attribs1[] =
+                {
+                    WGL_SUPPORT_OPENGL_ARB, TRUE,
+                    WGL_DRAW_TO_WINDOW_ARB, TRUE,
+                    WGL_PIXEL_TYPE_ARB, WGL_TYPE_RGBA_ARB,
+                    WGL_RED_BITS_ARB, 10,
+                    WGL_GREEN_BITS_ARB, 10,
+                    WGL_BLUE_BITS_ARB, 10,
+                    WGL_ALPHA_BITS_ARB, 2,
+                    WGL_DOUBLE_BUFFER_ARB, TRUE,
+                    0, // zero terminates the list
+                };
+                float fattribs[] = {
+                    0.0f, // zero terminates the list
+                };
+
+                int pixelFormat;
+                UINT numFormats;
+
+                wglChoosePixelFormatARB(w.m_deviceContext, attribs1, fattribs, 1, &pixelFormat, &numFormats);
+                if (numFormats)
+                    SetPixelFormat(w.m_deviceContext, pixelFormat, nullptr);
+            }
+#endif
         }
 
+        //w.m_mainContext = wglCreateContextAttribsARB(w.m_deviceContext, 0, ContextAttribs);
         w.m_mainContext = wglCreateContext(w.m_deviceContext);
         if (!w.m_mainContext)
             Log.report(logvisor::Fatal, "unable to create window's main context");
@@ -284,6 +325,7 @@ public:
 
         m_dataFactory = _NewGLDataFactory(this, &b3dCtx.m_ctxOgl.m_glCtx);
         m_commandQueue = _NewGLCommandQueue(this, &b3dCtx.m_ctxOgl.m_glCtx);
+        m_commandQueue->startRenderer();
     }
 
     ~GraphicsContextWin32GL()
@@ -565,14 +607,29 @@ public:
          * supported format will be returned. */
         if (formatCount >= 1)
         {
-            for (int i=0 ; i<formatCount ; ++i)
+            if (m_ctx->m_deepColor)
             {
-                if (surfFormats[i].format == VK_FORMAT_B8G8R8A8_UNORM ||
-                    surfFormats[i].format == VK_FORMAT_R8G8B8A8_UNORM)
+                for (int i=0 ; i<formatCount ; ++i)
                 {
-                    m_format = surfFormats[i].format;
-                    m_colorspace = surfFormats[i].colorSpace;
-                    break;
+                    if (surfFormats[i].format == VK_FORMAT_R16G16B16A16_UNORM)
+                    {
+                        m_format = surfFormats[i].format;
+                        m_colorspace = surfFormats[i].colorSpace;
+                        break;
+                    }
+                }
+            }
+            if (m_format == VK_FORMAT_UNDEFINED)
+            {
+                for (int i=0 ; i<formatCount ; ++i)
+                {
+                    if (surfFormats[i].format == VK_FORMAT_B8G8R8A8_UNORM ||
+                        surfFormats[i].format == VK_FORMAT_R8G8B8A8_UNORM)
+                    {
+                        m_format = surfFormats[i].format;
+                        m_colorspace = surfFormats[i].colorSpace;
+                        break;
+                    }
                 }
             }
         }

@@ -37,6 +37,7 @@ struct IGraphicsCommandQueue
     virtual void resolveDisplay(const ObjToken<ITextureR>& source)=0;
     virtual void execute()=0;
 
+    virtual void startRenderer()=0;
     virtual void stopRenderer()=0;
 };
 

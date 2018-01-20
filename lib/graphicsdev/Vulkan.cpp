@@ -2586,6 +2586,8 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         ThrowIfFailed(vk::CreateFence(m_ctx->m_dev, &fenceInfo, nullptr, &m_dynamicBufFence));
     }
 
+    void startRenderer() {}
+
     void stopRenderer()
     {
         m_running = false;

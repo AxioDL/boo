@@ -302,7 +302,7 @@ class D3D11TextureR : public GraphicsDataNode<ITextureR>
 
     void Setup(D3D11Context* ctx)
     {
-        ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R8G8B8A8_UNORM, m_width, m_height,
+        ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(ctx->m_fbFormat, m_width, m_height,
             1, 1, D3D11_BIND_RENDER_TARGET, D3D11_USAGE_DEFAULT, 0, m_samples), nullptr, &m_colorTex));
         ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_D24_UNORM_S8_UINT, m_width, m_height,
             1, 1, D3D11_BIND_DEPTH_STENCIL, D3D11_USAGE_DEFAULT, 0, m_samples), nullptr, &m_depthTex));
@@ -328,7 +328,7 @@ class D3D11TextureR : public GraphicsDataNode<ITextureR>
 
         for (size_t i=0 ; i<m_colorBindCount ; ++i)
         {
-            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R8G8B8A8_UNORM, m_width, m_height,
+            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(ctx->m_fbFormat, m_width, m_height,
                 1, 1, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, 1), nullptr, &m_colorBindTex[i]));
             ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_colorBindTex[i].Get(),
                 &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_colorBindTex[i].Get(), D3D11_SRV_DIMENSION_TEXTURE2D), &m_colorSrv[i]));
@@ -965,7 +965,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
                 {
                     self->m_windowCtx->m_swapChain->ResizeBuffers(2,
                         self->m_windowCtx->width, self->m_windowCtx->height,
-                        DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+                        self->m_ctx->m_fbFormat, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
                     self->m_windowCtx->m_needsResize = false;
                     CmdList.reset();
                     continue;
@@ -984,7 +984,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
 
                 ID3D11Texture2D* src = csource->m_colorTex.Get();
                 if (csource->m_samples > 1)
-                    self->m_ctx->m_devCtx->ResolveSubresource(dest.Get(), 0, src, 0, DXGI_FORMAT_R8G8B8A8_UNORM);
+                    self->m_ctx->m_devCtx->ResolveSubresource(dest.Get(), 0, src, 0, self->m_ctx->m_fbFormat);
                 else
                     self->m_ctx->m_devCtx->CopyResource(dest.Get(), src);
 
@@ -1004,6 +1004,8 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         m_initlk.unlock();
         ThrowIfFailed(ctx->m_dev->CreateDeferredContext1(0, &m_deferredCtx));
     }
+
+    void startRenderer() {}
 
     void stopRenderer()
     {
@@ -1122,7 +1124,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
             if (tex->m_samples > 1)
             {
                 m_deferredCtx->ResolveSubresource(tex->m_colorBindTex[bindIdx].Get(), 0, tex->m_colorTex.Get(), 0,
-                                                  DXGI_FORMAT_R8G8B8A8_UNORM);
+                                                  m_ctx->m_fbFormat);
             }
             else
             {
@@ -1248,7 +1250,7 @@ public:
     {
         UINT qLevels;
         while (SUCCEEDED(ctx->m_dev->CheckMultisampleQualityLevels
-                         (DXGI_FORMAT_R8G8B8A8_UNORM, m_ctx->m_sampleCount, &qLevels)) && !qLevels)
+                         (m_ctx->m_fbFormat, m_ctx->m_sampleCount, &qLevels)) && !qLevels)
             m_ctx->m_sampleCount = flp2(m_ctx->m_sampleCount - 1);
     }
 

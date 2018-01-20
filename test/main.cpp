@@ -294,7 +294,7 @@ struct TestApplicationCallback : IApplicationCallback
             /* Create render target */
             int x, y, w, h;
             self->mainWindow->getWindowFrame(x, y, w, h);
-            self->m_renderTarget = ctx.newRenderTexture(w, h, boo::TextureClampMode::Repeat, 0, 0);
+            self->m_renderTarget = ctx.newRenderTexture(w, h, boo::TextureClampMode::Repeat, 1, 0);
 
             /* Make Tri-strip VBO */
             struct Vert
@@ -439,7 +439,8 @@ struct TestApplicationCallback : IApplicationCallback
                     "struct VertToFrag {float4 out_pos : SV_Position; float2 out_uv : UV;};\n"
                     "float4 main(in VertToFrag d) : SV_Target0\n"
                     "{\n"
-                    "    return tex.Sample(samp, d.out_uv);\n"
+                    "    //return tex.Sample(samp, d.out_uv);\n"
+                    "    return float4(d.out_uv.xy, 0.0, 1.0);\n"
                     "}\n";
 
                 pipeline = d3dF.newShaderPipeline(VS, PS, nullptr, nullptr, nullptr, vfmt,

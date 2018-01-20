@@ -195,6 +195,8 @@ public:
     Token lock() { return Token(this); }
 };
 
+void UpdateGammaLUT(ITextureD* tex, float gamma);
+
 }
 
 #endif // BOO_GRAPHICSDEV_COMMON_HPP

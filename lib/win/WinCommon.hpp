@@ -47,6 +47,17 @@ struct D3D12Context
 
     uint32_t m_sampleCount = 1;
     uint32_t m_anisotropy = 1;
+
+    struct RGBATex2DFBViewDesc : D3D12_SHADER_RESOURCE_VIEW_DESC
+    {
+        RGBATex2DFBViewDesc()
+        {
+            Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+            Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            Texture2D = {UINT(0), UINT(1), UINT(0), 0.0f};
+        }
+    } RGBATex2DFBViewDesc;
 };
 
 struct D3D11Context
@@ -69,6 +80,7 @@ struct D3D11Context
 
     uint32_t m_sampleCount = 1;
     uint32_t m_anisotropy = 1;
+    DXGI_FORMAT m_fbFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 };
 
 struct Boo3DAppContext
