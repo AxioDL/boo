@@ -2088,6 +2088,8 @@ public:
             m_sourceToBinary.erase(srcKey);
         m_sharedShaders.erase(binKey);
     }
+
+    void setDisplayGamma(float gamma) { /*UpdateGammaLUT(m_gammaLUT.get(), gamma);*/ }
 };
 
 void D3D12CommandQueue::execute()

@@ -59,6 +59,8 @@ public:
             m_sourceToBinary.erase(srcKey);
         m_sharedShaders.erase(binKey);
     }
+
+    void setDisplayGamma(float gamma) { /*UpdateGammaLUT(m_gammaLUT.get(), gamma);*/ }
 };
 
 static inline void ThrowIfFailed(VkResult res)

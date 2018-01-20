@@ -22,7 +22,7 @@
 static const int ContextAttribs[] =
 {
     WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
-    WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
+    WGL_CONTEXT_MINOR_VERSION_ARB, 3,
     WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
     //WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_DEBUG_BIT_ARB,
     //WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
@@ -276,9 +276,11 @@ public:
             int pf = ChoosePixelFormat(w.m_deviceContext, &pfd);
             SetPixelFormat(w.m_deviceContext, pf, &pfd);
 
-#if 0
+#if 1
             HGLRC tmpCtx = wglCreateContext(w.m_deviceContext);
             wglMakeCurrent(w.m_deviceContext, tmpCtx);
+            if (glewInit() != GLEW_OK)
+                Log.report(logvisor::Fatal, "glewInit failed");
             wglCreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC)
                 wglGetProcAddress("wglCreateContextAttribsARB");
             wglChoosePixelFormatARB = (PFNWGLCHOOSEPIXELFORMATARBPROC)
@@ -314,8 +316,8 @@ public:
 #endif
         }
 
-        //w.m_mainContext = wglCreateContextAttribsARB(w.m_deviceContext, 0, ContextAttribs);
-        w.m_mainContext = wglCreateContext(w.m_deviceContext);
+        //w.m_mainContext = wglCreateContext(w.m_deviceContext);
+        w.m_mainContext = wglCreateContextAttribsARB(w.m_deviceContext, 0, ContextAttribs);
         if (!w.m_mainContext)
             Log.report(logvisor::Fatal, "unable to create window's main context");
         if (m_3dCtx.m_ctxOgl.m_lastContext)
@@ -360,7 +362,13 @@ public:
     void makeCurrent()
     {
         OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
-        if (!wglMakeCurrent(w.m_deviceContext, w.m_mainContext))
+        //if (!wglMakeCurrent(w.m_deviceContext, w.m_mainContext))
+        //    Log.report(logvisor::Fatal, "unable to make WGL context current");
+
+        w.m_renderContext = wglCreateContextAttribsARB(w.m_deviceContext, w.m_mainContext, ContextAttribs);
+        if (!w.m_renderContext)
+            Log.report(logvisor::Fatal, "unable to make new WGL context");
+        if (!wglMakeCurrent(w.m_deviceContext, w.m_renderContext))
             Log.report(logvisor::Fatal, "unable to make WGL context current");
     }
 
@@ -368,13 +376,13 @@ public:
     {
         OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
 
-        wglCreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC)
-            wglGetProcAddress("wglCreateContextAttribsARB");
-        w.m_renderContext = wglCreateContextAttribsARB(w.m_deviceContext, w.m_mainContext, ContextAttribs);
-        if (!w.m_renderContext)
-            Log.report(logvisor::Fatal, "unable to make new WGL context");
-        if (!wglMakeCurrent(w.m_deviceContext, w.m_renderContext))
-            Log.report(logvisor::Fatal, "unable to make WGL context current");
+        //wglCreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC)
+        //    wglGetProcAddress("wglCreateContextAttribsARB");
+        //w.m_renderContext = wglCreateContextAttribsARB(w.m_deviceContext, w.m_mainContext, ContextAttribs);
+        //if (!w.m_renderContext)
+        //    Log.report(logvisor::Fatal, "unable to make new WGL context");
+        //if (!wglMakeCurrent(w.m_deviceContext, w.m_renderContext))
+        //    Log.report(logvisor::Fatal, "unable to make WGL context current");
 
         if (!WGLEW_EXT_swap_control)
             Log.report(logvisor::Fatal, "WGL_EXT_swap_control not available");

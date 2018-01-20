@@ -257,7 +257,7 @@ struct CTestWindowCallback : IWindowCallback
 
     void windowMoved(const SWindowRect& rect)
     {
-        fprintf(stderr, "Moved %d, %d (%d, %d)\n", rect.size[0], rect.size[1], rect.location[0], rect.location[1]);
+        //fprintf(stderr, "Moved %d, %d (%d, %d)\n", rect.size[0], rect.size[1], rect.location[0], rect.location[1]);
     }
 
     void destroyed()
@@ -277,16 +277,8 @@ struct TestApplicationCallback : IApplicationCallback
     boo::ObjToken<IShaderDataBinding> m_binding;
     boo::ObjToken<ITextureR> m_renderTarget;
 
-    std::mutex m_mt;
-    std::condition_variable m_cv;
-
-    std::mutex m_initmt;
-    std::condition_variable m_initcv;
-
     static void LoaderProc(TestApplicationCallback* self)
     {
-        std::unique_lock<std::mutex> lk(self->m_initmt);
-
         IGraphicsDataFactory* factory = self->mainWindow->getLoadContextDataFactory();
 
         factory->commitTransaction([&](IGraphicsDataFactory::Context& ctx) -> bool
@@ -491,19 +483,6 @@ struct TestApplicationCallback : IApplicationCallback
 
             return true;
         });
-
-        /* Return control to client */
-        lk.unlock();
-        self->m_initcv.notify_one();
-
-        /* Wait for exit */
-        while (self->running)
-        {
-            std::unique_lock<std::mutex> lk(self->m_mt);
-            self->m_cv.wait(lk);
-            if (!self->running)
-                break;
-        }
     }
 
     int appMain(IApplication* app)
@@ -517,9 +496,7 @@ struct TestApplicationCallback : IApplicationCallback
 
         IGraphicsCommandQueue* gfxQ = mainWindow->getCommandQueue();
 
-        std::unique_lock<std::mutex> lk(m_initmt);
-        std::thread loaderThread(LoaderProc, this);
-        m_initcv.wait(lk);
+        LoaderProc(this);
 
         size_t frameIdx = 0;
         size_t lastCheck = 0;
@@ -551,7 +528,14 @@ struct TestApplicationCallback : IApplicationCallback
             r.location[1] = 0;
             gfxQ->setViewport(r);
             gfxQ->setScissor(r);
-            float rgba[] = {std::max(0.f, sinf(frameIdx / 60.0)), std::max(0.f, cosf(frameIdx / 60.0)), 0.0, 1.0};
+            //float rgba[] = {std::max(0.f, sinf(frameIdx / 60.0)), std::max(0.f, cosf(frameIdx / 60.0)), 0.0, 1.0};
+            float gammaT = sinf(frameIdx / 60.0) + 1.f;
+            //if (gammaT < 0.f)
+            //    gammaT = 1.f / ((1.f - gammaT) * 2.f);
+            //else
+            //    gammaT = gammaT + 1.f;
+            printf("%f\n", gammaT);
+            mainWindow->getDataFactory()->setDisplayGamma(gammaT);
             //gfxQ->setClearColor(rgba);
             gfxQ->clearTarget();
 
@@ -570,9 +554,10 @@ struct TestApplicationCallback : IApplicationCallback
             }
         }
 
+        m_renderTarget.reset();
+        m_binding.reset();
+
         gfxQ->stopRenderer();
-        m_cv.notify_one();
-        loaderThread.join();
         return 0;
     }
     void appQuitting(IApplication*)

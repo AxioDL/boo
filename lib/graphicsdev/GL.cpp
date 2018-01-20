@@ -50,10 +50,9 @@ BOO_GLSL_BINDING_HEAD
 "TBINDING1 uniform sampler2D gammaLUT;\n"
 "void main()\n"
 "{\n"
-"    //int linScale = int(65535.0 * texture(screenTex, vtf.uv).r);\n"
-"    //colorOut = texelFetch(gammaLUT, ivec2(linScale % 256, linScale / 256), 0);\n"
-"    //colorOut = vec4(texture(screenTex, vtf.uv).r, 0.0, 0.0, 1.0);\n"
-"    colorOut = vec4(vtf.uv, 0.0, 1.0);\n"
+"    ivec4 linScale = ivec4(texture(screenTex, vtf.uv) * vec4(65535.0));\n"
+"    for (int i=0 ; i<3 ; ++i)\n"
+"        colorOut[i] = texelFetch(gammaLUT, ivec2(linScale[i] % 256, linScale[i] / 256), 0).r;\n"
 "}\n";
 
 namespace boo
@@ -77,7 +76,6 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead
     GLContext* m_glCtx;
     std::unordered_map<uint64_t, std::unique_ptr<GLShareableShader>> m_sharedShaders;
 
-#if 0
     ObjToken<IShaderPipeline> m_gammaShader;
     ObjToken<ITextureD> m_gammaLUT;
     ObjToken<IGraphicsBufferS> m_gammaVBO;
@@ -91,7 +89,7 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead
                 2, texNames, 0, nullptr, BlendFactor::One, BlendFactor::Zero,
                 Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None);
             m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
-            UpdateGammaLUT(m_gammaLUT.get(), 2.2f);
+            UpdateGammaLUT(m_gammaLUT.get(), 1.0f);
             const struct Vert {
                 float pos[4];
                 float uv[4];
@@ -110,7 +108,6 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead
             return true;
         });
     }
-#endif
 
 public:
     GLDataFactoryImpl(IGraphicsContext* parent, GLContext* glCtx)
@@ -121,6 +118,8 @@ public:
     void commitTransaction(const FactoryCommitFunc&);
     ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count);
     void _unregisterShareableShader(uint64_t srcKey, uint64_t binKey) { m_sharedShaders.erase(srcKey); }
+
+    void setDisplayGamma(float gamma) { UpdateGammaLUT(m_gammaLUT.get(), gamma); }
 };
 
 static const GLenum USE_TABLE[] =
@@ -324,10 +323,10 @@ class GLTextureS : public GraphicsDataNode<ITextureS>
         }
         else
         {
-            //GLenum compType = intFormat == GL_R16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
+            GLenum compType = intFormat == GL_R16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
             for (size_t i=0 ; i<mips ; ++i)
             {
-                glTexImage2D(GL_TEXTURE_2D, i, intFormat, width, height, 0, format, GL_UNSIGNED_BYTE, dataIt);
+                glTexImage2D(GL_TEXTURE_2D, i, intFormat, width, height, 0, format, compType, dataIt);
                 dataIt += width * height * pxPitch;
                 if (width > 1)
                     width /= 2;
@@ -400,10 +399,10 @@ class GLTextureSA : public GraphicsDataNode<ITextureSA>
             Log.report(logvisor::Fatal, "unsupported tex format");
         }
 
-        //GLenum compType = intFormat == GL_R16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
+        GLenum compType = intFormat == GL_R16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
         for (size_t i=0 ; i<mips ; ++i)
         {
-            glTexImage3D(GL_TEXTURE_2D_ARRAY, i, intFormat, width, height, layers, 0, format, GL_UNSIGNED_BYTE, dataIt);
+            glTexImage3D(GL_TEXTURE_2D_ARRAY, i, intFormat, width, height, layers, 0, format, compType, dataIt);
             dataIt += width * height * layers * pxPitch;
             if (width > 1)
                 width /= 2;
@@ -466,15 +465,14 @@ class GLTextureD : public GraphicsDataNode<ITextureD>
         m_cpuSz = width * height * pxPitch;
         m_cpuBuf.reset(new uint8_t[m_cpuSz]);
 
-        //GLenum compType = m_intFormat == GL_R16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
+        GLenum compType = m_intFormat == GL_R16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
         glGenTextures(3, m_texs);
         for (int i=0 ; i<3 ; ++i)
         {
             glBindTexture(GL_TEXTURE_2D, m_texs[i]);
-            glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, width, height, 0, m_format, GL_UNSIGNED_BYTE, nullptr);
+            glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, width, height, 0, m_format, compType, nullptr);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
             SetClampMode(GL_TEXTURE_2D, clampMode);
         }
     }
@@ -488,8 +486,8 @@ public:
         if ((slot & m_validMask) == 0)
         {
             glBindTexture(GL_TEXTURE_2D, m_texs[b]);
-            //GLenum compType = m_intFormat == GL_R16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
-            glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, m_width, m_height, 0, m_format, GL_UNSIGNED_BYTE, m_cpuBuf.get());
+            GLenum compType = m_intFormat == GL_R16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
+            glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, m_width, m_height, 0, m_format, compType, m_cpuBuf.get());
             m_validMask |= slot;
         }
     }
@@ -582,7 +580,7 @@ public:
         m_width = width;
         m_height = height;
 
-        //GLenum compType = m_colorFormat == GL_RGBA16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
+        GLenum compType = m_colorFormat == GL_RGBA16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
         if (m_samples > 1)
         {
             glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[0]);
@@ -593,7 +591,7 @@ public:
         else
         {
             glBindTexture(GL_TEXTURE_2D, m_texs[0]);
-            glTexImage2D(GL_TEXTURE_2D, 0, m_colorFormat, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            glTexImage2D(GL_TEXTURE_2D, 0, m_colorFormat, width, height, 0, GL_RGBA, compType, nullptr);
             glBindTexture(GL_TEXTURE_2D, m_texs[1]);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
 
@@ -607,7 +605,7 @@ public:
             if (m_bindTexs[0][i])
             {
                 glBindTexture(GL_TEXTURE_2D, m_bindTexs[0][i]);
-                glTexImage2D(GL_TEXTURE_2D, 0, m_colorFormat, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                glTexImage2D(GL_TEXTURE_2D, 0, m_colorFormat, width, height, 0, GL_RGBA, compType, nullptr);
             }
         }
 
@@ -1318,8 +1316,8 @@ struct GLCommandQueue : IGraphicsCommandQueue
         {
             std::unique_lock<std::mutex> lk(self->m_initmt);
             self->m_parent->makeCurrent();
-            if (glewInit() != GLEW_OK)
-                Log.report(logvisor::Fatal, "unable to init glew");
+            //if (glewInit() != GLEW_OK)
+            //    Log.report(logvisor::Fatal, "unable to init glew");
             const GLubyte* version = glGetString(GL_VERSION);
             Log.report(logvisor::Info, "OpenGL Version: %s", version);
             self->m_parent->postInit();
@@ -1336,7 +1334,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
             self->m_glCtx->m_sampleCount =
                 flp2(std::min(uint32_t(maxSamples), std::max(uint32_t(1), self->m_glCtx->m_sampleCount)) - 1);
 
-            //dataFactory->SetupGammaResources();
+            dataFactory->SetupGammaResources();
         }
         self->m_initcv.notify_one();
         while (self->m_running)
@@ -1496,7 +1494,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 {
                     if (const GLTextureR* tex = cmd.source.cast<GLTextureR>())
                     {
-#if 0
+#if 1
 #ifndef NDEBUG
                         if (!tex->m_colorBindCount)
                             Log.report(logvisor::Fatal,
@@ -1505,12 +1503,8 @@ struct GLCommandQueue : IGraphicsCommandQueue
                         glBindFramebuffer(GL_READ_FRAMEBUFFER, tex->m_fbo);
                         if (tex->m_samples <= 1)
                         {
-                            glActiveTexture(GL_TEXTURE9);
-                            glBindTexture(GL_TEXTURE_2D, tex->m_bindTexs[0][0]);
-                            glCopyTexSubImage2D(GL_TEXTURE_2D, 0,
-                                                0, 0,
-                                                0, 0,
-                                                tex->m_width, tex->m_height);
+                            glActiveTexture(GL_TEXTURE0);
+                            glBindTexture(GL_TEXTURE_2D, tex->m_texs[0]);
                         }
                         else
                         {
@@ -1520,12 +1514,12 @@ struct GLCommandQueue : IGraphicsCommandQueue
                                               0, 0,
                                               tex->m_width, tex->m_height,
                                               GL_COLOR_BUFFER_BIT, GL_NEAREST);
+                            tex->bind(0, 0, false);
                         }
 
                         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
                         dataFactory->m_gammaShader.cast<GLShaderPipeline>()->bind();
                         dataFactory->m_gammaVFMT.cast<GLVertexFormat>()->bind(self->m_drawBuf);
-                        tex->bind(0, 0, false);
                         dataFactory->m_gammaLUT.cast<GLTextureD>()->bind(1, self->m_drawBuf);
                         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
@@ -1797,7 +1791,7 @@ GLTextureR::GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue*
         glGenTextures(depthBindingCount, m_bindTexs[1]);
     }
 
-    //GLenum compType = colorFormat == GL_RGBA16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
+    GLenum compType = colorFormat == GL_RGBA16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
     if (samples > 1)
     {
         glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[0]);
@@ -1808,7 +1802,11 @@ GLTextureR::GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue*
     else
     {
         glBindTexture(GL_TEXTURE_2D, m_texs[0]);
-        glTexImage2D(GL_TEXTURE_2D, 0, colorFormat, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, colorFormat, width, height, 0, GL_RGBA, compType, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glBindTexture(GL_TEXTURE_2D, m_texs[1]);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
     }
@@ -1816,7 +1814,7 @@ GLTextureR::GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue*
     for (int i=0 ; i<colorBindingCount ; ++i)
     {
         glBindTexture(GL_TEXTURE_2D, m_bindTexs[0][i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, colorFormat, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, colorFormat, width, height, 0, GL_RGBA, compType, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         SetClampMode(GL_TEXTURE_2D, clampMode);
