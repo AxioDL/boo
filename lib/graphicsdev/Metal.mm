@@ -106,10 +106,10 @@ class MetalDataFactoryImpl : public MetalDataFactory, public GraphicsDataFactory
                 float pos[4];
                 float uv[4];
             } verts[4] = {
-                {{-1.f, -1.f, 0.f, 1.f}, {0.f, 0.f, 0.f, 0.f}},
-                {{ 1.f, -1.f, 0.f, 1.f}, {1.f, 0.f, 0.f, 0.f}},
-                {{-1.f,  1.f, 0.f, 1.f}, {0.f, 1.f, 0.f, 0.f}},
-                {{ 1.f,  1.f, 0.f, 1.f}, {1.f, 1.f, 0.f, 0.f}}
+                {{-1.f,  1.f, 0.f, 1.f}, {0.f, 0.f, 0.f, 0.f}},
+                {{ 1.f,  1.f, 0.f, 1.f}, {1.f, 0.f, 0.f, 0.f}},
+                {{-1.f, -1.f, 0.f, 1.f}, {0.f, 1.f, 0.f, 0.f}},
+                {{ 1.f, -1.f, 0.f, 1.f}, {1.f, 1.f, 0.f, 0.f}}
             };
             m_gammaVBO = ctx.newStaticBuffer(BufferUse::Vertex, verts, 32, 4);
             ObjToken<ITexture> texs[] = {{}, m_gammaLUT.get()};
