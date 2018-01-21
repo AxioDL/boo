@@ -17,6 +17,50 @@
 #define MAX_UNIFORM_COUNT 8
 #define MAX_TEXTURE_COUNT 8
 
+static const char* GammaVS =
+"#include <metal_stdlib>\n"
+"using namespace metal;\n"
+"struct VertData\n"
+"{\n"
+"    float4 posIn [[ attribute(0) ]];\n"
+"    float4 uvIn [[ attribute(1) ]];\n"
+"};\n"
+"\n"
+"struct VertToFrag\n"
+"{\n"
+"    float4 pos [[ position ]];\n"
+"    float2 uv;\n"
+"};\n"
+"\n"
+"vertex VertToFrag vmain(VertData v [[ stage_in ]])\n"
+"{\n"
+"    VertToFrag vtf;\n"
+"    vtf.uv = v.uvIn.xy;\n"
+"    vtf.pos = v.posIn;\n"
+"    return vtf;\n"
+"}\n";
+
+static const char* GammaFS =
+"#include <metal_stdlib>\n"
+"using namespace metal;\n"
+"struct VertToFrag\n"
+"{\n"
+"    float4 pos [[ position ]];\n"
+"    float2 uv;\n"
+"};\n"
+"\n"
+"fragment float4 fmain(VertToFrag vtf [[ stage_in ]],\n"
+"                      sampler clampSamp [[ sampler(2) ]],\n"
+"                      texture2d<float> screenTex [[ texture(0) ]],\n"
+"                      texture2d<float> gammaLUT [[ texture(1) ]])\n"
+"{\n"
+"    uint4 tex = uint4(saturate(screenTex.sample(clampSamp, vtf.uv)) * float4(65535.0));\n"
+"    float4 colorOut;\n"
+"    for (int i=0 ; i<3 ; ++i)\n"
+"        colorOut[i] = gammaLUT.read(uint2(tex[i] % 256, tex[i] / 256)).r;\n"
+"    return colorOut;\n"
+"}\n";
+
 namespace boo
 {
 static logvisor::Module Log("boo::Metal");
@@ -37,6 +81,43 @@ class MetalDataFactoryImpl : public MetalDataFactory, public GraphicsDataFactory
     IGraphicsContext* m_parent;
     std::unordered_map<uint64_t, std::unique_ptr<MetalShareableShader>> m_sharedShaders;
     struct MetalContext* m_ctx;
+
+    float m_gamma = 1.f;
+    ObjToken<IShaderPipeline> m_gammaShader;
+    ObjToken<ITextureD> m_gammaLUT;
+    ObjToken<IGraphicsBufferS> m_gammaVBO;
+    ObjToken<IVertexFormat> m_gammaVFMT;
+    ObjToken<IShaderDataBinding> m_gammaBinding;
+    void SetupGammaResources()
+    {
+        commitTransaction([this](IGraphicsDataFactory::Context& ctx)
+        {
+            const VertexElementDescriptor vfmt[] = {
+                {nullptr, nullptr, VertexSemantic::Position4},
+                {nullptr, nullptr, VertexSemantic::UV4}
+            };
+            m_gammaVFMT = ctx.newVertexFormat(2, vfmt);
+            m_gammaShader = static_cast<Context&>(ctx).newShaderPipeline(GammaVS, GammaFS,
+                nullptr, nullptr, m_gammaVFMT, BlendFactor::One, BlendFactor::Zero,
+                Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None);
+            m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
+            setDisplayGamma(1.f);
+            const struct Vert {
+                float pos[4];
+                float uv[4];
+            } verts[4] = {
+                {{-1.f, -1.f, 0.f, 1.f}, {0.f, 0.f, 0.f, 0.f}},
+                {{ 1.f, -1.f, 0.f, 1.f}, {1.f, 0.f, 0.f, 0.f}},
+                {{-1.f,  1.f, 0.f, 1.f}, {0.f, 1.f, 0.f, 0.f}},
+                {{ 1.f,  1.f, 0.f, 1.f}, {1.f, 1.f, 0.f, 0.f}}
+            };
+            m_gammaVBO = ctx.newStaticBuffer(BufferUse::Vertex, verts, 32, 4);
+            ObjToken<ITexture> texs[] = {{}, m_gammaLUT.get()};
+            m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVFMT, m_gammaVBO.get(), {}, {},
+                                                      0, nullptr, nullptr, 2, texs, nullptr, nullptr);
+            return true;
+        });
+    }
 
 public:
     std::unordered_map<uint64_t, uint64_t> m_sourceToBinary;
@@ -201,6 +282,16 @@ public:
         }
         return 0;
     }
+
+    void setDisplayGamma(float gamma)
+    {
+        if (m_ctx->m_pixelFormat == MTLPixelFormatRGBA16Float)
+            m_gamma = gamma * 2.2f;
+        else
+            m_gamma = gamma;
+        if (m_gamma != 1.f)
+            UpdateGammaLUT(m_gammaLUT.get(), m_gamma);
+    }
 };
 
 #define MTL_STATIC MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeManaged
@@ -296,6 +387,11 @@ class MetalTextureS : public GraphicsDataNode<ITextureS>
             ppitchNum = 1;
             bytesPerRow = width * ppitchNum;
             break;
+        case TextureFormat::I16:
+            pfmt = MTLPixelFormatR16Unorm;
+            ppitchNum = 2;
+            bytesPerRow = width * ppitchNum;
+            break;
         case TextureFormat::DXT1:
             pfmt = MTLPixelFormatBC1_RGBA;
             ppitchNum = 1;
@@ -351,6 +447,10 @@ class MetalTextureSA : public GraphicsDataNode<ITextureSA>
         case TextureFormat::I8:
             pfmt = MTLPixelFormatR8Unorm;
             ppitch = 1;
+            break;
+        case TextureFormat::I16:
+            pfmt = MTLPixelFormatR16Unorm;
+            ppitch = 2;
             break;
         default: break;
         }
@@ -416,6 +516,10 @@ class MetalTextureD : public GraphicsDataNode<ITextureD>
         case TextureFormat::I8:
             format = MTLPixelFormatR8Unorm;
             m_pxPitch = 1;
+            break;
+        case TextureFormat::I16:
+            format = MTLPixelFormatR16Unorm;
+            m_pxPitch = 2;
             break;
         default:
             Log.report(logvisor::Fatal, "unsupported tex format");
@@ -1061,6 +1165,11 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         }
     }
 
+    void startRenderer()
+    {
+        static_cast<MetalDataFactoryImpl*>(m_parent->getDataFactory())->SetupGammaResources();
+    }
+
     void stopRenderer()
     {
         m_running = false;
@@ -1212,6 +1321,54 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                         baseInstance:m_boundData->m_baseInst];
     }
 
+    void _resolveBindTexture(MetalTextureR* tex, const SWindowRect& rect, bool tlOrigin,
+                             int bindIdx, bool color, bool depth)
+    {
+        if (tex->samples() > 1)
+        {
+            if (color && tex->m_colorBindTex[bindIdx])
+            [[m_cmdBuf renderCommandEncoderWithDescriptor:tex->m_blitColor[bindIdx]] endEncoding];
+            if (depth && tex->m_depthBindTex[bindIdx])
+            [[m_cmdBuf renderCommandEncoderWithDescriptor:tex->m_blitDepth[bindIdx]] endEncoding];
+        }
+        else
+        {
+            SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, tex->m_width, tex->m_height));
+            NSUInteger y = tlOrigin ? intersectRect.location[1] : int(tex->m_height) -
+                           intersectRect.location[1] - intersectRect.size[1];
+            MTLOrigin origin = {NSUInteger(intersectRect.location[0]), y, 0};
+            id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf blitCommandEncoder];
+
+            if (color && tex->m_colorBindTex[bindIdx])
+            {
+                [blitEnc copyFromTexture:tex->m_colorTex
+                sourceSlice:0
+                sourceLevel:0
+                sourceOrigin:origin
+                sourceSize:MTLSizeMake(intersectRect.size[0], intersectRect.size[1], 1)
+                toTexture:tex->m_colorBindTex[bindIdx]
+                destinationSlice:0
+                destinationLevel:0
+                destinationOrigin:origin];
+            }
+
+            if (depth && tex->m_depthBindTex[bindIdx])
+            {
+                [blitEnc copyFromTexture:tex->m_depthTex
+                sourceSlice:0
+                sourceLevel:0
+                sourceOrigin:origin
+                sourceSize:MTLSizeMake(intersectRect.size[0], intersectRect.size[1], 1)
+                toTexture:tex->m_depthBindTex[bindIdx]
+                destinationSlice:0
+                destinationLevel:0
+                destinationOrigin:origin];
+            }
+
+            [blitEnc endEncoding];
+        }
+    }
+
     void resolveBindTexture(const ObjToken<ITextureR>& texture, const SWindowRect& rect, bool tlOrigin,
                             int bindIdx, bool color, bool depth, bool clearDepth)
     {
@@ -1220,49 +1377,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         {
             [m_enc endEncoding];
 
-            if (tex->samples() > 1)
-            {
-                if (color && tex->m_colorBindTex[bindIdx])
-                    [[m_cmdBuf renderCommandEncoderWithDescriptor:tex->m_blitColor[bindIdx]] endEncoding];
-                if (depth && tex->m_depthBindTex[bindIdx])
-                    [[m_cmdBuf renderCommandEncoderWithDescriptor:tex->m_blitDepth[bindIdx]] endEncoding];
-            }
-            else
-            {
-                SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, tex->m_width, tex->m_height));
-                NSUInteger y = tlOrigin ? intersectRect.location[1] : int(tex->m_height) -
-                               intersectRect.location[1] - intersectRect.size[1];
-                MTLOrigin origin = {NSUInteger(intersectRect.location[0]), y, 0};
-                id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf blitCommandEncoder];
-
-                if (color && tex->m_colorBindTex[bindIdx])
-                {
-                    [blitEnc copyFromTexture:tex->m_colorTex
-                    sourceSlice:0
-                    sourceLevel:0
-                    sourceOrigin:origin
-                    sourceSize:MTLSizeMake(intersectRect.size[0], intersectRect.size[1], 1)
-                    toTexture:tex->m_colorBindTex[bindIdx]
-                    destinationSlice:0
-                    destinationLevel:0
-                    destinationOrigin:origin];
-                }
-
-                if (depth && tex->m_depthBindTex[bindIdx])
-                {
-                    [blitEnc copyFromTexture:tex->m_depthTex
-                    sourceSlice:0
-                    sourceLevel:0
-                    sourceOrigin:origin
-                    sourceSize:MTLSizeMake(intersectRect.size[0], intersectRect.size[1], 1)
-                    toTexture:tex->m_depthBindTex[bindIdx]
-                    destinationSlice:0
-                    destinationLevel:0
-                    destinationOrigin:origin];
-                }
-
-                [blitEnc endEncoding];
-            }
+            _resolveBindTexture(tex, rect, tlOrigin, bindIdx, color, depth);
 
             m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:clearDepth ? tex->m_clearDepthPassDesc : tex->m_passDesc];
             [m_enc setFrontFacingWinding:MTLWindingCounterClockwise];
@@ -1282,6 +1397,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
 
     bool m_inProgress = false;
     std::unordered_map<uintptr_t, MTLRenderPassDescriptor*> m_resolvePasses;
+    std::unordered_map<uintptr_t, MTLRenderPassDescriptor*> m_gammaPasses;
     void execute()
     {
         if (!m_running)
@@ -1357,34 +1473,61 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                     if (src->m_colorTex.width == dest.width &&
                         src->m_colorTex.height == dest.height)
                     {
-                        if (src->samples() > 1)
+                        if (gfxF->m_gamma != 1.f)
                         {
-                            uintptr_t key = uintptr_t(src->m_colorTex) ^ uintptr_t(dest);
-                            auto passSearch = m_resolvePasses.find(key);
-                            if (passSearch == m_resolvePasses.end())
+                            SWindowRect rect(0, 0, src->m_width, src->m_height);
+                            _resolveBindTexture(src, rect, true, 0, true, false);
+
+                            uintptr_t key = uintptr_t(dest);
+                            auto passSearch = m_gammaPasses.find(key);
+                            if (passSearch == m_gammaPasses.end())
                             {
                                 MTLRenderPassDescriptor* desc = [MTLRenderPassDescriptor renderPassDescriptor];
-                                desc.colorAttachments[0].texture = src->m_colorTex;
+                                desc.colorAttachments[0].texture = dest;
                                 desc.colorAttachments[0].loadAction = MTLLoadActionLoad;
-                                desc.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
-                                desc.colorAttachments[0].resolveTexture = dest;
-                                passSearch = m_resolvePasses.insert(std::make_pair(key, desc)).first;
+                                desc.colorAttachments[0].storeAction = MTLStoreActionStore;
+                                passSearch = m_gammaPasses.insert(std::make_pair(key, desc)).first;
                             }
-                            [[m_cmdBuf renderCommandEncoderWithDescriptor:passSearch->second] endEncoding];
+
+                            id<MTLRenderCommandEncoder> enc = [m_cmdBuf renderCommandEncoderWithDescriptor:passSearch->second];
+                            MetalShaderDataBinding* gammaBinding = gfxF->m_gammaBinding.cast<MetalShaderDataBinding>();
+                            gammaBinding->m_texs[0].tex = m_needsDisplay.get();
+                            gammaBinding->bind(enc, m_drawBuf);
+                            [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+                            gammaBinding->m_texs[0].tex.reset();
+                            [enc endEncoding];
                         }
                         else
                         {
-                            id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf blitCommandEncoder];
-                            [blitEnc copyFromTexture:src->m_colorTex
-                                         sourceSlice:0
-                                         sourceLevel:0
-                                        sourceOrigin:MTLOriginMake(0, 0, 0)
-                                          sourceSize:MTLSizeMake(dest.width, dest.height, 1)
-                                           toTexture:dest
-                                    destinationSlice:0
-                                    destinationLevel:0
-                                   destinationOrigin:MTLOriginMake(0, 0, 0)];
-                            [blitEnc endEncoding];
+                            if (src->samples() > 1)
+                            {
+                                uintptr_t key = uintptr_t(src->m_colorTex) ^ uintptr_t(dest);
+                                auto passSearch = m_resolvePasses.find(key);
+                                if (passSearch == m_resolvePasses.end())
+                                {
+                                    MTLRenderPassDescriptor* desc = [MTLRenderPassDescriptor renderPassDescriptor];
+                                    desc.colorAttachments[0].texture = src->m_colorTex;
+                                    desc.colorAttachments[0].loadAction = MTLLoadActionLoad;
+                                    desc.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
+                                    desc.colorAttachments[0].resolveTexture = dest;
+                                    passSearch = m_resolvePasses.insert(std::make_pair(key, desc)).first;
+                                }
+                                [[m_cmdBuf renderCommandEncoderWithDescriptor:passSearch->second] endEncoding];
+                            }
+                            else
+                            {
+                                id<MTLBlitCommandEncoder> blitEnc = [m_cmdBuf blitCommandEncoder];
+                                [blitEnc copyFromTexture:src->m_colorTex
+                                             sourceSlice:0
+                                             sourceLevel:0
+                                            sourceOrigin:MTLOriginMake(0, 0, 0)
+                                              sourceSize:MTLSizeMake(dest.width, dest.height, 1)
+                                               toTexture:dest
+                                        destinationSlice:0
+                                        destinationLevel:0
+                                       destinationOrigin:MTLOriginMake(0, 0, 0)];
+                                [blitEnc endEncoding];
+                            }
                         }
                         [m_cmdBuf presentDrawable:drawable];
                     }

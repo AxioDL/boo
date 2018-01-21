@@ -266,6 +266,7 @@ public:
         CVDisplayLinkSetOutputCallback(m_dispLink, (CVDisplayLinkOutputCallback)DLCallback, this);
         CVDisplayLinkStart(m_dispLink);
         m_commandQueue = _NewGLCommandQueue(this, m_glCtx);
+        m_commandQueue->startRenderer();
         return true;
     }
 
@@ -351,6 +352,8 @@ IGraphicsContext* _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI api,
         major = glVersion[0] - '0';
         minor = glVersion[2] - '0';
     }
+    if (glewInit() != GLEW_OK)
+        Log.report(logvisor::Fatal, "glewInit failed");
     [NSOpenGLContext clearCurrentContext];
     if (!glVersion)
         return NULL;
@@ -428,6 +431,7 @@ public:
         CVDisplayLinkSetOutputCallback(m_dispLink, (CVDisplayLinkOutputCallback)DLCallback, this);
         CVDisplayLinkStart(m_dispLink);
         m_commandQueue = _NewMetalCommandQueue(m_metalCtx, m_parentWindow, this);
+        m_commandQueue->startRenderer();
         return true;
     }
 
@@ -1244,7 +1248,6 @@ static boo::ESpecialKey translateKeycode(short code)
     CAMetalLayer* layer = [CAMetalLayer new];
     layer.device = m_ctx->m_dev;
     layer.pixelFormat = m_ctx->m_pixelFormat;
-    layer.colorspace = CGColorSpaceCreateDeviceRGB();
     layer.framebufferOnly = NO;
     return layer;
 }

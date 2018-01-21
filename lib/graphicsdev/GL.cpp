@@ -1321,8 +1321,6 @@ struct GLCommandQueue : IGraphicsCommandQueue
         {
             std::unique_lock<std::mutex> lk(self->m_initmt);
             self->m_parent->makeCurrent();
-            //if (glewInit() != GLEW_OK)
-            //    Log.report(logvisor::Fatal, "unable to init glew");
             const GLubyte* version = glGetString(GL_VERSION);
             Log.report(logvisor::Info, "OpenGL Version: %s", version);
             self->m_parent->postInit();

@@ -1,4 +1,5 @@
 #include "Common.hpp"
+#include <cmath>
 
 namespace boo
 {
