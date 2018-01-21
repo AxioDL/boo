@@ -98,6 +98,7 @@ public:
             ID3D12CommandQueue* cmdQueue;
             m_dataFactory = _NewD3D12DataFactory(&b3dCtx.m_ctx12, this);
             m_commandQueue = _NewD3D12CommandQueue(&b3dCtx.m_ctx12, &w, this, &cmdQueue);
+            m_commandQueue->startRenderer();
 
             scDesc.Format = b3dCtx.m_ctx12.RGBATex2DFBViewDesc.Format;
             scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
@@ -129,16 +130,11 @@ public:
 
             auto insIt = b3dCtx.m_ctx11.m_windows.emplace(std::make_pair(parentWindow, D3D11Context::Window()));
             D3D11Context::Window& w = insIt.first->second;
+            w.setupRTV(m_swapChain, b3dCtx.m_ctx11.m_dev.Get());
 
-            m_swapChain.As<IDXGISwapChain1>(&w.m_swapChain);
-            ComPtr<ID3D11Texture2D> fbRes;
-            m_swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), &fbRes);
-            D3D11_TEXTURE2D_DESC resDesc;
-            fbRes->GetDesc(&resDesc);
-            w.width = resDesc.Width;
-            w.height = resDesc.Height;
             m_dataFactory = _NewD3D11DataFactory(&b3dCtx.m_ctx11, this);
             m_commandQueue = _NewD3D11CommandQueue(&b3dCtx.m_ctx11, &insIt.first->second, this);
+            m_commandQueue->startRenderer();
 
             if (FAILED(m_swapChain->GetContainingOutput(&m_output)))
                 Log.report(logvisor::Fatal, "unable to get DXGI output");
@@ -651,6 +647,7 @@ public:
 
         m_dataFactory = _NewVulkanDataFactory(this, m_ctx);
         m_commandQueue = _NewVulkanCommandQueue(m_ctx, m_ctx->m_windows[m_parentWindow].get(), this);
+        m_commandQueue->startRenderer();
         return true;
     }
 

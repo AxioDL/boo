@@ -43,6 +43,7 @@ struct VulkanContext
     VkDescriptorSetLayout m_descSetLayout;
     VkPipelineLayout m_pipelinelayout;
     VkRenderPass m_pass;
+    VkRenderPass m_passColorOnly;
     VkCommandPool m_loadPool;
     VkCommandBuffer m_loadCmdBuf;
     VkFormat m_displayFormat;
@@ -56,7 +57,10 @@ struct VulkanContext
             struct Buffer
             {
                 VkImage m_image = VK_NULL_HANDLE;
-                VkImageLayout m_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+                VkImageView m_colorView = VK_NULL_HANDLE;
+                VkFramebuffer m_framebuffer = VK_NULL_HANDLE;
+                VkRenderPassBeginInfo m_passBeginInfo = {};
+                void setImage(VulkanContext* ctx, VkImage image, uint32_t width, uint32_t height);
             };
             std::vector<Buffer> m_bufs;
             uint32_t m_backBuf = 0;

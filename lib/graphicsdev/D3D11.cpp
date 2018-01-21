@@ -19,6 +19,46 @@
 
 extern pD3DCompile D3DCompilePROC;
 
+static const char* GammaVS =
+"struct VertData\n"
+"{\n"
+"    float4 posIn : POSITION;\n"
+"    float4 uvIn : UV;\n"
+"};\n"
+"\n"
+"struct VertToFrag\n"
+"{\n"
+"    float4 pos : SV_Position;\n"
+"    float2 uv : UV;\n"
+"};\n"
+"\n"
+"VertToFrag main(in VertData v)\n"
+"{\n"
+"    VertToFrag vtf;\n"
+"    vtf.uv = v.uvIn.xy;\n"
+"    vtf.pos = v.posIn;\n"
+"    return vtf;\n"
+"}\n";
+
+static const char* GammaFS =
+"struct VertToFrag\n"
+"{\n"
+"    float4 pos : SV_Position;\n"
+"    float2 uv : UV;\n"
+"};\n"
+"\n"
+"Texture2D screenTex : register(t0);\n"
+"Texture2D gammaLUT : register(t1);\n"
+"SamplerState samp : register(s2);\n"
+"float4 main(in VertToFrag vtf) : SV_Target0\n"
+"{\n"
+"    int4 tex = int4(saturate(screenTex.Sample(samp, vtf.uv)) * float4(65535.0, 65535.0, 65535.0, 65535.0));\n"
+"    float4 colorOut;\n"
+"    for (int i=0 ; i<3 ; ++i)\n"
+"        colorOut[i] = gammaLUT.Load(int3(tex[i] % 256, tex[i] / 256, 0)).r;\n"
+"    return colorOut;\n"
+"}\n";
+
 namespace boo
 {
 static logvisor::Module Log("boo::D3D11");
@@ -138,6 +178,10 @@ class D3D11TextureS : public GraphicsDataNode<ITextureS>
         case TextureFormat::I8:
             pfmt = DXGI_FORMAT_R8_UNORM;
             break;
+        case TextureFormat::I16:
+            pfmt = DXGI_FORMAT_R16_UNORM;
+            pxPitchNum = 2;
+            break;
         case TextureFormat::DXT1:
             pfmt = DXGI_FORMAT_BC1_UNORM;
             compressed = true;
@@ -189,15 +233,20 @@ class D3D11TextureSA : public GraphicsDataNode<ITextureSA>
     {
         size_t pixelPitch;
         DXGI_FORMAT pixelFmt;
-        if (fmt == TextureFormat::RGBA8)
+        switch (fmt)
         {
+        case TextureFormat::RGBA8:
             pixelPitch = 4;
             pixelFmt = DXGI_FORMAT_R8G8B8A8_UNORM;
-        }
-        else if (fmt == TextureFormat::I8)
-        {
+            break;
+        case TextureFormat::I8:
             pixelPitch = 1;
             pixelFmt = DXGI_FORMAT_R8_UNORM;
+            break;
+        case TextureFormat::I16:
+            pixelPitch = 2;
+            pixelFmt = DXGI_FORMAT_R16_UNORM;
+            break;
         }
 
         CD3D11_TEXTURE2D_DESC desc(pixelFmt, width, height, layers, mips,
@@ -259,6 +308,10 @@ class D3D11TextureD : public GraphicsDataNode<ITextureD>
         case TextureFormat::I8:
             pixelFmt = DXGI_FORMAT_R8_UNORM;
             m_pxPitch = 1;
+            break;
+        case TextureFormat::I16:
+            pixelFmt = DXGI_FORMAT_R16_UNORM;
+            m_pxPitch = 2;
             break;
         default:
             Log.report(logvisor::Fatal, "unsupported tex format");
@@ -531,8 +584,8 @@ class D3D11ShaderPipeline : public GraphicsDataNode<IShaderPipeline>
         }
 
         CD3D11_RASTERIZER_DESC rasDesc(D3D11_FILL_SOLID, cullMode, true,
-            D3D11_DEFAULT_DEPTH_BIAS, D3D11_DEFAULT_DEPTH_BIAS_CLAMP, D3D11_DEFAULT_SLOPE_SCALED_DEPTH_BIAS,
-            true, true, false, false);
+            D3D11_DEFAULT_DEPTH_BIAS, D3D11_DEFAULT_DEPTH_BIAS_CLAMP,
+            D3D11_DEFAULT_SLOPE_SCALED_DEPTH_BIAS, true, true, false, false);
         ThrowIfFailed(ctx->m_dev->CreateRasterizerState(&rasDesc, &m_rasState));
 
         CD3D11_DEPTH_STENCIL_DESC dsDesc(D3D11_DEFAULT);
@@ -919,81 +972,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
 
     std::recursive_mutex m_dynamicLock;
     void ProcessDynamicLoads(ID3D11DeviceContext* ctx);
-    static void RenderingWorker(D3D11CommandQueue* self)
-    {
-        {
-            std::unique_lock<std::mutex> lk(self->m_initmt);
-        }
-        self->m_initcv.notify_one();
-        while (self->m_running)
-        {
-            {
-                std::unique_lock<std::mutex> lk(self->m_mt);
-                self->m_cv.wait(lk);
-                if (!self->m_running)
-                    break;
-                self->m_drawBuf = self->m_completeBuf;
-                auto& CmdList = self->m_cmdLists[self->m_drawBuf];
-
-                self->ProcessDynamicLoads(self->m_ctx->m_devCtx.Get());
-
-                if (self->m_texResizes.size())
-                {
-                    for (const auto& resize : self->m_texResizes)
-                        resize.first->resize(self->m_ctx, resize.second.first, resize.second.second);
-                    self->m_texResizes.clear();
-                    CmdList.reset();
-                    continue;
-                }
-
-                if (self->m_windowCtx->m_needsFSTransition)
-                {
-                    if (self->m_windowCtx->m_fs)
-                    {
-                        self->m_windowCtx->m_swapChain->SetFullscreenState(true, nullptr);
-                        self->m_windowCtx->m_swapChain->ResizeTarget(&self->m_windowCtx->m_fsdesc);
-                    }
-                    else
-                        self->m_windowCtx->m_swapChain->SetFullscreenState(false, nullptr);
-
-                    self->m_windowCtx->m_needsFSTransition = false;
-                    CmdList.reset();
-                    continue;
-                }
-
-                if (self->m_windowCtx->m_needsResize)
-                {
-                    self->m_windowCtx->m_swapChain->ResizeBuffers(2,
-                        self->m_windowCtx->width, self->m_windowCtx->height,
-                        self->m_ctx->m_fbFormat, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
-                    self->m_windowCtx->m_needsResize = false;
-                    CmdList.reset();
-                    continue;
-                }
-            }
-
-            auto& CmdList = self->m_cmdLists[self->m_drawBuf];
-            ID3D11CommandList* list = CmdList.list.Get();
-            self->m_ctx->m_devCtx->ExecuteCommandList(list, false);
-
-            D3D11TextureR* csource = CmdList.workDoPresent.cast<D3D11TextureR>();
-            if (csource)
-            {
-                ComPtr<ID3D11Texture2D> dest;
-                ThrowIfFailed(self->m_windowCtx->m_swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), &dest));
-
-                ID3D11Texture2D* src = csource->m_colorTex.Get();
-                if (csource->m_samples > 1)
-                    self->m_ctx->m_devCtx->ResolveSubresource(dest.Get(), 0, src, 0, self->m_ctx->m_fbFormat);
-                else
-                    self->m_ctx->m_devCtx->CopyResource(dest.Get(), src);
-
-                self->m_windowCtx->m_swapChain->Present(1, 0);
-            }
-
-            CmdList.reset();
-        }
-    }
+    static void RenderingWorker(D3D11CommandQueue* self);
 
     D3D11CommandQueue(D3D11Context* ctx, D3D11Context::Window* windowCtx, IGraphicsContext* parent)
     : m_ctx(ctx), m_windowCtx(windowCtx), m_parent(parent),
@@ -1005,7 +984,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         ThrowIfFailed(ctx->m_dev->CreateDeferredContext1(0, &m_deferredCtx));
     }
 
-    void startRenderer() {}
+    void startRenderer();
 
     void stopRenderer()
     {
@@ -1115,16 +1094,15 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         m_deferredCtx->DrawIndexedInstanced(count, instCount, start, 0, 0);
     }
 
-    void resolveBindTexture(const boo::ObjToken<ITextureR>& texture, const SWindowRect& rect,
-                            bool tlOrigin, int bindIdx, bool color, bool depth, bool clearDepth)
+    void _resolveBindTexture(ID3D11DeviceContext1* ctx, const D3D11TextureR* tex, const SWindowRect& rect,
+                             bool tlOrigin, int bindIdx, bool color, bool depth)
     {
-        const D3D11TextureR* tex = texture.cast<D3D11TextureR>();
         if (color && tex->m_colorBindCount)
         {
             if (tex->m_samples > 1)
             {
-                m_deferredCtx->ResolveSubresource(tex->m_colorBindTex[bindIdx].Get(), 0, tex->m_colorTex.Get(), 0,
-                                                  m_ctx->m_fbFormat);
+                ctx->ResolveSubresource(tex->m_colorBindTex[bindIdx].Get(), 0, tex->m_colorTex.Get(), 0,
+                                        m_ctx->m_fbFormat);
             }
             else
             {
@@ -1132,23 +1110,29 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
                 int y = tlOrigin ? intersectRect.location[1] : (tex->m_height - intersectRect.size[1] - intersectRect.location[1]);
                 D3D11_BOX box = {UINT(intersectRect.location[0]), UINT(y), 0,
                                  UINT(intersectRect.location[0] + intersectRect.size[0]), UINT(y + intersectRect.size[1]), 1};
-                m_deferredCtx->CopySubresourceRegion1(tex->m_colorBindTex[bindIdx].Get(), 0, box.left, box.top, 0,
-                                                      tex->m_colorTex.Get(), 0, &box, D3D11_COPY_DISCARD);
+                ctx->CopySubresourceRegion1(tex->m_colorBindTex[bindIdx].Get(), 0, box.left, box.top, 0,
+                                            tex->m_colorTex.Get(), 0, &box, D3D11_COPY_DISCARD);
             }
         }
         if (depth && tex->m_depthBindCount)
         {
             if (tex->m_samples > 1)
             {
-                m_deferredCtx->ResolveSubresource(tex->m_depthBindTex[bindIdx].Get(), 0, tex->m_depthTex.Get(), 0,
+                ctx->ResolveSubresource(tex->m_depthBindTex[bindIdx].Get(), 0, tex->m_depthTex.Get(), 0,
                                                   DXGI_FORMAT_D24_UNORM_S8_UINT);
             }
             else
             {
-                m_deferredCtx->CopyResource(tex->m_depthBindTex[bindIdx].Get(), tex->m_depthTex.Get());
+                ctx->CopyResource(tex->m_depthBindTex[bindIdx].Get(), tex->m_depthTex.Get());
             }
         }
+    }
 
+    void resolveBindTexture(const boo::ObjToken<ITextureR>& texture, const SWindowRect& rect,
+                            bool tlOrigin, int bindIdx, bool color, bool depth, bool clearDepth)
+    {
+        const D3D11TextureR* tex = texture.cast<D3D11TextureR>();
+        _resolveBindTexture(m_deferredCtx.Get(), tex, rect, tlOrigin, bindIdx, color, depth);
         if (clearDepth)
             m_deferredCtx->ClearDepthStencilView(tex->m_dsv.Get(), D3D11_CLEAR_DEPTH, 0.0f, 0);
     }
@@ -1243,6 +1227,43 @@ class D3D11DataFactory : public ID3DDataFactory, public GraphicsDataFactoryHead
     struct D3D11Context* m_ctx;
     std::unordered_map<uint64_t, std::unique_ptr<D3D11ShareableShader>> m_sharedShaders;
     std::unordered_map<uint64_t, uint64_t> m_sourceToBinary;
+
+    float m_gamma = 1.f;
+    ObjToken<IShaderPipeline> m_gammaShader;
+    ObjToken<ITextureD> m_gammaLUT;
+    ObjToken<IGraphicsBufferS> m_gammaVBO;
+    ObjToken<IVertexFormat> m_gammaVFMT;
+    ObjToken<IShaderDataBinding> m_gammaBinding;
+    void SetupGammaResources()
+    {
+        commitTransaction([this](IGraphicsDataFactory::Context& ctx)
+        {
+            const VertexElementDescriptor vfmt[] = {
+                {nullptr, nullptr, VertexSemantic::Position4},
+                {nullptr, nullptr, VertexSemantic::UV4}
+            };
+            m_gammaVFMT = ctx.newVertexFormat(2, vfmt);
+            m_gammaShader = static_cast<Context&>(ctx).newShaderPipeline(GammaVS, GammaFS,
+                nullptr, nullptr, nullptr, m_gammaVFMT, BlendFactor::One, BlendFactor::Zero,
+                Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None);
+            m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
+            setDisplayGamma(1.f);
+            const struct Vert {
+                float pos[4];
+                float uv[4];
+            } verts[4] = {
+                {{-1.f,  1.f, 0.f, 1.f}, {0.f, 0.f, 0.f, 0.f}},
+                {{ 1.f,  1.f, 0.f, 1.f}, {1.f, 0.f, 0.f, 0.f}},
+                {{-1.f, -1.f, 0.f, 1.f}, {0.f, 1.f, 0.f, 0.f}},
+                {{ 1.f, -1.f, 0.f, 1.f}, {1.f, 1.f, 0.f, 0.f}}
+            };
+            m_gammaVBO = ctx.newStaticBuffer(BufferUse::Vertex, verts, 32, 4);
+            ObjToken<ITexture> texs[] = {{}, m_gammaLUT.get()};
+            m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVFMT, m_gammaVBO.get(), {}, {},
+                                                      0, nullptr, nullptr, 2, texs, nullptr, nullptr);
+            return true;
+        });
+    }
 
 public:
     D3D11DataFactory(IGraphicsContext* parent, D3D11Context* ctx)
@@ -1502,8 +1523,128 @@ public:
         m_sharedShaders.erase(binKey);
     }
 
-    void setDisplayGamma(float gamma) { /*UpdateGammaLUT(m_gammaLUT.get(), gamma);*/ }
+    void setDisplayGamma(float gamma)
+    {
+        if (m_ctx->m_fbFormat == DXGI_FORMAT_R16G16B16A16_FLOAT)
+            m_gamma = gamma * 2.2f;
+        else
+            m_gamma = gamma;
+        if (m_gamma != 1.f)
+            UpdateGammaLUT(m_gammaLUT.get(), m_gamma);
+    }
 };
+
+void D3D11CommandQueue::RenderingWorker(D3D11CommandQueue* self)
+{
+    {
+        std::unique_lock<std::mutex> lk(self->m_initmt);
+    }
+    self->m_initcv.notify_one();
+    D3D11DataFactory* dataFactory = static_cast<D3D11DataFactory*>(self->m_parent->getDataFactory());
+    while (self->m_running)
+    {
+        {
+            std::unique_lock<std::mutex> lk(self->m_mt);
+            self->m_cv.wait(lk);
+            if (!self->m_running)
+                break;
+            self->m_drawBuf = self->m_completeBuf;
+            auto& CmdList = self->m_cmdLists[self->m_drawBuf];
+
+            self->ProcessDynamicLoads(self->m_ctx->m_devCtx.Get());
+
+            if (self->m_texResizes.size())
+            {
+                for (const auto& resize : self->m_texResizes)
+                    resize.first->resize(self->m_ctx, resize.second.first, resize.second.second);
+                self->m_texResizes.clear();
+                CmdList.reset();
+                continue;
+            }
+
+            if (self->m_windowCtx->m_needsFSTransition)
+            {
+                if (self->m_windowCtx->m_fs)
+                {
+                    self->m_windowCtx->m_swapChain->SetFullscreenState(true, nullptr);
+                    self->m_windowCtx->m_swapChain->ResizeTarget(&self->m_windowCtx->m_fsdesc);
+                }
+                else
+                    self->m_windowCtx->m_swapChain->SetFullscreenState(false, nullptr);
+
+                self->m_windowCtx->m_needsFSTransition = false;
+                CmdList.reset();
+                continue;
+            }
+
+            if (self->m_windowCtx->m_needsResize)
+            {
+                self->m_windowCtx->clearRTV();
+                self->m_windowCtx->m_swapChain->ResizeBuffers(2,
+                    self->m_windowCtx->width, self->m_windowCtx->height,
+                    self->m_ctx->m_fbFormat, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+                self->m_windowCtx->setupRTV(self->m_windowCtx->m_swapChain, self->m_ctx->m_dev.Get());
+                self->m_windowCtx->m_needsResize = false;
+                CmdList.reset();
+                continue;
+            }
+        }
+
+        auto& CmdList = self->m_cmdLists[self->m_drawBuf];
+        ID3D11CommandList* list = CmdList.list.Get();
+        self->m_ctx->m_devCtx->ExecuteCommandList(list, false);
+
+        if (D3D11TextureR* csource = CmdList.workDoPresent.cast<D3D11TextureR>())
+        {
+#ifndef NDEBUG
+            if (!csource->m_colorBindCount)
+                Log.report(logvisor::Fatal,
+                           "texture provided to resolveDisplay() must have at least 1 color binding");
+#endif
+
+            if (dataFactory->m_gamma != 1.f)
+            {
+                SWindowRect rect(0, 0, csource->m_width, csource->m_height);
+                self->_resolveBindTexture(self->m_ctx->m_devCtx.Get(), csource, rect, true, 0, true, false);
+                ID3D11RenderTargetView* rtv = self->m_windowCtx->m_swapChainRTV.Get();
+                self->m_ctx->m_devCtx->OMSetRenderTargets(1, &rtv, nullptr);
+
+                D3D11_VIEWPORT vp = {0.f, 0.f, FLOAT(csource->m_width), FLOAT(csource->m_height), 0.f, 1.f};
+                self->m_ctx->m_devCtx->RSSetViewports(1, &vp);
+                D3D11_RECT d3drect = {0, 0, LONG(csource->m_width), LONG(csource->m_height)};
+                self->m_ctx->m_devCtx->RSSetScissorRects(1, &d3drect);
+                ID3D11SamplerState* samp[] = {self->m_ctx->m_ss[0].Get(),
+                                              self->m_ctx->m_ss[1].Get(),
+                                              self->m_ctx->m_ss[2].Get()};
+                self->m_ctx->m_devCtx->PSSetSamplers(0, 3, samp);
+
+                D3D11ShaderDataBinding* gammaBinding = dataFactory->m_gammaBinding.cast<D3D11ShaderDataBinding>();
+                gammaBinding->m_texs[0].tex = CmdList.workDoPresent.get();
+                gammaBinding->bind(self->m_ctx->m_devCtx.Get(), self->m_drawBuf);
+                self->m_ctx->m_devCtx->Draw(4, 0);
+                gammaBinding->m_texs[0].tex.reset();
+            }
+            else
+            {
+                ComPtr<ID3D11Texture2D> dest = self->m_windowCtx->m_swapChainTex;
+                ID3D11Texture2D* src = csource->m_colorTex.Get();
+                if (csource->m_samples > 1)
+                    self->m_ctx->m_devCtx->ResolveSubresource(dest.Get(), 0, src, 0, self->m_ctx->m_fbFormat);
+                else
+                    self->m_ctx->m_devCtx->CopyResource(dest.Get(), src);
+            }
+
+            self->m_windowCtx->m_swapChain->Present(1, 0);
+        }
+
+        CmdList.reset();
+    }
+}
+
+void D3D11CommandQueue::startRenderer()
+{
+    static_cast<D3D11DataFactory*>(m_parent->getDataFactory())->SetupGammaResources();
+}
 
 void D3D11CommandQueue::execute()
 {

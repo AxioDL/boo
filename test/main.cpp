@@ -201,7 +201,7 @@ struct CTestWindowCallback : IWindowCallback
     }
     void mouseMove(const SWindowCoord& coord)
     {
-        fprintf(stderr, "Mouse Move (%f,%f)\n", coord.norm[0], coord.norm[1]);
+        //fprintf(stderr, "Mouse Move (%f,%f)\n", coord.norm[0], coord.norm[1]);
     }
     void mouseEnter(const SWindowCoord &coord)
     {
@@ -286,7 +286,7 @@ struct TestApplicationCallback : IApplicationCallback
             /* Create render target */
             int x, y, w, h;
             self->mainWindow->getWindowFrame(x, y, w, h);
-            self->m_renderTarget = ctx.newRenderTexture(w, h, boo::TextureClampMode::Repeat, 1, 0);
+            self->m_renderTarget = ctx.newRenderTexture(w, h, boo::TextureClampMode::ClampToEdge, 1, 0);
 
             /* Make Tri-strip VBO */
             struct Vert
@@ -332,7 +332,7 @@ struct TestApplicationCallback : IApplicationCallback
                     tex[i][j][3] = 0xff;
                 }
             boo::ObjToken<ITexture> texture = ctx.newStaticTexture(256, 256, 1, TextureFormat::RGBA8,
-                                              boo::TextureClampMode::Repeat, tex, 256*256*4).get();
+                                              boo::TextureClampMode::ClampToEdge, tex, 256*256*4).get();
 
             /* Make shader pipeline */
             boo::ObjToken<IShaderPipeline> pipeline;
@@ -530,11 +530,9 @@ struct TestApplicationCallback : IApplicationCallback
             gfxQ->setScissor(r);
             //float rgba[] = {std::max(0.f, sinf(frameIdx / 60.0)), std::max(0.f, cosf(frameIdx / 60.0)), 0.0, 1.0};
             float gammaT = sinf(frameIdx / 60.0) + 1.f;
-            //if (gammaT < 0.f)
-            //    gammaT = 1.f / ((1.f - gammaT) * 2.f);
-            //else
-            //    gammaT = gammaT + 1.f;
-            printf("%f\n", gammaT);
+            if (gammaT < 1.f)
+                gammaT = gammaT * 0.5f + 0.5f;
+            //printf("%f\n", gammaT);
             mainWindow->getDataFactory()->setDisplayGamma(gammaT);
             //gfxQ->setClearColor(rgba);
             gfxQ->clearTarget();
@@ -554,10 +552,9 @@ struct TestApplicationCallback : IApplicationCallback
             }
         }
 
+        gfxQ->stopRenderer();
         m_renderTarget.reset();
         m_binding.reset();
-
-        gfxQ->stopRenderer();
         return 0;
     }
     void appQuitting(IApplication*)
@@ -592,7 +589,7 @@ int main(int argc, const boo::SystemChar** argv)
     logvisor::RegisterConsoleLogger();
     boo::TestApplicationCallback appCb;
     int ret = ApplicationRun(boo::IApplication::EPlatformType::Auto,
-        appCb, _S("boo"), _S("boo"), argc, argv, {}, 1, 1, false);
+        appCb, _S("boo"), _S("boo"), argc, argv, {}, 1, 1, true);
     printf("IM DYING!!\n");
     return ret;
 }

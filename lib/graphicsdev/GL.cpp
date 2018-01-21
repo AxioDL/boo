@@ -50,9 +50,9 @@ BOO_GLSL_BINDING_HEAD
 "TBINDING1 uniform sampler2D gammaLUT;\n"
 "void main()\n"
 "{\n"
-"    ivec4 linScale = ivec4(texture(screenTex, vtf.uv) * vec4(65535.0));\n"
+"    ivec4 tex = ivec4(texture(screenTex, vtf.uv) * 65535.0);\n"
 "    for (int i=0 ; i<3 ; ++i)\n"
-"        colorOut[i] = texelFetch(gammaLUT, ivec2(linScale[i] % 256, linScale[i] / 256), 0).r;\n"
+"        colorOut[i] = texelFetch(gammaLUT, ivec2(tex[i] % 256, tex[i] / 256), 0).r;\n"
 "}\n";
 
 namespace boo
@@ -76,6 +76,7 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead
     GLContext* m_glCtx;
     std::unordered_map<uint64_t, std::unique_ptr<GLShareableShader>> m_sharedShaders;
 
+    float m_gamma = 1.f;
     ObjToken<IShaderPipeline> m_gammaShader;
     ObjToken<ITextureD> m_gammaLUT;
     ObjToken<IGraphicsBufferS> m_gammaVBO;
@@ -89,7 +90,6 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead
                 2, texNames, 0, nullptr, BlendFactor::One, BlendFactor::Zero,
                 Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None);
             m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
-            UpdateGammaLUT(m_gammaLUT.get(), 1.0f);
             const struct Vert {
                 float pos[4];
                 float uv[4];
@@ -119,7 +119,12 @@ public:
     ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count);
     void _unregisterShareableShader(uint64_t srcKey, uint64_t binKey) { m_sharedShaders.erase(srcKey); }
 
-    void setDisplayGamma(float gamma) { UpdateGammaLUT(m_gammaLUT.get(), gamma); }
+    void setDisplayGamma(float gamma)
+    {
+        m_gamma = gamma;
+        if (gamma != 1.f)
+            UpdateGammaLUT(m_gammaLUT.get(), gamma);
+    }
 };
 
 static const GLenum USE_TABLE[] =
@@ -1494,41 +1499,43 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 {
                     if (const GLTextureR* tex = cmd.source.cast<GLTextureR>())
                     {
-#if 1
 #ifndef NDEBUG
                         if (!tex->m_colorBindCount)
                             Log.report(logvisor::Fatal,
                                        "texture provided to resolveDisplay() must have at least 1 color binding");
 #endif
-                        glBindFramebuffer(GL_READ_FRAMEBUFFER, tex->m_fbo);
-                        if (tex->m_samples <= 1)
+                        if (dataFactory->m_gamma != 1.f)
                         {
-                            glActiveTexture(GL_TEXTURE0);
-                            glBindTexture(GL_TEXTURE_2D, tex->m_texs[0]);
+                            glBindFramebuffer(GL_READ_FRAMEBUFFER, tex->m_fbo);
+                            if (tex->m_samples <= 1)
+                            {
+                                glActiveTexture(GL_TEXTURE0);
+                                glBindTexture(GL_TEXTURE_2D, tex->m_texs[0]);
+                            }
+                            else
+                            {
+                                glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex->m_bindFBOs[0][0]);
+                                glBlitFramebuffer(0, 0,
+                                                  tex->m_width, tex->m_height,
+                                                  0, 0,
+                                                  tex->m_width, tex->m_height,
+                                                  GL_COLOR_BUFFER_BIT, GL_NEAREST);
+                                tex->bind(0, 0, false);
+                            }
+
+                            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+                            dataFactory->m_gammaShader.cast<GLShaderPipeline>()->bind();
+                            dataFactory->m_gammaVFMT.cast<GLVertexFormat>()->bind(self->m_drawBuf);
+                            dataFactory->m_gammaLUT.cast<GLTextureD>()->bind(1, self->m_drawBuf);
+                            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
                         }
                         else
                         {
-                            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex->m_bindFBOs[0][0]);
-                            glBlitFramebuffer(0, 0,
-                                              tex->m_width, tex->m_height,
-                                              0, 0,
-                                              tex->m_width, tex->m_height,
-                                              GL_COLOR_BUFFER_BIT, GL_NEAREST);
-                            tex->bind(0, 0, false);
+                            glBindFramebuffer(GL_READ_FRAMEBUFFER, tex->m_fbo);
+                            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+                            glBlitFramebuffer(0, 0, tex->m_width, tex->m_height, 0, 0,
+                                              tex->m_width, tex->m_height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
                         }
-
-                        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-                        dataFactory->m_gammaShader.cast<GLShaderPipeline>()->bind();
-                        dataFactory->m_gammaVFMT.cast<GLVertexFormat>()->bind(self->m_drawBuf);
-                        dataFactory->m_gammaLUT.cast<GLTextureD>()->bind(1, self->m_drawBuf);
-                        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-
-#else
-                        glBindFramebuffer(GL_READ_FRAMEBUFFER, tex->m_fbo);
-                        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-                        glBlitFramebuffer(0, 0, tex->m_width, tex->m_height, 0, 0,
-                                          tex->m_width, tex->m_height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-#endif
                     }
                     self->m_parent->present();
                     break;

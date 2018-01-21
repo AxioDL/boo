@@ -17,6 +17,43 @@
 #undef max
 #undef None
 
+static const char* GammaVS =
+"#version 330\n"
+BOO_GLSL_BINDING_HEAD
+"layout(location=0) in vec4 posIn;\n"
+"layout(location=1) in vec4 uvIn;\n"
+"\n"
+"struct VertToFrag\n"
+"{\n"
+"    vec2 uv;\n"
+"};\n"
+"\n"
+"SBINDING(0) out VertToFrag vtf;\n"
+"void main()\n"
+"{\n"
+"    vtf.uv = uvIn.xy;\n"
+"    gl_Position = posIn;\n"
+"}\n";
+
+static const char* GammaFS =
+"#version 330\n"
+BOO_GLSL_BINDING_HEAD
+"struct VertToFrag\n"
+"{\n"
+"    vec2 uv;\n"
+"};\n"
+"\n"
+"SBINDING(0) in VertToFrag vtf;\n"
+"layout(location=0) out vec4 colorOut;\n"
+"TBINDING0 uniform sampler2D screenTex;\n"
+"TBINDING1 uniform sampler2D gammaLUT;\n"
+"void main()\n"
+"{\n"
+"    ivec4 tex = ivec4(texture(screenTex, vtf.uv) * 65535.0);\n"
+"    for (int i=0 ; i<3 ; ++i)\n"
+"        colorOut[i] = texelFetch(gammaLUT, ivec2(tex[i] % 256, tex[i] / 256), 0).r;\n"
+"}\n";
+
 namespace boo
 {
 static logvisor::Module Log("boo::Vulkan");
@@ -42,6 +79,43 @@ class VulkanDataFactoryImpl : public VulkanDataFactory, public GraphicsDataFacto
     VulkanContext* m_ctx;
     std::unordered_map<uint64_t, std::unique_ptr<VulkanShareableShader>> m_sharedShaders;
     std::vector<int> m_texUnis;
+
+    float m_gamma = 1.f;
+    ObjToken<IShaderPipeline> m_gammaShader;
+    ObjToken<ITextureD> m_gammaLUT;
+    ObjToken<IGraphicsBufferS> m_gammaVBO;
+    ObjToken<IVertexFormat> m_gammaVFMT;
+    ObjToken<IShaderDataBinding> m_gammaBinding;
+    void SetupGammaResources()
+    {
+        commitTransaction([this](IGraphicsDataFactory::Context& ctx)
+        {
+            const VertexElementDescriptor vfmt[] = {
+                {nullptr, nullptr, VertexSemantic::Position4},
+                {nullptr, nullptr, VertexSemantic::UV4}
+            };
+            m_gammaVFMT = ctx.newVertexFormat(2, vfmt);
+            m_gammaShader = static_cast<Context&>(ctx).newShaderPipeline(GammaVS, GammaFS,
+                m_gammaVFMT, BlendFactor::One, BlendFactor::Zero,
+                Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None);
+            m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
+            const struct Vert {
+                float pos[4];
+                float uv[4];
+            } verts[4] = {
+                {{-1.f, -1.f, 0.f, 1.f}, {0.f, 0.f, 0.f, 0.f}},
+                {{ 1.f, -1.f, 0.f, 1.f}, {1.f, 0.f, 0.f, 0.f}},
+                {{-1.f,  1.f, 0.f, 1.f}, {0.f, 1.f, 0.f, 0.f}},
+                {{ 1.f,  1.f, 0.f, 1.f}, {1.f, 1.f, 0.f, 0.f}}
+            };
+            m_gammaVBO = ctx.newStaticBuffer(BufferUse::Vertex, verts, 32, 4);
+            ObjToken<ITexture> texs[] = {{}, m_gammaLUT.get()};
+            m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVFMT, m_gammaVBO.get(), {}, {},
+                                                      0, nullptr, nullptr, 2, texs, nullptr, nullptr);
+            return true;
+        });
+    }
+
 public:
     std::unordered_map<uint64_t, uint64_t> m_sourceToBinary;
     VulkanDataFactoryImpl(IGraphicsContext* parent, VulkanContext* ctx);
@@ -60,7 +134,12 @@ public:
         m_sharedShaders.erase(binKey);
     }
 
-    void setDisplayGamma(float gamma) { /*UpdateGammaLUT(m_gammaLUT.get(), gamma);*/ }
+    void setDisplayGamma(float gamma)
+    {
+        m_gamma = gamma;
+        if (gamma != 1.f)
+            UpdateGammaLUT(m_gammaLUT.get(), gamma);
+    }
 };
 
 static inline void ThrowIfFailed(VkResult res)
@@ -474,6 +553,57 @@ void VulkanContext::initDevice()
                m_gpuProps.driverVersion & 0b111111111111);
 }
 
+void VulkanContext::Window::SwapChain::Buffer::setImage
+(VulkanContext* ctx, VkImage image, uint32_t width, uint32_t height)
+{
+    m_image = image;
+    if (m_colorView)
+        vk::DestroyImageView(ctx->m_dev, m_colorView, nullptr);
+    if (m_framebuffer)
+        vk::DestroyFramebuffer(ctx->m_dev, m_framebuffer, nullptr);
+
+    /* Create resource views */
+    VkImageViewCreateInfo viewCreateInfo = {};
+    viewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewCreateInfo.pNext = nullptr;
+    viewCreateInfo.image = m_image;
+    viewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewCreateInfo.format = ctx->m_displayFormat;
+    viewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+    viewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+    viewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+    viewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+    viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewCreateInfo.subresourceRange.baseMipLevel = 0;
+    viewCreateInfo.subresourceRange.levelCount = 1;
+    viewCreateInfo.subresourceRange.baseArrayLayer = 0;
+    viewCreateInfo.subresourceRange.layerCount = 1;
+    ThrowIfFailed(vk::CreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_colorView));
+
+    /* framebuffer */
+    VkFramebufferCreateInfo fbCreateInfo = {};
+    fbCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    fbCreateInfo.pNext = nullptr;
+    fbCreateInfo.renderPass = ctx->m_passColorOnly;
+    fbCreateInfo.attachmentCount = 1;
+    fbCreateInfo.width = width;
+    fbCreateInfo.height = height;
+    fbCreateInfo.layers = 1;
+    fbCreateInfo.pAttachments = &m_colorView;
+    ThrowIfFailed(vk::CreateFramebuffer(ctx->m_dev, &fbCreateInfo, nullptr, &m_framebuffer));
+
+    m_passBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    m_passBeginInfo.pNext = nullptr;
+    m_passBeginInfo.renderPass = ctx->m_passColorOnly;
+    m_passBeginInfo.framebuffer = m_framebuffer;
+    m_passBeginInfo.renderArea.offset.x = 0;
+    m_passBeginInfo.renderArea.offset.y = 0;
+    m_passBeginInfo.renderArea.extent.width = width;
+    m_passBeginInfo.renderArea.extent.height = height;
+    m_passBeginInfo.clearValueCount = 0;
+    m_passBeginInfo.pClearValues = nullptr;
+}
+
 void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR surface,
                                   VkFormat format, VkColorSpaceKHR colorspace)
 {
@@ -553,7 +683,7 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
     swapChainInfo.oldSwapchain = nullptr;
     swapChainInfo.clipped = true;
     swapChainInfo.imageColorSpace = colorspace;
-    swapChainInfo.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    swapChainInfo.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swapChainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     swapChainInfo.queueFamilyIndexCount = 0;
     swapChainInfo.pQueueFamilyIndices = nullptr;
@@ -604,12 +734,90 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
     else
         m_anisotropy = 1;
 
+    VkDescriptorSetLayoutBinding layoutBindings[BOO_GLSL_MAX_UNIFORM_COUNT + BOO_GLSL_MAX_TEXTURE_COUNT];
+    for (int i=0 ; i<BOO_GLSL_MAX_UNIFORM_COUNT ; ++i)
+    {
+        layoutBindings[i].binding = i;
+        layoutBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        layoutBindings[i].descriptorCount = 1;
+        layoutBindings[i].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        layoutBindings[i].pImmutableSamplers = nullptr;
+    }
+    for (int i=BOO_GLSL_MAX_UNIFORM_COUNT ; i<BOO_GLSL_MAX_UNIFORM_COUNT+BOO_GLSL_MAX_TEXTURE_COUNT ; ++i)
+    {
+        layoutBindings[i].binding = i;
+        layoutBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        layoutBindings[i].descriptorCount = 1;
+        layoutBindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        layoutBindings[i].pImmutableSamplers = nullptr;
+    }
+
+    VkDescriptorSetLayoutCreateInfo descriptorLayout = {};
+    descriptorLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    descriptorLayout.pNext = nullptr;
+    descriptorLayout.bindingCount = BOO_GLSL_MAX_UNIFORM_COUNT + BOO_GLSL_MAX_TEXTURE_COUNT;
+    descriptorLayout.pBindings = layoutBindings;
+
+    ThrowIfFailed(vk::CreateDescriptorSetLayout(m_dev, &descriptorLayout, nullptr,
+                                                &m_descSetLayout));
+
+    VkPipelineLayoutCreateInfo pipelineLayout = {};
+    pipelineLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayout.setLayoutCount = 1;
+    pipelineLayout.pSetLayouts = &m_descSetLayout;
+    ThrowIfFailed(vk::CreatePipelineLayout(m_dev, &pipelineLayout, nullptr, &m_pipelinelayout));
+
+    VkAttachmentDescription attachments[2] = {};
+
+    /* color attachment */
+    attachments[0].format = m_displayFormat;
+    attachments[0].samples = VkSampleCountFlagBits(m_sampleCountColor);
+    attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    VkAttachmentReference colorAttachmentRef = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+
+    /* depth attachment */
+    attachments[1].format = VK_FORMAT_D32_SFLOAT;
+    attachments[1].samples = VkSampleCountFlagBits(m_sampleCountDepth);
+    attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[1].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    VkAttachmentReference depthAttachmentRef = {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+
+    /* render subpass */
+    VkSubpassDescription subpass = {};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorAttachmentRef;
+    subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
+    /* render pass */
+    VkRenderPassCreateInfo renderPass = {};
+    renderPass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPass.attachmentCount = 2;
+    renderPass.pAttachments = attachments;
+    renderPass.subpassCount = 1;
+    renderPass.pSubpasses = &subpass;
+    ThrowIfFailed(vk::CreateRenderPass(m_dev, &renderPass, nullptr, &m_pass));
+
+    /* render pass color only */
+    renderPass.attachmentCount = 1;
+    subpass.pDepthStencilAttachment = nullptr;
+    ThrowIfFailed(vk::CreateRenderPass(m_dev, &renderPass, nullptr, &m_passColorOnly));
+
     /* images */
     sc.m_bufs.resize(swapchainImageCount);
     for (uint32_t i=0 ; i<swapchainImageCount ; ++i)
     {
         Window::SwapChain::Buffer& buf = sc.m_bufs[i];
-        buf.m_image = swapchainImages[i];
+        buf.setImage(this, swapchainImages[i], swapChainExtent.width, swapChainExtent.height);
     }
 }
 
@@ -708,7 +916,7 @@ bool VulkanContext::_resizeSwapChains()
         swapChainInfo.oldSwapchain = oldSc.m_swapChain;
         swapChainInfo.clipped = true;
         swapChainInfo.imageColorSpace = resize.m_colorspace;
-        swapChainInfo.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        swapChainInfo.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         swapChainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
         swapChainInfo.queueFamilyIndexCount = 0;
         swapChainInfo.pQueueFamilyIndices = nullptr;
@@ -730,7 +938,7 @@ bool VulkanContext::_resizeSwapChains()
         for (uint32_t i=0 ; i<swapchainImageCount ; ++i)
         {
             Window::SwapChain::Buffer& buf = sc.m_bufs[i];
-            buf.m_image = swapchainImages[i];
+            buf.setImage(this, swapchainImages[i], swapChainExtent.width, swapChainExtent.height);
         }
 
         m_deferredResizes.pop();
@@ -995,6 +1203,10 @@ class VulkanTextureS : public GraphicsDataNode<ITextureS>
         case TextureFormat::I8:
             pfmt = VK_FORMAT_R8_UNORM;
             break;
+        case TextureFormat::I16:
+            pfmt = VK_FORMAT_R16_UNORM;
+            m_pixelPitchNum = 2;
+            break;
         case TextureFormat::DXT1:
             pfmt = VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
             m_pixelPitchNum = 1;
@@ -1204,6 +1416,10 @@ class VulkanTextureSA : public GraphicsDataNode<ITextureSA>
         case TextureFormat::I8:
             pfmt = VK_FORMAT_R8_UNORM;
             break;
+        case TextureFormat::I16:
+            pfmt = VK_FORMAT_R16_UNORM;
+            m_pixelPitchNum = 2;
+            break;
         default:
             Log.report(logvisor::Fatal, "unsupported tex format");
         }
@@ -1409,6 +1625,10 @@ class VulkanTextureD : public GraphicsDataNode<ITextureD>
             pfmt = VK_FORMAT_R8_UNORM;
             m_cpuSz = width * height;
             break;
+        case TextureFormat::I16:
+            pfmt = VK_FORMAT_R16_UNORM;
+            m_cpuSz = width * height * 2;
+            break;
         default:
             Log.report(logvisor::Fatal, "unsupported tex format");
         }
@@ -1563,7 +1783,6 @@ class VulkanTextureR : public GraphicsDataNode<ITextureR>
     size_t m_height = 0;
     VkSampleCountFlags m_samplesColor, m_samplesDepth;
 
-    TextureClampMode m_clampMode;
     size_t m_colorBindCount;
     size_t m_depthBindCount;
 
@@ -1751,7 +1970,6 @@ class VulkanTextureR : public GraphicsDataNode<ITextureR>
       m_width(width), m_height(height),
       m_samplesColor(ctx->m_sampleCountColor),
       m_samplesDepth(ctx->m_sampleCountDepth),
-      m_clampMode(clampMode),
       m_colorBindCount(colorBindCount),
       m_depthBindCount(depthBindCount)
     {
@@ -1762,7 +1980,7 @@ class VulkanTextureR : public GraphicsDataNode<ITextureR>
 
         if (m_samplesColor == 0) m_samplesColor = 1;
         if (m_samplesDepth == 0) m_samplesDepth = 1;
-        setClampMode(m_clampMode);
+        setClampMode(clampMode);
         Setup(ctx);
     }
 public:
@@ -1970,10 +2188,13 @@ public:
     }
     VulkanShaderPipeline& operator=(const VulkanShaderPipeline&) = delete;
     VulkanShaderPipeline(const VulkanShaderPipeline&) = delete;
-    VkPipeline bind() const
+    VkPipeline bind(VkRenderPass rPass = 0) const
     {
         if (!m_pipeline)
         {
+            if (!rPass)
+                rPass = m_ctx->m_pass;
+
             VkCullModeFlagBits cullMode;
             switch (m_culling)
             {
@@ -2122,7 +2343,7 @@ public:
             pipelineCreateInfo.pColorBlendState = &colorBlendInfo;
             pipelineCreateInfo.pDynamicState = &dynamicState;
             pipelineCreateInfo.layout = m_ctx->m_pipelinelayout;
-            pipelineCreateInfo.renderPass = m_ctx->m_pass;
+            pipelineCreateInfo.renderPass = rPass;
 
             ThrowIfFailed(vk::CreateGraphicsPipelines(m_ctx->m_dev, m_pipelineCache, 1, &pipelineCreateInfo,
                                                       nullptr, &m_pipeline));
@@ -2440,7 +2661,7 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
 #endif
     }
 
-    void bind(VkCommandBuffer cmdBuf, int b)
+    void bind(VkCommandBuffer cmdBuf, int b, VkRenderPass rPass = 0)
     {
 #ifndef NDEBUG
         if (!m_committed)
@@ -2477,7 +2698,7 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
         if (totalWrites)
             vk::UpdateDescriptorSets(m_ctx->m_dev, totalWrites, writes, 0, nullptr);
 
-        vk::CmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.cast<VulkanShaderPipeline>()->bind());
+        vk::CmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline.cast<VulkanShaderPipeline>()->bind(rPass));
         if (m_descSets[b])
             vk::CmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_ctx->m_pipelinelayout,
                                       0, 1, &m_descSets[b], 0, nullptr);
@@ -2588,7 +2809,10 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         ThrowIfFailed(vk::CreateFence(m_ctx->m_dev, &fenceInfo, nullptr, &m_dynamicBufFence));
     }
 
-    void startRenderer() {}
+    void startRenderer()
+    {
+        static_cast<VulkanDataFactoryImpl*>(m_parent->getDataFactory())->SetupGammaResources();
+    }
 
     void stopRenderer()
     {
@@ -2771,77 +2995,102 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
 
         VkCommandBuffer cmdBuf = m_cmdBufs[m_drawBuf];
         VulkanTextureR* csource = m_resolveDispSource.cast<VulkanTextureR>();
+#ifndef NDEBUG
+        if (!csource->m_colorBindCount)
+            Log.report(logvisor::Fatal,
+                       "texture provided to resolveDisplay() must have at least 1 color binding");
+#endif
 
         ThrowIfFailed(vk::AcquireNextImageKHR(m_ctx->m_dev, sc.m_swapChain, UINT64_MAX,
                                               m_swapChainReadySem, nullptr, &sc.m_backBuf));
         VulkanContext::Window::SwapChain::Buffer& dest = sc.m_bufs[sc.m_backBuf];
-        SetImageLayout(cmdBuf, dest.m_image, VK_IMAGE_ASPECT_COLOR_BIT,
-                       VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
 
-        if (m_resolveDispSource == m_boundTarget)
-            SetImageLayout(cmdBuf, csource->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
-                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
-
-        if (csource->m_samplesColor > 1)
+        VulkanDataFactoryImpl* dataFactory = static_cast<VulkanDataFactoryImpl*>(m_parent->getDataFactory());
+        if (dataFactory->m_gamma != 1.f)
         {
-            VkImageResolve resolveInfo = {};
-            resolveInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            resolveInfo.srcSubresource.mipLevel = 0;
-            resolveInfo.srcSubresource.baseArrayLayer = 0;
-            resolveInfo.srcSubresource.layerCount = 1;
-            resolveInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            resolveInfo.dstSubresource.mipLevel = 0;
-            resolveInfo.dstSubresource.baseArrayLayer = 0;
-            resolveInfo.dstSubresource.layerCount = 1;
-            resolveInfo.extent.width = csource->m_width;
-            resolveInfo.extent.height = csource->m_height;
-            resolveInfo.extent.depth = 1;
-            vk::CmdResolveImage(cmdBuf,
-                                csource->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                dest.m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                1, &resolveInfo);
+            SWindowRect rect(0, 0, csource->m_width, csource->m_height);
+            _resolveBindTexture(cmdBuf, csource, rect, true, 0, true, false);
+            VulkanShaderDataBinding* gammaBinding = dataFactory->m_gammaBinding.cast<VulkanShaderDataBinding>();
+
+            SetImageLayout(cmdBuf, dest.m_image, VK_IMAGE_ASPECT_COLOR_BIT,
+                           VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
+
+            vk::CmdBeginRenderPass(cmdBuf, &dest.m_passBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+            gammaBinding->m_texs[0].tex = m_resolveDispSource.get();
+            gammaBinding->bind(cmdBuf, m_drawBuf, m_ctx->m_passColorOnly);
+            vk::CmdDraw(cmdBuf, 4, 1, 0, 0);
+            gammaBinding->m_texs[0].tex.reset();
+
+            vk::CmdEndRenderPass(cmdBuf);
+
+            SetImageLayout(cmdBuf, dest.m_image, VK_IMAGE_ASPECT_COLOR_BIT,
+                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1, 1);
         }
         else
         {
-            VkImageCopy copyInfo = {};
-            copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyInfo.srcSubresource.mipLevel = 0;
-            copyInfo.srcSubresource.baseArrayLayer = 0;
-            copyInfo.srcSubresource.layerCount = 1;
-            copyInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyInfo.dstSubresource.mipLevel = 0;
-            copyInfo.dstSubresource.baseArrayLayer = 0;
-            copyInfo.dstSubresource.layerCount = 1;
-            copyInfo.extent.width = csource->m_width;
-            copyInfo.extent.height = csource->m_height;
-            copyInfo.extent.depth = 1;
-            vk::CmdCopyImage(cmdBuf,
-                             csource->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                             dest.m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                             1, &copyInfo);
+            SetImageLayout(cmdBuf, dest.m_image, VK_IMAGE_ASPECT_COLOR_BIT,
+                           VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
+
+            if (m_resolveDispSource == m_boundTarget)
+                SetImageLayout(cmdBuf, csource->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
+                               VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 1);
+
+            if (csource->m_samplesColor > 1)
+            {
+                VkImageResolve resolveInfo = {};
+                resolveInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                resolveInfo.srcSubresource.mipLevel = 0;
+                resolveInfo.srcSubresource.baseArrayLayer = 0;
+                resolveInfo.srcSubresource.layerCount = 1;
+                resolveInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                resolveInfo.dstSubresource.mipLevel = 0;
+                resolveInfo.dstSubresource.baseArrayLayer = 0;
+                resolveInfo.dstSubresource.layerCount = 1;
+                resolveInfo.extent.width = csource->m_width;
+                resolveInfo.extent.height = csource->m_height;
+                resolveInfo.extent.depth = 1;
+                vk::CmdResolveImage(cmdBuf,
+                                    csource->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                    dest.m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                    1, &resolveInfo);
+            }
+            else
+            {
+                VkImageCopy copyInfo = {};
+                copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                copyInfo.srcSubresource.mipLevel = 0;
+                copyInfo.srcSubresource.baseArrayLayer = 0;
+                copyInfo.srcSubresource.layerCount = 1;
+                copyInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                copyInfo.dstSubresource.mipLevel = 0;
+                copyInfo.dstSubresource.baseArrayLayer = 0;
+                copyInfo.dstSubresource.layerCount = 1;
+                copyInfo.extent.width = csource->m_width;
+                copyInfo.extent.height = csource->m_height;
+                copyInfo.extent.depth = 1;
+                vk::CmdCopyImage(cmdBuf,
+                                 csource->m_colorTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                 dest.m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                 1, &copyInfo);
+            }
+
+            SetImageLayout(cmdBuf, dest.m_image, VK_IMAGE_ASPECT_COLOR_BIT,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1, 1);
+
+            if (m_resolveDispSource == m_boundTarget)
+                SetImageLayout(cmdBuf, csource->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
+                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
         }
-
-        SetImageLayout(cmdBuf, dest.m_image, VK_IMAGE_ASPECT_COLOR_BIT,
-                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1, 1);
-        dest.m_layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-        if (m_resolveDispSource == m_boundTarget)
-            SetImageLayout(cmdBuf, csource->m_colorTex, VK_IMAGE_ASPECT_COLOR_BIT,
-                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
 
         m_resolveDispSource.reset();
         return true;
     }
 
-    void resolveBindTexture(const boo::ObjToken<ITextureR>& texture,
-                            const SWindowRect& rect, bool tlOrigin,
-                            int bindIdx, bool color, bool depth, bool clearDepth)
+    void _resolveBindTexture(VkCommandBuffer cmdBuf, VulkanTextureR* ctexture,
+                             const SWindowRect& rect, bool tlOrigin,
+                             int bindIdx, bool color, bool depth)
     {
-        VkCommandBuffer cmdBuf = m_cmdBufs[m_fillBuf];
-        VulkanTextureR* ctexture = texture.cast<VulkanTextureR>();
-
-        vk::CmdEndRenderPass(cmdBuf);
-
         if (color && ctexture->m_colorBindCount)
         {
             if (ctexture->m_samplesColor <= 1)
@@ -3013,7 +3262,17 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
                 ctexture->m_depthBindLayout[bindIdx] = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             }
         }
+    }
 
+    void resolveBindTexture(const boo::ObjToken<ITextureR>& texture,
+                            const SWindowRect& rect, bool tlOrigin,
+                            int bindIdx, bool color, bool depth, bool clearDepth)
+    {
+        VkCommandBuffer cmdBuf = m_cmdBufs[m_fillBuf];
+        VulkanTextureR* ctexture = texture.cast<VulkanTextureR>();
+
+        vk::CmdEndRenderPass(cmdBuf);
+        _resolveBindTexture(cmdBuf, ctexture, rect, tlOrigin, bindIdx, color, depth);
         vk::CmdBeginRenderPass(cmdBuf, &m_boundTarget.cast<VulkanTextureR>()->m_passBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         if (clearDepth)
@@ -3232,81 +3491,7 @@ void VulkanTextureD::unmap()
 }
 
 VulkanDataFactoryImpl::VulkanDataFactoryImpl(IGraphicsContext* parent, VulkanContext* ctx)
-: m_parent(parent), m_ctx(ctx)
-{
-    VkDescriptorSetLayoutBinding layoutBindings[BOO_GLSL_MAX_UNIFORM_COUNT + BOO_GLSL_MAX_TEXTURE_COUNT];
-    for (int i=0 ; i<BOO_GLSL_MAX_UNIFORM_COUNT ; ++i)
-    {
-        layoutBindings[i].binding = i;
-        layoutBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        layoutBindings[i].descriptorCount = 1;
-        layoutBindings[i].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-        layoutBindings[i].pImmutableSamplers = nullptr;
-    }
-    for (int i=BOO_GLSL_MAX_UNIFORM_COUNT ; i<BOO_GLSL_MAX_UNIFORM_COUNT+BOO_GLSL_MAX_TEXTURE_COUNT ; ++i)
-    {
-        layoutBindings[i].binding = i;
-        layoutBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        layoutBindings[i].descriptorCount = 1;
-        layoutBindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-        layoutBindings[i].pImmutableSamplers = nullptr;
-    }
-
-    VkDescriptorSetLayoutCreateInfo descriptorLayout = {};
-    descriptorLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptorLayout.pNext = nullptr;
-    descriptorLayout.bindingCount = BOO_GLSL_MAX_UNIFORM_COUNT + BOO_GLSL_MAX_TEXTURE_COUNT;
-    descriptorLayout.pBindings = layoutBindings;
-
-    ThrowIfFailed(vk::CreateDescriptorSetLayout(ctx->m_dev, &descriptorLayout, nullptr,
-                                                &ctx->m_descSetLayout));
-
-    VkPipelineLayoutCreateInfo pipelineLayout = {};
-    pipelineLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayout.setLayoutCount = 1;
-    pipelineLayout.pSetLayouts = &ctx->m_descSetLayout;
-    ThrowIfFailed(vk::CreatePipelineLayout(ctx->m_dev, &pipelineLayout, nullptr, &ctx->m_pipelinelayout));
-
-    VkAttachmentDescription attachments[2] = {};
-
-    /* color attachment */
-    attachments[0].format = ctx->m_displayFormat;
-    attachments[0].samples = VkSampleCountFlagBits(m_ctx->m_sampleCountColor);
-    attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-    attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    VkAttachmentReference colorAttachmentRef = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-
-    /* depth attachment */
-    attachments[1].format = VK_FORMAT_D32_SFLOAT;
-    attachments[1].samples = VkSampleCountFlagBits(m_ctx->m_sampleCountDepth);
-    attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-    attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[1].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    VkAttachmentReference depthAttachmentRef = {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
-
-    /* render subpass */
-    VkSubpassDescription subpass = {};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colorAttachmentRef;
-    subpass.pDepthStencilAttachment = &depthAttachmentRef;
-
-    /* render pass */
-    VkRenderPassCreateInfo renderPass = {};
-    renderPass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPass.attachmentCount = 2;
-    renderPass.pAttachments = attachments;
-    renderPass.subpassCount = 1;
-    renderPass.pSubpasses = &subpass;
-    ThrowIfFailed(vk::CreateRenderPass(ctx->m_dev, &renderPass, nullptr, &ctx->m_pass));
-}
+: m_parent(parent), m_ctx(ctx) {}
 
 static uint64_t CompileVert(std::vector<unsigned int>& out, const char* vertSource, uint64_t srcKey,
                             VulkanDataFactoryImpl& factory)

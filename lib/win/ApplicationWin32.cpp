@@ -111,11 +111,9 @@ public:
         m_3dCtx.m_ctx11.m_sampleCount = samples;
         m_3dCtx.m_ctx11.m_anisotropy = anisotropy;
         m_3dCtx.m_ctx11.m_fbFormat = deepColor ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
-        //m_3dCtx.m_ctx11.m_fbFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
         m_3dCtx.m_ctx12.m_sampleCount = samples;
         m_3dCtx.m_ctx12.m_anisotropy = anisotropy;
         m_3dCtx.m_ctx12.RGBATex2DFBViewDesc.Format = deepColor ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
-        //m_3dCtx.m_ctx12.RGBATex2DFBViewDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         m_3dCtx.m_ctxOgl.m_glCtx.m_sampleCount = samples;
         m_3dCtx.m_ctxOgl.m_glCtx.m_anisotropy = anisotropy;
         m_3dCtx.m_ctxOgl.m_glCtx.m_deepColor = deepColor;

@@ -21,6 +21,46 @@
 extern PFN_D3D12_SERIALIZE_ROOT_SIGNATURE D3D12SerializeRootSignaturePROC;
 extern pD3DCompile D3DCompilePROC;
 
+static const char* GammaVS =
+"struct VertData\n"
+"{\n"
+"    float4 posIn : POSITION;\n"
+"    float4 uvIn : UV;\n"
+"};\n"
+"\n"
+"struct VertToFrag\n"
+"{\n"
+"    float4 pos : SV_Position;\n"
+"    float2 uv : UV;\n"
+"};\n"
+"\n"
+"VertToFrag main(in VertData v)\n"
+"{\n"
+"    VertToFrag vtf;\n"
+"    vtf.uv = v.uvIn.xy;\n"
+"    vtf.pos = v.posIn;\n"
+"    return vtf;\n"
+"}\n";
+
+static const char* GammaFS =
+"struct VertToFrag\n"
+"{\n"
+"    float4 pos : SV_Position;\n"
+"    float2 uv : UV;\n"
+"};\n"
+"\n"
+"Texture2D screenTex : register(t0);\n"
+"Texture2D gammaLUT : register(t1);\n"
+"SamplerState samp : register(s2);\n"
+"float4 main(in VertToFrag vtf) : SV_Target0\n"
+"{\n"
+"    int4 tex = int4(saturate(screenTex.Sample(samp, vtf.uv)) * float4(65535.0, 65535.0, 65535.0, 65535.0));\n"
+"    float4 colorOut;\n"
+"    for (int i=0 ; i<3 ; ++i)\n"
+"        colorOut[i] = gammaLUT.Load(int3(tex[i] % 256, tex[i] / 256, 0)).r;\n"
+"    return colorOut;\n"
+"}\n";
+
 namespace boo
 {
 static logvisor::Module Log("boo::D3D12");
@@ -203,6 +243,10 @@ class D3D12TextureS : public GraphicsDataNode<ITextureS>
         case TextureFormat::I8:
             pfmt = DXGI_FORMAT_R8_UNORM;
             break;
+        case TextureFormat::I16:
+            pfmt = DXGI_FORMAT_R16_UNORM;
+            pxPitchNum = 2;
+            break;
         case TextureFormat::DXT1:
             pfmt = DXGI_FORMAT_BC1_UNORM;
             compressed = true;
@@ -286,6 +330,10 @@ class D3D12TextureSA : public GraphicsDataNode<ITextureSA>
         case TextureFormat::I8:
             pxPitch = 1;
             pixelFmt = DXGI_FORMAT_R8_UNORM;
+            break;
+        case TextureFormat::I16:
+            pxPitch = 2;
+            pixelFmt = DXGI_FORMAT_R16_UNORM;
             break;
         default:
             Log.report(logvisor::Fatal, "unsupported tex format");
@@ -371,6 +419,10 @@ class D3D12TextureD : public GraphicsDataNode<ITextureD>
             pixelFmt = DXGI_FORMAT_R8_UNORM;
             pxPitch = 1;
             break;
+        case TextureFormat::I16:
+            pixelFmt = DXGI_FORMAT_R16_UNORM;
+            pxPitch = 2;
+            break;
         default:
             Log.report(logvisor::Fatal, "unsupported tex format");
         }
@@ -448,10 +500,10 @@ class D3D12TextureR : public GraphicsDataNode<ITextureR>
             rtvDim = D3D12_RTV_DIMENSION_TEXTURE2DMS;
             dsvDim = D3D12_DSV_DIMENSION_TEXTURE2DMS;
             rtvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(ctx->RGBATex2DFBViewDesc.Format, m_width, m_height, 1, 1, m_samples,
-                D3D11_STANDARD_MULTISAMPLE_PATTERN, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, D3D12_TEXTURE_LAYOUT_UNKNOWN,
+                0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, D3D12_TEXTURE_LAYOUT_UNKNOWN,
                 D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT);
             dsvresdesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R24G8_TYPELESS, m_width, m_height, 1, 1, m_samples,
-                D3D11_STANDARD_MULTISAMPLE_PATTERN, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL, D3D12_TEXTURE_LAYOUT_UNKNOWN,
+                0, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL, D3D12_TEXTURE_LAYOUT_UNKNOWN,
                 D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT);
         }
         else
@@ -749,7 +801,7 @@ class D3D12ShaderPipeline : public GraphicsDataNode<IShaderPipeline>
         desc.RTVFormats[0] = ctx->RGBATex2DFBViewDesc.Format;
         desc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
         desc.SampleDesc.Count = ctx->m_sampleCount;
-        desc.SampleDesc.Quality = D3D11_STANDARD_MULTISAMPLE_PATTERN;
+        desc.SampleDesc.Quality = 0;
         if (pipeline)
         {
             desc.CachedPSO.pCachedBlob = pipeline->GetBufferPointer();
@@ -895,6 +947,17 @@ static const struct GreyTex2DViewDesc : D3D12_SHADER_RESOURCE_VIEW_DESC
     }
 } GreyTex2DViewDesc;
 
+static const struct Grey16Tex2DViewDesc : D3D12_SHADER_RESOURCE_VIEW_DESC
+{
+    Grey16Tex2DViewDesc()
+    {
+        Format = DXGI_FORMAT_R16_UNORM;
+        ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        Texture2D = {UINT(0), UINT(-1), UINT(0), 0.0f};
+    }
+} Grey16Tex2DViewDesc;
+
 static const struct RGBATex2DArrayViewDesc : D3D12_SHADER_RESOURCE_VIEW_DESC
 {
     RGBATex2DArrayViewDesc()
@@ -917,6 +980,17 @@ static const struct GreyTex2DArrayViewDesc : D3D12_SHADER_RESOURCE_VIEW_DESC
     }
 } GreyTex2DArrayViewDesc;
 
+static const struct Grey16Tex2DArrayViewDesc : D3D12_SHADER_RESOURCE_VIEW_DESC
+{
+    Grey16Tex2DArrayViewDesc()
+    {
+        Format = DXGI_FORMAT_R16_UNORM;
+        ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+        Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        Texture2DArray = {UINT(0), UINT(1), 0, 0, UINT(0), 0.0f};
+    }
+} Grey16Tex2DArrayViewDesc;
+
 static ID3D12Resource* GetTextureGPUResource(D3D12Context* ctx, const ITexture* tex, int idx, int bindIdx, bool depth,
                                              D3D12_SHADER_RESOURCE_VIEW_DESC& descOut)
 {
@@ -933,6 +1007,9 @@ static ID3D12Resource* GetTextureGPUResource(D3D12Context* ctx, const ITexture* 
         case TextureFormat::I8:
             descOut = GreyTex2DViewDesc;
             break;
+        case TextureFormat::I16:
+            descOut = Grey16Tex2DViewDesc;
+            break;
         default:break;
         }
         descOut.Texture2D.MipLevels = 1;
@@ -948,6 +1025,9 @@ static ID3D12Resource* GetTextureGPUResource(D3D12Context* ctx, const ITexture* 
             break;
         case TextureFormat::I8:
             descOut = GreyTex2DViewDesc;
+            break;
+        case TextureFormat::I16:
+            descOut = Grey16Tex2DViewDesc;
             break;
         case TextureFormat::DXT1:
             descOut = DXTTex2DViewDesc;
@@ -967,6 +1047,9 @@ static ID3D12Resource* GetTextureGPUResource(D3D12Context* ctx, const ITexture* 
             break;
         case TextureFormat::I8:
             descOut = GreyTex2DArrayViewDesc;
+            break;
+        case TextureFormat::I16:
+            descOut = Grey16Tex2DArrayViewDesc;
             break;
         default:break;
         }
@@ -1284,17 +1367,8 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
                                                     nullptr, __uuidof(ID3D12GraphicsCommandList), &m_dynamicCmdList));
     }
 
-    void startRenderer() {}
-
-    void stopRenderer()
-    {
-        m_running = false;
-        if (m_fence->GetCompletedValue() < m_submittedFenceVal)
-        {
-            ThrowIfFailed(m_fence->SetEventOnCompletion(m_submittedFenceVal, m_renderFenceHandle));
-            WaitForSingleObject(m_renderFenceHandle, INFINITE);
-        }
-    }
+    void startRenderer();
+    void stopRenderer();
 
     ~D3D12CommandQueue()
     {
@@ -1473,98 +1547,7 @@ struct D3D12CommandQueue : IGraphicsCommandQueue
     }
 
     bool m_doPresent = false;
-    void resolveDisplay(const boo::ObjToken<ITextureR>& source)
-    {
-        D3D12TextureR* csource = source.cast<D3D12TextureR>();
-
-        if (m_windowCtx->m_needsResize)
-        {
-            UINT nodeMasks[] = {0,0};
-            IUnknown* const queues[] = {m_ctx->m_q.Get(), m_ctx->m_q.Get()};
-            m_windowCtx->m_swapChain->ResizeBuffers1(2, m_windowCtx->width, m_windowCtx->height,
-                m_ctx->RGBATex2DFBViewDesc.Format, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH, nodeMasks, queues);
-            m_windowCtx->m_backBuf = m_windowCtx->m_swapChain->GetCurrentBackBufferIndex();
-            m_windowCtx->m_needsResize = false;
-        }
-
-        ComPtr<ID3D12Resource> dest;
-        ThrowIfFailed(m_windowCtx->m_swapChain->GetBuffer(m_windowCtx->m_backBuf, __uuidof(ID3D12Resource), &dest));
-
-        ID3D12Resource* src = csource->m_colorTex.Get();
-        D3D12_RESOURCE_STATES srcState = D3D12_RESOURCE_STATE_COPY_SOURCE;
-        if (m_boundTarget.get() == csource)
-            srcState = D3D12_RESOURCE_STATE_RENDER_TARGET;
-
-        if (csource->m_samples > 1)
-        {
-            D3D12_RESOURCE_BARRIER msaaSetup[] =
-            {
-                CD3DX12_RESOURCE_BARRIER::Transition(src,
-                    srcState, D3D12_RESOURCE_STATE_RESOLVE_SOURCE),
-                CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(),
-                    D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RESOLVE_DEST)
-            };
-            m_cmdList->ResourceBarrier(2, msaaSetup);
-
-            m_cmdList->ResolveSubresource(dest.Get(), 0, src, 0, m_ctx->RGBATex2DFBViewDesc.Format);
-
-            D3D12_RESOURCE_BARRIER msaaTeardown[] =
-            {
-                CD3DX12_RESOURCE_BARRIER::Transition(src,
-                    D3D12_RESOURCE_STATE_RESOLVE_SOURCE, srcState),
-                CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(),
-                    D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_PRESENT)
-            };
-            m_cmdList->ResourceBarrier(2, msaaTeardown);
-        }
-        else
-        {
-            if (srcState != D3D12_RESOURCE_STATE_COPY_SOURCE)
-            {
-                D3D12_RESOURCE_BARRIER copySetup[] =
-                {
-                    CD3DX12_RESOURCE_BARRIER::Transition(src,
-                        srcState, D3D12_RESOURCE_STATE_COPY_SOURCE),
-                    CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(),
-                        D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST)
-                };
-                m_cmdList->ResourceBarrier(2, copySetup);
-            }
-            else
-            {
-                D3D12_RESOURCE_BARRIER copySetup[] =
-                {
-                    CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(),
-                        D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST)
-                };
-                m_cmdList->ResourceBarrier(1, copySetup);
-            }
-
-            m_cmdList->CopyResource(dest.Get(), src);
-
-            if (srcState != D3D12_RESOURCE_STATE_COPY_SOURCE)
-            {
-                D3D12_RESOURCE_BARRIER copyTeardown[] =
-                {
-                    CD3DX12_RESOURCE_BARRIER::Transition(src,
-                        D3D12_RESOURCE_STATE_COPY_SOURCE, srcState),
-                    CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(),
-                        D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT)
-                };
-                m_cmdList->ResourceBarrier(2, copyTeardown);
-            }
-            else
-            {
-                D3D12_RESOURCE_BARRIER copyTeardown[] =
-                {
-                    CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(),
-                        D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT)
-                };
-                m_cmdList->ResourceBarrier(1, copyTeardown);
-            }
-        }
-        m_doPresent = true;
-    }
+    void resolveDisplay(const boo::ObjToken<ITextureR>& source);
 
     UINT64 m_submittedFenceVal = 0;
     void execute();
@@ -1666,6 +1649,43 @@ class D3D12DataFactory : public ID3DDataFactory, public GraphicsDataFactoryHead
     struct D3D12Context* m_ctx;
     std::unordered_map<uint64_t, std::unique_ptr<D3D12ShareableShader>> m_sharedShaders;
     std::unordered_map<uint64_t, uint64_t> m_sourceToBinary;
+
+    float m_gamma = 1.f;
+    ObjToken<IShaderPipeline> m_gammaShader;
+    ObjToken<ITextureD> m_gammaLUT;
+    ObjToken<IGraphicsBufferS> m_gammaVBO;
+    ObjToken<IVertexFormat> m_gammaVFMT;
+    ObjToken<IShaderDataBinding> m_gammaBinding;
+    void SetupGammaResources()
+    {
+        commitTransaction([this](IGraphicsDataFactory::Context& ctx)
+        {
+            const VertexElementDescriptor vfmt[] = {
+                {nullptr, nullptr, VertexSemantic::Position4},
+                {nullptr, nullptr, VertexSemantic::UV4}
+            };
+            m_gammaVFMT = ctx.newVertexFormat(2, vfmt);
+            m_gammaShader = static_cast<Context&>(ctx).newShaderPipeline(GammaVS, GammaFS,
+                nullptr, nullptr, nullptr, m_gammaVFMT, BlendFactor::One, BlendFactor::Zero,
+                Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None);
+            m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
+            setDisplayGamma(1.f);
+            const struct Vert {
+                float pos[4];
+                float uv[4];
+            } verts[4] = {
+                {{-1.f,  1.f, 0.f, 1.f}, {0.f, 0.f, 0.f, 0.f}},
+                {{ 1.f,  1.f, 0.f, 1.f}, {1.f, 0.f, 0.f, 0.f}},
+                {{-1.f, -1.f, 0.f, 1.f}, {0.f, 1.f, 0.f, 0.f}},
+                {{ 1.f, -1.f, 0.f, 1.f}, {1.f, 1.f, 0.f, 0.f}}
+            };
+            m_gammaVBO = ctx.newStaticBuffer(BufferUse::Vertex, verts, 32, 4);
+            ObjToken<ITexture> texs[] = {{}, m_gammaLUT.get()};
+            m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVFMT, m_gammaVBO.get(), {}, {},
+                                                      0, nullptr, nullptr, 2, texs, nullptr, nullptr);
+            return true;
+        });
+    }
 
 public:
     D3D12DataFactory(IGraphicsContext* parent, D3D12Context* ctx)
@@ -2089,8 +2109,184 @@ public:
         m_sharedShaders.erase(binKey);
     }
 
-    void setDisplayGamma(float gamma) { /*UpdateGammaLUT(m_gammaLUT.get(), gamma);*/ }
+    void setDisplayGamma(float gamma)
+    {
+        if (m_ctx->RGBATex2DFBViewDesc.Format == DXGI_FORMAT_R16G16B16A16_FLOAT)
+            m_gamma = gamma * 2.2f;
+        else
+            m_gamma = gamma;
+        if (m_gamma != 1.f)
+            UpdateGammaLUT(m_gammaLUT.get(), m_gamma);
+    }
 };
+
+void D3D12CommandQueue::startRenderer()
+{
+    static_cast<D3D12DataFactory*>(m_parent->getDataFactory())->SetupGammaResources();
+}
+
+void D3D12CommandQueue::stopRenderer()
+{
+    m_running = false;
+    if (m_fence->GetCompletedValue() < m_submittedFenceVal)
+    {
+        ThrowIfFailed(m_fence->SetEventOnCompletion(m_submittedFenceVal, m_renderFenceHandle));
+        WaitForSingleObject(m_renderFenceHandle, INFINITE);
+    }
+    /*
+    D3D12DataFactory* dataFactory = static_cast<D3D12DataFactory*>(m_parent->getDataFactory());
+    dataFactory->m_gammaShader.reset();
+    dataFactory->m_gammaLUT.reset();
+    dataFactory->m_gammaVBO.reset();
+    dataFactory->m_gammaVFMT.reset();
+    dataFactory->m_gammaBinding.reset();
+    */
+}
+
+void D3D12CommandQueue::resolveDisplay(const boo::ObjToken<ITextureR>& source)
+{
+    D3D12TextureR* csource = source.cast<D3D12TextureR>();
+#ifndef NDEBUG
+    if (!csource->m_colorBindCount)
+        Log.report(logvisor::Fatal,
+                   "texture provided to resolveDisplay() must have at least 1 color binding");
+#endif
+
+    if (m_windowCtx->m_needsResize)
+    {
+        UINT nodeMasks[] = {0,0};
+        IUnknown* const queues[] = {m_ctx->m_q.Get(), m_ctx->m_q.Get()};
+        m_windowCtx->m_swapChain->ResizeBuffers1(2, m_windowCtx->width, m_windowCtx->height,
+            m_ctx->RGBATex2DFBViewDesc.Format, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH, nodeMasks, queues);
+        m_windowCtx->m_backBuf = m_windowCtx->m_swapChain->GetCurrentBackBufferIndex();
+        m_windowCtx->m_rtvHeaps.clear();
+        m_windowCtx->m_needsResize = false;
+        return;
+    }
+
+    ComPtr<ID3D12Resource> dest;
+    ThrowIfFailed(m_windowCtx->m_swapChain->GetBuffer(m_windowCtx->m_backBuf, __uuidof(ID3D12Resource), &dest));
+
+    ID3D12Resource* src = csource->m_colorTex.Get();
+    D3D12_RESOURCE_STATES srcState = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    if (m_boundTarget.get() == csource)
+        srcState = D3D12_RESOURCE_STATE_RENDER_TARGET;
+
+    D3D12DataFactory* dataFactory = static_cast<D3D12DataFactory*>(m_parent->getDataFactory());
+    if (dataFactory->m_gamma != 1.f)
+    {
+        SWindowRect rect(0, 0, csource->m_width, csource->m_height);
+        resolveBindTexture(source, rect, true, 0, true, false, false);
+
+        auto search = m_windowCtx->m_rtvHeaps.find(dest.Get());
+        if (search == m_windowCtx->m_rtvHeaps.end())
+        {
+            ComPtr<ID3D12DescriptorHeap> rtvHeap;
+            D3D12_DESCRIPTOR_HEAP_DESC rtvdesc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1};
+            ThrowIfFailed(m_ctx->m_dev->CreateDescriptorHeap(&rtvdesc, __uuidof(ID3D12DescriptorHeap), &rtvHeap));
+
+            D3D12_RENDER_TARGET_VIEW_DESC rtvvdesc = {m_ctx->RGBATex2DFBViewDesc.Format, D3D12_RTV_DIMENSION_TEXTURE2D};
+            m_ctx->m_dev->CreateRenderTargetView(dest.Get(), &rtvvdesc, rtvHeap->GetCPUDescriptorHandleForHeapStart());
+
+            search = m_windowCtx->m_rtvHeaps.insert(std::make_pair(dest.Get(), rtvHeap)).first;
+        }
+
+        D3D12_RESOURCE_BARRIER gammaSetup[] =
+        {
+            CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(),
+                D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET)
+        };
+        m_cmdList->ResourceBarrier(1, gammaSetup);
+
+        m_cmdList->OMSetRenderTargets(1, &search->second->GetCPUDescriptorHandleForHeapStart(), false, nullptr);
+
+        D3D12ShaderDataBinding* gammaBinding = dataFactory->m_gammaBinding.cast<D3D12ShaderDataBinding>();
+        gammaBinding->m_texs[0].tex = source.get();
+        gammaBinding->bind(m_ctx, m_cmdList.Get(), m_fillBuf);
+        m_cmdList->DrawInstanced(4, 1, 0, 0);
+        gammaBinding->m_texs[0].tex.reset();
+
+        D3D12_RESOURCE_BARRIER gammaTeardown[] =
+        {
+            CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(),
+                D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT)
+        };
+        m_cmdList->ResourceBarrier(1, gammaTeardown);
+    }
+    else
+    {
+        if (csource->m_samples > 1)
+        {
+            D3D12_RESOURCE_BARRIER msaaSetup[] =
+            {
+                CD3DX12_RESOURCE_BARRIER::Transition(src,
+                    srcState, D3D12_RESOURCE_STATE_RESOLVE_SOURCE),
+                CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(),
+                    D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RESOLVE_DEST)
+            };
+            m_cmdList->ResourceBarrier(2, msaaSetup);
+
+            m_cmdList->ResolveSubresource(dest.Get(), 0, src, 0, m_ctx->RGBATex2DFBViewDesc.Format);
+
+            D3D12_RESOURCE_BARRIER msaaTeardown[] =
+            {
+                CD3DX12_RESOURCE_BARRIER::Transition(src,
+                    D3D12_RESOURCE_STATE_RESOLVE_SOURCE, srcState),
+                CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(),
+                    D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_PRESENT)
+            };
+            m_cmdList->ResourceBarrier(2, msaaTeardown);
+        }
+        else
+        {
+            if (srcState != D3D12_RESOURCE_STATE_COPY_SOURCE)
+            {
+                D3D12_RESOURCE_BARRIER copySetup[] =
+                {
+                    CD3DX12_RESOURCE_BARRIER::Transition(src,
+                        srcState, D3D12_RESOURCE_STATE_COPY_SOURCE),
+                    CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(),
+                        D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST)
+                };
+                m_cmdList->ResourceBarrier(2, copySetup);
+            }
+            else
+            {
+                D3D12_RESOURCE_BARRIER copySetup[] =
+                {
+                    CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(),
+                        D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST)
+                };
+                m_cmdList->ResourceBarrier(1, copySetup);
+            }
+
+            m_cmdList->CopyResource(dest.Get(), src);
+
+            if (srcState != D3D12_RESOURCE_STATE_COPY_SOURCE)
+            {
+                D3D12_RESOURCE_BARRIER copyTeardown[] =
+                {
+                    CD3DX12_RESOURCE_BARRIER::Transition(src,
+                        D3D12_RESOURCE_STATE_COPY_SOURCE, srcState),
+                    CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(),
+                        D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT)
+                };
+                m_cmdList->ResourceBarrier(2, copyTeardown);
+            }
+            else
+            {
+                D3D12_RESOURCE_BARRIER copyTeardown[] =
+                {
+                    CD3DX12_RESOURCE_BARRIER::Transition(dest.Get(),
+                        D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT)
+                };
+                m_cmdList->ResourceBarrier(1, copyTeardown);
+            }
+        }
+    }
+
+    m_doPresent = true;
+}
 
 void D3D12CommandQueue::execute()
 {

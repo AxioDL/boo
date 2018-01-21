@@ -39,6 +39,7 @@ struct D3D12Context
     struct Window
     {
         ComPtr<IDXGISwapChain3> m_swapChain;
+        std::unordered_map<ID3D12Resource*, ComPtr<ID3D12DescriptorHeap>> m_rtvHeaps;
         UINT m_backBuf = 0;
         bool m_needsResize = false;
         size_t width, height;
@@ -69,12 +70,32 @@ struct D3D11Context
     struct Window
     {
         ComPtr<IDXGISwapChain1> m_swapChain;
+        ComPtr<ID3D11Texture2D> m_swapChainTex;
+        ComPtr<ID3D11RenderTargetView> m_swapChainRTV;
         bool m_needsResize = false;
         size_t width, height;
 
         bool m_needsFSTransition = false;
         bool m_fs = false;
         DXGI_MODE_DESC m_fsdesc = {};
+
+        void clearRTV()
+        {
+            m_swapChainTex.Reset();
+            m_swapChainRTV.Reset();
+        }
+
+        void setupRTV(ComPtr<IDXGISwapChain1>& sc, ID3D11Device* dev)
+        {
+            m_swapChain = sc;
+            m_swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), &m_swapChainTex);
+            D3D11_TEXTURE2D_DESC resDesc;
+            m_swapChainTex->GetDesc(&resDesc);
+            width = resDesc.Width;
+            height = resDesc.Height;
+            CD3D11_RENDER_TARGET_VIEW_DESC rtvDesc(D3D11_RTV_DIMENSION_TEXTURE2D, resDesc.Format);
+            dev->CreateRenderTargetView(m_swapChainTex.Get(), &rtvDesc, &m_swapChainRTV);
+        }
     };
     std::unordered_map<const boo::IWindow*, Window> m_windows;
 
