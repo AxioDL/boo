@@ -47,6 +47,7 @@ struct VulkanContext
     VkCommandPool m_loadPool;
     VkCommandBuffer m_loadCmdBuf;
     VkFormat m_displayFormat;
+    VkFormat m_internalFormat;
 
     struct Window
     {

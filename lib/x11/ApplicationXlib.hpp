@@ -30,6 +30,7 @@ DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
 #include <X11/Xlib-xcb.h>
 #include <vulkan/vulkan.h>
 #include <dlfcn.h>
+#include "boo/graphicsdev/Vulkan.hpp"
 #endif
 
 namespace boo
@@ -228,6 +229,7 @@ public:
                     std::string_view gfxApi,
                     uint32_t samples,
                     uint32_t anisotropy,
+                    bool deepColor,
                     bool singleInstance)
     : m_callback(callback),
       m_uniqueName(uniqueName),
@@ -238,7 +240,13 @@ public:
     {
         m_glContext.m_sampleCount = samples;
         m_glContext.m_anisotropy = anisotropy;
+        m_glContext.m_deepColor = deepColor;
 #if BOO_HAS_VULKAN
+        g_VulkanContext.m_sampleCountColor = samples;
+        g_VulkanContext.m_sampleCountDepth = samples;
+        g_VulkanContext.m_anisotropy = anisotropy;
+        g_VulkanContext.m_deepColor = deepColor;
+
         /* Check for Vulkan presence and preference */
         bool tryVulkan = true;
         if (!gfxApi.compare("OpenGL"))

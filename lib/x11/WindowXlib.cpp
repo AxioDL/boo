@@ -3,6 +3,7 @@
 #include "boo/IApplication.hpp"
 #include "boo/graphicsdev/GL.hpp"
 #include "boo/audiodev/IAudioVoiceEngine.hpp"
+#include "boo/graphicsdev/glew.h"
 
 #if BOO_HAS_VULKAN
 #include "boo/graphicsdev/Vulkan.hpp"
@@ -334,8 +335,8 @@ public:
     GraphicsContextXlibGLX(EGraphicsAPI api, IWindow* parentWindow,
                            Display* display, int defaultScreen,
                            GLXContext lastCtx, uint32_t& visualIdOut, GLContext* glCtx)
-    : GraphicsContextXlib(api, EPixelFormat::RGBA8, parentWindow, display, glCtx),
-      m_lastCtx(lastCtx)
+    : GraphicsContextXlib(api, glCtx->m_deepColor ? EPixelFormat::RGBA16 : EPixelFormat::RGBA8,
+                          parentWindow, display, glCtx), m_lastCtx(lastCtx)
     {
         m_dataFactory = _NewGLDataFactory(this, m_glCtx);
 
@@ -367,6 +368,20 @@ public:
                 m_fbconfig = config;
                 m_visualid = visualId;
                 break;
+            }
+            else if (m_pf == EPixelFormat::RGBA16)
+            {
+                if (colorSize >= 64)
+                {
+                    m_fbconfig = config;
+                    m_visualid = visualId;
+                    break;
+                }
+                else if (!m_visualid && colorSize >= 32)
+                {
+                    m_fbconfig = config;
+                    m_visualid = visualId;
+                }
             }
             else if (m_pf == EPixelFormat::RGBA8_Z24 && colorSize >= 32 && depthSize >= 24)
             {
@@ -483,6 +498,12 @@ public:
             Log.report(logvisor::Fatal, "unable to make new GLX window");
         _XlibUpdateLastGlxCtx(m_glxCtx);
 
+        if (!glXMakeCurrent(m_xDisp, DefaultRootWindow(m_xDisp), m_glxCtx))
+            Log.report(logvisor::Fatal, "unable to make GLX context current");
+        if (glewInit() != GLEW_OK)
+            Log.report(logvisor::Fatal, "glewInit failed");
+        glXMakeCurrent(m_xDisp, 0, 0);
+
         /* Spawn vsync thread */
         m_vsyncRunning = true;
         std::mutex initmt;
@@ -532,6 +553,7 @@ public:
 
         XUnlockDisplay(m_xDisp);
         m_commandQueue = _NewGLCommandQueue(this, m_glCtx);
+        m_commandQueue->startRenderer();
         XLockDisplay(m_xDisp);
 
         return true;
@@ -634,7 +656,8 @@ public:
     GraphicsContextXlibVulkan(IWindow* parentWindow,
                               Display* display, xcb_connection_t* xcbConn, int defaultScreen,
                               VulkanContext* ctx, uint32_t& visualIdOut, GLContext* glCtx)
-    : GraphicsContextXlib(EGraphicsAPI::Vulkan, EPixelFormat::RGBA8, parentWindow, display, glCtx),
+    : GraphicsContextXlib(EGraphicsAPI::Vulkan, ctx->m_deepColor ? EPixelFormat::RGBA16 : EPixelFormat::RGBA8,
+                          parentWindow, display, glCtx),
       m_xcbConn(xcbConn), m_ctx(ctx)
     {
         Screen* screen = ScreenOfDisplay(display, defaultScreen);
@@ -773,14 +796,29 @@ public:
          * supported format will be returned. */
         if (formatCount >= 1)
         {
-            for (int i=0 ; i<formatCount ; ++i)
+            if (m_ctx->m_deepColor)
             {
-                if (surfFormats[i].format == VK_FORMAT_B8G8R8A8_UNORM ||
-                    surfFormats[i].format == VK_FORMAT_R8G8B8A8_UNORM)
+                for (int i=0 ; i<formatCount ; ++i)
                 {
-                    m_format = surfFormats[i].format;
-                    m_colorspace = surfFormats[i].colorSpace;
-                    break;
+                    if (surfFormats[i].format == VK_FORMAT_R16G16B16A16_UNORM)
+                    {
+                        m_format = surfFormats[i].format;
+                        m_colorspace = surfFormats[i].colorSpace;
+                        break;
+                    }
+                }
+            }
+            if (m_format == VK_FORMAT_UNDEFINED)
+            {
+                for (int i=0 ; i<formatCount ; ++i)
+                {
+                    if (surfFormats[i].format == VK_FORMAT_B8G8R8A8_UNORM ||
+                        surfFormats[i].format == VK_FORMAT_R8G8B8A8_UNORM)
+                    {
+                        m_format = surfFormats[i].format;
+                        m_colorspace = surfFormats[i].colorSpace;
+                        break;
+                    }
                 }
             }
         }
@@ -839,6 +877,7 @@ public:
 
         m_dataFactory = _NewVulkanDataFactory(this, m_ctx);
         m_commandQueue = _NewVulkanCommandQueue(m_ctx, m_ctx->m_windows[m_parentWindow].get(), this);
+        m_commandQueue->startRenderer();
 
         return true;
     }

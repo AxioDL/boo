@@ -35,6 +35,7 @@ public:
                         std::string_view gfxApi,
                         uint32_t samples,
                         uint32_t anisotropy,
+                        bool deepColor,
                         bool singleInstance)
     : m_callback(callback),
       m_uniqueName(uniqueName),

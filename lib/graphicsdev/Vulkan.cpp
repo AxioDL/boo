@@ -607,7 +607,9 @@ void VulkanContext::Window::SwapChain::Buffer::setImage
 void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR surface,
                                   VkFormat format, VkColorSpaceKHR colorspace)
 {
-    m_displayFormat = format;
+    m_internalFormat = m_displayFormat = format;
+    if (m_deepColor)
+        m_internalFormat = VK_FORMAT_R16G16B16A16_UNORM;
     VkSurfaceCapabilitiesKHR surfCapabilities;
     ThrowIfFailed(vk::GetPhysicalDeviceSurfaceCapabilitiesKHR(m_gpus[0], surface, &surfCapabilities));
 
@@ -770,7 +772,7 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
     VkAttachmentDescription attachments[2] = {};
 
     /* color attachment */
-    attachments[0].format = m_displayFormat;
+    attachments[0].format = m_internalFormat;
     attachments[0].samples = VkSampleCountFlagBits(m_sampleCountColor);
     attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
     attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -808,6 +810,7 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
     ThrowIfFailed(vk::CreateRenderPass(m_dev, &renderPass, nullptr, &m_pass));
 
     /* render pass color only */
+    attachments[0].format = m_displayFormat;
     renderPass.attachmentCount = 1;
     subpass.pDepthStencilAttachment = nullptr;
     ThrowIfFailed(vk::CreateRenderPass(m_dev, &renderPass, nullptr, &m_passColorOnly));
@@ -1797,7 +1800,7 @@ class VulkanTextureR : public GraphicsDataNode<ITextureR>
         texCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         texCreateInfo.pNext = nullptr;
         texCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-        texCreateInfo.format = ctx->m_displayFormat;
+        texCreateInfo.format = ctx->m_internalFormat;
         texCreateInfo.extent.width = m_width;
         texCreateInfo.extent.height = m_height;
         texCreateInfo.extent.depth = 1;
@@ -1848,7 +1851,7 @@ class VulkanTextureR : public GraphicsDataNode<ITextureR>
         for (size_t i=0 ; i<m_colorBindCount ; ++i)
         {
             m_colorBindLayout[i] = VK_IMAGE_LAYOUT_UNDEFINED;
-            texCreateInfo.format = ctx->m_displayFormat;
+            texCreateInfo.format = ctx->m_internalFormat;
             texCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
             ThrowIfFailed(vk::CreateImage(ctx->m_dev, &texCreateInfo, nullptr, &m_colorBindTex[i]));
 
@@ -1899,7 +1902,7 @@ class VulkanTextureR : public GraphicsDataNode<ITextureR>
         viewCreateInfo.pNext = nullptr;
         viewCreateInfo.image = m_colorTex;
         viewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewCreateInfo.format = ctx->m_displayFormat;
+        viewCreateInfo.format = ctx->m_internalFormat;
         viewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_R;
         viewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_G;
         viewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_B;
@@ -1920,7 +1923,7 @@ class VulkanTextureR : public GraphicsDataNode<ITextureR>
         {
             ThrowIfFailed(vk::BindImageMemory(ctx->m_dev, m_colorBindTex[i], m_gpuMem, colorOffsets[i]));
             viewCreateInfo.image = m_colorBindTex[i];
-            viewCreateInfo.format = ctx->m_displayFormat;
+            viewCreateInfo.format = ctx->m_internalFormat;
             viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             ThrowIfFailed(vk::CreateImageView(ctx->m_dev, &viewCreateInfo, nullptr, &m_colorBindView[i]));
             m_colorBindDescInfo[i].imageView = m_colorBindView[i];
@@ -3006,7 +3009,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         VulkanContext::Window::SwapChain::Buffer& dest = sc.m_bufs[sc.m_backBuf];
 
         VulkanDataFactoryImpl* dataFactory = static_cast<VulkanDataFactoryImpl*>(m_parent->getDataFactory());
-        if (dataFactory->m_gamma != 1.f)
+        if (dataFactory->m_gamma != 1.f || m_ctx->m_internalFormat != m_ctx->m_displayFormat)
         {
             SWindowRect rect(0, 0, csource->m_width, csource->m_height);
             _resolveBindTexture(cmdBuf, csource, rect, true, 0, true, false);
