@@ -99,6 +99,7 @@ class VulkanDataFactoryImpl : public VulkanDataFactory, public GraphicsDataFacto
                 m_gammaVFMT, BlendFactor::One, BlendFactor::Zero,
                 Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None);
             m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
+            setDisplayGamma(1.f);
             const struct Vert {
                 float pos[4];
                 float uv[4];
