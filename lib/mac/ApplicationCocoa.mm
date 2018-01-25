@@ -110,11 +110,18 @@ public:
         if (!gfxApi.compare("OpenGL"))
             useGL = true;
         for (const SystemString& arg : args)
+        {
             if (!arg.compare("--gl"))
             {
                 useGL = true;
                 break;
             }
+            else if (!arg.compare("--metal"))
+            {
+                useGL = false;
+                break;
+            }
+        }
         if (!useGL)
             m_metalCtx.m_dev = MTLCreateSystemDefaultDevice();
         if (m_metalCtx.m_dev)

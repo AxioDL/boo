@@ -99,7 +99,7 @@ class MetalDataFactoryImpl : public MetalDataFactory, public GraphicsDataFactory
             m_gammaVFMT = ctx.newVertexFormat(2, vfmt);
             m_gammaShader = static_cast<Context&>(ctx).newShaderPipeline(GammaVS, GammaFS,
                 nullptr, nullptr, m_gammaVFMT, BlendFactor::One, BlendFactor::Zero,
-                Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None);
+                Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None, false);
             m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
             setDisplayGamma(1.f);
             const struct Vert {
@@ -879,7 +879,7 @@ class MetalShaderPipeline : public GraphicsDataNode<IShaderPipeline>
                         const ObjToken<IVertexFormat>& vtxFmt, NSUInteger targetSamples,
                         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                         ZTest depthTest, bool depthWrite, bool colorWrite,
-                        bool alphaWrite, CullMode culling)
+                        bool alphaWrite, CullMode culling, bool depthAttachment = true)
     : GraphicsDataNode<IShaderPipeline>(parent),
       m_drawPrim(PRIMITIVE_TABLE[int(prim)]),
       m_vert(std::move(vert)), m_frag(std::move(frag))
@@ -921,7 +921,7 @@ class MetalShaderPipeline : public GraphicsDataNode<IShaderPipeline>
         }
         desc.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
         desc.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorZero;
-        desc.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;
+        desc.depthAttachmentPixelFormat = depthAttachment ? MTLPixelFormatDepth32Float : MTLPixelFormatInvalid;
         desc.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
         NSError* err = nullptr;
         m_state = [ctx->m_dev newRenderPipelineStateWithDescriptor:desc error:&err];
@@ -1493,6 +1493,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                             MetalShaderDataBinding* gammaBinding = gfxF->m_gammaBinding.cast<MetalShaderDataBinding>();
                             gammaBinding->m_texs[0].tex = m_needsDisplay.get();
                             gammaBinding->bind(enc, m_drawBuf);
+                            [enc setFragmentSamplerStates:m_samplers withRange:NSMakeRange(0, 3)];
                             [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
                             gammaBinding->m_texs[0].tex.reset();
                             [enc endEncoding];
@@ -1632,7 +1633,7 @@ MetalDataFactory::Context::newShaderPipeline(const char* vertSource, const char*
                                              const ObjToken<IVertexFormat>& vtxFmt,
                                              BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                                              ZTest depthTest, bool depthWrite, bool colorWrite,
-                                             bool alphaWrite, CullMode culling)
+                                             bool alphaWrite, CullMode culling, bool depthAttachment)
 {
     @autoreleasepool
     {
@@ -1759,8 +1760,9 @@ MetalDataFactory::Context::newShaderPipeline(const char* vertSource, const char*
         }
 
         return {new MetalShaderPipeline(m_data, factory.m_ctx, std::move(vertShader), std::move(fragShader),
-                                        vtxFmt, factory.m_ctx->m_sampleCount, srcFac, dstFac, prim, depthTest, depthWrite,
-                                        colorWrite, alphaWrite, culling)};
+                                        vtxFmt, depthAttachment ? factory.m_ctx->m_sampleCount : 1,
+                                        srcFac, dstFac, prim, depthTest, depthWrite,
+                                        colorWrite, alphaWrite, culling, depthAttachment)};
     }
 }
 

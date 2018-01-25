@@ -48,7 +48,7 @@ public:
                                                     const ObjToken<IVertexFormat>& vtxFmt,
                                                     BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                                                     ZTest depthTest, bool depthWrite, bool colorWrite,
-                                                    bool alphaWrite, CullMode culling);
+                                                    bool alphaWrite, CullMode culling, bool depthAttachment = true);
 
         ObjToken<IShaderDataBinding>
         newShaderDataBinding(const ObjToken<IShaderPipeline>& pipeline,
