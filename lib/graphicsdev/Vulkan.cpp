@@ -2305,9 +2305,9 @@ public:
             colorAttachment.blendEnable = m_dstFac != BlendFactor::Zero;
             if (m_srcFac == BlendFactor::Subtract || m_dstFac == BlendFactor::Subtract)
             {
-                colorAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_DST_COLOR;
-                colorAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_SRC_COLOR;
-                colorAttachment.colorBlendOp = VK_BLEND_OP_SUBTRACT;
+                colorAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+                colorAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+                colorAttachment.colorBlendOp = VK_BLEND_OP_REVERSE_SUBTRACT;
             }
             else
             {

@@ -909,9 +909,9 @@ class MetalShaderPipeline : public GraphicsDataNode<IShaderPipeline>
         desc.colorAttachments[0].blendingEnabled = dstFac != BlendFactor::Zero;
         if (srcFac == BlendFactor::Subtract || dstFac == BlendFactor::Subtract)
         {
-            desc.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorDestinationColor;
-            desc.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorSourceColor;
-            desc.colorAttachments[0].rgbBlendOperation = MTLBlendOperationSubtract;
+            desc.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+            desc.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOne;
+            desc.colorAttachments[0].rgbBlendOperation = MTLBlendOperationReverseSubtract;
         }
         else
         {

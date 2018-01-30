@@ -741,7 +741,7 @@ public:
             glEnable(GL_BLEND);
             glBlendFuncSeparate(m_sfactor, m_dfactor, GL_ONE, GL_ZERO);
             if (m_subtractBlend)
-                glBlendEquation(GL_FUNC_SUBTRACT);
+                glBlendEquation(GL_FUNC_REVERSE_SUBTRACT);
             else
                 glBlendEquation(GL_FUNC_ADD);
         }
@@ -904,8 +904,8 @@ ObjToken<IShaderPipeline> GLDataFactory::Context::newShaderPipeline
 
     if (srcFac == BlendFactor::Subtract || dstFac == BlendFactor::Subtract)
     {
-        shader.m_sfactor = GL_DST_COLOR;
-        shader.m_dfactor = GL_SRC_COLOR;
+        shader.m_sfactor = GL_SRC_ALPHA;
+        shader.m_dfactor = GL_ONE;
         shader.m_subtractBlend = true;
     }
     else

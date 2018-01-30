@@ -748,9 +748,9 @@ class D3D12ShaderPipeline : public GraphicsDataNode<IShaderPipeline>
             desc.BlendState.RenderTarget[0].BlendEnable = true;
             if (srcFac == BlendFactor::Subtract || dstFac == BlendFactor::Subtract)
             {
-                desc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_DEST_COLOR;
-                desc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_SRC_COLOR;
-                desc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_SUBTRACT;
+                desc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+                desc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+                desc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_REV_SUBTRACT;
             }
             else
             {
