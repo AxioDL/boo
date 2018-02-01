@@ -71,7 +71,8 @@ enum class TextureClampMode
 {
     Repeat,
     ClampToWhite,
-    ClampToEdge
+    ClampToEdge,
+    ClampToEdgeNearest
 };
 
 /** Typeless texture */

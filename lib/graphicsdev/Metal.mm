@@ -1129,7 +1129,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     IGraphicsContext* m_parent;
     id<MTLCommandBuffer> m_cmdBuf;
     id<MTLRenderCommandEncoder> m_enc;
-    id<MTLSamplerState> m_samplers[3];
+    id<MTLSamplerState> m_samplers[4];
     bool m_running = true;
 
     int m_fillBuf = 0;
@@ -1162,6 +1162,13 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             sampDesc.sAddressMode = MTLSamplerAddressModeClampToEdge;
             sampDesc.tAddressMode = MTLSamplerAddressModeClampToEdge;
             m_samplers[2] = [ctx->m_dev newSamplerStateWithDescriptor:sampDesc];
+
+            sampDesc.rAddressMode = MTLSamplerAddressModeClampToEdge;
+            sampDesc.sAddressMode = MTLSamplerAddressModeClampToEdge;
+            sampDesc.tAddressMode = MTLSamplerAddressModeClampToEdge;
+            sampDesc.minFilter = MTLSamplerMinMagFilterNearest;
+            sampDesc.magFilter = MTLSamplerMinMagFilterNearest;
+            m_samplers[3] = [ctx->m_dev newSamplerStateWithDescriptor:sampDesc];
         }
     }
 
@@ -1192,7 +1199,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             cbind->bind(m_enc, m_fillBuf);
             m_boundData = cbind;
             m_currentPrimitive = cbind->m_pipeline.cast<MetalShaderPipeline>()->m_drawPrim;
-            [m_enc setFragmentSamplerStates:m_samplers withRange:NSMakeRange(0, 3)];
+            [m_enc setFragmentSamplerStates:m_samplers withRange:NSMakeRange(0, 4)];
         }
     }
 
@@ -1493,7 +1500,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                             MetalShaderDataBinding* gammaBinding = gfxF->m_gammaBinding.cast<MetalShaderDataBinding>();
                             gammaBinding->m_texs[0].tex = m_needsDisplay.get();
                             gammaBinding->bind(enc, m_drawBuf);
-                            [enc setFragmentSamplerStates:m_samplers withRange:NSMakeRange(0, 3)];
+                            [enc setFragmentSamplerStates:m_samplers withRange:NSMakeRange(0, 4)];
                             [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
                             gammaBinding->m_texs[0].tex.reset();
                             [enc endEncoding];
