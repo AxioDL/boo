@@ -1174,6 +1174,15 @@ static void MakeSampler(VulkanContext* ctx, VkSampler& sampOut, TextureClampMode
         samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         break;
+    case TextureClampMode::ClampToEdgeNearest:
+        samplerInfo.magFilter = VK_FILTER_NEAREST;
+        samplerInfo.minFilter = VK_FILTER_NEAREST;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        break;
     }
     ThrowIfFailed(vk::CreateSampler(ctx->m_dev, &samplerInfo, nullptr, &sampOut));
     ctx->m_samplers[key] = sampOut;
