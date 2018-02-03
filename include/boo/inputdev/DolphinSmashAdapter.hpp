@@ -20,8 +20,8 @@ enum class EDolphinControllerButtons
 {
     Start  = 1<<0,
     Z      = 1<<1,
-    L      = 1<<2,
-    R      = 1<<3,
+    R      = 1<<2,
+    L      = 1<<3,
     A      = 1<<8,
     B      = 1<<9,
     X      = 1<<10,
