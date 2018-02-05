@@ -669,6 +669,7 @@ class GLShaderPipeline : public GraphicsDataNode<IShaderPipeline>
     bool m_colorWrite = true;
     bool m_alphaWrite = true;
     bool m_subtractBlend = false;
+    bool m_overwriteAlpha = false;
     CullMode m_culling;
     mutable std::vector<GLint> m_uniLocs;
     mutable std::vector<std::string> m_texNames;
@@ -748,9 +749,13 @@ public:
         if (m_dfactor != GL_ZERO)
         {
             glEnable(GL_BLEND);
-            glBlendFuncSeparate(m_sfactor, m_dfactor, GL_ONE, GL_ZERO);
+            if (m_overwriteAlpha)
+                glBlendFuncSeparate(m_sfactor, m_dfactor, GL_ONE, GL_ZERO);
+            else
+                glBlendFuncSeparate(m_sfactor, m_dfactor, m_sfactor, m_dfactor);
             if (m_subtractBlend)
-                glBlendEquation(GL_FUNC_REVERSE_SUBTRACT);
+                glBlendEquationSeparate(GL_FUNC_REVERSE_SUBTRACT,
+                                        m_overwriteAlpha ? GL_FUNC_ADD : GL_FUNC_REVERSE_SUBTRACT);
             else
                 glBlendEquation(GL_FUNC_ADD);
         }
@@ -822,7 +827,7 @@ ObjToken<IShaderPipeline> GLDataFactory::Context::newShaderPipeline
  size_t uniformBlockCount, const char** uniformBlockNames,
  BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
  ZTest depthTest, bool depthWrite, bool colorWrite,
- bool alphaWrite, CullMode culling)
+ bool alphaWrite, CullMode culling, bool overwriteAlpha)
 {
     GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
     ObjToken<IShaderPipeline> retval(new GLShaderPipeline(m_data));
@@ -928,6 +933,7 @@ ObjToken<IShaderPipeline> GLDataFactory::Context::newShaderPipeline
     shader.m_depthWrite = depthWrite;
     shader.m_colorWrite = colorWrite;
     shader.m_alphaWrite = alphaWrite;
+    shader.m_overwriteAlpha = overwriteAlpha;
     shader.m_culling = culling;
     shader.m_drawPrim = PRIMITIVE_TABLE[int(prim)];
 

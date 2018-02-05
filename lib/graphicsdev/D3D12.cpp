@@ -751,15 +751,36 @@ class D3D12ShaderPipeline : public GraphicsDataNode<IShaderPipeline>
                 desc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
                 desc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
                 desc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_REV_SUBTRACT;
+                if (overwriteAlpha)
+                {
+                    desc.BlendState.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+                    desc.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
+                    desc.BlendState.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+                }
+                else
+                {
+                    desc.BlendState.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_SRC_ALPHA;
+                    desc.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ONE;
+                    desc.BlendState.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_REV_SUBTRACT;
+                }
             }
             else
             {
                 desc.BlendState.RenderTarget[0].SrcBlend = BLEND_FACTOR_TABLE[int(srcFac)];
                 desc.BlendState.RenderTarget[0].DestBlend = BLEND_FACTOR_TABLE[int(dstFac)];
                 desc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+                if (m_overwriteAlpha)
+                {
+                    desc.BlendState.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+                    desc.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
+                }
+                else
+                {
+                    desc.BlendState.RenderTarget[0].SrcBlendAlpha = BLEND_FACTOR_TABLE[int(srcFac)];
+                    desc.BlendState.RenderTarget[0].DestBlendAlpha = BLEND_FACTOR_TABLE[int(dstFac)];
+                }
+                desc.BlendState.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
             }
-            desc.BlendState.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
-            desc.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
         }
         desc.BlendState.RenderTarget[0].RenderTargetWriteMask =
                 (colorWrite ? (D3D12_COLOR_WRITE_ENABLE_RED |
@@ -1846,7 +1867,7 @@ public:
              ComPtr<ID3DBlob>* pipelineBlob, const boo::ObjToken<IVertexFormat>& vtxFmt,
              BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
              ZTest depthTest, bool depthWrite, bool colorWrite,
-             bool alphaWrite, CullMode culling)
+             bool alphaWrite, CullMode culling, bool overwriteAlpha)
         {
             XXH64_state_t hashState;
             uint64_t srcHashes[2] = {};
@@ -1930,9 +1951,10 @@ public:
             }
 
             ID3DBlob* pipeline = pipelineBlob ? pipelineBlob->Get() : nullptr;
-            D3D12ShaderPipeline* retval = new D3D12ShaderPipeline(m_data, m_parent.m_ctx, std::move(vertShader), std::move(fragShader),
-                                                                  pipeline, vtxFmt, srcFac, dstFac, prim, depthTest, depthWrite, colorWrite,
-                                                                  alphaWrite, culling);
+            D3D12ShaderPipeline* retval = new D3D12ShaderPipeline(
+                m_data, m_parent.m_ctx, std::move(vertShader), std::move(fragShader),
+                pipeline, vtxFmt, srcFac, dstFac, prim, depthTest, depthWrite, colorWrite,
+                alphaWrite, overwriteAlpha, culling);
             if (pipelineBlob && !*pipelineBlob)
                 retval->m_state->GetCachedBlob(&*pipelineBlob);
             return retval;

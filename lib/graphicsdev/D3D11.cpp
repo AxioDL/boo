@@ -560,7 +560,7 @@ class D3D11ShaderPipeline : public GraphicsDataNode<IShaderPipeline>
                         const boo::ObjToken<IVertexFormat>& vtxFmt,
                         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                         ZTest depthTest, bool depthWrite, bool colorWrite,
-                        bool alphaWrite, CullMode culling)
+                        bool alphaWrite, bool overwriteAlpha, CullMode culling)
     : GraphicsDataNode<IShaderPipeline>(parent), m_vtxFmt(vtxFmt),
       m_vert(std::move(vert)), m_pixel(std::move(pixel)),
       m_topology(PRIMITIVE_TABLE[int(prim)])
@@ -619,15 +619,36 @@ class D3D11ShaderPipeline : public GraphicsDataNode<IShaderPipeline>
             blDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
             blDesc.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
             blDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_REV_SUBTRACT;
+            if (overwriteAlpha)
+            {
+                blDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+                blDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
+                blDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+            }
+            else
+            {
+                blDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_SRC_ALPHA;
+                blDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+                blDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_REV_SUBTRACT;
+            }
         }
         else
         {
             blDesc.RenderTarget[0].SrcBlend = BLEND_FACTOR_TABLE[int(srcFac)];
             blDesc.RenderTarget[0].DestBlend = BLEND_FACTOR_TABLE[int(dstFac)];
             blDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+            if (m_overwriteAlpha)
+            {
+                blDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+                blDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
+            }
+            else
+            {
+                blDesc.RenderTarget[0].SrcBlendAlpha = BLEND_FACTOR_TABLE[int(srcFac)];
+                blDesc.RenderTarget[0].DestBlendAlpha = BLEND_FACTOR_TABLE[int(dstFac)];
+            }
+            blDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
         }
-        blDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
-        blDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
         blDesc.RenderTarget[0].RenderTargetWriteMask =
                 (colorWrite ? (D3D11_COLOR_WRITE_ENABLE_RED |
                                D3D11_COLOR_WRITE_ENABLE_GREEN |
@@ -1381,7 +1402,7 @@ public:
              ComPtr<ID3DBlob>* pipelineBlob, const boo::ObjToken<IVertexFormat>& vtxFmt,
              BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
              ZTest depthTest, bool depthWrite, bool colorWrite,
-             bool alphaWrite, CullMode culling)
+             bool alphaWrite, CullMode culling, bool overwriteAlpha)
         {
             XXH64_state_t hashState;
             uint64_t srcHashes[2] = {};
@@ -1482,7 +1503,8 @@ public:
 
             return {new D3D11ShaderPipeline(m_data, ctx,
                 std::move(vertShader), std::move(fragShader),
-                vtxFmt, srcFac, dstFac, prim, depthTest, depthWrite, colorWrite, alphaWrite, culling)};
+                vtxFmt, srcFac, dstFac, prim, depthTest, depthWrite, colorWrite,
+                alphaWrite, overwriteAlpha, culling)};
         }
 
         boo::ObjToken<IShaderDataBinding> newShaderDataBinding(

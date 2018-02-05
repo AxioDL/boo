@@ -99,7 +99,7 @@ class MetalDataFactoryImpl : public MetalDataFactory, public GraphicsDataFactory
             m_gammaVFMT = ctx.newVertexFormat(2, vfmt);
             m_gammaShader = static_cast<Context&>(ctx).newShaderPipeline(GammaVS, GammaFS,
                 nullptr, nullptr, m_gammaVFMT, BlendFactor::One, BlendFactor::Zero,
-                Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None, false);
+                Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None, true, false);
             m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
             setDisplayGamma(1.f);
             const struct Vert {
@@ -879,7 +879,8 @@ class MetalShaderPipeline : public GraphicsDataNode<IShaderPipeline>
                         const ObjToken<IVertexFormat>& vtxFmt, NSUInteger targetSamples,
                         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                         ZTest depthTest, bool depthWrite, bool colorWrite,
-                        bool alphaWrite, CullMode culling, bool depthAttachment = true)
+                        bool alphaWrite, bool overwriteAlpha, CullMode culling,
+                        bool depthAttachment = true)
     : GraphicsDataNode<IShaderPipeline>(parent),
       m_drawPrim(PRIMITIVE_TABLE[int(prim)]),
       m_vert(std::move(vert)), m_frag(std::move(frag))
@@ -912,15 +913,36 @@ class MetalShaderPipeline : public GraphicsDataNode<IShaderPipeline>
             desc.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
             desc.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOne;
             desc.colorAttachments[0].rgbBlendOperation = MTLBlendOperationReverseSubtract;
+            if (overwriteAlpha)
+            {
+                desc.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
+                desc.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorZero;
+                desc.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
+            }
+            else
+            {
+                desc.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorSourceAlpha;
+                desc.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOne;
+                desc.colorAttachments[0].alphaBlendOperation = MTLBlendOperationReverseSubtract;
+            }
         }
         else
         {
             desc.colorAttachments[0].sourceRGBBlendFactor = BLEND_FACTOR_TABLE[int(srcFac)];
             desc.colorAttachments[0].destinationRGBBlendFactor = BLEND_FACTOR_TABLE[int(dstFac)];
             desc.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+            if (overwriteAlpha)
+            {
+                desc.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
+                desc.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorZero;
+            }
+            else
+            {
+                desc.colorAttachments[0].sourceAlphaBlendFactor = BLEND_FACTOR_TABLE[int(srcFac)];
+                desc.colorAttachments[0].destinationAlphaBlendFactor = BLEND_FACTOR_TABLE[int(dstFac)];
+            }
+            desc.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
         }
-        desc.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
-        desc.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorZero;
         desc.depthAttachmentPixelFormat = depthAttachment ? MTLPixelFormatDepth32Float : MTLPixelFormatInvalid;
         desc.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
         NSError* err = nullptr;
@@ -1640,7 +1662,8 @@ MetalDataFactory::Context::newShaderPipeline(const char* vertSource, const char*
                                              const ObjToken<IVertexFormat>& vtxFmt,
                                              BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                                              ZTest depthTest, bool depthWrite, bool colorWrite,
-                                             bool alphaWrite, CullMode culling, bool depthAttachment)
+                                             bool alphaWrite, CullMode culling, bool overwriteAlpha,
+                                             bool depthAttachment)
 {
     @autoreleasepool
     {
@@ -1769,7 +1792,7 @@ MetalDataFactory::Context::newShaderPipeline(const char* vertSource, const char*
         return {new MetalShaderPipeline(m_data, factory.m_ctx, std::move(vertShader), std::move(fragShader),
                                         vtxFmt, depthAttachment ? factory.m_ctx->m_sampleCount : 1,
                                         srcFac, dstFac, prim, depthTest, depthWrite,
-                                        colorWrite, alphaWrite, culling, depthAttachment)};
+                                        colorWrite, alphaWrite, overwriteAlpha, culling, depthAttachment)};
     }
 }
 

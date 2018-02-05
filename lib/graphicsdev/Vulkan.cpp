@@ -2164,6 +2164,7 @@ class VulkanShaderPipeline : public GraphicsDataNode<IShaderPipeline>
     bool m_depthWrite;
     bool m_colorWrite;
     bool m_alphaWrite;
+    bool m_overwriteAlpha;
     CullMode m_culling;
     mutable VkPipeline m_pipeline = VK_NULL_HANDLE;
 
@@ -2175,12 +2176,12 @@ class VulkanShaderPipeline : public GraphicsDataNode<IShaderPipeline>
                          const boo::ObjToken<IVertexFormat>& vtxFmt,
                          BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                          ZTest depthTest, bool depthWrite, bool colorWrite,
-                         bool alphaWrite, CullMode culling)
+                         bool alphaWrite, bool overwriteAlpha, CullMode culling)
     : GraphicsDataNode<IShaderPipeline>(parent),
       m_ctx(ctx), m_pipelineCache(pipelineCache), m_vtxFmt(vtxFmt),
       m_vert(std::move(vert)), m_frag(std::move(frag)), m_srcFac(srcFac), m_dstFac(dstFac),
       m_prim(prim), m_depthTest(depthTest), m_depthWrite(depthWrite), m_colorWrite(colorWrite),
-      m_alphaWrite(alphaWrite), m_culling(culling)
+      m_alphaWrite(alphaWrite), m_overwriteAlpha(overwriteAlpha), m_culling(culling)
     {}
 public:
     ~VulkanShaderPipeline()
@@ -2308,16 +2309,36 @@ public:
                 colorAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
                 colorAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
                 colorAttachment.colorBlendOp = VK_BLEND_OP_REVERSE_SUBTRACT;
+                if (m_overwriteAlpha)
+                {
+                    colorAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+                    colorAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+                    colorAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+                }
+                else
+                {
+                    colorAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+                    colorAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+                    colorAttachment.alphaBlendOp = VK_BLEND_OP_REVERSE_SUBTRACT;
+                }
             }
             else
             {
                 colorAttachment.srcColorBlendFactor = BLEND_FACTOR_TABLE[int(m_srcFac)];
                 colorAttachment.dstColorBlendFactor = BLEND_FACTOR_TABLE[int(m_dstFac)];
                 colorAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+                if (m_overwriteAlpha)
+                {
+                    colorAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+                    colorAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+                }
+                else
+                {
+                    colorAttachment.srcAlphaBlendFactor = BLEND_FACTOR_TABLE[int(m_srcFac)];
+                    colorAttachment.dstAlphaBlendFactor = BLEND_FACTOR_TABLE[int(m_dstFac)];
+                }
+                colorAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
             }
-            colorAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            colorAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            colorAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
             colorAttachment.colorWriteMask =
                     (m_colorWrite ? (VK_COLOR_COMPONENT_R_BIT |
                                      VK_COLOR_COMPONENT_G_BIT |
@@ -3561,7 +3582,7 @@ boo::ObjToken<IShaderPipeline> VulkanDataFactory::Context::newShaderPipeline
  std::vector<unsigned char>* pipelineBlob, const boo::ObjToken<IVertexFormat>& vtxFmt,
  BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
  ZTest depthTest, bool depthWrite, bool colorWrite,
- bool alphaWrite, CullMode culling)
+ bool alphaWrite, CullMode culling, bool overwriteAlpha)
 {
     VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
 
@@ -3688,7 +3709,7 @@ boo::ObjToken<IShaderPipeline> VulkanDataFactory::Context::newShaderPipeline
     VulkanShaderPipeline* retval = new VulkanShaderPipeline(m_data, factory.m_ctx, std::move(vertShader),
                                                             std::move(fragShader), pipelineCache, vtxFmt, srcFac,
                                                             dstFac, prim, depthTest, depthWrite, colorWrite,
-                                                            alphaWrite, culling);
+                                                            alphaWrite, overwriteAlpha, culling);
 
     if (pipelineBlob && pipelineBlob->empty())
     {

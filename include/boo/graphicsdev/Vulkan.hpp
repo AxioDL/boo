@@ -160,7 +160,7 @@ public:
                                                          const boo::ObjToken<IVertexFormat>& vtxFmt,
                                                          BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                                                          ZTest depthTest, bool depthWrite, bool colorWrite,
-                                                         bool alphaWrite, CullMode culling);
+                                                         bool alphaWrite, CullMode culling, bool overwriteAlpha = true);
 
         boo::ObjToken<IShaderPipeline> newShaderPipeline(const char* vertSource, const char* fragSource,
                                                          const boo::ObjToken<IVertexFormat>& vtxFmt,

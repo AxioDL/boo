@@ -35,7 +35,7 @@ public:
                           const boo::ObjToken<IVertexFormat>& vtxFmt,
                           BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                           ZTest depthTest, bool depthWrite, bool colorWrite,
-                          bool alphaWrite, CullMode culling)=0;
+                          bool alphaWrite, CullMode culling, bool overwriteAlpha=true)=0;
     };
 };
 
