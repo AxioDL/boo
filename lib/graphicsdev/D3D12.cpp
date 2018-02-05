@@ -716,7 +716,7 @@ class D3D12ShaderPipeline : public GraphicsDataNode<IShaderPipeline>
                         const boo::ObjToken<IVertexFormat>& vtxFmt,
                         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
                         ZTest depthTest, bool depthWrite, bool colorWrite,
-                        bool alphaWrite, CullMode culling)
+                        bool alphaWrite, bool overwriteAlpha, CullMode culling)
     : GraphicsDataNode<IShaderPipeline>(parent), m_vtxFmt(vtxFmt),
       m_vert(std::move(vert)), m_pixel(std::move(pixel)),
       m_topology(PRIMITIVE_TABLE[int(prim)])
@@ -769,7 +769,7 @@ class D3D12ShaderPipeline : public GraphicsDataNode<IShaderPipeline>
                 desc.BlendState.RenderTarget[0].SrcBlend = BLEND_FACTOR_TABLE[int(srcFac)];
                 desc.BlendState.RenderTarget[0].DestBlend = BLEND_FACTOR_TABLE[int(dstFac)];
                 desc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
-                if (m_overwriteAlpha)
+                if (overwriteAlpha)
                 {
                     desc.BlendState.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
                     desc.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;

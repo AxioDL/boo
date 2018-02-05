@@ -637,7 +637,7 @@ class D3D11ShaderPipeline : public GraphicsDataNode<IShaderPipeline>
             blDesc.RenderTarget[0].SrcBlend = BLEND_FACTOR_TABLE[int(srcFac)];
             blDesc.RenderTarget[0].DestBlend = BLEND_FACTOR_TABLE[int(dstFac)];
             blDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
-            if (m_overwriteAlpha)
+            if (overwriteAlpha)
             {
                 blDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
                 blDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
