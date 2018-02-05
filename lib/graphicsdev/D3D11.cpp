@@ -1025,8 +1025,11 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         cbind->bind(m_deferredCtx.Get(), m_fillBuf);
         m_cmdLists[m_fillBuf].resTokens.push_back(binding.get());
 
-        ID3D11SamplerState* samp[] = {m_ctx->m_ss[0].Get(), m_ctx->m_ss[1].Get(), m_ctx->m_ss[2].Get()};
-        m_deferredCtx->PSSetSamplers(0, 3, samp);
+        ID3D11SamplerState* samp[] = {m_ctx->m_ss[0].Get(),
+                                      m_ctx->m_ss[1].Get(),
+                                      m_ctx->m_ss[2].Get(),
+                                      m_ctx->m_ss[3].Get()};
+        m_deferredCtx->PSSetSamplers(0, 4, samp);
     }
 
     boo::ObjToken<ITextureR> m_boundTarget;
@@ -1637,8 +1640,9 @@ void D3D11CommandQueue::RenderingWorker(D3D11CommandQueue* self)
                 self->m_ctx->m_devCtx->RSSetScissorRects(1, &d3drect);
                 ID3D11SamplerState* samp[] = {self->m_ctx->m_ss[0].Get(),
                                               self->m_ctx->m_ss[1].Get(),
-                                              self->m_ctx->m_ss[2].Get()};
-                self->m_ctx->m_devCtx->PSSetSamplers(0, 3, samp);
+                                              self->m_ctx->m_ss[2].Get(),
+                                              self->m_ctx->m_ss[3].Get()};
+                self->m_ctx->m_devCtx->PSSetSamplers(0, 4, samp);
 
                 D3D11ShaderDataBinding* gammaBinding = dataFactory->m_gammaBinding.cast<D3D11ShaderDataBinding>();
                 gammaBinding->m_texs[0].tex = CmdList.workDoPresent.get();
