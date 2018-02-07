@@ -1269,7 +1269,7 @@ class D3D11DataFactory : public ID3DDataFactory, public GraphicsDataFactoryHead
             m_gammaVFMT = ctx.newVertexFormat(2, vfmt);
             m_gammaShader = static_cast<Context&>(ctx).newShaderPipeline(GammaVS, GammaFS,
                 nullptr, nullptr, nullptr, m_gammaVFMT, BlendFactor::One, BlendFactor::Zero,
-                Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None);
+                Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None, true);
             m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
             setDisplayGamma(1.f);
             const struct Vert {

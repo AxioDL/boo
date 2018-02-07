@@ -1022,8 +1022,18 @@ public:
 
     WindowWin32(SystemStringView title, Boo3DAppContextWin32& b3dCtx)
     {
+        const POINT ptZero = { 0, 0 };
+        HMONITOR monitor = MonitorFromPoint(ptZero, MONITOR_DEFAULTTOPRIMARY);
+        MONITORINFO monInfo = {};
+        monInfo.cbSize = sizeof(MONITORINFO);
+        GetMonitorInfo(monitor, &monInfo);
+        int x, y, w, h;
+        genFrameDefault(&monInfo, x, y, w, h);
+        RECT r = {x, y, x + w, y + h};
+        AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
+
         m_hwnd = CreateWindowW(L"BooWindow", title.data(), WS_OVERLAPPEDWINDOW,
-                               CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                               r.left, r.top, r.right - r.left, r.bottom - r.top,
                                NULL, NULL, NULL, NULL);
         HINSTANCE wndInstance = HINSTANCE(GetWindowLongPtr(m_hwnd, GWLP_HINSTANCE));
         m_imc = ImmGetContext(m_hwnd);
@@ -1118,8 +1128,10 @@ public:
 
     void setWindowFrameDefault()
     {
-        MONITORINFO monInfo;
-        GetMonitorInfo(MonitorFromWindow(m_hwnd, MONITOR_DEFAULTTOPRIMARY), &monInfo);
+        MONITORINFO monInfo = {};
+        monInfo.cbSize = sizeof(MONITORINFO);
+        HMONITOR mon = MonitorFromWindow(m_hwnd, MONITOR_DEFAULTTOPRIMARY);
+        GetMonitorInfo(mon, &monInfo);
         int x, y, w, h;
         genFrameDefault(&monInfo, x, y, w, h);
         setWindowFrame(x, y, w, h);
@@ -1155,12 +1167,14 @@ public:
 
     void setWindowFrame(float x, float y, float w, float h)
     {
-        MoveWindow(m_hwnd, x, y, w, h, true);
+        setWindowFrame(int(x), int(y), int(w), int(h));
     }
 
     void setWindowFrame(int x, int y, int w, int h)
     {
-        MoveWindow(m_hwnd, x, y, w, h, true);
+        RECT r = {x, y, x + w, y + h};
+        AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
+        MoveWindow(m_hwnd, r.left, r.top, r.right - r.left, r.bottom - r.top, true);
     }
 
     float getVirtualPixelFactor() const
