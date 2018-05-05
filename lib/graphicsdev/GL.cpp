@@ -1352,6 +1352,9 @@ struct GLCommandQueue : IGraphicsCommandQueue
             self->m_glCtx->m_sampleCount =
                 flp2(std::min(uint32_t(maxSamples), std::max(uint32_t(1), self->m_glCtx->m_sampleCount)) - 1);
 
+            glEnable(GL_PRIMITIVE_RESTART);
+            glPrimitiveRestartIndex(0xffffffff);
+
             dataFactory->SetupGammaResources();
         }
         self->m_initcv.notify_one();
