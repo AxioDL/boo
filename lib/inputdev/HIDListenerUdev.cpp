@@ -28,7 +28,6 @@ class HIDListenerUdev final : public IHIDListener
 
     udev_monitor* m_udevMon;
     std::thread m_udevThread;
-    bool m_udevRunning;
     bool m_scanningEnabled;
 
     static void deviceConnected(HIDListenerUdev* listener,
@@ -152,36 +151,23 @@ class HIDListenerUdev final : public IHIDListener
         listener->m_finder._removeToken(devPath);
     }
 
-    /* Empty handler for SIGTERM */
-    static void _sigterm(int) {}
-
     static void _udevProc(HIDListenerUdev* listener)
     {
-        /* SIGTERM will be used to terminate thread */
-        struct sigaction s;
-        s.sa_handler = _sigterm;
-        sigemptyset(&s.sa_mask);
-        s.sa_flags = 0;
-        sigaction(SIGTERM, &s, nullptr);
-
-        sigset_t waitmask, origmask;
-        sigemptyset(&waitmask);
-        sigaddset(&waitmask, SIGTERM);
-        pthread_sigmask(SIG_BLOCK, &waitmask, &origmask);
-
         udev_monitor_enable_receiving(listener->m_udevMon);
         int fd = udev_monitor_get_fd(listener->m_udevMon);
-        while (listener->m_udevRunning)
+        while (true)
         {
             fd_set fds;
             FD_ZERO(&fds);
             FD_SET(fd, &fds);
-            if (pselect(fd+1, &fds, nullptr, nullptr, nullptr, &origmask) < 0)
+            if (pselect(fd+1, &fds, nullptr, nullptr, nullptr, nullptr) < 0)
             {
                 /* SIGTERM handled here */
                 if (errno == EINTR)
                     break;
             }
+            int oldtype;
+            pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldtype);
             udev_device* dev = udev_monitor_receive_device(listener->m_udevMon);
             if (dev)
             {
@@ -192,6 +178,8 @@ class HIDListenerUdev final : public IHIDListener
                     deviceDisconnected(listener, dev);
                 udev_device_unref(dev);
             }
+            pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &oldtype);
+            pthread_testcancel();
         }
     }
 
@@ -217,15 +205,14 @@ public:
         m_scanningEnabled = false;
 
         /* Start hotplug thread */
-        m_udevRunning = true;
         m_udevThread = std::thread(_udevProc, this);
     }
 
     ~HIDListenerUdev()
     {
-        m_udevRunning = false;
-        pthread_kill(m_udevThread.native_handle(), SIGTERM);
-        m_udevThread.join();
+        pthread_cancel(m_udevThread.native_handle());
+        if (m_udevThread.joinable())
+            m_udevThread.join();
         udev_monitor_unref(m_udevMon);
     }
 

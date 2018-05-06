@@ -481,8 +481,9 @@ public:
         return 0;
     }
 
-    void _incomingEvent(void* ev)
+    bool _incomingEvent(void* ev)
     {
+        return false;
     }
 
     void OnKeyDown(CoreWindow^ window, KeyEventArgs^ keyEventArgs)

@@ -299,7 +299,7 @@ public:
     virtual void waitForRetrace(IAudioVoiceEngine* voxEngine=nullptr)=0;
     
     virtual uintptr_t getPlatformHandle() const=0;
-    virtual void _incomingEvent(void* event) {(void)event;}
+    virtual bool _incomingEvent(void* event) {(void)event; return false;}
 
     virtual ETouchType getTouchType() const=0;
 

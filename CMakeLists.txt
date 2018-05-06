@@ -150,7 +150,7 @@ else(NOT GEKKO)
        lib/graphicsdev/GL.cpp
        lib/graphicsdev/GLX.cpp
        lib/graphicsdev/glew.c
-       lib/audiodev/ALSA.cpp)
+       lib/audiodev/LinuxMidi.hpp)
 
   find_package(PkgConfig)
   if(PKG_CONFIG_FOUND)
@@ -189,6 +189,18 @@ else(NOT GEKKO)
     lib
     lib32
     lib64)
+
+  find_path(PULSEAUDIO_INCLUDE_DIR
+            NAMES pulse/pulseaudio.h)
+
+  if (PULSEAUDIO_INCLUDE_DIR)
+    list(APPEND PLAT_SRCS lib/audiodev/PulseAudio.cpp)
+    list(APPEND _BOO_SYS_LIBS pulse)
+    message(STATUS "Using PulseAudio backend")
+  else()
+    list(APPEND PLAT_SRCS lib/audiodev/ALSA.cpp)
+    message(STATUS "Using ALSA backend")
+  endif()
 
   if(DBUS_INCLUDE_DIR-NOTFOUND)
     message(FATAL_ERROR "Unix build of boo requires dbus")

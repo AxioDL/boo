@@ -1,20 +1,13 @@
 #include <memory>
 #include <list>
-#include <thread>
 #include "AudioVoiceEngine.hpp"
 #include "logvisor/logvisor.hpp"
 
-#include <alsa/asoundlib.h>
-#include <signal.h>
-
-static inline double TimespecToDouble(struct timespec& ts)
-{
-    return ts.tv_sec + ts.tv_nsec / 1.0e9;
-}
+#include "LinuxMidi.hpp"
 
 namespace boo
 {
-static logvisor::Module Log("boo::ALSA");
+logvisor::Module ALSALog("boo::ALSA");
 
 static const uint64_t StereoChans = (1 << SND_CHMAP_FL) |
                                     (1 << SND_CHMAP_FR);
@@ -40,7 +33,7 @@ static const uint64_t S71Chans = (1 << SND_CHMAP_FL) |
                                  (1 << SND_CHMAP_SL) |
                                  (1 << SND_CHMAP_SR);
 
-struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
+struct ALSAAudioVoiceEngine : LinuxMidi
 {
     snd_pcm_t* m_pcm;
     snd_pcm_uframes_t m_bufSize;
@@ -129,7 +122,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
         /* Open device */
         if (snd_pcm_open(&m_pcm, "default", SND_PCM_STREAM_PLAYBACK, 0))
         {
-            Log.report(logvisor::Error, "unable to allocate ALSA voice");
+            ALSALog.report(logvisor::Error, "unable to allocate ALSA voice");
             return;
         }
 
@@ -144,7 +137,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             snd_pcm_hw_params_free(hwParams);
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
-            Log.report(logvisor::Error, "Can't set interleaved mode. %s\n", snd_strerror(errr));
+            ALSALog.report(logvisor::Error, "Can't set interleaved mode. %s\n", snd_strerror(errr));
             return;
         }
 
@@ -172,7 +165,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             snd_pcm_hw_params_free(hwParams);
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
-            Log.report(logvisor::Error, "unsupported audio formats on default ALSA device");
+            ALSALog.report(logvisor::Error, "unsupported audio formats on default ALSA device");
             return;
         }
 
@@ -181,7 +174,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             snd_pcm_hw_params_free(hwParams);
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
-            Log.report(logvisor::Error, "Can't set format. %s\n", snd_strerror(errr));
+            ALSALog.report(logvisor::Error, "Can't set format. %s\n", snd_strerror(errr));
             return;
         }
 
@@ -193,7 +186,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             snd_pcm_hw_params_free(hwParams);
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
-            Log.report(logvisor::Error, "Can't set channels number. %s\n", snd_strerror(errr));
+            ALSALog.report(logvisor::Error, "Can't set channels number. %s\n", snd_strerror(errr));
             return;
         }
 
@@ -211,7 +204,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             snd_pcm_hw_params_free(hwParams);
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
-            Log.report(logvisor::Error, "unsupported audio sample rates on default ALSA device");
+            ALSALog.report(logvisor::Error, "unsupported audio sample rates on default ALSA device");
             return;
         }
 
@@ -220,7 +213,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             snd_pcm_hw_params_free(hwParams);
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
-            Log.report(logvisor::Error, "Can't set rate. %s\n", snd_strerror(errr));
+            ALSALog.report(logvisor::Error, "Can't set rate. %s\n", snd_strerror(errr));
             return;
         }
         m_mixInfo.m_sampleRate = bestRate;
@@ -232,7 +225,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             snd_pcm_hw_params_free(hwParams);
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
-            Log.report(logvisor::Error, "Can't set period size. %s\n", snd_strerror(errr));
+            ALSALog.report(logvisor::Error, "Can't set period size. %s\n", snd_strerror(errr));
             return;
         }
 
@@ -242,7 +235,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             snd_pcm_hw_params_free(hwParams);
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
-            Log.report(logvisor::Error, "Can't set buffer size. %s\n", snd_strerror(errr));
+            ALSALog.report(logvisor::Error, "Can't set buffer size. %s\n", snd_strerror(errr));
             return;
         }
 
@@ -252,7 +245,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             snd_pcm_hw_params_free(hwParams);
             snd_pcm_close(m_pcm);
             m_pcm = nullptr;
-            Log.report(logvisor::Error, "Can't set harware parameters. %s\n", snd_strerror(errr));
+            ALSALog.report(logvisor::Error, "Can't set harware parameters. %s\n", snd_strerror(errr));
             return;
         }
 
@@ -308,7 +301,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
                 snd_pcm_close(m_pcm);
                 m_pcm = nullptr;
                 snd_pcm_free_chmaps(chmaps);
-                Log.report(logvisor::Error, "unable to find matching ALSA voice chmap");
+                ALSALog.report(logvisor::Error, "unable to find matching ALSA voice chmap");
                 return;
             }
             chmapOut.m_channelCount = chCount;
@@ -373,7 +366,7 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             {
                 snd_pcm_prepare(m_pcm);
                 frames = snd_pcm_avail_update(m_pcm);
-                Log.report(logvisor::Warning, "ALSA underrun %ld frames", frames);
+                ALSALog.report(logvisor::Warning, "ALSA underrun %ld frames", frames);
             }
             else
                 return;
@@ -403,234 +396,6 @@ struct ALSAAudioVoiceEngine : BaseAudioVoiceEngine
             }
         }
     }
-
-    std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const
-    {
-        std::vector<std::pair<std::string, std::string>> ret;
-        int status;
-        int card = -1;  /* use -1 to prime the pump of iterating through card list */
-
-        if ((status = snd_card_next(&card)) < 0)
-            return {};
-        if (card < 0)
-            return {};
-
-        while (card >= 0)
-        {
-            snd_ctl_t *ctl;
-            char name[32];
-            int device = -1;
-            int status;
-            sprintf(name, "hw:%d", card);
-            if ((status = snd_ctl_open(&ctl, name, 0)) < 0)
-                continue;
-
-            do {
-                status = snd_ctl_rawmidi_next_device(ctl, &device);
-                if (status < 0)
-                    break;
-                if (device >= 0)
-                {
-                    snd_rawmidi_info_t *info;
-                    snd_rawmidi_info_alloca(&info);
-                    snd_rawmidi_info_set_device(info, device);
-                    sprintf(name + strlen(name), ",%d", device);
-                    ret.push_back(std::make_pair(name, snd_rawmidi_info_get_name(info)));
-                }
-            } while (device >= 0);
-
-            snd_ctl_close(ctl);
-
-            if ((status = snd_card_next(&card)) < 0)
-                break;
-        }
-
-        return ret;
-    }
-
-    /* Empty handler for SIGQUIT */
-    static void _sigquit(int) {}
-
-    static void MIDIReceiveProc(snd_rawmidi_t* midi, const ReceiveFunctor& receiver, bool& running)
-    {
-        struct sigaction s;
-        s.sa_handler = _sigquit;
-        sigemptyset(&s.sa_mask);
-        s.sa_flags = 0;
-        sigaction(SIGQUIT, &s, nullptr);
-
-        snd_rawmidi_status_t* midiStatus;
-        snd_rawmidi_status_malloc(&midiStatus);
-
-        uint8_t buf[512];
-        while (running)
-        {
-            snd_htimestamp_t ts;
-            snd_rawmidi_status(midi, midiStatus);
-            snd_rawmidi_status_get_tstamp(midiStatus, &ts);
-            int rdBytes = snd_rawmidi_read(midi, buf, 512);
-            if (rdBytes < 0)
-            {
-                if (rdBytes != -EINTR)
-                    Log.report(logvisor::Error, "MIDI connection lost");
-                running = false;
-                break;
-            }
-
-            receiver(std::vector<uint8_t>(std::cbegin(buf), std::cbegin(buf) + rdBytes), TimespecToDouble(ts));
-        }
-
-        snd_rawmidi_status_free(midiStatus);
-    }
-
-    struct MIDIIn : public IMIDIIn
-    {
-        bool m_midiRunning = true;
-        snd_rawmidi_t* m_midi;
-        std::thread m_midiThread;
-
-        MIDIIn(snd_rawmidi_t* midi, bool virt, ReceiveFunctor&& receiver)
-        : IMIDIIn(virt, std::move(receiver)), m_midi(midi),
-          m_midiThread(std::bind(MIDIReceiveProc, m_midi, m_receiver, m_midiRunning)) {}
-
-        ~MIDIIn()
-        {
-            m_midiRunning = false;
-            pthread_kill(m_midiThread.native_handle(), SIGQUIT);
-            if (m_midiThread.joinable())
-                m_midiThread.join();
-            snd_rawmidi_close(m_midi);
-        }
-
-        std::string description() const
-        {
-            snd_rawmidi_info_t* info;
-            snd_rawmidi_info_alloca(&info);
-            snd_rawmidi_info(m_midi, info);
-            std::string ret = snd_rawmidi_info_get_name(info);
-            return ret;
-        }
-    };
-
-    struct MIDIOut : public IMIDIOut
-    {
-        snd_rawmidi_t* m_midi;
-        MIDIOut(snd_rawmidi_t* midi, bool virt)
-        : IMIDIOut(virt), m_midi(midi) {}
-
-        ~MIDIOut() {snd_rawmidi_close(m_midi);}
-
-        std::string description() const
-        {
-            snd_rawmidi_info_t* info;
-            snd_rawmidi_info_alloca(&info);
-            snd_rawmidi_info(m_midi, info);
-            std::string ret = snd_rawmidi_info_get_name(info);
-            return ret;
-        }
-
-        size_t send(const void* buf, size_t len) const
-        {
-            return size_t(std::max(0l, snd_rawmidi_write(m_midi, buf, len)));
-        }
-    };
-
-    struct MIDIInOut : public IMIDIInOut
-    {
-        bool m_midiRunning = true;
-        snd_rawmidi_t* m_midiIn;
-        snd_rawmidi_t* m_midiOut;
-        std::thread m_midiThread;
-
-        MIDIInOut(snd_rawmidi_t* midiIn, snd_rawmidi_t* midiOut, bool virt, ReceiveFunctor&& receiver)
-        : IMIDIInOut(virt, std::move(receiver)), m_midiIn(midiIn), m_midiOut(midiOut),
-          m_midiThread(std::bind(MIDIReceiveProc, m_midiIn, m_receiver, m_midiRunning)) {}
-
-        ~MIDIInOut()
-        {
-            m_midiRunning = false;
-            pthread_kill(m_midiThread.native_handle(), SIGQUIT);
-            if (m_midiThread.joinable())
-                m_midiThread.join();
-            snd_rawmidi_close(m_midiIn);
-            snd_rawmidi_close(m_midiOut);
-        }
-
-        std::string description() const
-        {
-            snd_rawmidi_info_t* info;
-            snd_rawmidi_info_alloca(&info);
-            snd_rawmidi_info(m_midiIn, info);
-            std::string ret = snd_rawmidi_info_get_name(info);
-            return ret;
-        }
-
-        size_t send(const void* buf, size_t len) const
-        {
-            return size_t(std::max(0l, snd_rawmidi_write(m_midiOut, buf, len)));
-        }
-    };
-
-    std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver)
-    {
-        int status;
-        snd_rawmidi_t* midi;
-        status = snd_rawmidi_open(&midi, nullptr, "virtual", 0);
-        if (status)
-            return {};
-        return std::make_unique<MIDIIn>(midi, true, std::move(receiver));
-    }
-
-    std::unique_ptr<IMIDIOut> newVirtualMIDIOut()
-    {
-        int status;
-        snd_rawmidi_t* midi;
-        status = snd_rawmidi_open(nullptr, &midi, "virtual", 0);
-        if (status)
-            return {};
-        return std::make_unique<MIDIOut>(midi, true);
-    }
-
-    std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver)
-    {
-        int status;
-        snd_rawmidi_t* midiIn;
-        snd_rawmidi_t* midiOut;
-        status = snd_rawmidi_open(&midiIn, &midiOut, "virtual", 0);
-        if (status)
-            return {};
-        return std::make_unique<MIDIInOut>(midiIn, midiOut, true, std::move(receiver));
-    }
-
-    std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver)
-    {
-        snd_rawmidi_t* midi;
-        int status = snd_rawmidi_open(&midi, nullptr, name, 0);
-        if (status)
-            return {};
-        return std::make_unique<MIDIIn>(midi, true, std::move(receiver));
-    }
-
-    std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name)
-    {
-        snd_rawmidi_t* midi;
-        int status = snd_rawmidi_open(nullptr, &midi, name, 0);
-        if (status)
-            return {};
-        return std::make_unique<MIDIOut>(midi, true);
-    }
-
-    std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver)
-    {
-        snd_rawmidi_t* midiIn;
-        snd_rawmidi_t* midiOut;
-        int status = snd_rawmidi_open(&midiIn, &midiOut, name, 0);
-        if (status)
-            return {};
-        return std::make_unique<MIDIInOut>(midiIn, midiOut, true, std::move(receiver));
-    }
-
-    bool useMIDILock() const {return true;}
 };
 
 std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine()

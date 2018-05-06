@@ -1358,7 +1358,7 @@ public:
     }
 
     bool mouseTracking = false;
-    void _incomingEvent(void* ev)
+    bool _incomingEvent(void* ev)
     {
         HWNDEvent& e = *static_cast<HWNDEvent*>(ev);
         switch (e.uMsg)
@@ -1366,28 +1366,28 @@ public:
         case WM_CLOSE:
             if (m_callback)
                 m_callback->destroyed();
-            return;
+            return true;
         case WM_SIZE:
         {
             SWindowRect rect;
             getWindowFrame(rect.location[0], rect.location[1], rect.size[0], rect.size[1]);
             if (!rect.size[0] || !rect.size[1])
-                return;
+                return false;
             m_gfxCtx->resized(rect);
             if (m_callback)
                 m_callback->resized(rect, m_openGL);
-            return;
+            return false;
         }
         case WM_MOVING:
         {
             SWindowRect rect;
             getWindowFrame(rect.location[0], rect.location[1], rect.size[0], rect.size[1]);
             if (!rect.size[0] || !rect.size[1])
-                return;
+                return false;
 
             if (m_callback)
                 m_callback->windowMoved(rect);
-            return;
+            return false;
         }
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
@@ -1405,7 +1405,7 @@ public:
                 else if (modifierKey != EModifierKey::None)
                     m_callback->modKeyDown(modifierKey, (HIWORD(e.lParam) & KF_REPEAT) != 0);
             }
-            return;
+            return false;
         }
         case WM_KEYUP:
         case WM_SYSKEYUP:
@@ -1423,37 +1423,37 @@ public:
                 else if (modifierKey != EModifierKey::None)
                     m_callback->modKeyUp(modifierKey);
             }
-            return;
+            return false;
         }
         case WM_LBUTTONDOWN:
         {
             buttonDown(e, EMouseButton::Primary);
-            return;
+            return false;
         }
         case WM_LBUTTONUP:
         {
             buttonUp(e, EMouseButton::Primary);
-            return;
+            return false;
         }
         case WM_RBUTTONDOWN:
         {
             buttonDown(e, EMouseButton::Secondary);
-            return;
+            return false;
         }
         case WM_RBUTTONUP:
         {
             buttonUp(e, EMouseButton::Secondary);
-            return;
+            return false;
         }
         case WM_MBUTTONDOWN:
         {
             buttonDown(e, EMouseButton::Middle);
-            return;
+            return false;
         }
         case WM_MBUTTONUP:
         {
             buttonUp(e, EMouseButton::Middle);
-            return;
+            return false;
         }
         case WM_XBUTTONDOWN:
         {
@@ -1461,7 +1461,7 @@ public:
                 buttonDown(e, EMouseButton::Aux1);
             else if (HIWORD(e.wParam) == XBUTTON2)
                 buttonDown(e, EMouseButton::Aux2);
-            return;
+            return false;
         }
         case WM_XBUTTONUP:
         {
@@ -1469,7 +1469,7 @@ public:
                 buttonUp(e, EMouseButton::Aux1);
             else if (HIWORD(e.wParam) == XBUTTON2)
                 buttonUp(e, EMouseButton::Aux2);
-            return;
+            return false;
         }
         case WM_MOUSEMOVE:
         {
@@ -1493,7 +1493,7 @@ public:
                     m_callback->mouseMove(coord);
             }
 
-            return;
+            return false;
         }
         case WM_MOUSELEAVE:
         case WM_NCMOUSELEAVE:
@@ -1511,7 +1511,7 @@ public:
                 m_callback->mouseLeave(coord);
                 mouseTracking = false;
             }
-            return;
+            return false;
         }
         case WM_NCMOUSEHOVER:
         case WM_MOUSEHOVER:
@@ -1528,7 +1528,7 @@ public:
                 };
                 m_callback->mouseEnter(coord);
             }
-            return;
+            return false;
         }
         case WM_MOUSEWHEEL:
         {
@@ -1546,7 +1546,7 @@ public:
                 scroll.delta[1] = GET_WHEEL_DELTA_WPARAM(e.wParam) / double(WHEEL_DELTA);
                 m_callback->scroll(coord, scroll);
             }
-            return;
+            return false;
         }
         case WM_MOUSEHWHEEL:
         {
@@ -1564,7 +1564,7 @@ public:
                 scroll.delta[0] = GET_WHEEL_DELTA_WPARAM(e.wParam) / double(-WHEEL_DELTA);
                 m_callback->scroll(coord, scroll);
             }
-            return;
+            return false;
         }
         case WM_CHAR:
         case WM_UNICHAR:
@@ -1577,10 +1577,12 @@ public:
                 if (inputCb && len)
                     inputCb->insertText(std::string((char*)utf8ch, len));
             }
-            return;
+            return false;
         }
         default: break;
         }
+
+        return false;
     }
 
     ETouchType getTouchType() const

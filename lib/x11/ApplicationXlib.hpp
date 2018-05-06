@@ -473,6 +473,8 @@ public:
 
             if (FD_ISSET(m_x11Fd, &fds))
             {
+                bool needsQuit = false;
+
                 XLockDisplay(m_xDisp);
                 while (XPending(m_xDisp))
                 {
@@ -486,10 +488,17 @@ public:
                         auto window = m_windows.find(evWindow);
                         if (window != m_windows.end())
                             if (std::shared_ptr<IWindow> w = window->second.lock())
-                                w->_incomingEvent(&event);
+                                if (w->_incomingEvent(&event) && m_windows.size() == 1)
+                                {
+                                    needsQuit = true;
+                                    break;
+                                }
                     }
                 }
                 XUnlockDisplay(m_xDisp);
+
+                if (needsQuit)
+                    break;
             }
 
             if (FD_ISSET(m_dbusFd, &fds))

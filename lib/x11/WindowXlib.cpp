@@ -360,7 +360,7 @@ public:
             glXGetFBConfigAttrib(display, config, GLX_DOUBLEBUFFER, &doubleBuffer);
 
             /* Double-buffer only */
-            if (!doubleBuffer)
+            if (!doubleBuffer || !visualId)
                 continue;
 
             if (m_pf == EPixelFormat::RGBA8 && colorSize >= 32)
@@ -1641,7 +1641,7 @@ public:
     }
 #endif
 
-    void _incomingEvent(void* e)
+    bool _incomingEvent(void* e)
     {
         XEvent* event = (XEvent*)e;
         switch (event->type)
@@ -1649,7 +1649,7 @@ public:
         case SelectionRequest:
         {
             handleSelectionRequest(&event->xselectionrequest);
-            return;
+            return false;
         }
         case ClientMessage:
         {
@@ -1658,7 +1658,7 @@ public:
                 m_callback->destroyed();
                 m_callback = nullptr;
             }
-            return;
+            return true;
         }
         case Expose:
         {
@@ -1684,7 +1684,7 @@ public:
                 m_callback->resized(m_wrect, m_openGL);
                 XLockDisplay(m_xDisp);
             }
-            return;
+            return false;
         }
         case ConfigureNotify:
         {
@@ -1700,7 +1700,7 @@ public:
 
             if (m_callback)
                 m_callback->windowMoved(m_wrect);
-            return;
+            return false;
         }
         case KeyPress:
         {
@@ -1718,7 +1718,7 @@ public:
                     {
                         if (inputCb)
                             inputCb->insertText(utf8Frag);
-                        return;
+                        return false;
                     }
                 }
                 char charCode = translateKeysym(&event->xkey, specialKey, modifierKey);
@@ -1749,7 +1749,7 @@ public:
                         m_modKeys.insert((unsigned long)modifierKey);
                 }
             }
-            return;
+            return false;
         }
         case KeyRelease:
         {
@@ -1777,7 +1777,7 @@ public:
                     m_callback->modKeyUp(modifierKey);
                 }
             }
-            return;
+            return false;
         }
         case ButtonPress:
         {
@@ -1812,7 +1812,7 @@ public:
                     m_callback->scroll(MakeButtonEventCoord(event), scrollDelta);
                 }
             }
-            return;
+            return false;
         }
         case ButtonRelease:
         {
@@ -1827,19 +1827,19 @@ public:
                                         (EModifierKey)modifierMask);
                 }
             }
-            return;
+            return false;
         }
         case FocusIn:
         {
             if (m_callback)
                 m_callback->focusGained();
-            return;
+            return false;
         }
         case FocusOut:
         {
             if (m_callback)
                 m_callback->focusLost();
-            return;
+            return false;
         }
         case MotionNotify:
         {
@@ -1848,7 +1848,7 @@ public:
                 getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
                 m_callback->mouseMove(MakeMotionEventCoord(event));
             }
-            return;
+            return false;
         }
         case EnterNotify:
         {
@@ -1857,7 +1857,7 @@ public:
                 getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
                 m_callback->mouseEnter(MakeCrossingEventCoord(event));
             }
-            return;
+            return false;
         }
         case LeaveNotify:
         {
@@ -1866,7 +1866,7 @@ public:
                 getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
                 m_callback->mouseLeave(MakeCrossingEventCoord(event));
             }
-            return;
+            return false;
         }
         case GenericEvent:
         {
@@ -1925,7 +1925,7 @@ public:
                         };
                         m_callback->scroll(coord, scrollDelta);
                     }
-                    return;
+                    return false;
                 }
                 case XI_TouchBegin:
                 {
@@ -1951,7 +1951,7 @@ public:
 
                     if (m_callback)
                         m_callback->touchDown(coord, ev->detail);
-                    return;
+                    return false;
                 }
                 case XI_TouchUpdate:
                 {
@@ -1977,7 +1977,7 @@ public:
 
                     if (m_callback)
                         m_callback->touchMove(coord, ev->detail);
-                    return;
+                    return false;
                 }
                 case XI_TouchEnd:
                 {
@@ -2003,12 +2003,14 @@ public:
 
                     if (m_callback)
                         m_callback->touchUp(coord, ev->detail);
-                    return;
+                    return false;
                 }
                 }
             }
         }
         }
+
+        return false;
     }
     
     ETouchType getTouchType() const
