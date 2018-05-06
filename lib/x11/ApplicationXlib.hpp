@@ -551,7 +551,7 @@ public:
                                              m_bestStyle, m_fontset, m_lastGlxCtx, (void*)m_getVkProc, &m_glContext);
 #else
         std::shared_ptr<IWindow> newWindow = _WindowXlibNew(title, m_xDisp, nullptr, m_xDefaultScreen, m_xIM,
-                                             m_bestStyle, m_fontset, m_lastGlxCtx, nullptr, &m_glCtx);
+                                             m_bestStyle, m_fontset, m_lastGlxCtx, nullptr, &m_glContext);
 #endif
         m_windows[(Window)newWindow->getPlatformHandle()] = newWindow;
         return newWindow;

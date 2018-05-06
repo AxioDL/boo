@@ -38,7 +38,7 @@ if(NOT GEKKO AND NOT CAFE AND NOT WINDOWS_STORE)
 list(APPEND PLAT_SRCS
     lib/graphicsdev/GL.cpp
     lib/graphicsdev/glew.c)
-list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_GL=1)
+list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_GL=1 -DGLEW_NO_GLU=1)
 
 list(APPEND PLAT_HDRS
      include/boo/graphicsdev/GLSLMacros.hpp
@@ -198,19 +198,24 @@ else(NOT GEKKO)
   list(APPEND _BOO_SYS_LIBS X11 Xi Xrandr GL asound ${DBUS_LIBRARY} pthread)
 
   if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
+    find_path(VULKAN_INCLUDE_DIR
+              NAMES vulkan/vulkan.h)
+    if(VULKAN_INCLUDE_DIR)
       message(STATUS "Enabling Vulkan support")
       list(APPEND PLAT_SRCS
-          lib/inputdev/HIDListenerUdev.cpp
-          lib/inputdev/HIDDeviceUdev.cpp
           lib/graphicsdev/Vulkan.cpp
           lib/graphicsdev/VulkanDispatchTable.cpp)
       list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_VULKAN=1 -DVK_USE_PLATFORM_XCB_KHR=1)
-      list(APPEND _BOO_SYS_LIBS xcb X11-xcb dl udev)
+    endif()
+    list(APPEND PLAT_SRCS
+         lib/inputdev/HIDListenerUdev.cpp
+         lib/inputdev/HIDDeviceUdev.cpp)
+    list(APPEND _BOO_SYS_LIBS xcb X11-xcb dl udev)
   else()
-      list(APPEND PLAT_SRCS
-          lib/inputdev/HIDListenerBSD.cpp
-          lib/inputdev/HIDDeviceBSD.cpp)
-      list(APPEND _BOO_SYS_LIBS execinfo)
+    list(APPEND PLAT_SRCS
+        lib/inputdev/HIDListenerBSD.cpp
+        lib/inputdev/HIDDeviceBSD.cpp)
+    list(APPEND _BOO_SYS_LIBS execinfo)
   endif()
 
 endif()
