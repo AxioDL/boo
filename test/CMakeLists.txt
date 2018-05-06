@@ -1,2 +1,5 @@
 add_executable(booTest WIN32 main.cpp)
 target_link_libraries(booTest boo logvisor xxhash ${BOO_SYS_LIBS})
+if(COMMAND add_sanitizers)
+  add_sanitizers(booTest)
+endif()
