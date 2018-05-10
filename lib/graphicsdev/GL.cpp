@@ -600,14 +600,14 @@ public:
             glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[0]);
             glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_samples, m_colorFormat, width, height, GL_FALSE);
             glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[1]);
-            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_samples, GL_DEPTH_COMPONENT24, width, height, GL_FALSE);
+            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_samples, GL_DEPTH_COMPONENT32F, width, height, GL_FALSE);
         }
         else
         {
             glBindTexture(GL_TEXTURE_2D, m_texs[0]);
             glTexImage2D(GL_TEXTURE_2D, 0, m_colorFormat, width, height, 0, GL_RGBA, compType, nullptr);
             glBindTexture(GL_TEXTURE_2D, m_texs[1]);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
 
             glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
             glDepthMask(GL_TRUE);
@@ -628,7 +628,7 @@ public:
             if (m_bindTexs[1][i])
             {
                 glBindTexture(GL_TEXTURE_2D, m_bindTexs[1][i]);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
             }
         }
     }
@@ -1820,7 +1820,7 @@ GLTextureR::GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue*
         glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[0]);
         glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, colorFormat, width, height, GL_FALSE);
         glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_texs[1]);
-        glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_DEPTH_COMPONENT24, width, height, GL_FALSE);
+        glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_DEPTH_COMPONENT32F, width, height, GL_FALSE);
     }
     else
     {
@@ -1831,7 +1831,7 @@ GLTextureR::GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue*
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glBindTexture(GL_TEXTURE_2D, m_texs[1]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
     }
 
     for (int i=0 ; i<colorBindingCount ; ++i)
@@ -1845,7 +1845,7 @@ GLTextureR::GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue*
     for (int i=0 ; i<depthBindingCount ; ++i)
     {
         glBindTexture(GL_TEXTURE_2D, m_bindTexs[1][i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         SetClampMode(GL_TEXTURE_2D, clampMode);
