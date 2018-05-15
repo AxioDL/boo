@@ -191,48 +191,48 @@ struct PulseAudioVoiceEngine : LinuxMidi
         ChannelMap& chmapOut = m_mixInfo.m_channelMap;
         m_mixInfo.m_channels = AudioChannelSet::Unknown;
 
+        uint64_t chBits = 0;
+        chmapOut.m_channelCount = chm->channels;
+        for (unsigned c=0 ; c<chm->channels ; ++c)
+        {
+            chBits |= 1 << chm->map[c];
+            switch (chm->map[c])
+            {
+            case PA_CHANNEL_POSITION_FRONT_LEFT:
+                chmapOut.m_channels[c] = AudioChannel::FrontLeft;
+                break;
+            case PA_CHANNEL_POSITION_FRONT_RIGHT:
+                chmapOut.m_channels[c] = AudioChannel::FrontRight;
+                break;
+            case PA_CHANNEL_POSITION_REAR_LEFT:
+                chmapOut.m_channels[c] = AudioChannel::RearLeft;
+                break;
+            case PA_CHANNEL_POSITION_REAR_RIGHT:
+                chmapOut.m_channels[c] = AudioChannel::RearRight;
+                break;
+            case PA_CHANNEL_POSITION_FRONT_CENTER:
+                chmapOut.m_channels[c] = AudioChannel::FrontCenter;
+                break;
+            case PA_CHANNEL_POSITION_LFE:
+                chmapOut.m_channels[c] = AudioChannel::LFE;
+                break;
+            case PA_CHANNEL_POSITION_SIDE_LEFT:
+                chmapOut.m_channels[c] = AudioChannel::SideLeft;
+                break;
+            case PA_CHANNEL_POSITION_SIDE_RIGHT:
+                chmapOut.m_channels[c] = AudioChannel::SideRight;
+                break;
+            default:
+                chmapOut.m_channels[c] = AudioChannel::Unknown;
+                break;
+            }
+        }
+
         static const std::array<AudioChannelSet, 4> testSets =
             {{AudioChannelSet::Surround71, AudioChannelSet::Surround51,
                  AudioChannelSet::Quad, AudioChannelSet::Stereo}};
         for (AudioChannelSet set : testSets)
         {
-            uint64_t chBits = 0;
-            chmapOut.m_channelCount = chm->channels;
-            for (unsigned c=0 ; c<chm->channels ; ++c)
-            {
-                chBits |= 1 << chm->map[c];
-                switch (chm->map[c])
-                {
-                case PA_CHANNEL_POSITION_FRONT_LEFT:
-                    chmapOut.m_channels[c] = AudioChannel::FrontLeft;
-                    break;
-                case PA_CHANNEL_POSITION_FRONT_RIGHT:
-                    chmapOut.m_channels[c] = AudioChannel::FrontRight;
-                    break;
-                case PA_CHANNEL_POSITION_REAR_LEFT:
-                    chmapOut.m_channels[c] = AudioChannel::RearLeft;
-                    break;
-                case PA_CHANNEL_POSITION_REAR_RIGHT:
-                    chmapOut.m_channels[c] = AudioChannel::RearRight;
-                    break;
-                case PA_CHANNEL_POSITION_FRONT_CENTER:
-                    chmapOut.m_channels[c] = AudioChannel::FrontCenter;
-                    break;
-                case PA_CHANNEL_POSITION_LFE:
-                    chmapOut.m_channels[c] = AudioChannel::LFE;
-                    break;
-                case PA_CHANNEL_POSITION_SIDE_LEFT:
-                    chmapOut.m_channels[c] = AudioChannel::SideLeft;
-                    break;
-                case PA_CHANNEL_POSITION_SIDE_RIGHT:
-                    chmapOut.m_channels[c] = AudioChannel::SideRight;
-                    break;
-                default:
-                    chmapOut.m_channels[c] = AudioChannel::Unknown;
-                    break;
-                }
-            }
-
             switch (set)
             {
             case AudioChannelSet::Stereo:
