@@ -2254,7 +2254,7 @@ public:
             assemblyInfo.pNext = nullptr;
             assemblyInfo.flags = 0;
             assemblyInfo.topology = PRIMITIVE_TABLE[int(m_prim)];
-            assemblyInfo.primitiveRestartEnable = VK_FALSE;
+            assemblyInfo.primitiveRestartEnable = VK_TRUE;
 
             VkPipelineViewportStateCreateInfo viewportInfo = {};
             viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
