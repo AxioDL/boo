@@ -258,6 +258,11 @@ public:
                 tryVulkan = false;
                 break;
             }
+            if (!arg.compare("--vulkan"))
+            {
+                tryVulkan = true;
+                break;
+            }
         }
 
         if (tryVulkan)

@@ -670,12 +670,17 @@ public:
         VulkanContext::Window& m_windowCtx = *m_ctx->m_windows[m_parentWindow];
         m_windowCtx.m_swapChains[0].destroy(m_ctx->m_dev);
         m_windowCtx.m_swapChains[1].destroy(m_ctx->m_dev);
-        //vk::DestroySurfaceKHR(m_ctx->m_instance, m_surface, nullptr);
+        if (m_surface)
+        {
+            vk::DestroySurfaceKHR(m_ctx->m_instance, m_surface, nullptr);
+            m_surface = VK_NULL_HANDLE;
+        }
 
         if (m_vsyncRunning)
         {
             m_vsyncRunning = false;
-            m_vsyncThread.join();
+            if (m_vsyncThread.joinable())
+                m_vsyncThread.join();
         }
     }
 
@@ -787,8 +792,8 @@ public:
         /* Get the list of VkFormats that are supported */
         uint32_t formatCount;
         ThrowIfFailed(vk::GetPhysicalDeviceSurfaceFormatsKHR(m_ctx->m_gpus[0], m_surface, &formatCount, nullptr));
-        VkSurfaceFormatKHR* surfFormats = (VkSurfaceFormatKHR*)malloc(formatCount * sizeof(VkSurfaceFormatKHR));
-        ThrowIfFailed(vk::GetPhysicalDeviceSurfaceFormatsKHR(m_ctx->m_gpus[0], m_surface, &formatCount, surfFormats));
+        std::vector<VkSurfaceFormatKHR> surfFormats(formatCount);
+        ThrowIfFailed(vk::GetPhysicalDeviceSurfaceFormatsKHR(m_ctx->m_gpus[0], m_surface, &formatCount, surfFormats.data()));
 
 
         /* If the format list includes just one entry of VK_FORMAT_UNDEFINED,

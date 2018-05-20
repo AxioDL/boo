@@ -62,11 +62,14 @@ struct VulkanContext
                 VkFramebuffer m_framebuffer = VK_NULL_HANDLE;
                 VkRenderPassBeginInfo m_passBeginInfo = {};
                 void setImage(VulkanContext* ctx, VkImage image, uint32_t width, uint32_t height);
+                void destroy(VkDevice dev);
             };
             std::vector<Buffer> m_bufs;
             uint32_t m_backBuf = 0;
             void destroy(VkDevice dev)
             {
+                for (Buffer& buf : m_bufs)
+                    buf.destroy(dev);
                 m_bufs.clear();
                 if (m_swapChain)
                 {

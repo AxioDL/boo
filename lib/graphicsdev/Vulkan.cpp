@@ -78,6 +78,7 @@ class VulkanDataFactoryImpl : public VulkanDataFactory, public GraphicsDataFacto
     IGraphicsContext* m_parent;
     VulkanContext* m_ctx;
     std::unordered_map<uint64_t, std::unique_ptr<VulkanShareableShader>> m_sharedShaders;
+    std::unordered_map<uint64_t, uint64_t> m_sourceToBinary;
     std::vector<int> m_texUnis;
 
     float m_gamma = 1.f;
@@ -117,8 +118,16 @@ class VulkanDataFactoryImpl : public VulkanDataFactory, public GraphicsDataFacto
         });
     }
 
+    void DestroyGammaResources()
+    {
+        m_gammaBinding.reset();
+        m_gammaVFMT.reset();
+        m_gammaVBO.reset();
+        m_gammaLUT.reset();
+        m_gammaShader.reset();
+    }
+
 public:
-    std::unordered_map<uint64_t, uint64_t> m_sourceToBinary;
     VulkanDataFactoryImpl(IGraphicsContext* parent, VulkanContext* ctx);
 
     Platform platform() const {return Platform::Vulkan;}
@@ -141,6 +150,9 @@ public:
         if (gamma != 1.f)
             UpdateGammaLUT(m_gammaLUT.get(), gamma);
     }
+
+    uint64_t CompileVert(std::vector<unsigned int>& out, const char* vertSource, uint64_t srcKey);
+    uint64_t CompileFrag(std::vector<unsigned int>& out, const char* fragSource, uint64_t srcKey);
 };
 
 static inline void ThrowIfFailed(VkResult res)
@@ -603,6 +615,14 @@ void VulkanContext::Window::SwapChain::Buffer::setImage
     m_passBeginInfo.renderArea.extent.height = height;
     m_passBeginInfo.clearValueCount = 0;
     m_passBeginInfo.pClearValues = nullptr;
+}
+
+void VulkanContext::Window::SwapChain::Buffer::destroy(VkDevice dev)
+{
+    if (m_colorView)
+        vk::DestroyImageView(dev, m_colorView, nullptr);
+    if (m_framebuffer)
+        vk::DestroyFramebuffer(dev, m_framebuffer, nullptr);
 }
 
 void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR surface,
@@ -2852,6 +2872,11 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
     {
         m_running = false;
         vk::WaitForFences(m_ctx->m_dev, 1, &m_drawCompleteFence, VK_FALSE, -1);
+        static_cast<VulkanDataFactoryImpl*>(m_parent->getDataFactory())->DestroyGammaResources();
+        m_drawResTokens[0].clear();
+        m_drawResTokens[1].clear();
+        m_boundTarget.reset();
+        m_resolveDispSource.reset();
     }
 
     ~VulkanCommandQueue()
@@ -3527,8 +3552,7 @@ void VulkanTextureD::unmap()
 VulkanDataFactoryImpl::VulkanDataFactoryImpl(IGraphicsContext* parent, VulkanContext* ctx)
 : m_parent(parent), m_ctx(ctx) {}
 
-static uint64_t CompileVert(std::vector<unsigned int>& out, const char* vertSource, uint64_t srcKey,
-                            VulkanDataFactoryImpl& factory)
+uint64_t VulkanDataFactoryImpl::CompileVert(std::vector<unsigned int>& out, const char* vertSource, uint64_t srcKey)
 {
     const EShMessages messages = EShMessages(EShMsgSpvRules | EShMsgVulkanRules);
     glslang::TShader vs(EShLangVertex);
@@ -3552,12 +3576,11 @@ static uint64_t CompileVert(std::vector<unsigned int>& out, const char* vertSour
     XXH64_reset(&hashState, 0);
     XXH64_update(&hashState, out.data(), out.size() * sizeof(unsigned int));
     uint64_t binKey = XXH64_digest(&hashState);
-    factory.m_sourceToBinary[srcKey] = binKey;
+    m_sourceToBinary[srcKey] = binKey;
     return binKey;
 }
 
-static uint64_t CompileFrag(std::vector<unsigned int>& out, const char* fragSource, uint64_t srcKey,
-                            VulkanDataFactoryImpl& factory)
+uint64_t VulkanDataFactoryImpl::CompileFrag(std::vector<unsigned int>& out, const char* fragSource, uint64_t srcKey)
 {
     const EShMessages messages = EShMessages(EShMsgSpvRules | EShMsgVulkanRules);
     glslang::TShader fs(EShLangFragment);
@@ -3581,7 +3604,7 @@ static uint64_t CompileFrag(std::vector<unsigned int>& out, const char* fragSour
     XXH64_reset(&hashState, 0);
     XXH64_update(&hashState, out.data(), out.size() * sizeof(unsigned int));
     uint64_t binKey = XXH64_digest(&hashState);
-    factory.m_sourceToBinary[srcKey] = binKey;
+    m_sourceToBinary[srcKey] = binKey;
     return binKey;
 }
 
@@ -3628,10 +3651,10 @@ boo::ObjToken<IShaderPipeline> VulkanDataFactory::Context::newShaderPipeline
     }
 
     if (vertBlobOut && vertBlobOut->empty())
-        binHashes[0] = CompileVert(*vertBlobOut, vertSource, srcHashes[0], factory);
+        binHashes[0] = factory.CompileVert(*vertBlobOut, vertSource, srcHashes[0]);
 
     if (fragBlobOut && fragBlobOut->empty())
-        binHashes[1] = CompileFrag(*fragBlobOut, fragSource, srcHashes[1], factory);
+        binHashes[1] = factory.CompileFrag(*fragBlobOut, fragSource, srcHashes[1]);
 
     VkShaderModuleCreateInfo smCreateInfo = {};
     smCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -3657,7 +3680,7 @@ boo::ObjToken<IShaderPipeline> VulkanDataFactory::Context::newShaderPipeline
         else
         {
             useVertBlob = &vertBlob;
-            binHashes[0] = CompileVert(vertBlob, vertSource, srcHashes[0], factory);
+            binHashes[0] = factory.CompileVert(vertBlob, vertSource, srcHashes[0]);
         }
 
         VkShaderModule vertModule;
@@ -3687,7 +3710,7 @@ boo::ObjToken<IShaderPipeline> VulkanDataFactory::Context::newShaderPipeline
         else
         {
             useFragBlob = &fragBlob;
-            binHashes[1] = CompileFrag(fragBlob, fragSource, srcHashes[1], factory);
+            binHashes[1] = factory.CompileFrag(fragBlob, fragSource, srcHashes[1]);
         }
 
         VkShaderModule fragModule;
