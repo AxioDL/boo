@@ -281,7 +281,7 @@ struct TestApplicationCallback : IApplicationCallback
     {
         IGraphicsDataFactory* factory = self->mainWindow->getLoadContextDataFactory();
 
-        factory->commitTransaction([&](IGraphicsDataFactory::Context& ctx) -> bool
+        factory->BooCommitTransaction([&](IGraphicsDataFactory::Context& ctx)
         {
             /* Create render target */
             int x, y, w, h;
