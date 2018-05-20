@@ -293,9 +293,9 @@ struct IGraphicsDataFactory
         }
     };
 
-    virtual void commitTransaction(const std::function<bool(Context& ctx)>&)=0;
+    virtual void commitTransaction(const std::function<bool(Context& ctx)>& __BooTraceArgs)=0;
 
-    virtual ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count)=0;
+    virtual ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs)=0;
 
     virtual void setDisplayGamma(float gamma)=0;
 };

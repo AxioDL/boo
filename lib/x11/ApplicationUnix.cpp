@@ -51,7 +51,7 @@ DBusConnection* RegisterDBus(const char* appName, bool& isFirst)
 namespace boo
 {
 
-IApplication* APP = NULL;
+IApplication* APP = nullptr;
 int ApplicationRun(IApplication::EPlatformType platform,
                    IApplicationCallback& cb,
                    std::string_view uniqueName,
@@ -75,7 +75,10 @@ int ApplicationRun(IApplication::EPlatformType platform,
         APP = new ApplicationXlib(cb, uniqueName, friendlyName, pname, args, gfxApi, samples, anisotropy, deepColor, singleInstance);
     else
         return 1;
-    return APP->run();
+    int ret = APP->run();
+    delete APP;
+    APP = nullptr;
+    return ret;
 }
     
 }

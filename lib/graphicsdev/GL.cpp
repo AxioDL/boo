@@ -83,7 +83,7 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead
     ObjToken<IVertexFormat> m_gammaVFMT;
     void SetupGammaResources()
     {
-        commitTransaction([this](IGraphicsDataFactory::Context& ctx)
+        BooCommitTransaction([this](IGraphicsDataFactory::Context& ctx)
         {
             const char* texNames[] = {"screenTex", "gammaLUT"};
             m_gammaShader = static_cast<Context&>(ctx).newShaderPipeline(GammaVS, GammaFS,
@@ -115,8 +115,8 @@ public:
 
     Platform platform() const { return Platform::OpenGL; }
     const SystemChar* platformName() const { return _S("OpenGL"); }
-    void commitTransaction(const FactoryCommitFunc&);
-    ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count);
+    void commitTransaction(const FactoryCommitFunc& trans __BooTraceArgs);
+    ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs);
     void _unregisterShareableShader(uint64_t srcKey, uint64_t binKey) { m_sharedShaders.erase(srcKey); }
 
     void setDisplayGamma(float gamma)
@@ -1084,15 +1084,15 @@ GLDataFactory::Context::newShaderDataBinding(const ObjToken<IShaderPipeline>& pi
                                     ubufOffs, ubufSizes, texCount, texs, texBindIdx, depthBind)};
 }
 
-GLDataFactory::Context::Context(GLDataFactory& parent)
-: m_parent(parent), m_data(new BaseGraphicsData(static_cast<GLDataFactoryImpl&>(parent)))
+GLDataFactory::Context::Context(GLDataFactory& parent __BooTraceArgs)
+: m_parent(parent), m_data(new BaseGraphicsData(static_cast<GLDataFactoryImpl&>(parent) __BooTraceArgsUse))
 {}
 
 GLDataFactory::Context::~Context() {}
 
-void GLDataFactoryImpl::commitTransaction(const FactoryCommitFunc& trans)
+void GLDataFactoryImpl::commitTransaction(const FactoryCommitFunc& trans __BooTraceArgs)
 {
-    GLDataFactory::Context ctx(*this);
+    GLDataFactory::Context ctx(*this __BooTraceArgsUse);
     if (!trans(ctx))
         return;
 
@@ -1102,9 +1102,9 @@ void GLDataFactoryImpl::commitTransaction(const FactoryCommitFunc& trans)
     //glFlush();
 }
 
-ObjToken<IGraphicsBufferD> GLDataFactoryImpl::newPoolBuffer(BufferUse use, size_t stride, size_t count)
+ObjToken<IGraphicsBufferD> GLDataFactoryImpl::newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs)
 {
-    ObjToken<BaseGraphicsPool> pool(new BaseGraphicsPool(*this));
+    ObjToken<BaseGraphicsPool> pool(new BaseGraphicsPool(*this __BooTraceArgsUse));
     return {new GLGraphicsBufferD<BaseGraphicsPool>(pool, use, stride * count)};
 }
 
@@ -1888,14 +1888,14 @@ ObjToken<IVertexFormat> GLDataFactory::Context::newVertexFormat
     return {new GLVertexFormat(m_data, q, elementCount, elements, baseVert, baseInst)};
 }
 
-IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent, GLContext* glCtx)
+std::unique_ptr<IGraphicsCommandQueue> _NewGLCommandQueue(IGraphicsContext* parent, GLContext* glCtx)
 {
-    return new struct GLCommandQueue(parent, glCtx);
+    return std::make_unique<GLCommandQueue>(parent, glCtx);
 }
 
-IGraphicsDataFactory* _NewGLDataFactory(IGraphicsContext* parent, GLContext* glCtx)
+std::unique_ptr<IGraphicsDataFactory> _NewGLDataFactory(IGraphicsContext* parent, GLContext* glCtx)
 {
-    return new class GLDataFactoryImpl(parent, glCtx);
+    return std::make_unique<GLDataFactoryImpl>(parent, glCtx);
 }
 
 }

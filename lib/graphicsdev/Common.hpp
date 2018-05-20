@@ -43,6 +43,8 @@ struct BaseGraphicsData : ListNode<BaseGraphicsData, GraphicsDataFactoryHead*>
     static std::unique_lock<std::recursive_mutex> _getHeadLock(GraphicsDataFactoryHead* head)
     { return std::unique_lock<std::recursive_mutex>{head->m_dataMutex}; }
 
+    __BooTraceFields
+
     GraphicsDataNode<IShaderPipeline, BaseGraphicsData>* m_SPs = nullptr;
     GraphicsDataNode<IShaderDataBinding, BaseGraphicsData>* m_SBinds = nullptr;
     GraphicsDataNode<IGraphicsBufferS, BaseGraphicsData>* m_SBufs = nullptr;
@@ -58,8 +60,8 @@ struct BaseGraphicsData : ListNode<BaseGraphicsData, GraphicsDataFactoryHead*>
     std::unique_lock<std::recursive_mutex> destructorLock() override
     { return std::unique_lock<std::recursive_mutex>{m_head->m_dataMutex}; }
 
-    explicit BaseGraphicsData(GraphicsDataFactoryHead& head)
-    : ListNode<BaseGraphicsData, GraphicsDataFactoryHead*>(&head)
+    explicit BaseGraphicsData(GraphicsDataFactoryHead& head __BooTraceArgs)
+    : ListNode<BaseGraphicsData, GraphicsDataFactoryHead*>(&head) __BooTraceInitializer
     {}
 };
 
@@ -91,6 +93,8 @@ struct BaseGraphicsPool : ListNode<BaseGraphicsPool, GraphicsDataFactoryHead*>
     static std::unique_lock<std::recursive_mutex> _getHeadLock(GraphicsDataFactoryHead* head)
     { return std::unique_lock<std::recursive_mutex>{head->m_dataMutex}; }
 
+    __BooTraceFields
+
     GraphicsDataNode<IGraphicsBufferD, BaseGraphicsPool>* m_DBufs = nullptr;
     template<class T> GraphicsDataNode<T, BaseGraphicsPool>*& getHead();
     template<class T> size_t countForward()
@@ -98,8 +102,8 @@ struct BaseGraphicsPool : ListNode<BaseGraphicsPool, GraphicsDataFactoryHead*>
     std::unique_lock<std::recursive_mutex> destructorLock() override
     { return std::unique_lock<std::recursive_mutex>{m_head->m_dataMutex}; }
 
-    explicit BaseGraphicsPool(GraphicsDataFactoryHead& head)
-    : ListNode<BaseGraphicsPool, GraphicsDataFactoryHead*>(&head)
+    explicit BaseGraphicsPool(GraphicsDataFactoryHead& head __BooTraceArgs)
+    : ListNode<BaseGraphicsPool, GraphicsDataFactoryHead*>(&head) __BooTraceInitializer
     {}
 };
 

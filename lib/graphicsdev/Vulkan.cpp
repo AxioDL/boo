@@ -88,7 +88,7 @@ class VulkanDataFactoryImpl : public VulkanDataFactory, public GraphicsDataFacto
     ObjToken<IShaderDataBinding> m_gammaBinding;
     void SetupGammaResources()
     {
-        commitTransaction([this](IGraphicsDataFactory::Context& ctx)
+        BooCommitTransaction([this](IGraphicsDataFactory::Context& ctx)
         {
             const VertexElementDescriptor vfmt[] = {
                 {nullptr, nullptr, VertexSemantic::Position4},
@@ -124,9 +124,9 @@ public:
     Platform platform() const {return Platform::Vulkan;}
     const SystemChar* platformName() const {return _S("Vulkan");}
 
-    void commitTransaction(const FactoryCommitFunc&);
+    void commitTransaction(const FactoryCommitFunc& __BooTraceArgs);
 
-    boo::ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count);
+    boo::ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs);
 
     void _unregisterShareableShader(uint64_t srcKey, uint64_t binKey)
     {
@@ -957,8 +957,8 @@ struct VulkanData : BaseGraphicsData
     VkDeviceMemory m_bufMem = VK_NULL_HANDLE;
     VkDeviceMemory m_texMem = VK_NULL_HANDLE;
 
-    explicit VulkanData(VulkanDataFactoryImpl& head)
-    : BaseGraphicsData(head), m_ctx(head.m_ctx) {}
+    explicit VulkanData(VulkanDataFactoryImpl& head __BooTraceArgs)
+    : BaseGraphicsData(head __BooTraceArgsUse), m_ctx(head.m_ctx) {}
     ~VulkanData()
     {
         if (m_bufMem)
@@ -972,8 +972,8 @@ struct VulkanPool : BaseGraphicsPool
 {
     VulkanContext* m_ctx;
     VkDeviceMemory m_bufMem = VK_NULL_HANDLE;
-    explicit VulkanPool(VulkanDataFactoryImpl& head)
-    : BaseGraphicsPool(head), m_ctx(head.m_ctx) {}
+    explicit VulkanPool(VulkanDataFactoryImpl& head __BooTraceArgs)
+    : BaseGraphicsPool(head __BooTraceArgsUse), m_ctx(head.m_ctx) {}
     ~VulkanPool()
     {
         if (m_bufMem)
@@ -3736,8 +3736,8 @@ boo::ObjToken<IShaderPipeline> VulkanDataFactory::Context::newShaderPipeline
     return {retval};
 }
 
-VulkanDataFactory::Context::Context(VulkanDataFactory& parent)
-: m_parent(parent), m_data(new VulkanData(static_cast<VulkanDataFactoryImpl&>(parent))) {}
+VulkanDataFactory::Context::Context(VulkanDataFactory& parent __BooTraceArgs)
+: m_parent(parent), m_data(new VulkanData(static_cast<VulkanDataFactoryImpl&>(parent) __BooTraceArgsUse)) {}
 VulkanDataFactory::Context::~Context() {}
 
 boo::ObjToken<IGraphicsBufferS>
@@ -3820,9 +3820,9 @@ VulkanDataFactory::Context::newShaderDataBinding(
 }
 
 void VulkanDataFactoryImpl::commitTransaction
-    (const std::function<bool(IGraphicsDataFactory::Context&)>& trans)
+    (const std::function<bool(IGraphicsDataFactory::Context&)>& trans __BooTraceArgs)
 {
-    Context ctx(*this);
+    Context ctx(*this __BooTraceArgsUse);
     if (!trans(ctx))
         return;
 
@@ -3944,10 +3944,10 @@ void VulkanDataFactoryImpl::commitTransaction
 }
 
 boo::ObjToken<IGraphicsBufferD>
-VulkanDataFactoryImpl::newPoolBuffer(BufferUse use, size_t stride, size_t count)
+VulkanDataFactoryImpl::newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs)
 {
     VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(m_parent->getCommandQueue());
-    boo::ObjToken<BaseGraphicsPool> pool(new VulkanPool(*this));
+    boo::ObjToken<BaseGraphicsPool> pool(new VulkanPool(*this __BooTraceArgsUse));
     VulkanPool* cpool = pool.cast<VulkanPool>();
     VulkanGraphicsBufferD<BaseGraphicsPool>* retval =
             new VulkanGraphicsBufferD<BaseGraphicsPool>(pool, q, use, m_ctx, stride, count);
@@ -4112,15 +4112,15 @@ void VulkanCommandQueue::execute()
     resetDynamicCommandBuffer();
 }
 
-IGraphicsCommandQueue* _NewVulkanCommandQueue(VulkanContext* ctx, VulkanContext::Window* windowCtx,
-                                              IGraphicsContext* parent)
+std::unique_ptr<IGraphicsCommandQueue> _NewVulkanCommandQueue(VulkanContext* ctx, VulkanContext::Window* windowCtx,
+                                                              IGraphicsContext* parent)
 {
-    return new struct VulkanCommandQueue(ctx, windowCtx, parent);
+    return std::make_unique<VulkanCommandQueue>(ctx, windowCtx, parent);
 }
 
-IGraphicsDataFactory* _NewVulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx)
+std::unique_ptr<IGraphicsDataFactory> _NewVulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx)
 {
-    return new class VulkanDataFactoryImpl(parent, ctx);
+    return std::make_unique<VulkanDataFactoryImpl>(parent, ctx);
 }
 
 }

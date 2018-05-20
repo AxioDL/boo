@@ -131,7 +131,7 @@ public:
         friend class VulkanDataFactoryImpl;
         VulkanDataFactory& m_parent;
         boo::ObjToken<BaseGraphicsData> m_data;
-        Context(VulkanDataFactory& parent);
+        Context(VulkanDataFactory& parent __BooTraceArgs);
         ~Context();
     public:
         Platform platform() const {return Platform::Vulkan;}

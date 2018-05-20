@@ -111,13 +111,13 @@ extern "C" const size_t MAINICON_NETWM_SZ;
 namespace boo
 {
 static logvisor::Module Log("boo::WindowXlib");
-IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent, GLContext* glCtx);
-IGraphicsDataFactory* _NewGLDataFactory(IGraphicsContext* parent, GLContext* glCtx);
+std::unique_ptr<IGraphicsCommandQueue> _NewGLCommandQueue(IGraphicsContext* parent, GLContext* glCtx);
+std::unique_ptr<IGraphicsDataFactory> _NewGLDataFactory(IGraphicsContext* parent, GLContext* glCtx);
 #if BOO_HAS_VULKAN
-IGraphicsCommandQueue* _NewVulkanCommandQueue(VulkanContext* ctx,
-                                              VulkanContext::Window* windowCtx,
-                                              IGraphicsContext* parent);
-IGraphicsDataFactory* _NewVulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx);
+std::unique_ptr<IGraphicsCommandQueue> _NewVulkanCommandQueue(VulkanContext* ctx,
+                                                              VulkanContext::Window* windowCtx,
+                                                              IGraphicsContext* parent);
+std::unique_ptr<IGraphicsDataFactory> _NewVulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx);
 #endif
 void _XlibUpdateLastGlxCtx(GLXContext lastGlxCtx);
 void GLXExtensionCheck();
@@ -321,8 +321,8 @@ struct GraphicsContextXlibGLX : GraphicsContextXlib
     GLXWindow m_glxWindow = 0;
     GLXContext m_glxCtx = 0;
 
-    IGraphicsCommandQueue* m_commandQueue = nullptr;
-    IGraphicsDataFactory* m_dataFactory = nullptr;
+    std::unique_ptr<IGraphicsDataFactory> m_dataFactory;
+    std::unique_ptr<IGraphicsCommandQueue> m_commandQueue;
     GLXContext m_mainCtx = 0;
     GLXContext m_loadCtx = 0;
 
@@ -577,12 +577,12 @@ public:
 
     IGraphicsCommandQueue* getCommandQueue()
     {
-        return m_commandQueue;
+        return m_commandQueue.get();
     }
 
     IGraphicsDataFactory* getDataFactory()
     {
-        return m_dataFactory;
+        return m_dataFactory.get();
     }
 
     IGraphicsDataFactory* getMainContextDataFactory()
@@ -638,8 +638,8 @@ struct GraphicsContextXlibVulkan : GraphicsContextXlib
     GLXFBConfig m_fbconfig = 0;
     int m_visualid = 0;
 
-    IGraphicsCommandQueue* m_commandQueue = nullptr;
-    IGraphicsDataFactory* m_dataFactory = nullptr;
+    std::unique_ptr<IGraphicsDataFactory> m_dataFactory;
+    std::unique_ptr<IGraphicsCommandQueue> m_commandQueue;
 
     std::thread m_vsyncThread;
     bool m_vsyncRunning;
@@ -888,12 +888,12 @@ public:
 
     IGraphicsCommandQueue* getCommandQueue()
     {
-        return m_commandQueue;
+        return m_commandQueue.get();
     }
 
     IGraphicsDataFactory* getDataFactory()
     {
-        return m_dataFactory;
+        return m_dataFactory.get();
     }
 
     IGraphicsDataFactory* getMainContextDataFactory()

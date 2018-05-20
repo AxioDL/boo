@@ -72,6 +72,22 @@ namespace boo
 #   endif
 #endif
 
+#ifndef NDEBUG
+#define __BooTraceArgs , const char* file, int line
+#define __BooTraceArgsUse , file, line
+#define __BooTraceInitializer , m_file(file), m_line(line)
+#define __BooTraceFields const char* m_file; int m_line;
+#define BooCommitTransaction(...) commitTransaction(__VA_ARGS__, __FILE__, __LINE__)
+#define BooNewPoolBuffer(...) newPoolBuffer(__VA_ARGS__, __FILE__, __LINE__)
+#else
+#define __BooTraceArgs
+#define __BooTraceArgsUse
+#define __BooTraceInitializer
+#define __BooTraceFields
+#define BooCommitTransaction(...) commitTransaction(__VA_ARGS__)
+#define BooNewPoolBuffer(...) newPoolBuffer(__VA_ARGS__)
+#endif
+
 }
 
 #endif

@@ -26,7 +26,7 @@ public:
         friend class GLDataFactoryImpl;
         GLDataFactory& m_parent;
         ObjToken<BaseGraphicsData> m_data;
-        Context(GLDataFactory& parent);
+        Context(GLDataFactory& parent __BooTraceArgs);
         ~Context();
     public:
         Platform platform() const { return Platform::OpenGL; }

@@ -175,7 +175,7 @@ class ApplicationXlib final : public IApplication
 
     Display* m_xDisp = nullptr;
     XIM m_xIM = nullptr;
-    XFontSet m_fontset;
+    XFontSet m_fontset = nullptr;
     XIMStyle m_bestStyle = 0;
     int m_xDefaultScreen = 0;
     int m_x11Fd, m_dbusFd, m_maxFd;
@@ -408,6 +408,10 @@ public:
 
     ~ApplicationXlib()
     {
+        if (m_fontset)
+            XFreeFontSet(m_xDisp, m_fontset);
+        if (m_xIM)
+            XCloseIM(m_xIM);
         XCloseDisplay(m_xDisp);
     }
     
