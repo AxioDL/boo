@@ -538,7 +538,13 @@ public:
         }
 
         m_callback.appQuitting(this);
-        clientThread.join();
+        if (clientThread.joinable())
+            clientThread.join();
+
+#if BOO_HAS_VULKAN
+        g_VulkanContext.destroyDevice();
+#endif
+
         return clientReturn;
     }
 

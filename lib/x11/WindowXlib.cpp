@@ -726,11 +726,9 @@ public:
                 Log.report(logvisor::Fatal, "unable to resolve glXWaitVideoSyncSGI");
         }
 
-        vk::init_dispatch_table_top(PFN_vkGetInstanceProcAddr(getVkProc));
         if (m_ctx->m_instance == VK_NULL_HANDLE)
-            m_ctx->initVulkan(APP->getUniqueName());
+            m_ctx->initVulkan(APP->getUniqueName(), PFN_vkGetInstanceProcAddr(getVkProc));
 
-        vk::init_dispatch_table_middle(m_ctx->m_instance, false);
         if (!m_ctx->enumerateDevices())
             return false;
 
@@ -780,8 +778,6 @@ public:
                 Log.report(logvisor::Fatal, "subsequent surface doesn't support present");
         }
         free(supportsPresent);
-
-        vk::init_dispatch_table_bottom(m_ctx->m_instance, m_ctx->m_dev);
 
         if (!vk::GetPhysicalDeviceXcbPresentationSupportKHR(m_ctx->m_gpus[0], m_ctx->m_graphicsQueueFamilyIndex, m_xcbConn, m_visualid))
         {

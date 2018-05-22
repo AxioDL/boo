@@ -13,6 +13,9 @@
 #include <queue>
 #include "boo/graphicsdev/VulkanDispatchTable.hpp"
 
+/* Forward-declare handle type for Vulkan Memory Allocator */
+struct VmaAllocator_T;
+
 namespace boo
 {
 struct BaseGraphicsData;
@@ -34,18 +37,20 @@ struct VulkanContext
     VkPhysicalDeviceFeatures m_features;
     VkPhysicalDeviceProperties m_gpuProps;
     VkPhysicalDeviceMemoryProperties m_memoryProperties;
-    VkDevice m_dev;
+    VkDevice m_dev = VK_NULL_HANDLE;
+    VmaAllocator_T* m_allocator = VK_NULL_HANDLE;
     uint32_t m_queueCount;
     uint32_t m_graphicsQueueFamilyIndex = UINT32_MAX;
     std::vector<VkQueueFamilyProperties> m_queueProps;
     VkQueue m_queue = VK_NULL_HANDLE;
     std::mutex m_queueLock;
-    VkDescriptorSetLayout m_descSetLayout;
-    VkPipelineLayout m_pipelinelayout;
-    VkRenderPass m_pass;
-    VkRenderPass m_passColorOnly;
-    VkCommandPool m_loadPool;
-    VkCommandBuffer m_loadCmdBuf;
+    VkDescriptorSetLayout m_descSetLayout = VK_NULL_HANDLE;
+    VkPipelineLayout m_pipelinelayout = VK_NULL_HANDLE;
+    VkDescriptorPool m_descPool = VK_NULL_HANDLE;
+    VkRenderPass m_pass = VK_NULL_HANDLE;
+    VkRenderPass m_passColorOnly = VK_NULL_HANDLE;
+    VkCommandPool m_loadPool = VK_NULL_HANDLE;
+    VkCommandBuffer m_loadCmdBuf = VK_NULL_HANDLE;
     VkFormat m_displayFormat;
     VkFormat m_internalFormat;
 
@@ -99,9 +104,10 @@ struct VulkanContext
 
     std::unordered_map<uint32_t, VkSampler> m_samplers;
 
-    bool initVulkan(std::string_view appName);
+    bool initVulkan(std::string_view appName, PFN_vkGetInstanceProcAddr getVkProc);
     bool enumerateDevices();
     void initDevice();
+    void destroyDevice();
     void initSwapChain(Window& windowCtx, VkSurfaceKHR surface, VkFormat format, VkColorSpaceKHR colorspace);
 
     struct SwapChainResize

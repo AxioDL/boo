@@ -591,8 +591,6 @@ public:
         }
         free(supportsPresent);
 
-        vk::init_dispatch_table_bottom(m_ctx->m_instance, m_ctx->m_dev);
-
         if (!vk::GetPhysicalDeviceWin32PresentationSupportKHR(m_ctx->m_gpus[0], m_ctx->m_graphicsQueueFamilyIndex))
         {
             Log.report(logvisor::Fatal, "Win32 doesn't support vulkan present");

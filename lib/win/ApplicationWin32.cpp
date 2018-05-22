@@ -370,13 +370,11 @@ public:
                 if (m_getVkProc)
                 {
                     /* Check device support for vulkan */
-                    vk::init_dispatch_table_top(PFN_vkGetInstanceProcAddr(m_getVkProc));
                     if (g_VulkanContext.m_instance == VK_NULL_HANDLE)
                     {
                         auto appName = getUniqueName();
-                        if (g_VulkanContext.initVulkan(WCSTMBS(appName.data()).c_str()))
+                        if (g_VulkanContext.initVulkan(WCSTMBS(appName.data()).c_str(), m_getVkProc))
                         {
-                            vk::init_dispatch_table_middle(g_VulkanContext.m_instance, false);
                             if (g_VulkanContext.enumerateDevices())
                             {
                                 /* Obtain DXGI Factory */
