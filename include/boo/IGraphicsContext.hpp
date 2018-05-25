@@ -24,7 +24,6 @@ public:
         OpenGL4_2  = 2,
         Vulkan     = 3,
         D3D11      = 4,
-        D3D12      = 5,
         Metal      = 6,
         GX         = 7,
         GX2        = 8

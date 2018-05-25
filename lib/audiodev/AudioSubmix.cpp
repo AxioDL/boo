@@ -11,7 +11,7 @@ namespace boo
 {
 
 AudioSubmix::AudioSubmix(BaseAudioVoiceEngine& root, IAudioSubmixCallback* cb, int busId, bool mainOut)
-: ListNode<AudioSubmix, BaseAudioVoiceEngine*, IAudioSubmix>(&root), m_busId(busId), m_cb(cb), m_mainOut(mainOut)
+: ListNode<AudioSubmix, BaseAudioVoiceEngine*, IAudioSubmix>(&root), m_busId(busId), m_mainOut(mainOut), m_cb(cb)
 {
     if (mainOut)
         setSendLevel(m_head->m_mainSubmix.get(), 1.f, false);

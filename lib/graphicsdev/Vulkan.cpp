@@ -96,7 +96,7 @@ class VulkanDataFactoryImpl : public VulkanDataFactory, public GraphicsDataFacto
     ObjToken<IShaderDataBinding> m_gammaBinding;
     void SetupGammaResources()
     {
-        BooCommitTransaction([this](IGraphicsDataFactory::Context& ctx)
+        commitTransaction([this](IGraphicsDataFactory::Context& ctx)
         {
             const VertexElementDescriptor vfmt[] = {
                 {nullptr, nullptr, VertexSemantic::Position4},
@@ -122,7 +122,7 @@ class VulkanDataFactoryImpl : public VulkanDataFactory, public GraphicsDataFacto
             m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVFMT, m_gammaVBO.get(), {}, {},
                                                       0, nullptr, nullptr, 2, texs, nullptr, nullptr);
             return true;
-        });
+        } BooTrace);
     }
 
     void DestroyGammaResources()

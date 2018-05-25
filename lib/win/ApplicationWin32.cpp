@@ -28,9 +28,6 @@ PFN_GetScaleFactorForMonitor MyGetScaleFactorForMonitor = nullptr;
 DWORD g_mainThreadId = 0;
 
 static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-#if _WIN32_WINNT_WIN10
-PFN_D3D12_SERIALIZE_ROOT_SIGNATURE D3D12SerializeRootSignaturePROC = nullptr;
-#endif
 pD3DCompile D3DCompilePROC = nullptr;
 pD3DCreateBlob D3DCreateBlobPROC = nullptr;
 
@@ -77,7 +74,6 @@ class ApplicationWin32 final : public IApplication
     const SystemString m_pname;
     const std::vector<SystemString> m_args;
     std::unordered_map<HWND, std::weak_ptr<IWindow>> m_allWindows;
-    bool m_singleInstance;
 
     Boo3DAppContextWin32 m_3dCtx;
 #if BOO_HAS_VULKAN
@@ -105,15 +101,11 @@ public:
       m_uniqueName(uniqueName),
       m_friendlyName(friendlyName),
       m_pname(pname),
-      m_args(args),
-      m_singleInstance(singleInstance)
+      m_args(args)
     {
         m_3dCtx.m_ctx11.m_sampleCount = samples;
         m_3dCtx.m_ctx11.m_anisotropy = anisotropy;
         m_3dCtx.m_ctx11.m_fbFormat = deepColor ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
-        m_3dCtx.m_ctx12.m_sampleCount = samples;
-        m_3dCtx.m_ctx12.m_anisotropy = anisotropy;
-        m_3dCtx.m_ctx12.RGBATex2DFBViewDesc.Format = deepColor ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
         m_3dCtx.m_ctxOgl.m_glCtx.m_sampleCount = samples;
         m_3dCtx.m_ctxOgl.m_glCtx.m_anisotropy = anisotropy;
         m_3dCtx.m_ctxOgl.m_glCtx.m_deepColor = deepColor;
@@ -133,7 +125,6 @@ public:
         if (!MyCreateDXGIFactory1)
             Log.report(logvisor::Fatal, "unable to find CreateDXGIFactory1 in DXGI.dll\n");
 
-        bool yes12 = false;
         bool noD3d = false;
 #if BOO_HAS_VULKAN
         bool useVulkan = false;
@@ -141,11 +132,6 @@ public:
         if (!gfxApi.empty())
         {
 #if BOO_HAS_VULKAN
-            if (!gfxApi.compare("D3D12"))
-            {
-                useVulkan = false;
-                yes12 = true;
-            }
             if (!gfxApi.compare("Vulkan"))
             {
                 noD3d = true;
@@ -157,8 +143,6 @@ public:
                 useVulkan = false;
             }
 #else
-            if (!gfxApi.compare("D3D12"))
-                yes12 = true;
             if (!gfxApi.compare("OpenGL"))
                 noD3d = true;
 #endif
@@ -166,16 +150,9 @@ public:
         for (const SystemString& arg : args)
         {
 #if BOO_HAS_VULKAN
-            if (!arg.compare(L"--d3d12"))
-            {
-                useVulkan = false;
-                yes12 = true;
-                noD3d = false;
-            }
             if (!arg.compare(L"--d3d11"))
             {
                 useVulkan = false;
-                yes12 = false;
                 noD3d = false;
             }
             if (!arg.compare(L"--vulkan"))
@@ -189,109 +166,13 @@ public:
                 useVulkan = false;
             }
 #else
-            if (!arg.compare(L"--d3d12"))
-            {
-                yes12 = true;
-                noD3d = false;
-            }
             if (!arg.compare(L"--d3d11"))
-            {
-                yes12 = false;
                 noD3d = false;
-            }
             if (!arg.compare(L"--gl"))
                 noD3d = true;
 #endif
         }
 
-#if _WIN32_WINNT_WIN10
-        HMODULE d3d12lib = nullptr;
-        if (yes12 && !noD3d)
-            d3d12lib = LoadLibraryW(L"D3D12.dll");
-        if (d3d12lib)
-        {   
-#if _DEBUG
-            {
-                PFN_D3D12_GET_DEBUG_INTERFACE MyD3D12GetDebugInterface =
-                (PFN_D3D12_GET_DEBUG_INTERFACE)GetProcAddress(d3d12lib, "D3D12GetDebugInterface");
-                ComPtr<ID3D12Debug> debugController;
-                if (SUCCEEDED(MyD3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
-                {
-                    debugController->EnableDebugLayer();
-                }
-            }
-#endif
-            if (!FindBestD3DCompile())
-                Log.report(logvisor::Fatal, "unable to find D3DCompile_[43-47].dll");
-
-            D3D12SerializeRootSignaturePROC =
-            (PFN_D3D12_SERIALIZE_ROOT_SIGNATURE)GetProcAddress(d3d12lib, "D3D12SerializeRootSignature");
-
-            /* Create device */
-            PFN_D3D12_CREATE_DEVICE MyD3D12CreateDevice = (PFN_D3D12_CREATE_DEVICE)GetProcAddress(d3d12lib, "D3D12CreateDevice");
-            if (!MyD3D12CreateDevice)
-                Log.report(logvisor::Fatal, "unable to find D3D12CreateDevice in D3D12.dll");
-
-            /* Obtain DXGI Factory */
-            HRESULT hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory2), &m_3dCtx.m_ctx12.m_dxFactory);
-            if (FAILED(hr))
-                Log.report(logvisor::Fatal, "unable to create DXGI factory");
-
-            /* Adapter */
-            ComPtr<IDXGIAdapter1> ppAdapter;
-            for (UINT adapterIndex = 0; ; ++adapterIndex)
-            {
-                ComPtr<IDXGIAdapter1> pAdapter;
-                if (DXGI_ERROR_NOT_FOUND == m_3dCtx.m_ctx12.m_dxFactory->EnumAdapters1(adapterIndex, &pAdapter))
-                    break;
-
-                // Check to see if the adapter supports Direct3D 12, but don't create the
-                // actual device yet.
-                if (SUCCEEDED(MyD3D12CreateDevice(pAdapter.Get(), D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device), nullptr)))
-                {
-                    ppAdapter = std::move(pAdapter);
-                    break;
-                }
-            }
-
-            /* Create device */
-            hr = ppAdapter ? MyD3D12CreateDevice(ppAdapter.Get(), D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), &m_3dCtx.m_ctx12.m_dev) : E_FAIL;
-            if (!FAILED(hr))
-            {
-                /* Establish loader objects */
-                if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
-                    __uuidof(ID3D12CommandAllocator), &m_3dCtx.m_ctx12.m_loadqalloc)))
-                    Log.report(logvisor::Fatal, "unable to create loader allocator");
-
-                D3D12_COMMAND_QUEUE_DESC desc =
-                {
-                    D3D12_COMMAND_LIST_TYPE_DIRECT,
-                    D3D12_COMMAND_QUEUE_PRIORITY_NORMAL,
-                    D3D12_COMMAND_QUEUE_FLAG_NONE
-                };
-                if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandQueue(&desc, __uuidof(ID3D12CommandQueue), &m_3dCtx.m_ctx12.m_loadq)))
-                    Log.report(logvisor::Fatal, "unable to create loader queue");
-
-                if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), &m_3dCtx.m_ctx12.m_loadfence)))
-                    Log.report(logvisor::Fatal, "unable to create loader fence");
-
-                m_3dCtx.m_ctx12.m_loadfencehandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-
-                if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_3dCtx.m_ctx12.m_loadqalloc.Get(),
-                    nullptr, __uuidof(ID3D12GraphicsCommandList), &m_3dCtx.m_ctx12.m_loadlist)))
-                    Log.report(logvisor::Fatal, "unable to create loader list");
-
-                Log.report(logvisor::Info, "initialized D3D12 renderer");
-                return;
-            }
-            else
-            {
-                /* Some Win10 client HW doesn't support D3D12 (despite being supposedly HW-agnostic) */
-                m_3dCtx.m_ctx12.m_dev.Reset();
-                m_3dCtx.m_ctx12.m_dxFactory.Reset();
-            }
-        }
-#endif
         HMODULE d3d11lib = nullptr;
         if (!noD3d)
             d3d11lib = LoadLibraryW(L"D3D11.dll");
@@ -621,7 +502,7 @@ int ApplicationRun(IApplication::EPlatformType platform,
     };
     wndClass.hIcon = LoadIconW(wndClass.hInstance, MAKEINTRESOURCEW(101));
     wndClass.hCursor = WIN32_CURSORS.m_arrow;
-    ATOM a = RegisterClassW(&wndClass);
+    RegisterClassW(&wndClass);
 
     APP = new ApplicationWin32(cb, uniqueName, friendlyName, pname, args,
                                gfxApi, samples, anisotropy, deepColor, singleInstance);
@@ -633,9 +514,7 @@ int ApplicationRun(IApplication::EPlatformType platform,
 static const DEV_BROADCAST_DEVICEINTERFACE HOTPLUG_CONF =
 {
     sizeof(DEV_BROADCAST_DEVICEINTERFACE),
-    DBT_DEVTYP_DEVICEINTERFACE,
-    0,
-    0
+    DBT_DEVTYP_DEVICEINTERFACE
 };
 static bool HOTPLUG_REGISTERED = false;
 static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)

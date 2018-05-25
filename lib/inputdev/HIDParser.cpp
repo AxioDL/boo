@@ -323,59 +323,6 @@ const char* HIDMainItem::GetUsageName() const
     }
 }
 
-static HIDParser::ParserStatus
-AdvanceIt(const uint8_t*& it, const uint8_t* end, size_t adv)
-{
-    it += adv;
-    if (it > end)
-    {
-        it = end;
-        return HIDParser::ParserStatus::Error;
-    }
-    else if (it == end)
-    {
-        return HIDParser::ParserStatus::Done;
-    }
-    return HIDParser::ParserStatus::OK;
-}
-
-static uint8_t
-GetByteValue(const uint8_t*& it, const uint8_t* end, HIDParser::ParserStatus& status)
-{
-    const uint8_t* oldIt = it;
-    status = AdvanceIt(it, end, 1);
-    if (status == HIDParser::ParserStatus::Error)
-        return 0;
-    return *oldIt;
-}
-
-static uint32_t
-GetShortValue(const uint8_t*& it, const uint8_t* end, int adv, HIDParser::ParserStatus& status)
-{
-    const uint8_t* oldIt = it;
-    switch (adv)
-    {
-    case 1:
-        status = AdvanceIt(it, end, 1);
-        if (status == HIDParser::ParserStatus::Error)
-            return 0;
-        return *oldIt;
-    case 2:
-        status = AdvanceIt(it, end, 2);
-        if (status == HIDParser::ParserStatus::Error)
-            return 0;
-        return *reinterpret_cast<const uint16_t*>(&*oldIt);
-    case 3:
-        status = AdvanceIt(it, end, 4);
-        if (status == HIDParser::ParserStatus::Error)
-            return 0;
-        return *reinterpret_cast<const uint32_t*>(&*oldIt);
-    default:
-        break;
-    }
-    return 0;
-}
-
 struct HIDReports
 {
     std::map<int32_t, std::vector<HIDMainItem>> m_inputReports;
@@ -478,6 +425,59 @@ HIDParser::ParserStatus HIDParser::Parse(const PHIDP_PREPARSED_DATA descriptorDa
 }
 #endif
 #else
+
+static HIDParser::ParserStatus
+AdvanceIt(const uint8_t*& it, const uint8_t* end, size_t adv)
+{
+    it += adv;
+    if (it > end)
+    {
+        it = end;
+        return HIDParser::ParserStatus::Error;
+    }
+    else if (it == end)
+    {
+        return HIDParser::ParserStatus::Done;
+    }
+    return HIDParser::ParserStatus::OK;
+}
+
+static uint8_t
+GetByteValue(const uint8_t*& it, const uint8_t* end, HIDParser::ParserStatus& status)
+{
+    const uint8_t* oldIt = it;
+    status = AdvanceIt(it, end, 1);
+    if (status == HIDParser::ParserStatus::Error)
+        return 0;
+    return *oldIt;
+}
+
+static uint32_t
+GetShortValue(const uint8_t*& it, const uint8_t* end, int adv, HIDParser::ParserStatus& status)
+{
+    const uint8_t* oldIt = it;
+    switch (adv)
+    {
+    case 1:
+        status = AdvanceIt(it, end, 1);
+        if (status == HIDParser::ParserStatus::Error)
+            return 0;
+        return *oldIt;
+    case 2:
+        status = AdvanceIt(it, end, 2);
+        if (status == HIDParser::ParserStatus::Error)
+            return 0;
+        return *reinterpret_cast<const uint16_t*>(&*oldIt);
+    case 3:
+        status = AdvanceIt(it, end, 4);
+        if (status == HIDParser::ParserStatus::Error)
+            return 0;
+        return *reinterpret_cast<const uint32_t*>(&*oldIt);
+    default:
+        break;
+    }
+    return 0;
+}
 
 HIDParser::ParserStatus
 HIDParser::ParseItem(HIDReports& reportsOut,

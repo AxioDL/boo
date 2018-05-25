@@ -90,7 +90,6 @@ elseif(WIN32)
        lib/inputdev/HIDListenerWinUSB.cpp
        lib/inputdev/HIDDeviceWinUSB.cpp
        lib/graphicsdev/D3D11.cpp
-       lib/graphicsdev/D3D12.cpp
        lib/audiodev/WASAPI.cpp)
 
   list(APPEND PLAT_HDRS
@@ -241,6 +240,7 @@ endif()
 function(glslang_set_link_args TARGET)
 endfunction(glslang_set_link_args)
 
+add_definitions("-DENABLE_OPT=0")
 add_subdirectory(glslang/glslang)
 add_subdirectory(glslang/OGLCompilersDLL)
 add_subdirectory(glslang/SPIRV)

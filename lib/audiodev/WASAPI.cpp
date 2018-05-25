@@ -40,7 +40,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
     std::vector<float> m_5msBuffer;
 
 #if !WINDOWS_STORE
-    struct NotificationClient : public IMMNotificationClient
+    struct NotificationClient final : public IMMNotificationClient
     {
         WASAPIAudioVoiceEngine& m_parent;
 
@@ -138,14 +138,14 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
 #if !WINDOWS_STORE
         if (FAILED(m_enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &m_device)))
         {
-            Log.report(logvisor::Fatal, L"unable to obtain default audio device");
+            Log.report(logvisor::Error, L"unable to obtain default audio device");
             m_device.Reset();
             return;
         }
 
         if (FAILED(m_device->Activate(IID_IAudioClient, CLSCTX_ALL, nullptr, &m_audClient)))
         {
-            Log.report(logvisor::Fatal, L"unable to create audio client from device");
+            Log.report(logvisor::Error, L"unable to create audio client from device");
             m_device.Reset();
             return;
         }
@@ -154,7 +154,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         WAVEFORMATEXTENSIBLE* pwfx;
         if (FAILED(m_audClient->GetMixFormat((WAVEFORMATEX**)&pwfx)))
         {
-            Log.report(logvisor::Fatal, L"unable to obtain audio mix format from device");
+            Log.report(logvisor::Error, L"unable to obtain audio mix format from device");
 #if !WINDOWS_STORE
             m_device.Reset();
 #endif
@@ -239,7 +239,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
                    (WAVEFORMATEX*)pwfx,
                    nullptr)))
         {
-            Log.report(logvisor::Fatal, L"unable to initialize audio client");
+            Log.report(logvisor::Error, L"unable to initialize audio client");
 #if !WINDOWS_STORE
             m_device.Reset();
 #endif
@@ -283,7 +283,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
             }
             else
             {
-                Log.report(logvisor::Fatal, L"unsupported floating-point bits-per-sample %d", pwfx->Format.wBitsPerSample);
+                Log.report(logvisor::Error, L"unsupported floating-point bits-per-sample %d", pwfx->Format.wBitsPerSample);
 #if !WINDOWS_STORE
                 m_device.Reset();
 #endif
@@ -296,7 +296,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         UINT32 bufferFrameCount;
         if (FAILED(m_audClient->GetBufferSize(&bufferFrameCount)))
         {
-            Log.report(logvisor::Fatal, L"unable to get audio buffer frame count");
+            Log.report(logvisor::Error, L"unable to get audio buffer frame count");
 #if !WINDOWS_STORE
             m_device.Reset();
 #endif
@@ -306,7 +306,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
 
         if (FAILED(m_audClient->GetService(IID_IAudioRenderClient, &m_renderClient)))
         {
-            Log.report(logvisor::Fatal, L"unable to create audio render client");
+            Log.report(logvisor::Error, L"unable to create audio render client");
 #if !WINDOWS_STORE
             m_device.Reset();
 #endif
@@ -385,13 +385,13 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
                                     CLSCTX_ALL, IID_IMMDeviceEnumerator,
                                     &m_enumerator)))
         {
-            Log.report(logvisor::Fatal, L"unable to create MMDeviceEnumerator instance");
+            Log.report(logvisor::Error, L"unable to create MMDeviceEnumerator instance");
             return;
         }
 
         if (FAILED(m_enumerator->RegisterEndpointNotificationCallback(&m_notificationClient)))
         {
-            Log.report(logvisor::Fatal, L"unable to register multimedia event callback");
+            Log.report(logvisor::Error, L"unable to register multimedia event callback");
             m_device.Reset();
             return;
         }
@@ -430,6 +430,9 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
     {
 #if WINDOWS_STORE
         if (!m_ready)
+            return;
+#else
+        if (!m_device)
             return;
 #endif
 
@@ -821,12 +824,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
 
 std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine()
 {
-    std::unique_ptr<IAudioVoiceEngine> ret = std::make_unique<WASAPIAudioVoiceEngine>();
-#if !WINDOWS_STORE
-    if (!static_cast<WASAPIAudioVoiceEngine&>(*ret).m_device)
-        return {};
-#endif
-    return ret;
+    return std::make_unique<WASAPIAudioVoiceEngine>();
 }
 
 }

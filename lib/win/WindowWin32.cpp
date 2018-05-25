@@ -32,20 +32,20 @@ static const int ContextAttribs[] =
 namespace boo
 {
 static logvisor::Module Log("boo::WindowWin32");
-#if _WIN32_WINNT_WIN10
-IGraphicsCommandQueue* _NewD3D12CommandQueue(D3D12Context* ctx, D3D12Context::Window* windowCtx, IGraphicsContext* parent,
-                                             ID3D12CommandQueue** cmdQueueOut);
-IGraphicsDataFactory* _NewD3D12DataFactory(D3D12Context* ctx, IGraphicsContext* parent);
-#endif
-IGraphicsCommandQueue* _NewD3D11CommandQueue(D3D11Context* ctx, D3D11Context::Window* windowCtx, IGraphicsContext* parent);
-IGraphicsDataFactory* _NewD3D11DataFactory(D3D11Context* ctx, IGraphicsContext* parent);
-IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent, GLContext* glCtx);
-IGraphicsDataFactory* _NewGLDataFactory(IGraphicsContext* parent, GLContext* glCtx);
+
+std::unique_ptr<IGraphicsCommandQueue>
+_NewD3D11CommandQueue(D3D11Context* ctx, D3D11Context::Window* windowCtx, IGraphicsContext* parent);
+std::unique_ptr<IGraphicsDataFactory>
+_NewD3D11DataFactory(D3D11Context* ctx, IGraphicsContext* parent);
+std::unique_ptr<IGraphicsCommandQueue>
+_NewGLCommandQueue(IGraphicsContext* parent, GLContext* glCtx);
+std::unique_ptr<IGraphicsDataFactory>
+_NewGLDataFactory(IGraphicsContext* parent, GLContext* glCtx);
 #if BOO_HAS_VULKAN
-IGraphicsCommandQueue* _NewVulkanCommandQueue(VulkanContext* ctx,
-                                              VulkanContext::Window* windowCtx,
-                                              IGraphicsContext* parent);
-IGraphicsDataFactory* _NewVulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx);
+std::unique_ptr<IGraphicsCommandQueue>
+_NewVulkanCommandQueue(VulkanContext* ctx, VulkanContext::Window* windowCtx, IGraphicsContext* parent);
+std::unique_ptr<IGraphicsDataFactory>
+_NewVulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx);
 #endif
 
 struct GraphicsContextWin32 : IGraphicsContext
@@ -71,8 +71,8 @@ struct GraphicsContextWin32D3D : GraphicsContextWin32
 {
     ComPtr<IDXGISwapChain1> m_swapChain;
 
-    IGraphicsCommandQueue* m_commandQueue = nullptr;
-    IGraphicsDataFactory* m_dataFactory = nullptr;
+    std::unique_ptr<IGraphicsDataFactory> m_dataFactory;
+    std::unique_ptr<IGraphicsCommandQueue> m_commandQueue;
 
 public:
     IWindowCallback* m_callback;
@@ -89,66 +89,27 @@ public:
         scDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
         scDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
-#if _WIN32_WINNT_WIN10
-        if (b3dCtx.m_ctx12.m_dev)
-        {
-            auto insIt = b3dCtx.m_ctx12.m_windows.emplace(std::make_pair(parentWindow, D3D12Context::Window()));
-            D3D12Context::Window& w = insIt.first->second;
+        scDesc.Format = b3dCtx.m_ctx11.m_fbFormat;
+        if (FAILED(b3dCtx.m_ctx11.m_dxFactory->CreateSwapChainForHwnd(b3dCtx.m_ctx11.m_dev.Get(),
+            hwnd, &scDesc, nullptr, nullptr, &m_swapChain)))
+            Log.report(logvisor::Fatal, "unable to create swap chain");
+        b3dCtx.m_ctx11.m_dxFactory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
 
-            ID3D12CommandQueue* cmdQueue;
-            m_dataFactory = _NewD3D12DataFactory(&b3dCtx.m_ctx12, this);
-            m_commandQueue = _NewD3D12CommandQueue(&b3dCtx.m_ctx12, &w, this, &cmdQueue);
-            m_commandQueue->startRenderer();
+        auto insIt = b3dCtx.m_ctx11.m_windows.emplace(std::make_pair(parentWindow, D3D11Context::Window()));
+        D3D11Context::Window& w = insIt.first->second;
+        w.setupRTV(m_swapChain, b3dCtx.m_ctx11.m_dev.Get());
 
-            scDesc.Format = b3dCtx.m_ctx12.RGBATex2DFBViewDesc.Format;
-            scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-            HRESULT hr = b3dCtx.m_ctx12.m_dxFactory->CreateSwapChainForHwnd(cmdQueue,
-                hwnd, &scDesc, nullptr, nullptr, &m_swapChain);
-            if (FAILED(hr))
-                Log.report(logvisor::Fatal, "unable to create swap chain");
-            b3dCtx.m_ctx12.m_dxFactory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
+        m_dataFactory = _NewD3D11DataFactory(&b3dCtx.m_ctx11, this);
+        m_commandQueue = _NewD3D11CommandQueue(&b3dCtx.m_ctx11, &insIt.first->second, this);
+        m_commandQueue->startRenderer();
 
-            m_swapChain.As<IDXGISwapChain3>(&w.m_swapChain);
-            ComPtr<ID3D12Resource> fb;
-            m_swapChain->GetBuffer(0, __uuidof(ID3D12Resource), &fb);
-            w.m_backBuf = w.m_swapChain->GetCurrentBackBufferIndex();
-            D3D12_RESOURCE_DESC resDesc = fb->GetDesc();
-            w.width = resDesc.Width;
-            w.height = resDesc.Height;
-
-            if (FAILED(m_swapChain->GetContainingOutput(&m_output)))
-                Log.report(logvisor::Fatal, "unable to get DXGI output");
-        }
-        else
-#endif
-        {
-            scDesc.Format = b3dCtx.m_ctx11.m_fbFormat;
-            if (FAILED(b3dCtx.m_ctx11.m_dxFactory->CreateSwapChainForHwnd(b3dCtx.m_ctx11.m_dev.Get(),
-                hwnd, &scDesc, nullptr, nullptr, &m_swapChain)))
-                Log.report(logvisor::Fatal, "unable to create swap chain");
-            b3dCtx.m_ctx11.m_dxFactory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
-
-            auto insIt = b3dCtx.m_ctx11.m_windows.emplace(std::make_pair(parentWindow, D3D11Context::Window()));
-            D3D11Context::Window& w = insIt.first->second;
-            w.setupRTV(m_swapChain, b3dCtx.m_ctx11.m_dev.Get());
-
-            m_dataFactory = _NewD3D11DataFactory(&b3dCtx.m_ctx11, this);
-            m_commandQueue = _NewD3D11CommandQueue(&b3dCtx.m_ctx11, &insIt.first->second, this);
-            m_commandQueue->startRenderer();
-
-            if (FAILED(m_swapChain->GetContainingOutput(&m_output)))
-                Log.report(logvisor::Fatal, "unable to get DXGI output");
-        }
+        if (FAILED(m_swapChain->GetContainingOutput(&m_output)))
+            Log.report(logvisor::Fatal, "unable to get DXGI output");
     }
 
     ~GraphicsContextWin32D3D()
     {
-#if _WIN32_WINNT_WIN10
-        if (m_3dCtx.m_ctx12.m_dev)
-            m_3dCtx.m_ctx12.m_windows.erase(m_parentWindow);
-        else
-#endif
-            m_3dCtx.m_ctx11.m_windows.erase(m_parentWindow);
+        m_3dCtx.m_ctx11.m_windows.erase(m_parentWindow);
     }
 
     void _setCallback(IWindowCallback* cb)
@@ -183,29 +144,29 @@ public:
 
     IGraphicsCommandQueue* getCommandQueue()
     {
-        return m_commandQueue;
+        return m_commandQueue.get();
     }
 
     IGraphicsDataFactory* getDataFactory()
     {
-        return m_dataFactory;
+        return m_dataFactory.get();
     }
 
     IGraphicsDataFactory* getMainContextDataFactory()
     {
-        return m_dataFactory;
+        return m_dataFactory.get();
     }
 
     IGraphicsDataFactory* getLoadContextDataFactory()
     {
-        return m_dataFactory;
+        return m_dataFactory.get();
     }
 };
 
 struct GraphicsContextWin32GL : GraphicsContextWin32
 {
-    IGraphicsCommandQueue* m_commandQueue = nullptr;
-    IGraphicsDataFactory* m_dataFactory = nullptr;
+    std::unique_ptr<IGraphicsDataFactory> m_dataFactory;
+    std::unique_ptr<IGraphicsCommandQueue> m_commandQueue;
 
 public:
     IWindowCallback* m_callback;
@@ -370,7 +331,7 @@ public:
 
     void postInit()
     {
-        OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
+        //OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
 
         //wglCreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC)
         //    wglGetProcAddress("wglCreateContextAttribsARB");
@@ -393,12 +354,12 @@ public:
 
     IGraphicsCommandQueue* getCommandQueue()
     {
-        return m_commandQueue;
+        return m_commandQueue.get();
     }
 
     IGraphicsDataFactory* getDataFactory()
     {
-        return m_dataFactory;
+        return m_dataFactory.get();
     }
 
     /* Creates a new context on current thread!! Call from client loading thread */
@@ -414,7 +375,7 @@ public:
         }
         if (!wglMakeCurrent(w.m_deviceContext, m_mainCtx))
             Log.report(logvisor::Fatal, "unable to make main WGL context current");
-        return m_dataFactory;
+        return m_dataFactory.get();
     }
 
     /* Creates a new context on current thread!! Call from client loading thread */
@@ -430,7 +391,7 @@ public:
         }
         if (!wglMakeCurrent(w.m_deviceContext, m_loadCtx))
             Log.report(logvisor::Fatal, "unable to make load WGL context current");
-        return m_dataFactory;
+        return m_dataFactory.get();
     }
 };
 
@@ -444,8 +405,8 @@ struct GraphicsContextWin32Vulkan : GraphicsContextWin32
     VkFormat m_format = VK_FORMAT_UNDEFINED;
     VkColorSpaceKHR m_colorspace;
 
-    IGraphicsCommandQueue* m_commandQueue = nullptr;
-    IGraphicsDataFactory* m_dataFactory = nullptr;
+    std::unique_ptr<IGraphicsDataFactory> m_dataFactory;
+    std::unique_ptr<IGraphicsCommandQueue> m_commandQueue;
 
     std::thread m_vsyncThread;
     bool m_vsyncRunning;
@@ -655,12 +616,12 @@ public:
 
     IGraphicsCommandQueue* getCommandQueue()
     {
-        return m_commandQueue;
+        return m_commandQueue.get();
     }
 
     IGraphicsDataFactory* getDataFactory()
     {
-        return m_dataFactory;
+        return m_dataFactory.get();
     }
 
     IGraphicsDataFactory* getMainContextDataFactory()
@@ -1043,12 +1004,10 @@ public:
             if (m_gfxCtx->initializeContext(nullptr))
                 return;
         }
+#else
+        (void)wndInstance;
 #endif
         IGraphicsContext::EGraphicsAPI api = IGraphicsContext::EGraphicsAPI::D3D11;
-#if _WIN32_WINNT_WIN10
-        if (b3dCtx.m_ctx12.m_dev)
-            api = IGraphicsContext::EGraphicsAPI::D3D12;
-#endif
         if (b3dCtx.m_ctxOgl.m_dxFactory)
         {
             m_gfxCtx.reset(new GraphicsContextWin32GL(IGraphicsContext::EGraphicsAPI::OpenGL3_3,

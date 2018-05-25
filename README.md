@@ -29,7 +29,7 @@ refresh-rate.
 #### Supported Graphics Backends
 
 * OpenGL 3.3+
-* Direct3D 11/12
+* Direct3D 11
 * Metal 1.1 (OS X 10.11 only for now, iOS coming soon)
 * Vulkan
 

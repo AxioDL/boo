@@ -280,7 +280,7 @@ class HIDDeviceWinUSB final : public IHIDDevice
 
                 if (Error != ERROR_IO_PENDING)
                 {
-                    fprintf(stderr, "Write Failed %08X\n", Error);
+                    fprintf(stderr, "Write Failed %08X\n", int(Error));
                     return false;
                 }
             }
@@ -288,7 +288,7 @@ class HIDDeviceWinUSB final : public IHIDDevice
             if (!GetOverlappedResult(m_hidHandle, &Overlapped, &BytesWritten, TRUE))
             {
                 DWORD Error = GetLastError();
-                fprintf(stderr, "Write Failed %08X\n", Error);
+                fprintf(stderr, "Write Failed %08X\n", int(Error));
                 return false;
             }
         }
@@ -297,7 +297,7 @@ class HIDDeviceWinUSB final : public IHIDDevice
             DWORD useLength = DWORD(std::max(length, m_minFeatureSz));
             if (!HidD_SetFeature(m_hidHandle, (PVOID)m_sendBuf.data(), useLength))
             {
-                int error = GetLastError();
+                //int error = GetLastError();
                 return false;
             }
         }
@@ -377,7 +377,7 @@ public:
             }
             else if (Error != ERROR_IO_PENDING)
             {
-                fprintf(stderr, "Read Failed: %08X\n", Error);
+                fprintf(stderr, "Read Failed: %08X\n", int(Error));
                 return;
             }
             else if (!GetOverlappedResultEx(m_hidHandle, &m_overlapped, &BytesRead, 10, TRUE))

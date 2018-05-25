@@ -19,7 +19,7 @@ class DolphinSmashAdapterCallback : public IDolphinSmashAdapterCallback
     {
 //        printf("CONTROLLER %u CONNECTED\n", idx);
     }
-    void controllerDisconnected(unsigned idx, EDolphinControllerType)
+    void controllerDisconnected(unsigned idx)
     {
 //        printf("CONTROLLER %u DISCONNECTED\n", idx);
     }
@@ -281,7 +281,7 @@ struct TestApplicationCallback : IApplicationCallback
     {
         IGraphicsDataFactory* factory = self->mainWindow->getLoadContextDataFactory();
 
-        factory->BooCommitTransaction([&](IGraphicsDataFactory::Context& ctx)
+        factory->commitTransaction([&](IGraphicsDataFactory::Context& ctx)
         {
             /* Create render target */
             int x, y, w, h;
@@ -409,10 +409,9 @@ struct TestApplicationCallback : IApplicationCallback
             } else
 #endif
 #if _WIN32
-            if (plat == IGraphicsDataFactory::Platform::D3D12 ||
-                plat == IGraphicsDataFactory::Platform::D3D11)
+            if (plat == IGraphicsDataFactory::Platform::D3D11)
             {
-                ID3DDataFactory::Context& d3dF = dynamic_cast<ID3DDataFactory::Context&>(ctx);
+                D3DDataFactory::Context& d3dF = dynamic_cast<D3DDataFactory::Context&>(ctx);
 
                 static const char* VS =
                     "struct VertData {float3 in_pos : POSITION; float2 in_uv : UV;};\n"
@@ -482,7 +481,7 @@ struct TestApplicationCallback : IApplicationCallback
                                      1, &texture, nullptr, nullptr);
 
             return true;
-        });
+        } BooTrace);
     }
 
     int appMain(IApplication* app)

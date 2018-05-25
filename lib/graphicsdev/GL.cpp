@@ -83,7 +83,7 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead
     ObjToken<IVertexFormat> m_gammaVFMT;
     void SetupGammaResources()
     {
-        BooCommitTransaction([this](IGraphicsDataFactory::Context& ctx)
+        commitTransaction([this](IGraphicsDataFactory::Context& ctx)
         {
             const char* texNames[] = {"screenTex", "gammaLUT"};
             m_gammaShader = static_cast<Context&>(ctx).newShaderPipeline(GammaVS, GammaFS,
@@ -106,7 +106,7 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead
             };
             m_gammaVFMT = ctx.newVertexFormat(2, vfmt);
             return true;
-        });
+        } BooTrace);
     }
 
 public:
@@ -390,8 +390,8 @@ class GLTextureSA : public GraphicsDataNode<ITextureSA>
 
         SetClampMode(GL_TEXTURE_2D_ARRAY, clampMode);
 
-        GLenum intFormat, format;
-        int pxPitch;
+        GLenum intFormat = 0, format = 0;
+        int pxPitch = 0;
         switch (fmt)
         {
         case TextureFormat::RGBA8:

@@ -16,13 +16,8 @@ typedef union
 #endif
 } TVectorUnion;
 
-static constexpr TVectorUnion ZeroVec = {};
-static constexpr TVectorUnion Min16Vec = {INT16_MIN, INT16_MIN, INT16_MIN, INT16_MIN};
-static constexpr TVectorUnion Max16Vec = {INT16_MAX, INT16_MAX, INT16_MAX, INT16_MAX};
-static constexpr TVectorUnion Min32Vec = {INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN};
-static constexpr TVectorUnion Max32Vec = {INT32_MAX, INT32_MAX, INT32_MAX, INT32_MAX};
-static constexpr TVectorUnion MinFltVec = {-1.f, -1.f, -1.f, -1.f};
-static constexpr TVectorUnion MaxFltVec = {1.f, 1.f, 1.f, 1.f};
+static constexpr TVectorUnion Min32Vec = {{INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN}};
+static constexpr TVectorUnion Max32Vec = {{INT32_MAX, INT32_MAX, INT32_MAX, INT32_MAX}};
 
 void AudioMatrixMono::setDefaultMatrixCoefficients(AudioChannelSet acSet)
 {

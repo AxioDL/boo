@@ -262,7 +262,7 @@ struct DeferredWindowEvents : public IWindowCallback
         }
 
         if (hasResize)
-            m_rec.resized(latestResize, latestResize);
+            m_rec.resized(latestResize, false);
 
         for (const Command& cmd : cmds)
             cmd.dispatch(m_rec);

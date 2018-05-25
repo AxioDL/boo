@@ -1,4 +1,4 @@
-#ifndef BOO_WI2COMMON_HPP
+#ifndef BOO_WINCOMMON_HPP
 #define BOO_WINCOMMON_HPP
 
 #include <unordered_map>
@@ -107,28 +107,13 @@ struct D3D11Context
 struct Boo3DAppContext
 {
     D3D11Context m_ctx11;
-#if _WIN32_WINNT_WIN10
-    D3D12Context m_ctx12;
-#endif
 
     void resize(boo::IWindow* window, size_t width, size_t height)
     {
-#if _WIN32_WINNT_WIN10
-        if (m_ctx12.m_dev)
-        {
-            D3D12Context::Window& win = m_ctx12.m_windows[window];
-            win.width = width;
-            win.height = height;
-            win.m_needsResize = true;
-        }
-        else
-#endif
-        {
-            D3D11Context::Window& win = m_ctx11.m_windows[window];
-            win.width = width;
-            win.height = height;
-            win.m_needsResize = true;
-        }
+        D3D11Context::Window& win = m_ctx11.m_windows[window];
+        win.width = width;
+        win.height = height;
+        win.m_needsResize = true;
     }
 };
 

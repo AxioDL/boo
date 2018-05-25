@@ -109,10 +109,11 @@ class D3D11GraphicsBufferS : public GraphicsDataNode<IGraphicsBufferS>
                          BufferUse use, D3D11Context* ctx,
                          const void* data, size_t stride, size_t count)
     : GraphicsDataNode<IGraphicsBufferS>(parent),
-      m_stride(stride), m_count(count), m_sz(stride * count)
+      m_sz(stride * count), m_stride(stride), m_count(count)
     {
         D3D11_SUBRESOURCE_DATA iData = {data};
-        ThrowIfFailed(ctx->m_dev->CreateBuffer(&CD3D11_BUFFER_DESC(m_sz, USE_TABLE[int(use)], D3D11_USAGE_IMMUTABLE), &iData, &m_buf));
+        CD3D11_BUFFER_DESC desc(m_sz, USE_TABLE[int(use)], D3D11_USAGE_IMMUTABLE);
+        ThrowIfFailed(ctx->m_dev->CreateBuffer(&desc, &iData, &m_buf));
     }
 public:
     size_t m_stride;
@@ -140,8 +141,11 @@ class D3D11GraphicsBufferD : public GraphicsDataNode<IGraphicsBufferD, DataCls>
         m_cpuSz = stride * count;
         m_cpuBuf.reset(new uint8_t[m_cpuSz]);
         for (int i=0 ; i<3 ; ++i)
-            ThrowIfFailed(ctx->m_dev->CreateBuffer(&CD3D11_BUFFER_DESC(m_cpuSz, USE_TABLE[int(use)],
-                          D3D11_USAGE_DYNAMIC, D3D11_CPU_ACCESS_WRITE), nullptr, &m_bufs[i]));
+        {
+            CD3D11_BUFFER_DESC desc(m_cpuSz, USE_TABLE[int(use)],
+                                    D3D11_USAGE_DYNAMIC, D3D11_CPU_ACCESS_WRITE);
+            ThrowIfFailed(ctx->m_dev->CreateBuffer(&desc, nullptr, &m_bufs[i]));
+        }
     }
     void update(ID3D11DeviceContext* ctx, int b);
 public:
@@ -158,14 +162,13 @@ public:
 class D3D11TextureS : public GraphicsDataNode<ITextureS>
 {
     friend class D3D11DataFactory;
-    size_t m_sz;
 
     D3D11TextureS(const boo::ObjToken<BaseGraphicsData>& parent,
                   D3D11Context* ctx, size_t width, size_t height, size_t mips,
                   TextureFormat fmt, const void* data, size_t sz)
-    : GraphicsDataNode<ITextureS>(parent), m_sz(sz)
+    : GraphicsDataNode<ITextureS>(parent)
     {
-        DXGI_FORMAT pfmt;
+        DXGI_FORMAT pfmt = DXGI_FORMAT_UNKNOWN;
         int pxPitchNum = 1;
         int pxPitchDenom = 1;
         bool compressed = false;
@@ -212,8 +215,8 @@ class D3D11TextureS : public GraphicsDataNode<ITextureS>
         }
 
         ThrowIfFailed(ctx->m_dev->CreateTexture2D(&desc, upData, &m_tex));
-        ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_tex.Get(),
-            &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_tex.Get(), D3D_SRV_DIMENSION_TEXTURE2D, pfmt, 0, mips), &m_srv));
+        CD3D11_SHADER_RESOURCE_VIEW_DESC srvDesc(m_tex.Get(), D3D_SRV_DIMENSION_TEXTURE2D, pfmt, 0, mips);
+        ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_tex.Get(), &srvDesc, &m_srv));
     }
 public:
     ComPtr<ID3D11Texture2D> m_tex;
@@ -225,14 +228,13 @@ class D3D11TextureSA : public GraphicsDataNode<ITextureSA>
 {
     friend class D3D11DataFactory;
 
-    size_t m_sz;
     D3D11TextureSA(const boo::ObjToken<BaseGraphicsData>& parent,
                    D3D11Context* ctx, size_t width, size_t height, size_t layers,
                    size_t mips, TextureFormat fmt, const void* data, size_t sz)
-    : GraphicsDataNode<ITextureSA>(parent), m_sz(sz)
+    : GraphicsDataNode<ITextureSA>(parent)
     {
-        size_t pixelPitch;
-        DXGI_FORMAT pixelFmt;
+        size_t pixelPitch = 0;
+        DXGI_FORMAT pixelFmt = DXGI_FORMAT_UNKNOWN;
         switch (fmt)
         {
         case TextureFormat::RGBA8:
@@ -247,6 +249,8 @@ class D3D11TextureSA : public GraphicsDataNode<ITextureSA>
             pixelPitch = 2;
             pixelFmt = DXGI_FORMAT_R16_UNORM;
             break;
+        default:
+            Log.report(logvisor::Fatal, "unsupported tex format");
         }
 
         CD3D11_TEXTURE2D_DESC desc(pixelFmt, width, height, layers, mips,
@@ -272,8 +276,8 @@ class D3D11TextureSA : public GraphicsDataNode<ITextureSA>
         }
         ThrowIfFailed(ctx->m_dev->CreateTexture2D(&desc, upData.get(), &m_tex));
 
-        ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_tex.Get(),
-            &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_tex.Get(), D3D_SRV_DIMENSION_TEXTURE2DARRAY, pixelFmt), &m_srv));
+        CD3D11_SHADER_RESOURCE_VIEW_DESC srvDesc(m_tex.Get(), D3D_SRV_DIMENSION_TEXTURE2DARRAY, pixelFmt);
+        ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_tex.Get(), &srvDesc, &m_srv));
     }
 public:
     ComPtr<ID3D11Texture2D> m_tex;
@@ -287,7 +291,6 @@ class D3D11TextureD : public GraphicsDataNode<ITextureD>
     friend struct D3D11CommandQueue;
 
     size_t m_width = 0;
-    size_t m_height = 0;
     D3D11CommandQueue* m_q;
     std::unique_ptr<uint8_t[]> m_cpuBuf;
     size_t m_cpuSz;
@@ -296,9 +299,9 @@ class D3D11TextureD : public GraphicsDataNode<ITextureD>
     D3D11TextureD(const boo::ObjToken<BaseGraphicsData>& parent,
                   D3D11CommandQueue* q, D3D11Context* ctx,
                   size_t width, size_t height, TextureFormat fmt)
-    : GraphicsDataNode<ITextureD>(parent), m_width(width), m_height(height), m_q(q)
+    : GraphicsDataNode<ITextureD>(parent), m_width(width), m_q(q)
     {
-        DXGI_FORMAT pixelFmt;
+        DXGI_FORMAT pixelFmt = DXGI_FORMAT_UNKNOWN;
         switch (fmt)
         {
         case TextureFormat::RGBA8:
@@ -325,8 +328,8 @@ class D3D11TextureD : public GraphicsDataNode<ITextureD>
         for (int i=0 ; i<3 ; ++i)
         {
             ThrowIfFailed(ctx->m_dev->CreateTexture2D(&desc, nullptr, &m_texs[i]));
-            ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_texs[i].Get(),
-                &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_texs[i].Get(), D3D_SRV_DIMENSION_TEXTURE2D, pixelFmt), &m_srvs[i]));
+            CD3D11_SHADER_RESOURCE_VIEW_DESC srvDesc(m_texs[i].Get(), D3D_SRV_DIMENSION_TEXTURE2D, pixelFmt);
+            ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_texs[i].Get(), &srvDesc, &m_srvs[i]));
         }
     }
     void update(ID3D11DeviceContext* ctx, int b);
@@ -355,10 +358,12 @@ class D3D11TextureR : public GraphicsDataNode<ITextureR>
 
     void Setup(D3D11Context* ctx)
     {
-        ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(ctx->m_fbFormat, m_width, m_height,
-            1, 1, D3D11_BIND_RENDER_TARGET, D3D11_USAGE_DEFAULT, 0, m_samples), nullptr, &m_colorTex));
-        ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_D24_UNORM_S8_UINT, m_width, m_height,
-            1, 1, D3D11_BIND_DEPTH_STENCIL, D3D11_USAGE_DEFAULT, 0, m_samples), nullptr, &m_depthTex));
+        CD3D11_TEXTURE2D_DESC colorDesc(ctx->m_fbFormat, m_width, m_height,
+                    1, 1, D3D11_BIND_RENDER_TARGET, D3D11_USAGE_DEFAULT, 0, m_samples);
+        ThrowIfFailed(ctx->m_dev->CreateTexture2D(&colorDesc, nullptr, &m_colorTex));
+        CD3D11_TEXTURE2D_DESC depthDesc(DXGI_FORMAT_D32_FLOAT, m_width, m_height,
+                    1, 1, D3D11_BIND_DEPTH_STENCIL, D3D11_USAGE_DEFAULT, 0, m_samples);
+        ThrowIfFailed(ctx->m_dev->CreateTexture2D(&depthDesc, nullptr, &m_depthTex));
 
         D3D11_RTV_DIMENSION rtvDim;
         D3D11_DSV_DIMENSION dsvDim;
@@ -374,26 +379,28 @@ class D3D11TextureR : public GraphicsDataNode<ITextureR>
             dsvDim = D3D11_DSV_DIMENSION_TEXTURE2D;
         }
 
-        ThrowIfFailed(ctx->m_dev->CreateRenderTargetView(m_colorTex.Get(),
-            &CD3D11_RENDER_TARGET_VIEW_DESC(m_colorTex.Get(), rtvDim), &m_rtv));
-        ThrowIfFailed(ctx->m_dev->CreateDepthStencilView(m_depthTex.Get(),
-            &CD3D11_DEPTH_STENCIL_VIEW_DESC(m_depthTex.Get(), dsvDim), &m_dsv));
+        CD3D11_RENDER_TARGET_VIEW_DESC rtvDesc(m_colorTex.Get(), rtvDim);
+        ThrowIfFailed(ctx->m_dev->CreateRenderTargetView(m_colorTex.Get(), &rtvDesc, &m_rtv));
+        CD3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc(m_depthTex.Get(), dsvDim);
+        ThrowIfFailed(ctx->m_dev->CreateDepthStencilView(m_depthTex.Get(), &dsvDesc, &m_dsv));
 
         for (size_t i=0 ; i<m_colorBindCount ; ++i)
         {
-            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(ctx->m_fbFormat, m_width, m_height,
-                1, 1, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, 1), nullptr, &m_colorBindTex[i]));
-            ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_colorBindTex[i].Get(),
-                &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_colorBindTex[i].Get(), D3D11_SRV_DIMENSION_TEXTURE2D), &m_colorSrv[i]));
+            CD3D11_TEXTURE2D_DESC colorBindDesc(ctx->m_fbFormat, m_width, m_height,
+                            1, 1, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, 1);
+            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&colorBindDesc, nullptr, &m_colorBindTex[i]));
+            CD3D11_SHADER_RESOURCE_VIEW_DESC colorSrvDesc(m_colorBindTex[i].Get(), D3D11_SRV_DIMENSION_TEXTURE2D);
+            ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_colorBindTex[i].Get(), &colorSrvDesc, &m_colorSrv[i]));
         }
 
         for (size_t i=0 ; i<m_depthBindCount ; ++i)
         {
-            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R24G8_TYPELESS, m_width, m_height,
-                1, 1, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, 1), nullptr, &m_depthBindTex[i]));
-            ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_depthBindTex[i].Get(),
-                &CD3D11_SHADER_RESOURCE_VIEW_DESC(m_depthBindTex[i].Get(), D3D11_SRV_DIMENSION_TEXTURE2D,
-                                                  DXGI_FORMAT_R24_UNORM_X8_TYPELESS), &m_depthSrv[i]));
+            CD3D11_TEXTURE2D_DESC depthBindDesc(DXGI_FORMAT_R32_FLOAT, m_width, m_height,
+                            1, 1, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, 1);
+            ThrowIfFailed(ctx->m_dev->CreateTexture2D(&depthBindDesc, nullptr, &m_depthBindTex[i]));
+            CD3D11_SHADER_RESOURCE_VIEW_DESC depthSrvDesc(m_depthBindTex[i].Get(), D3D11_SRV_DIMENSION_TEXTURE2D,
+                            DXGI_FORMAT_R32_FLOAT);
+            ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_depthBindTex[i].Get(), &depthSrvDesc, &m_depthSrv[i]));
         }
     }
 
@@ -1143,7 +1150,7 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
             if (tex->m_samples > 1)
             {
                 ctx->ResolveSubresource(tex->m_depthBindTex[bindIdx].Get(), 0, tex->m_depthTex.Get(), 0,
-                                                  DXGI_FORMAT_D24_UNORM_S8_UINT);
+                                                  DXGI_FORMAT_D32_FLOAT);
             }
             else
             {
@@ -1244,7 +1251,7 @@ void D3D11TextureD::unmap()
     m_q->m_dynamicLock.unlock();
 }
 
-class D3D11DataFactory : public ID3DDataFactory, public GraphicsDataFactoryHead
+class D3D11DataFactory : public D3DDataFactory, public GraphicsDataFactoryHead
 {
     friend struct D3D11CommandQueue;
     IGraphicsContext* m_parent;
@@ -1286,7 +1293,7 @@ class D3D11DataFactory : public ID3DDataFactory, public GraphicsDataFactoryHead
             m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVFMT, m_gammaVBO.get(), {}, {},
                                                       0, nullptr, nullptr, 2, texs, nullptr, nullptr);
             return true;
-        });
+        } BooTrace);
     }
 
 public:
@@ -1302,13 +1309,13 @@ public:
     Platform platform() const {return Platform::D3D11;}
     const SystemChar* platformName() const {return _S("D3D11");}
 
-    class Context : public ID3DDataFactory::Context
+    class Context : public D3DDataFactory::Context
     {
         friend class D3D11DataFactory;
         D3D11DataFactory& m_parent;
         boo::ObjToken<BaseGraphicsData> m_data;
-        Context(D3D11DataFactory& parent)
-        : m_parent(parent), m_data(new BaseGraphicsData(parent)) {}
+        Context(D3D11DataFactory& parent __BooTraceArgs)
+        : m_parent(parent), m_data(new BaseGraphicsData(parent __BooTraceArgsUse)) {}
     public:
         Platform platform() const {return Platform::D3D11;}
         const SystemChar* platformName() const {return _S("D3D11");}
@@ -1528,16 +1535,16 @@ public:
         }
     };
 
-    boo::ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count)
+    boo::ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs)
     {
         D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent->getCommandQueue());
-        boo::ObjToken<BaseGraphicsPool> pool(new BaseGraphicsPool(*this));
+        boo::ObjToken<BaseGraphicsPool> pool(new BaseGraphicsPool(*this __BooTraceArgsUse));
         return {new D3D11GraphicsBufferD<BaseGraphicsPool>(pool, q, use, m_ctx, stride, count)};
     }
 
-    void commitTransaction(const FactoryCommitFunc& trans)
+    void commitTransaction(const FactoryCommitFunc& trans __BooTraceArgs)
     {
-        D3D11DataFactory::Context ctx(*this);
+        D3D11DataFactory::Context ctx(*this __BooTraceArgsUse);
         trans(ctx);
     }
 
@@ -1727,14 +1734,16 @@ void D3D11CommandQueue::ProcessDynamicLoads(ID3D11DeviceContext* ctx)
     }
 }
 
-IGraphicsCommandQueue* _NewD3D11CommandQueue(D3D11Context* ctx, D3D11Context::Window* windowCtx, IGraphicsContext* parent)
+std::unique_ptr<IGraphicsCommandQueue>
+_NewD3D11CommandQueue(D3D11Context* ctx, D3D11Context::Window* windowCtx, IGraphicsContext* parent)
 {
-    return new D3D11CommandQueue(ctx, windowCtx, parent);
+    return std::make_unique<D3D11CommandQueue>(ctx, windowCtx, parent);
 }
 
-IGraphicsDataFactory* _NewD3D11DataFactory(D3D11Context* ctx, IGraphicsContext* parent)
+std::unique_ptr<IGraphicsDataFactory>
+_NewD3D11DataFactory(D3D11Context* ctx, IGraphicsContext* parent)
 {
-    return new D3D11DataFactory(parent, ctx);
+    return std::make_unique<D3D11DataFactory>(parent, ctx);
 }
 
 }

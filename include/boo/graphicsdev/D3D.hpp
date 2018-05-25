@@ -18,10 +18,10 @@ extern pD3DCreateBlob D3DCreateBlobPROC;
 namespace boo
 {
 
-class ID3DDataFactory : public IGraphicsDataFactory
+class D3DDataFactory : public IGraphicsDataFactory
 {
 public:
-    virtual ~ID3DDataFactory() {}
+    virtual ~D3DDataFactory() {}
 
     class Context : public IGraphicsDataFactory::Context
     {
