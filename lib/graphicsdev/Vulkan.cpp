@@ -2264,6 +2264,9 @@ public:
             case ZTest::Equal:
                 depthStencilInfo.depthCompareOp = VK_COMPARE_OP_EQUAL;
                 break;
+            case ZTest::GEqual:
+                depthStencilInfo.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
+                break;
             }
 
             VkPipelineColorBlendAttachmentState colorAttachment = {};
