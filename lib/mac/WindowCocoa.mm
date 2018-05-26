@@ -196,19 +196,19 @@ class GraphicsContextCocoaMetal;
 namespace boo
 {
 static logvisor::Module Log("boo::WindowCocoa");
-IGraphicsCommandQueue* _NewGLCommandQueue(IGraphicsContext* parent, GLContext* glCtx);
-IGraphicsDataFactory* _NewGLDataFactory(IGraphicsContext* parent, GLContext* glCtx);
-IGraphicsCommandQueue* _NewMetalCommandQueue(MetalContext* ctx, IWindow* parentWindow,
-                                             IGraphicsContext* parent);
-IGraphicsDataFactory* _NewMetalDataFactory(IGraphicsContext* parent, MetalContext* ctx);
+std::unique_ptr<IGraphicsCommandQueue> _NewGLCommandQueue(IGraphicsContext* parent, GLContext* glCtx);
+std::unique_ptr<IGraphicsDataFactory> _NewGLDataFactory(IGraphicsContext* parent, GLContext* glCtx);
+std::unique_ptr<IGraphicsCommandQueue> _NewMetalCommandQueue(MetalContext* ctx, IWindow* parentWindow,
+                                                             IGraphicsContext* parent);
+std::unique_ptr<IGraphicsDataFactory> _NewMetalDataFactory(IGraphicsContext* parent, MetalContext* ctx);
 void _CocoaUpdateLastGLCtx(NSOpenGLContext* lastGLCtx);
 
 class GraphicsContextCocoaGL : public GraphicsContextCocoa
 {
     GraphicsContextCocoaGLInternal* m_nsContext = nullptr;
 
-    IGraphicsCommandQueue* m_commandQueue = nullptr;
-    IGraphicsDataFactory* m_dataFactory = nullptr;
+    std::unique_ptr<IGraphicsDataFactory> m_dataFactory;
+    std::unique_ptr<IGraphicsCommandQueue> m_commandQueue;
     NSOpenGLContext* m_mainCtx = nullptr;
     NSOpenGLContext* m_loadCtx = nullptr;
 
@@ -228,8 +228,6 @@ public:
     ~GraphicsContextCocoaGL()
     {
         m_commandQueue->stopRenderer();
-        delete m_commandQueue;
-        delete m_dataFactory;
         printf("CONTEXT DESTROYED\n");
     }
 
@@ -281,12 +279,12 @@ public:
 
     IGraphicsCommandQueue* getCommandQueue()
     {
-        return m_commandQueue;
+        return m_commandQueue.get();
     }
 
     IGraphicsDataFactory* getDataFactory()
     {
-        return m_dataFactory;
+        return m_dataFactory.get();
     }
 
     IGraphicsDataFactory* getMainContextDataFactory()
@@ -299,7 +297,7 @@ public:
                 Log.report(logvisor::Fatal, "unable to make main NSOpenGLContext");
         }
         [m_mainCtx makeCurrentContext];
-        return m_dataFactory;
+        return m_dataFactory.get();
     }
 
     IGraphicsDataFactory* getLoadContextDataFactory()
@@ -312,7 +310,7 @@ public:
                 Log.report(logvisor::Fatal, "unable to make load NSOpenGLContext");
         }
         [m_loadCtx makeCurrentContext];
-        return m_dataFactory;
+        return m_dataFactory.get();
     }
 
     void present()
@@ -372,8 +370,8 @@ class GraphicsContextCocoaMetal : public GraphicsContextCocoa
 {
     GraphicsContextCocoaMetalInternal* m_nsContext = nullptr;
 
-    IGraphicsCommandQueue* m_commandQueue = nullptr;
-    IGraphicsDataFactory* m_dataFactory = nullptr;
+    std::unique_ptr<IGraphicsDataFactory> m_dataFactory;
+    std::unique_ptr<IGraphicsCommandQueue> m_commandQueue;
 
 public:
     IWindow* m_parentWindow;
@@ -391,8 +389,6 @@ public:
     ~GraphicsContextCocoaMetal()
     {
         m_commandQueue->stopRenderer();
-        delete m_commandQueue;
-        delete m_dataFactory;
         m_metalCtx->m_windows.erase(m_parentWindow);
     }
 
@@ -445,22 +441,22 @@ public:
 
     IGraphicsCommandQueue* getCommandQueue()
     {
-        return m_commandQueue;
+        return m_commandQueue.get();
     }
 
     IGraphicsDataFactory* getDataFactory()
     {
-        return m_dataFactory;
+        return m_dataFactory.get();
     }
 
     IGraphicsDataFactory* getMainContextDataFactory()
     {
-        return m_dataFactory;
+        return m_dataFactory.get();
     }
 
     IGraphicsDataFactory* getLoadContextDataFactory()
     {
-        return m_dataFactory;
+        return m_dataFactory.get();
     }
 
     void present()

@@ -19,7 +19,7 @@ public:
         friend class MetalDataFactoryImpl;
         MetalDataFactory& m_parent;
         ObjToken<BaseGraphicsData> m_data;
-        Context(MetalDataFactory& parent);
+        Context(MetalDataFactory& parent __BooTraceArgs);
         ~Context();
     public:
         Platform platform() const { return Platform::Metal; }

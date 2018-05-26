@@ -116,7 +116,7 @@ class MetalDataFactoryImpl : public MetalDataFactory, public GraphicsDataFactory
             m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVFMT, m_gammaVBO.get(), {}, {},
                                                       0, nullptr, nullptr, 2, texs, nullptr, nullptr);
             return true;
-        });
+        } BooTrace);
     }
 
 public:
@@ -139,8 +139,8 @@ public:
 
     Platform platform() const { return Platform::Metal; }
     const char* platformName() const { return "Metal"; }
-    void commitTransaction(const std::function<bool(IGraphicsDataFactory::Context& ctx)>&);
-    ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count);
+    void commitTransaction(const std::function<bool(IGraphicsDataFactory::Context& ctx)>& __BooTraceArgs);
+    ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs);
     void _unregisterShareableShader(uint64_t srcKey, uint64_t binKey) { m_sharedShaders.erase(srcKey); }
 
     static bool CheckForMetalCompiler()
@@ -1576,8 +1576,8 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     }
 };
 
-MetalDataFactory::Context::Context(MetalDataFactory& parent)
-: m_parent(parent), m_data(new BaseGraphicsData(static_cast<MetalDataFactoryImpl&>(parent))) {}
+MetalDataFactory::Context::Context(MetalDataFactory& parent __BooTraceArgs)
+: m_parent(parent), m_data(new BaseGraphicsData(static_cast<MetalDataFactoryImpl&>(parent) __BooTraceArgsUse)) {}
 
 MetalDataFactory::Context::~Context() {}
 
@@ -1819,28 +1819,28 @@ MetalDataFactory::Context::newShaderDataBinding(const ObjToken<IShaderPipeline>&
     }
 }
 
-void MetalDataFactoryImpl::commitTransaction(const FactoryCommitFunc& trans)
+void MetalDataFactoryImpl::commitTransaction(const FactoryCommitFunc& trans __BooTraceArgs)
 {
-    MetalDataFactory::Context ctx(*this);
+    MetalDataFactory::Context ctx(*this __BooTraceArgsUse);
     trans(ctx);
 }
 
-ObjToken<IGraphicsBufferD> MetalDataFactoryImpl::newPoolBuffer(BufferUse use, size_t stride, size_t count)
+ObjToken<IGraphicsBufferD> MetalDataFactoryImpl::newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs)
 {
-    ObjToken<BaseGraphicsPool> pool(new BaseGraphicsPool(*this));
+    ObjToken<BaseGraphicsPool> pool(new BaseGraphicsPool(*this __BooTraceArgsUse));
     MetalCommandQueue* q = static_cast<MetalCommandQueue*>(m_parent->getCommandQueue());
     return {new MetalGraphicsBufferD<BaseGraphicsPool>(pool, q, use, m_ctx, stride, count)};
 }
 
-IGraphicsCommandQueue* _NewMetalCommandQueue(MetalContext* ctx, IWindow* parentWindow,
-                                             IGraphicsContext* parent)
+std::unique_ptr<IGraphicsCommandQueue> _NewMetalCommandQueue(MetalContext* ctx, IWindow* parentWindow,
+                                                             IGraphicsContext* parent)
 {
-    return new struct MetalCommandQueue(ctx, parentWindow, parent);
+    return std::make_unique<MetalCommandQueue>(ctx, parentWindow, parent);
 }
 
-IGraphicsDataFactory* _NewMetalDataFactory(IGraphicsContext* parent, MetalContext* ctx)
+std::unique_ptr<IGraphicsDataFactory> _NewMetalDataFactory(IGraphicsContext* parent, MetalContext* ctx)
 {
-    return new class MetalDataFactoryImpl(parent, ctx);
+    return std::make_unique<MetalDataFactoryImpl>(parent, ctx);
 }
 
 }

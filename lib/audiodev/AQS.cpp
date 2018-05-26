@@ -629,6 +629,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         m_5msFrames = actualSampleRate * 5 / 1000;
 
         ChannelMap& chMapOut = m_mixInfo.m_channelMap;
+        chMapOut.m_channelCount = 0;
         if (chCount > 2)
         {
             AudioChannelLayout layout;
