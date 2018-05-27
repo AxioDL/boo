@@ -46,7 +46,6 @@ struct VulkanContext
     std::mutex m_queueLock;
     VkDescriptorSetLayout m_descSetLayout = VK_NULL_HANDLE;
     VkPipelineLayout m_pipelinelayout = VK_NULL_HANDLE;
-    VkDescriptorPool m_descPool = VK_NULL_HANDLE;
     VkRenderPass m_pass = VK_NULL_HANDLE;
     VkRenderPass m_passColorOnly = VK_NULL_HANDLE;
     VkCommandPool m_loadPool = VK_NULL_HANDLE;

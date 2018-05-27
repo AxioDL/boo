@@ -17,7 +17,7 @@
 
 #include "logvisor/logvisor.hpp"
 
-#define BOO_VK_MAX_DESCRIPTOR_SETS 262144
+#define BOO_VK_MAX_DESCRIPTOR_SETS 65536
 
 #undef min
 #undef max
@@ -66,6 +66,7 @@ static logvisor::Module Log("boo::Vulkan");
 VulkanContext g_VulkanContext;
 class VulkanDataFactoryImpl;
 struct VulkanCommandQueue;
+struct VulkanDescriptorPool;
 
 struct VulkanShareableShader : IShareableShader<VulkanDataFactoryImpl, VulkanShareableShader>
 {
@@ -82,8 +83,11 @@ class VulkanDataFactoryImpl : public VulkanDataFactory, public GraphicsDataFacto
     friend class VulkanDataFactory::Context;
     friend struct VulkanData;
     friend struct VulkanPool;
+    friend struct VulkanDescriptorPool;
+    friend struct VulkanShaderDataBinding;
     IGraphicsContext* m_parent;
     VulkanContext* m_ctx;
+    VulkanDescriptorPool* m_descPoolHead = nullptr;
     std::unordered_map<uint64_t, std::unique_ptr<VulkanShareableShader>> m_sharedShaders;
     std::unordered_map<uint64_t, uint64_t> m_sourceToBinary;
     std::vector<int> m_texUnis;
@@ -136,9 +140,15 @@ class VulkanDataFactoryImpl : public VulkanDataFactory, public GraphicsDataFacto
 
 public:
     VulkanDataFactoryImpl(IGraphicsContext* parent, VulkanContext* ctx);
+    ~VulkanDataFactoryImpl()
+    {
+        assert(m_descPoolHead == nullptr && "Dangling descriptor pools detected");
+    }
 
     Platform platform() const {return Platform::Vulkan;}
     const SystemChar* platformName() const {return _S("Vulkan");}
+
+    boo::ObjToken<VulkanDescriptorPool> allocateDescriptorSets(VkDescriptorSet* out);
 
     void commitTransaction(const FactoryCommitFunc& __BooTraceArgs);
 
@@ -198,7 +208,7 @@ dbgFunc(VkDebugReportFlagsEXT msgFlags, VkDebugReportObjectTypeEXT objType,
      * That's what would happen without validation layers, so we'll
      * keep that behavior here.
      */
-    return false;
+    return VK_FALSE;
 }
 
 static void SetImageLayout(VkCommandBuffer cmd, VkImage image,
@@ -665,23 +675,6 @@ void VulkanContext::initDevice()
     pipelineLayout.pSetLayouts = &m_descSetLayout;
     ThrowIfFailed(vk::CreatePipelineLayout(m_dev, &pipelineLayout, nullptr, &m_pipelinelayout));
 
-    VkDescriptorPoolSize poolSizes[2] = {};
-    VkDescriptorPoolCreateInfo descriptorPoolInfo = {};
-    descriptorPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    descriptorPoolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-    descriptorPoolInfo.pNext = nullptr;
-    descriptorPoolInfo.maxSets = BOO_VK_MAX_DESCRIPTOR_SETS;
-    descriptorPoolInfo.poolSizeCount = 2;
-    descriptorPoolInfo.pPoolSizes = poolSizes;
-
-    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount = BOO_GLSL_MAX_UNIFORM_COUNT * BOO_VK_MAX_DESCRIPTOR_SETS;
-
-    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = BOO_GLSL_MAX_TEXTURE_COUNT * BOO_VK_MAX_DESCRIPTOR_SETS;
-
-    ThrowIfFailed(vk::CreateDescriptorPool(m_dev, &descriptorPoolInfo, nullptr, &m_descPool));
-
     std::string gpuName = m_gpuProps.deviceName;
     Log.report(logvisor::Info, "Initialized %s", gpuName.c_str());
     Log.report(logvisor::Info, "Vulkan version %d.%d.%d",
@@ -706,12 +699,6 @@ void VulkanContext::destroyDevice()
     {
         vk::DestroyRenderPass(m_dev, m_pass, nullptr);
         m_pass = VK_NULL_HANDLE;
-    }
-
-    if (m_descPool)
-    {
-        vk::DestroyDescriptorPool(m_dev, m_descPool, nullptr);
-        m_descPool = VK_NULL_HANDLE;
     }
 
     if (m_pipelinelayout)
@@ -1091,6 +1078,66 @@ bool VulkanContext::_resizeSwapChains()
     }
 
     return true;
+}
+
+struct VulkanDescriptorPool : ListNode<VulkanDescriptorPool, VulkanDataFactoryImpl*>
+{
+    VkDescriptorPool m_descPool;
+    int m_allocatedSets = 0;
+
+    VulkanDescriptorPool(VulkanDataFactoryImpl* factory)
+    : ListNode<VulkanDescriptorPool, VulkanDataFactoryImpl*>(factory)
+    {
+        VkDescriptorPoolSize poolSizes[2] = {};
+        VkDescriptorPoolCreateInfo descriptorPoolInfo = {};
+        descriptorPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        descriptorPoolInfo.pNext = nullptr;
+        descriptorPoolInfo.maxSets = BOO_VK_MAX_DESCRIPTOR_SETS;
+        descriptorPoolInfo.poolSizeCount = 2;
+        descriptorPoolInfo.pPoolSizes = poolSizes;
+
+        poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        poolSizes[0].descriptorCount = BOO_GLSL_MAX_UNIFORM_COUNT * BOO_VK_MAX_DESCRIPTOR_SETS;
+
+        poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        poolSizes[1].descriptorCount = BOO_GLSL_MAX_TEXTURE_COUNT * BOO_VK_MAX_DESCRIPTOR_SETS;
+
+        ThrowIfFailed(vk::CreateDescriptorPool(factory->m_ctx->m_dev, &descriptorPoolInfo, nullptr, &m_descPool));
+    }
+
+    ~VulkanDescriptorPool()
+    {
+        vk::DestroyDescriptorPool(m_head->m_ctx->m_dev, m_descPool, nullptr);
+    }
+
+    std::unique_lock<std::recursive_mutex> destructorLock() override
+    { return std::unique_lock<std::recursive_mutex>{m_head->m_dataMutex}; }
+    static std::unique_lock<std::recursive_mutex> _getHeadLock(VulkanDataFactoryImpl* factory)
+    { return std::unique_lock<std::recursive_mutex>{factory->m_dataMutex}; }
+    static VulkanDescriptorPool*& _getHeadPtr(VulkanDataFactoryImpl* factory)
+    { return factory->m_descPoolHead; }
+};
+
+boo::ObjToken<VulkanDescriptorPool> VulkanDataFactoryImpl::allocateDescriptorSets(VkDescriptorSet* out)
+{
+    std::lock_guard<std::recursive_mutex> lk(m_dataMutex);
+    boo::ObjToken<VulkanDescriptorPool> pool;
+    if (!m_descPoolHead || m_descPoolHead->m_allocatedSets == BOO_VK_MAX_DESCRIPTOR_SETS)
+        pool = new VulkanDescriptorPool(this);
+    else
+        pool = m_descPoolHead;
+
+    VkDescriptorSetLayout layouts[] = {m_ctx->m_descSetLayout, m_ctx->m_descSetLayout};
+    VkDescriptorSetAllocateInfo descAllocInfo;
+    descAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    descAllocInfo.pNext = nullptr;
+    descAllocInfo.descriptorPool = pool->m_descPool;
+    descAllocInfo.descriptorSetCount = 2;
+    descAllocInfo.pSetLayouts = layouts;
+    ThrowIfFailed(vk::AllocateDescriptorSets(m_ctx->m_dev, &descAllocInfo, out));
+    pool->m_allocatedSets += 2;
+
+    return pool;
 }
 
 struct AllocatedBuffer
@@ -2414,6 +2461,7 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
     VkDeviceSize m_vboOffs[2][2] = {{},{}};
     VkBuffer m_iboBufs[2] = {};
     VkDeviceSize m_iboOffs[2] = {};
+    boo::ObjToken<VulkanDescriptorPool> m_descPool;
     VkDescriptorSet m_descSets[2] = {};
 
     size_t m_vertOffset;
@@ -2425,7 +2473,7 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
 #endif
 
     VulkanShaderDataBinding(const boo::ObjToken<BaseGraphicsData>& d,
-                            VulkanContext* ctx,
+                            VulkanDataFactoryImpl& factory,
                             const boo::ObjToken<IShaderPipeline>& pipeline,
                             const boo::ObjToken<IGraphicsBuffer>& vbuf,
                             const boo::ObjToken<IGraphicsBuffer>& instVbuf,
@@ -2436,7 +2484,7 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
                             const int* bindIdxs, const bool* depthBinds,
                             size_t baseVert, size_t baseInst)
     : GraphicsDataNode<IShaderDataBinding>(d),
-      m_ctx(ctx),
+      m_ctx(factory.m_ctx),
       m_pipeline(pipeline),
       m_vbuf(vbuf),
       m_instVbuf(instVbuf),
@@ -2478,22 +2526,7 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
 
         size_t totalDescs = ubufCount + texCount;
         if (totalDescs > 0)
-        {
-            VkDescriptorSetLayout layouts[] = {ctx->m_descSetLayout, ctx->m_descSetLayout};
-            VkDescriptorSetAllocateInfo descAllocInfo;
-            descAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-            descAllocInfo.pNext = nullptr;
-            descAllocInfo.descriptorPool = ctx->m_descPool;
-            descAllocInfo.descriptorSetCount = 2;
-            descAllocInfo.pSetLayouts = layouts;
-            ThrowIfFailed(vk::AllocateDescriptorSets(ctx->m_dev, &descAllocInfo, m_descSets));
-        }
-    }
-
-    ~VulkanShaderDataBinding()
-    {
-        if (m_descSets[0])
-            ThrowIfFailed(vk::FreeDescriptorSets(m_ctx->m_dev, m_ctx->m_descPool, 2, m_descSets));
+            m_descPool = factory.allocateDescriptorSets(m_descSets);
     }
 
     void commit(VulkanContext* ctx)
@@ -3709,7 +3742,7 @@ VulkanDataFactory::Context::newShaderDataBinding(
         size_t baseVert, size_t baseInst)
 {
     VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
-    return {new VulkanShaderDataBinding(m_data, factory.m_ctx, pipeline, vbuf, instVbuf, ibuf,
+    return {new VulkanShaderDataBinding(m_data, factory, pipeline, vbuf, instVbuf, ibuf,
                                         ubufCount, ubufs, ubufOffs, ubufSizes, texCount, texs,
                                         bindIdxs, bindDepth, baseVert, baseInst)};
 }
