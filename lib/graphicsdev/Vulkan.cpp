@@ -862,6 +862,7 @@ void VulkanContext::initSwapChain(VulkanContext::Window& windowCtx, VkSurfaceKHR
 
         /* render pass color only */
         attachments[0].format = m_displayFormat;
+        attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
         renderPass.attachmentCount = 1;
         subpass.pDepthStencilAttachment = nullptr;
         ThrowIfFailed(vk::CreateRenderPass(m_dev, &renderPass, nullptr, &m_passColorOnly));
