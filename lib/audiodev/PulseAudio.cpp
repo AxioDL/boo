@@ -91,7 +91,6 @@ struct PulseAudioVoiceEngine : LinuxMidi
         }
 
         pa_operation* op;
-        size_t periodSz;
 
         if (pa_context_connect(m_ctx, nullptr, PA_CONTEXT_NOFLAGS, nullptr))
         {
@@ -117,12 +116,11 @@ struct PulseAudioVoiceEngine : LinuxMidi
         }
 
         m_5msFrames = m_sampleSpec.rate * 5 / 1000;
-        periodSz = m_5msFrames * 4;
 
         m_mixInfo.m_sampleRate = m_sampleSpec.rate;
         m_mixInfo.m_sampleFormat = SOXR_FLOAT32;
         m_mixInfo.m_bitsPerSample = 32;
-        m_mixInfo.m_periodFrames = periodSz;
+        m_mixInfo.m_periodFrames = m_5msFrames;
         if (!(m_stream = pa_stream_new(m_ctx, "master", &m_sampleSpec, &m_chanMap)))
         {
             Log.report(logvisor::Error, "Unable to pa_stream_new(): %s", pa_strerror(pa_context_errno(m_ctx)));
@@ -130,8 +128,8 @@ struct PulseAudioVoiceEngine : LinuxMidi
         }
 
         pa_buffer_attr bufAttr;
-        bufAttr.minreq = uint32_t(periodSz * m_sampleSpec.channels * sizeof(float));
-        bufAttr.maxlength = bufAttr.minreq * 6;
+        bufAttr.minreq = uint32_t(m_5msFrames * m_sampleSpec.channels * sizeof(float));
+        bufAttr.maxlength = bufAttr.minreq * 12;
         bufAttr.tlength = bufAttr.maxlength;
         bufAttr.prebuf = UINT32_MAX;
         bufAttr.fragsize = UINT32_MAX;
@@ -286,8 +284,6 @@ struct PulseAudioVoiceEngine : LinuxMidi
         userdata->_parseAudioChannelSet(&i->channel_map);
     }
 
-    std::vector<float> m_finalFlt;
-
     void pumpAndMixVoices()
     {
         if (!m_stream)
@@ -302,9 +298,7 @@ struct PulseAudioVoiceEngine : LinuxMidi
             m_mixInfo.m_channelMap.m_channelCount = 2;
             m_mixInfo.m_channelMap.m_channels[0] = AudioChannel::FrontLeft;
             m_mixInfo.m_channelMap.m_channels[1] = AudioChannel::FrontRight;
-            if (m_finalFlt.size() < m_5msFrames * 2)
-                m_finalFlt.resize(m_5msFrames * 2);
-            _pumpAndMixVoices(m_5msFrames, m_finalFlt.data());
+            _pumpAndMixVoices(m_5msFrames, (float*)nullptr);
             return;
         }
 
@@ -334,8 +328,7 @@ struct PulseAudioVoiceEngine : LinuxMidi
 
         writablePeriods = nbytes / periodSz;
         size_t periodSamples = m_mixInfo.m_periodFrames * m_mixInfo.m_channelMap.m_channelCount;
-        for (int p=0 ; p<writablePeriods ; ++p)
-            _pumpAndMixVoices(m_mixInfo.m_periodFrames, reinterpret_cast<float*>(data) + p * periodSamples);
+        _pumpAndMixVoices(m_mixInfo.m_periodFrames * writablePeriods, reinterpret_cast<float*>(data));
 
         if (pa_stream_write(m_stream, data, nbytes, nullptr, 0, PA_SEEK_RELATIVE))
             Log.report(logvisor::Error, "Unable to pa_stream_write()");

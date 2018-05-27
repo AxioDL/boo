@@ -14,7 +14,9 @@ BaseAudioVoiceEngine::~BaseAudioVoiceEngine()
 template <typename T>
 void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, T* dataOut)
 {
-    memset(dataOut, 0, sizeof(T) * frames * m_mixInfo.m_channelMap.m_channelCount);
+    if (dataOut)
+        memset(dataOut, 0, sizeof(T) * frames * m_mixInfo.m_channelMap.m_channelCount);
+
     if (m_ltRtProcessing)
     {
         size_t sampleCount = m_5msFrames * 5;
@@ -64,6 +66,10 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, T* dataOut)
         for (auto it = m_linearizedSubmixes.rbegin() ; it != m_linearizedSubmixes.rend() ; ++it)
             (*it)->_pumpAndMix<T>(thisFrames);
 
+        remFrames -= thisFrames;
+        if (!dataOut)
+            continue;
+
         if (m_ltRtProcessing)
         {
             m_ltRtProcessing->Process(_getLtRtIn<T>().data(), dataOut, int(thisFrames));
@@ -74,7 +80,6 @@ void BaseAudioVoiceEngine::_pumpAndMixVoices(size_t frames, T* dataOut)
         for (size_t i=0 ; i<sampleCount ; ++i)
             dataOut[i] *= m_totalVol;
 
-        remFrames -= thisFrames;
         dataOut += sampleCount;
     }
 

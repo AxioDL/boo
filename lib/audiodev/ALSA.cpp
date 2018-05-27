@@ -352,9 +352,7 @@ struct ALSAAudioVoiceEngine : LinuxMidi
             m_mixInfo.m_channelMap.m_channelCount = 2;
             m_mixInfo.m_channelMap.m_channels[0] = AudioChannel::FrontLeft;
             m_mixInfo.m_channelMap.m_channels[1] = AudioChannel::FrontRight;
-            if (m_finalFlt.size() < m_5msFrames * 2)
-                m_finalFlt.resize(m_5msFrames * 2);
-            _pumpAndMixVoices(m_5msFrames, m_finalFlt.data());
+            _pumpAndMixVoices(m_5msFrames, (float*)nullptr);
             return;
         }
 
