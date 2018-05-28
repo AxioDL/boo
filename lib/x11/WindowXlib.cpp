@@ -1111,13 +1111,9 @@ public:
     
     ~WindowXlib()
     {
-        XLockDisplay(m_xDisp);
-        m_gfxCtx->destroy();
-        XUnmapWindow(m_xDisp, m_windowId);
-        XDestroyWindow(m_xDisp, m_windowId);
-        XFreeColormap(m_xDisp, m_colormapId);
-        XUnlockDisplay(m_xDisp);
-        APP->_deletedWindow(this);
+        _cleanup();
+        if (APP)
+            APP->_deletedWindow(this);
     }
     
     void setCallback(IWindowCallback* cb)
@@ -2013,7 +2009,21 @@ public:
 
         return false;
     }
-    
+
+    void _cleanup()
+    {
+        if (m_gfxCtx)
+        {
+            XLockDisplay(m_xDisp);
+            m_gfxCtx->destroy();
+            m_gfxCtx.reset();
+            XUnmapWindow(m_xDisp, m_windowId);
+            XDestroyWindow(m_xDisp, m_windowId);
+            XFreeColormap(m_xDisp, m_colormapId);
+            XUnlockDisplay(m_xDisp);
+        }
+    }
+
     ETouchType getTouchType() const
     {
         return m_touchType;

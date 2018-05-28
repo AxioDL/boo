@@ -49,6 +49,7 @@ protected:
     /* Deferred pitch ratio set */
     bool m_setPitchRatio = false;
     double m_pitchRatio = 1.0;
+    double m_sampleRatio = 1.0;
     bool m_slew = false;
     void _setPitchRatio(double ratio, bool slew);
 

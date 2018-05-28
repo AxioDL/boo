@@ -300,6 +300,7 @@ public:
     
     virtual uintptr_t getPlatformHandle() const=0;
     virtual bool _incomingEvent(void* event) {(void)event; return false;}
+    virtual void _cleanup() {}
 
     virtual ETouchType getTouchType() const=0;
 

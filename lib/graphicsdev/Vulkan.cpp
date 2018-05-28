@@ -2784,7 +2784,8 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
     void stopRenderer()
     {
         m_running = false;
-        vk::WaitForFences(m_ctx->m_dev, 1, &m_drawCompleteFence, VK_FALSE, -1);
+        if (m_submitted && vk::GetFenceStatus(m_ctx->m_dev, m_drawCompleteFence) == VK_NOT_READY)
+            vk::WaitForFences(m_ctx->m_dev, 1, &m_drawCompleteFence, VK_FALSE, -1);
         static_cast<VulkanDataFactoryImpl*>(m_parent->getDataFactory())->DestroyGammaResources();
         m_drawResTokens[0].clear();
         m_drawResTokens[1].clear();

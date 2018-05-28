@@ -1,6 +1,7 @@
 #include "AudioVoice.hpp"
 #include "AudioVoiceEngine.hpp"
 #include "logvisor/logvisor.hpp"
+#include <cmath>
 
 namespace boo
 {
@@ -29,8 +30,8 @@ void AudioVoice::_setPitchRatio(double ratio, bool slew)
 {
     if (m_dynamicRate)
     {
-        soxr_error_t err = soxr_set_io_ratio(m_src, ratio * m_sampleRateIn / m_sampleRateOut,
-                                             slew ? m_head->m_5msFrames : 0);
+        m_sampleRatio = ratio * m_sampleRateIn / m_sampleRateOut;
+        soxr_error_t err = soxr_set_io_ratio(m_src, m_sampleRatio, slew ? m_head->m_5msFrames : 0);
         if (err)
         {
             Log.report(logvisor::Fatal, "unable to set resampler rate: %s", soxr_strerror(err));
@@ -101,6 +102,7 @@ void AudioVoiceMono::_resetSampleRate(double sampleRate)
 
     m_sampleRateIn = sampleRate;
     m_sampleRateOut = rateOut;
+    m_sampleRatio = m_sampleRateIn / m_sampleRateOut;
     soxr_set_input_fn(m_src, soxr_input_fn_t(SRCCallback), this, 0);
     _setPitchRatio(m_pitchRatio, false);
     m_resetSampleRate = false;
@@ -114,7 +116,7 @@ size_t AudioVoiceMono::SRCCallback(AudioVoiceMono* ctx, int16_t** data, size_t f
     *data = scratchIn.data();
     if (ctx->m_silentOut)
     {
-        memset(*data, 0, frames * 2);
+        memset(scratchIn.data(), 0, frames * 2);
         return frames;
     }
     else
@@ -139,9 +141,6 @@ bool AudioVoiceMono::isSilent() const
 template <typename T>
 size_t AudioVoiceMono::_pumpAndMix(size_t frames)
 {
-    if (isSilent())
-        return 0;
-
     auto& scratchPre = m_head->_getScratchPre<T>();
     if (scratchPre.size() < frames)
         scratchPre.resize(frames + 2);
@@ -153,6 +152,14 @@ size_t AudioVoiceMono::_pumpAndMix(size_t frames)
     double dt = frames / m_sampleRateOut;
     m_cb->preSupplyAudio(*this, dt);
     _midUpdate();
+
+    if (isSilent())
+    {
+        int16_t* dummy;
+        SRCCallback(this, &dummy, size_t(std::ceil(frames * m_sampleRatio)));
+        return 0;
+    }
+
     size_t oDone = soxr_output(m_src, scratchPre.data(), frames);
 
     if (oDone)
@@ -248,6 +255,7 @@ void AudioVoiceStereo::_resetSampleRate(double sampleRate)
 
     m_sampleRateIn = sampleRate;
     m_sampleRateOut = rateOut;
+    m_sampleRatio = m_sampleRateIn / m_sampleRateOut;
     soxr_set_input_fn(m_src, soxr_input_fn_t(SRCCallback), this, 0);
     _setPitchRatio(m_pitchRatio, false);
     m_resetSampleRate = false;
@@ -262,7 +270,7 @@ size_t AudioVoiceStereo::SRCCallback(AudioVoiceStereo* ctx, int16_t** data, size
     *data = scratchIn.data();
     if (ctx->m_silentOut)
     {
-        memset(*data, 0, samples * 2);
+        memset(scratchIn.data(), 0, samples * 2);
         return frames;
     }
     else
@@ -287,9 +295,6 @@ bool AudioVoiceStereo::isSilent() const
 template <typename T>
 size_t AudioVoiceStereo::_pumpAndMix(size_t frames)
 {
-    if (isSilent())
-        return 0;
-
     size_t samples = frames * 2;
 
     auto& scratchPre = m_head->_getScratchPre<T>();
@@ -303,6 +308,14 @@ size_t AudioVoiceStereo::_pumpAndMix(size_t frames)
     double dt = frames / m_sampleRateOut;
     m_cb->preSupplyAudio(*this, dt);
     _midUpdate();
+    
+    if (isSilent())
+    {
+        int16_t* dummy;
+        SRCCallback(this, &dummy, size_t(std::ceil(frames * m_sampleRatio)));
+        return 0;
+    }
+    
     size_t oDone = soxr_output(m_src, scratchPre.data(), frames);
 
     if (oDone)

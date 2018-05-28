@@ -413,6 +413,14 @@ public:
 
     ~ApplicationXlib()
     {
+        for (auto& p : m_windows)
+            if (auto w = p.second.lock())
+                w->_cleanup();
+
+#if BOO_HAS_VULKAN
+        g_VulkanContext.destroyDevice();
+#endif
+
         if (m_fontset)
             XFreeFontSet(m_xDisp, m_fontset);
         if (m_xIM)
@@ -540,10 +548,6 @@ public:
         m_callback.appQuitting(this);
         if (clientThread.joinable())
             clientThread.join();
-
-#if BOO_HAS_VULKAN
-        g_VulkanContext.destroyDevice();
-#endif
 
         return clientReturn;
     }
