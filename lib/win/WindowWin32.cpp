@@ -1018,9 +1018,9 @@ public:
         m_gfxCtx.reset(new GraphicsContextWin32D3D(api, this, m_hwnd, b3dCtx));
     }
 
-    ~WindowWin32()
+    void _cleanup()
     {
-
+        m_gfxCtx.reset();
     }
 
     void setCallback(IWindowCallback* cb)

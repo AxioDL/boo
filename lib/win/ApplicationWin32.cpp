@@ -407,6 +407,13 @@ public:
         return clientReturn;
     }
 
+    ~ApplicationWin32()
+    {
+        for (auto& p : m_allWindows)
+            if (auto w = p.second.lock())
+                w->_cleanup();
+    }
+
     SystemStringView getUniqueName() const
     {
         return m_uniqueName;
@@ -506,7 +513,10 @@ int ApplicationRun(IApplication::EPlatformType platform,
 
     APP = new ApplicationWin32(cb, uniqueName, friendlyName, pname, args,
                                gfxApi, samples, anisotropy, deepColor, singleInstance);
-    return APP->run();
+    int ret = APP->run();
+    delete APP;
+    APP = nullptr;
+    return ret;
 }
 
 }
