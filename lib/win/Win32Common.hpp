@@ -16,6 +16,8 @@
 #include "boo/graphicsdev/GL.hpp"
 
 extern DWORD g_mainThreadId;
+extern std::mutex g_nwmt;
+extern std::condition_variable g_nwcv;
 
 #if _WIN32_WINNT_WINBLUE && !WINDOWS_STORE
 #include <ShellScalingApi.h>
@@ -47,44 +49,21 @@ struct OGLContext
     boo::GLContext m_glCtx;
 };
 
-template <class W>
-static inline void SetFullscreen(W& win, bool fs)
+#if !WINDOWS_STORE
+static inline void SetFullscreen(OGLContext::Window& win, bool fs)
 {
-    if (fs)
-    {
-        win.m_fsStyle = GetWindowLong(win.m_hwnd, GWL_STYLE);
-        win.m_fsExStyle = GetWindowLong(win.m_hwnd, GWL_EXSTYLE);
-        GetWindowRect(win.m_hwnd, &win.m_fsRect);
-
-        SetWindowLong(win.m_hwnd, GWL_STYLE,
-            win.m_fsStyle & ~(WS_CAPTION | WS_THICKFRAME));
-        SetWindowLong(win.m_hwnd, GWL_EXSTYLE,
-            win.m_fsExStyle & ~(WS_EX_DLGMODALFRAME |
-                WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE));
-
-        MONITORINFO monitor_info;
-        monitor_info.cbSize = sizeof(monitor_info);
-        GetMonitorInfo(MonitorFromWindow(win.m_hwnd, MONITOR_DEFAULTTONEAREST),
-            &monitor_info);
-        SetWindowPos(win.m_hwnd, NULL, monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
-            monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
-            monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
-            SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_ASYNCWINDOWPOS);
-
-        win.m_fs = true;
-    }
-    else
-    {
-        SetWindowLong(win.m_hwnd, GWL_STYLE, win.m_fsStyle);
-        SetWindowLong(win.m_hwnd, GWL_EXSTYLE, win.m_fsExStyle);
-
-        SetWindowPos(win.m_hwnd, NULL, win.m_fsRect.left, win.m_fsRect.top,
-            win.m_fsRect.right - win.m_fsRect.left, win.m_fsRect.bottom - win.m_fsRect.top,
-            SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_ASYNCWINDOWPOS);
-
-        win.m_fs = false;
-    }
+    std::unique_lock<std::mutex> lk(g_nwmt);
+    PostThreadMessageW(g_mainThreadId, WM_USER+5, WPARAM(&win), LPARAM(fs));
+    g_nwcv.wait(lk);
 }
+
+static inline void SetFullscreen(boo::VulkanContext::Window& win, bool fs)
+{
+    std::unique_lock<std::mutex> lk(g_nwmt);
+    PostThreadMessageW(g_mainThreadId, WM_USER+6, WPARAM(&win), LPARAM(fs));
+    g_nwcv.wait(lk);
+}
+#endif
 
 struct Boo3DAppContextWin32 : Boo3DAppContext
 {

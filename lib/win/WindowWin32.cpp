@@ -1164,7 +1164,7 @@ public:
     {
         if (GetCurrentThreadId() != g_mainThreadId)
         {
-            if (!PostThreadMessage(g_mainThreadId, WM_USER+3, WPARAM(m_imc), LPARAM(open)))
+            if (!PostThreadMessageW(g_mainThreadId, WM_USER+3, WPARAM(m_imc), LPARAM(open)))
                 Log.report(logvisor::Fatal, "PostThreadMessage error");
             return;
         }
@@ -1181,7 +1181,7 @@ public:
 
         if (GetCurrentThreadId() != g_mainThreadId)
         {
-            if (!PostThreadMessage(g_mainThreadId, WM_USER+4, WPARAM(m_imc), LPARAM(&m_cForm)))
+            if (!PostThreadMessageW(g_mainThreadId, WM_USER+4, WPARAM(m_imc), LPARAM(&m_cForm)))
                 Log.report(logvisor::Fatal, "PostThreadMessage error");
             return;
         }

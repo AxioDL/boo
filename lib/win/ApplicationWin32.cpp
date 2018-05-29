@@ -26,6 +26,8 @@ PFN_GetScaleFactorForMonitor MyGetScaleFactorForMonitor = nullptr;
 #endif
 
 DWORD g_mainThreadId = 0;
+std::mutex g_nwmt;
+std::condition_variable g_nwcv;
 
 static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 pD3DCompile D3DCompilePROC = nullptr;
@@ -345,6 +347,47 @@ public:
         }
     }
 
+    template <class W>
+    static void DoSetFullscreen(W& win, bool fs)
+    {
+        std::lock_guard<std::mutex> lk(g_nwmt);
+        if (fs)
+        {
+            win.m_fsStyle = GetWindowLong(win.m_hwnd, GWL_STYLE);
+            win.m_fsExStyle = GetWindowLong(win.m_hwnd, GWL_EXSTYLE);
+            GetWindowRect(win.m_hwnd, &win.m_fsRect);
+
+            SetWindowLong(win.m_hwnd, GWL_STYLE,
+                win.m_fsStyle & ~(WS_CAPTION | WS_THICKFRAME));
+            SetWindowLong(win.m_hwnd, GWL_EXSTYLE,
+                win.m_fsExStyle & ~(WS_EX_DLGMODALFRAME |
+                    WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE));
+
+            MONITORINFO monitor_info;
+            monitor_info.cbSize = sizeof(monitor_info);
+            GetMonitorInfo(MonitorFromWindow(win.m_hwnd, MONITOR_DEFAULTTONEAREST),
+                &monitor_info);
+            SetWindowPos(win.m_hwnd, NULL, monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
+                monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
+                monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+
+            win.m_fs = true;
+        }
+        else
+        {
+            SetWindowLong(win.m_hwnd, GWL_STYLE, win.m_fsStyle);
+            SetWindowLong(win.m_hwnd, GWL_EXSTYLE, win.m_fsExStyle);
+
+            SetWindowPos(win.m_hwnd, NULL, win.m_fsRect.left, win.m_fsRect.top,
+                win.m_fsRect.right - win.m_fsRect.left, win.m_fsRect.bottom - win.m_fsRect.top,
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+
+            win.m_fs = false;
+        }
+        g_nwcv.notify_one();
+    }
+
     int run()
     {
         g_mainThreadId = GetCurrentThreadId();
@@ -357,7 +400,7 @@ public:
             logvisor::RegisterThreadName(thrName.c_str());
             CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE);
             clientReturn = m_callback.appMain(this);
-            PostThreadMessage(g_mainThreadId, WM_USER+1, 0, 0);
+            PostThreadMessageW(g_mainThreadId, WM_USER+1, 0, 0);
         });
 
         /* Pump messages */
@@ -372,11 +415,10 @@ public:
                 case WM_USER:
                 {
                     /* New-window message (coalesced onto main thread) */
-                    std::unique_lock<std::mutex> lk(m_nwmt);
+                    std::lock_guard<std::mutex> lk(g_nwmt);
                     SystemStringView* title = reinterpret_cast<SystemStringView*>(msg.wParam);
                     m_mwret = newWindow(*title);
-                    lk.unlock();
-                    m_nwcv.notify_one();
+                    g_nwcv.notify_one();
                     continue;
                 }
                 case WM_USER+1:
@@ -394,6 +436,14 @@ public:
                 case WM_USER+4:
                     /* ImmSetCompositionWindow call from client thread */
                     ImmSetCompositionWindow(HIMC(msg.wParam), LPCOMPOSITIONFORM(msg.lParam));
+                    continue;
+                case WM_USER+5:
+                    /* SetFullscreen call for OpenGL window */
+                    DoSetFullscreen(*reinterpret_cast<OGLContext::Window*>(msg.wParam), msg.lParam);
+                    continue;
+                case WM_USER+6:
+                    /* SetFullscreen call for Vulkan window */
+                    DoSetFullscreen(*reinterpret_cast<boo::VulkanContext::Window*>(msg.wParam), msg.lParam);
                     continue;
                 default: break;
                 }
@@ -434,17 +484,15 @@ public:
         return m_args;
     }
 
-    std::mutex m_nwmt;
-    std::condition_variable m_nwcv;
     std::shared_ptr<IWindow> m_mwret;
     std::shared_ptr<IWindow> newWindow(SystemStringView title)
     {
         if (GetCurrentThreadId() != g_mainThreadId)
         {
-            std::unique_lock<std::mutex> lk(m_nwmt);
-            if (!PostThreadMessage(g_mainThreadId, WM_USER, WPARAM(&title), 0))
+            std::unique_lock<std::mutex> lk(g_nwmt);
+            if (!PostThreadMessageW(g_mainThreadId, WM_USER, WPARAM(&title), 0))
                 Log.report(logvisor::Fatal, "PostThreadMessage error");
-            m_nwcv.wait(lk);
+            g_nwcv.wait(lk);
             std::shared_ptr<IWindow> ret = std::move(m_mwret);
             m_mwret.reset();
             return ret;
