@@ -11,6 +11,8 @@
 #include "Common.hpp"
 #include "xxhash.h"
 
+#define AMD_PAL_HACK 1
+
 #define VMA_IMPLEMENTATION
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
 #include "vk_mem_alloc.h"
@@ -232,8 +234,8 @@ static void SetImageLayout(VkCommandBuffer cmd, VkImage image,
     imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
-    VkPipelineStageFlags src_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    VkPipelineStageFlags dest_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    VkPipelineStageFlags src_stages = VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
+    VkPipelineStageFlags dest_stages = VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
 
     switch (old_image_layout)
     {
@@ -421,6 +423,7 @@ bool VulkanContext::initVulkan(std::string_view appName, PFN_vkGetInstanceProcAd
 
 #ifndef NDEBUG
     m_layerNames.push_back("VK_LAYER_LUNARG_standard_validation");
+    //m_layerNames.push_back("VK_LAYER_LUNARG_api_dump");
     //m_layerNames.push_back("VK_LAYER_LUNARG_core_validation");
     //m_layerNames.push_back("VK_LAYER_LUNARG_object_tracker");
     //m_layerNames.push_back("VK_LAYER_LUNARG_parameter_validation");
@@ -2269,6 +2272,9 @@ public:
             viewportInfo.pScissors = nullptr;
             dynamicStateEnables[dynamicState.dynamicStateCount++] = VK_DYNAMIC_STATE_VIEWPORT;
             dynamicStateEnables[dynamicState.dynamicStateCount++] = VK_DYNAMIC_STATE_SCISSOR;
+#if AMD_PAL_HACK
+            dynamicStateEnables[dynamicState.dynamicStateCount++] = VK_DYNAMIC_STATE_BLEND_CONSTANTS;
+#endif
 
             VkPipelineRasterizationStateCreateInfo rasterizationInfo = {};
             rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -2679,6 +2685,14 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
 
         if (m_ibuf)
             vk::CmdBindIndexBuffer(cmdBuf, m_iboBufs[b], m_iboOffs[b], VK_INDEX_TYPE_UINT32);
+
+#if AMD_PAL_HACK
+        /* AMD GCN architecture is prone to hanging after binding a new pipeline without also refreshing the
+         * device context registers (i.e. viewport, scissor, line width, blend constants). Blend Constants
+         * are the simplest register to set within the PAL codebase. */
+        float dummy[4] = {};
+        vk::CmdSetBlendConstants(cmdBuf, dummy);
+#endif
     }
 };
 
@@ -4008,7 +4022,7 @@ void VulkanCommandQueue::execute()
     m_fillBuf ^= 1;
 
     /* Queue the command buffer for execution */
-    VkPipelineStageFlags pipeStageFlags = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    VkPipelineStageFlags pipeStageFlags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submitInfo = {};
     submitInfo.pNext = nullptr;
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
