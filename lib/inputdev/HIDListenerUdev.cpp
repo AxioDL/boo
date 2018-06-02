@@ -1,6 +1,7 @@
 #include "boo/inputdev/IHIDListener.hpp"
 #include "boo/inputdev/DeviceFinder.hpp"
 #include "boo/inputdev/HIDParser.hpp"
+#include "logvisor/logvisor.hpp"
 #include <libudev.h>
 #include <cstring>
 #include <cstdio>
@@ -30,15 +31,14 @@ class HIDListenerUdev final : public IHIDListener
     std::thread m_udevThread;
     bool m_scanningEnabled;
 
-    static void deviceConnected(HIDListenerUdev* listener,
-                                udev_device* device)
+    void deviceConnected(udev_device* device)
     {
-        if (!listener->m_scanningEnabled)
+        if (!m_scanningEnabled)
             return;
 
         /* Prevent redundant registration */
         const char* devPath = udev_device_get_syspath(device);
-        if (listener->m_finder._hasToken(devPath))
+        if (m_finder._hasToken(devPath))
             return;
 
         /* Filter to USB/BT */
@@ -140,21 +140,20 @@ class HIDListenerUdev final : public IHIDListener
         fprintf(stderr, "\n\n");
 #endif
 
-        listener->m_finder._insertToken(
-            std::make_unique<DeviceToken>(type, vid, pid, manuf, product, devPath));
+        m_finder._insertToken(std::make_unique<DeviceToken>(type, vid, pid, manuf, product, devPath));
     }
 
-    static void deviceDisconnected(HIDListenerUdev* listener,
-                                   udev_device* device)
+    void deviceDisconnected(udev_device* device)
     {
         const char* devPath = udev_device_get_syspath(device);
-        listener->m_finder._removeToken(devPath);
+        m_finder._removeToken(devPath);
     }
 
-    static void _udevProc(HIDListenerUdev* listener)
+    void _udevProc()
     {
-        udev_monitor_enable_receiving(listener->m_udevMon);
-        int fd = udev_monitor_get_fd(listener->m_udevMon);
+        logvisor::RegisterThreadName("Boo udev");
+        udev_monitor_enable_receiving(m_udevMon);
+        int fd = udev_monitor_get_fd(m_udevMon);
         while (true)
         {
             fd_set fds;
@@ -168,14 +167,14 @@ class HIDListenerUdev final : public IHIDListener
             }
             int oldtype;
             pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldtype);
-            udev_device* dev = udev_monitor_receive_device(listener->m_udevMon);
+            udev_device* dev = udev_monitor_receive_device(m_udevMon);
             if (dev)
             {
                 const char* action = udev_device_get_action(dev);
                 if (!strcmp(action, "add"))
-                    deviceConnected(listener, dev);
+                    deviceConnected(dev);
                 else if (!strcmp(action, "remove"))
-                    deviceDisconnected(listener, dev);
+                    deviceDisconnected(dev);
                 udev_device_unref(dev);
             }
             pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &oldtype);
@@ -205,7 +204,7 @@ public:
         m_scanningEnabled = false;
 
         /* Start hotplug thread */
-        m_udevThread = std::thread(_udevProc, this);
+        m_udevThread = std::thread(std::bind(&HIDListenerUdev::_udevProc, this), this);
     }
 
     ~HIDListenerUdev()
@@ -243,7 +242,7 @@ public:
             const char* devPath = udev_list_entry_get_name(uenumItem);
             udev_device* dev = udev_device_new_from_syspath(UDEV_INST, devPath);
             if (dev)
-                deviceConnected(this, dev);
+                deviceConnected(dev);
             udev_device_unref(dev);
         }
         udev_enumerate_unref(uenum);

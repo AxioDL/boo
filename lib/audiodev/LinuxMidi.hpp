@@ -70,6 +70,7 @@ struct LinuxMidi : BaseAudioVoiceEngine
 
     static void MIDIReceiveProc(snd_rawmidi_t* midi, const ReceiveFunctor& receiver)
     {
+        logvisor::RegisterThreadName("Boo MIDI");
         snd_rawmidi_status_t* midiStatus;
         snd_rawmidi_status_malloc(&midiStatus);
         pthread_cleanup_push(MIDIFreeProc, midiStatus);

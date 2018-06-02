@@ -64,7 +64,7 @@ int ApplicationRun(IApplication::EPlatformType platform,
                    bool deepColor,
                    bool singleInstance)
 {
-    std::string thrName = std::string(friendlyName) + " Main Thread";
+    std::string thrName = std::string(friendlyName) + " Main";
     logvisor::RegisterThreadName(thrName.c_str());
     if (APP)
         return 1;

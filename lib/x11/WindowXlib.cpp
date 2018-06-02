@@ -298,6 +298,8 @@ struct GraphicsContextXlib : IGraphicsContext
     GLContext* m_glCtx;
     Display* m_xDisp;
 
+    std::mutex m_initmt;
+    std::condition_variable m_initcv;
     std::mutex m_vsyncmt;
     std::condition_variable m_vsynccv;
 
@@ -506,15 +508,13 @@ public:
 
         /* Spawn vsync thread */
         m_vsyncRunning = true;
-        std::mutex initmt;
-        std::condition_variable initcv;
-        std::unique_lock<std::mutex> outerLk(initmt);
+        std::unique_lock<std::mutex> outerLk(m_initmt);
         m_vsyncThread = std::thread([&]()
         {
             Display* vsyncDisp;
             GLXContext vsyncCtx;
             {
-                std::unique_lock<std::mutex> innerLk(initmt);
+                std::unique_lock<std::mutex> innerLk(m_initmt);
 
                 vsyncDisp = XOpenDisplay(0);
                 if (!vsyncDisp)
@@ -531,7 +531,7 @@ public:
                 if (!glXMakeCurrent(vsyncDisp, DefaultRootWindow(vsyncDisp), vsyncCtx))
                     Log.report(logvisor::Fatal, "unable to make vsync context current");
             }
-            initcv.notify_one();
+            m_initcv.notify_one();
 
             while (m_vsyncRunning)
             {
@@ -549,7 +549,7 @@ public:
             XUnlockDisplay(vsyncDisp);
             XCloseDisplay(vsyncDisp);
         });
-        initcv.wait(outerLk);
+        m_initcv.wait(outerLk);
 
         XUnlockDisplay(m_xDisp);
         m_commandQueue = _NewGLCommandQueue(this, m_glCtx);
@@ -642,7 +642,7 @@ struct GraphicsContextXlibVulkan : GraphicsContextXlib
     std::unique_ptr<IGraphicsCommandQueue> m_commandQueue;
 
     std::thread m_vsyncThread;
-    bool m_vsyncRunning;
+    std::atomic_bool m_vsyncRunning;
 
     static void ThrowIfFailed(VkResult res)
     {
@@ -676,9 +676,9 @@ public:
             m_surface = VK_NULL_HANDLE;
         }
 
-        if (m_vsyncRunning)
+        if (m_vsyncRunning.load())
         {
-            m_vsyncRunning = false;
+            m_vsyncRunning.store(false);
             if (m_vsyncThread.joinable())
                 m_vsyncThread.join();
         }
@@ -832,16 +832,15 @@ public:
         m_ctx->initSwapChain(*m_windowCtx, m_surface, m_format, m_colorspace);
 
         /* Spawn vsync thread */
-        m_vsyncRunning = true;
-        std::mutex initmt;
-        std::condition_variable initcv;
-        std::unique_lock<std::mutex> outerLk(initmt);
+        m_vsyncRunning.store(true);
+        std::unique_lock<std::mutex> outerLk(m_initmt);
         m_vsyncThread = std::thread([&]()
         {
+            logvisor::RegisterThreadName("Boo VSync");
             Display* vsyncDisp;
             GLXContext vsyncCtx;
             {
-                std::unique_lock<std::mutex> innerLk(initmt);
+                std::unique_lock<std::mutex> innerLk(m_initmt);
 
                 vsyncDisp = XOpenDisplay(0);
                 if (!vsyncDisp)
@@ -858,9 +857,9 @@ public:
                 if (!glXMakeCurrent(vsyncDisp, DefaultRootWindow(vsyncDisp), vsyncCtx))
                     Log.report(logvisor::Fatal, "unable to make vsync context current");
             }
-            initcv.notify_one();
+            m_initcv.notify_one();
 
-            while (m_vsyncRunning)
+            while (m_vsyncRunning.load())
             {
                 unsigned int sync;
                 int err = glXWaitVideoSyncSGI(1, 0, &sync);
@@ -874,7 +873,7 @@ public:
             XUnlockDisplay(vsyncDisp);
             XCloseDisplay(vsyncDisp);
         });
-        initcv.wait(outerLk);
+        m_initcv.wait(outerLk);
 
         m_dataFactory = _NewVulkanDataFactory(this, m_ctx);
         m_commandQueue = _NewVulkanCommandQueue(m_ctx, m_ctx->m_windows[m_parentWindow].get(), this);
@@ -1118,7 +1117,9 @@ public:
     
     void setCallback(IWindowCallback* cb)
     {
+        XLockDisplay(m_xDisp);
         m_callback = cb;
+        XUnlockDisplay(m_xDisp);
     }
 
     void closeWindow()
@@ -2064,11 +2065,9 @@ std::shared_ptr<IWindow> _WindowXlibNew(std::string_view title,
                          int defaultScreen, XIM xIM, XIMStyle bestInputStyle, XFontSet fontset,
                          GLXContext lastCtx, void* vulkanHandle, GLContext* glCtx)
 {
-    XLockDisplay(display);
     std::shared_ptr<IWindow> ret = std::make_shared<WindowXlib>(title, display, xcbConn,
                                    defaultScreen, xIM, bestInputStyle, fontset, lastCtx,
                                    vulkanHandle, glCtx);
-    XUnlockDisplay(display);
     return ret;
 }
     

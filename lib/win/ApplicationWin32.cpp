@@ -441,10 +441,12 @@ public:
                     /* SetFullscreen call for OpenGL window */
                     DoSetFullscreen(*reinterpret_cast<OGLContext::Window*>(msg.wParam), msg.lParam);
                     continue;
+#if BOO_HAS_VULKAN
                 case WM_USER+6:
                     /* SetFullscreen call for Vulkan window */
                     DoSetFullscreen(*reinterpret_cast<boo::VulkanContext::Window*>(msg.wParam), msg.lParam);
                     continue;
+#endif
                 default: break;
                 }
             }

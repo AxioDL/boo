@@ -57,12 +57,14 @@ static inline void SetFullscreen(OGLContext::Window& win, bool fs)
     g_nwcv.wait(lk);
 }
 
+#if BOO_HAS_VULKAN
 static inline void SetFullscreen(boo::VulkanContext::Window& win, bool fs)
 {
     std::unique_lock<std::mutex> lk(g_nwmt);
     PostThreadMessageW(g_mainThreadId, WM_USER+6, WPARAM(&win), LPARAM(fs));
     g_nwcv.wait(lk);
 }
+#endif
 #endif
 
 struct Boo3DAppContextWin32 : Boo3DAppContext

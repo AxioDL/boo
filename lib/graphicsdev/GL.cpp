@@ -1329,7 +1329,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
 #if _WIN32
         std::string thrName = WCSTMBS(APP->getFriendlyName().data()) + " GL Rendering Thread";
 #else
-        std::string thrName = std::string(APP->getFriendlyName()) + " GL Rendering Thread";
+        std::string thrName = std::string(APP->getFriendlyName()) + " Render";
 #endif
         logvisor::RegisterThreadName(thrName.c_str());
         GLDataFactoryImpl* dataFactory = static_cast<GLDataFactoryImpl*>(self->m_parent->getDataFactory());

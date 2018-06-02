@@ -467,7 +467,7 @@ public:
             std::unique_lock<std::mutex> innerLk(initmt);
             innerLk.unlock();
             initcv.notify_one();
-            std::string thrName = std::string(getFriendlyName()) + " Client Thread";
+            std::string thrName = std::string(getFriendlyName()) + " Client";
             logvisor::RegisterThreadName(thrName.c_str());
             clientReturn = m_callback.appMain(this);
             pthread_kill(mainThread, SIGUSR2);
@@ -574,6 +574,7 @@ public:
     
     std::shared_ptr<IWindow> newWindow(std::string_view title)
     {
+        XLockDisplay(m_xDisp);
 #if BOO_HAS_VULKAN
         std::shared_ptr<IWindow> newWindow = _WindowXlibNew(title, m_xDisp, m_xcbConn, m_xDefaultScreen, m_xIM,
                                              m_bestStyle, m_fontset, m_lastGlxCtx, (void*)m_getVkProc, &m_glContext);
@@ -582,6 +583,7 @@ public:
                                              m_bestStyle, m_fontset, m_lastGlxCtx, nullptr, &m_glContext);
 #endif
         m_windows[(Window)newWindow->getPlatformHandle()] = newWindow;
+        XUnlockDisplay(m_xDisp);
         return newWindow;
     }
 
