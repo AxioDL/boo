@@ -129,7 +129,7 @@ struct PulseAudioVoiceEngine : LinuxMidi
 
         pa_buffer_attr bufAttr;
         bufAttr.minreq = uint32_t(m_5msFrames * m_sampleSpec.channels * sizeof(float));
-        bufAttr.maxlength = bufAttr.minreq * 12;
+        bufAttr.maxlength = bufAttr.minreq * 24;
         bufAttr.tlength = bufAttr.maxlength;
         bufAttr.prebuf = UINT32_MAX;
         bufAttr.fragsize = UINT32_MAX;
