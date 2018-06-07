@@ -54,6 +54,14 @@ public:
                                                     ZTest depthTest, bool depthWrite, bool colorWrite,
                                                     bool alphaWrite, CullMode culling, bool overwriteAlpha = true);
 
+        ObjToken<IShaderPipeline> newTessellationShaderPipeline(const char* vertSource, const char* fragSource,
+                                                    const char* controlSource, const char* evaluationSource,
+                                                    size_t texCount, const char** texNames,
+                                                    size_t uniformBlockCount, const char** uniformBlockNames,
+                                                    BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
+                                                    ZTest depthTest, bool depthWrite, bool colorWrite,
+                                                    bool alphaWrite, CullMode culling, bool overwriteAlpha = true);
+
         ObjToken<IShaderDataBinding>
         newShaderDataBinding(const ObjToken<IShaderPipeline>& pipeline,
                              const ObjToken<IVertexFormat>& vtxFormat,

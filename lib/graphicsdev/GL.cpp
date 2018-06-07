@@ -76,6 +76,9 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead
     GLContext* m_glCtx;
     std::unordered_map<uint64_t, std::unique_ptr<GLShareableShader>> m_sharedShaders;
 
+    bool m_hasTessellation = false;
+    uint32_t m_maxPatchSize = 0;
+
     float m_gamma = 1.f;
     ObjToken<IShaderPipeline> m_gammaShader;
     ObjToken<ITextureD> m_gammaLUT;
@@ -83,6 +86,15 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead
     ObjToken<IVertexFormat> m_gammaVFMT;
     void SetupGammaResources()
     {
+        /* Good enough place for this */
+        if (GLEW_ARB_tessellation_shader)
+        {
+            m_hasTessellation = true;
+            GLint maxPVerts;
+            glGetIntegerv(GL_MAX_PATCH_VERTICES, &maxPVerts);
+            m_maxPatchSize = uint32_t(maxPVerts);
+        }
+
         commitTransaction([this](IGraphicsDataFactory::Context& ctx)
         {
             const char* texNames[] = {"screenTex", "gammaLUT"};
@@ -125,6 +137,14 @@ public:
         if (gamma != 1.f)
             UpdateGammaLUT(m_gammaLUT.get(), gamma);
     }
+
+    bool isTessellationSupported(uint32_t& maxPatchSizeOut)
+    {
+        maxPatchSizeOut = m_maxPatchSize;
+        return m_hasTessellation;
+    }
+
+    GLShareableShader::Token PrepareShaderStage(const char* source, GLenum stage);
 };
 
 static const GLenum USE_TABLE[] =
@@ -247,6 +267,15 @@ static void SetClampMode(GLenum target, TextureClampMode clampMode)
         glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
         glTexParameteri(target, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
         GLfloat color[] = {1.f, 1.f, 1.f, 1.f};
+        glTexParameterfv(target, GL_TEXTURE_BORDER_COLOR, color);
+        break;
+    }
+    case TextureClampMode::ClampToBlack:
+    {
+        glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        glTexParameteri(target, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
+        GLfloat color[] = {0.f, 0.f, 0.f, 1.f};
         glTexParameterfv(target, GL_TEXTURE_BORDER_COLOR, color);
         break;
     }
@@ -653,8 +682,32 @@ GLDataFactory::Context::newStaticArrayTexture(size_t width, size_t height, size_
                             factory.m_glCtx->m_anisotropy, data, sz)};
 }
 
+static const GLenum PRIMITIVE_TABLE[] =
+{
+    GL_TRIANGLES,
+    GL_TRIANGLE_STRIP,
+    GL_PATCHES
+};
+
+static const GLenum BLEND_FACTOR_TABLE[] =
+{
+    GL_ZERO,
+    GL_ONE,
+    GL_SRC_COLOR,
+    GL_ONE_MINUS_SRC_COLOR,
+    GL_DST_COLOR,
+    GL_ONE_MINUS_DST_COLOR,
+    GL_SRC_ALPHA,
+    GL_ONE_MINUS_SRC_ALPHA,
+    GL_DST_ALPHA,
+    GL_ONE_MINUS_DST_ALPHA,
+    GL_SRC1_COLOR,
+    GL_ONE_MINUS_SRC1_COLOR
+};
+
 class GLShaderPipeline : public GraphicsDataNode<IShaderPipeline>
 {
+protected:
     friend class GLDataFactory;
     friend struct GLCommandQueue;
     friend struct GLShaderDataBinding;
@@ -674,10 +727,49 @@ class GLShaderPipeline : public GraphicsDataNode<IShaderPipeline>
     mutable std::vector<GLint> m_uniLocs;
     mutable std::vector<std::string> m_texNames;
     mutable std::vector<std::string> m_blockNames;
-    GLShaderPipeline(const ObjToken<BaseGraphicsData>& parent)
-    : GraphicsDataNode<IShaderPipeline>(parent) {}
+    GLShaderPipeline(const ObjToken<BaseGraphicsData>& parent,
+                     size_t texCount, const char** texNames,
+                     size_t uniformBlockCount, const char** uniformBlockNames,
+                     BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
+                     ZTest depthTest, bool depthWrite, bool colorWrite,
+                     bool alphaWrite, CullMode culling, bool overwriteAlpha)
+    : GraphicsDataNode<IShaderPipeline>(parent)
+    {
+        m_texNames.reserve(texCount);
+        for (int i=0 ; i<texCount ; ++i)
+            m_texNames.emplace_back(texNames[i]);
+
+        m_blockNames.reserve(uniformBlockCount);
+        for (int i=0 ; i<uniformBlockCount ; ++i)
+            m_blockNames.emplace_back(uniformBlockNames[i]);
+
+        if (srcFac == BlendFactor::Subtract || dstFac == BlendFactor::Subtract)
+        {
+            m_sfactor = GL_SRC_ALPHA;
+            m_dfactor = GL_ONE;
+            m_subtractBlend = true;
+        }
+        else
+        {
+            m_sfactor = BLEND_FACTOR_TABLE[int(srcFac)];
+            m_dfactor = BLEND_FACTOR_TABLE[int(dstFac)];
+            m_subtractBlend = false;
+        }
+
+        m_depthTest = depthTest;
+        m_depthWrite = depthWrite;
+        m_colorWrite = colorWrite;
+        m_alphaWrite = alphaWrite;
+        m_overwriteAlpha = overwriteAlpha;
+        m_culling = culling;
+        m_drawPrim = PRIMITIVE_TABLE[int(prim)];
+    }
 public:
     ~GLShaderPipeline() { if (m_prog) glDeleteProgram(m_prog); }
+
+    virtual void attachExtraStages() const {}
+    virtual void resetExtraStages() const {}
+    virtual void setExtraParameters() const {}
 
     GLuint bind() const
     {
@@ -692,6 +784,7 @@ public:
 
             glAttachShader(m_prog, m_vert.get().m_shader);
             glAttachShader(m_prog, m_frag.get().m_shader);
+            attachExtraStages();
 
             glLinkProgram(m_prog);
 
@@ -700,6 +793,7 @@ public:
 
             m_vert.reset();
             m_frag.reset();
+            resetExtraStages();
 
             GLint status;
             glGetProgramiv(m_prog, GL_LINK_STATUS, &status);
@@ -795,31 +889,94 @@ public:
         else
             glDisable(GL_CULL_FACE);
 
+        setExtraParameters();
+
         return m_prog;
     }
 };
 
-static const GLenum PRIMITIVE_TABLE[] =
+class GLTessellationShaderPipeline : public GLShaderPipeline
 {
-    GL_TRIANGLES,
-    GL_TRIANGLE_STRIP
+    friend class GLDataFactory;
+    friend struct GLCommandQueue;
+    friend struct GLShaderDataBinding;
+    GLint m_patchSize;
+    mutable GLShareableShader::Token m_control;
+    mutable GLShareableShader::Token m_evaluation;
+    GLTessellationShaderPipeline(const ObjToken<BaseGraphicsData>& parent,
+                                 size_t texCount, const char** texNames,
+                                 size_t uniformBlockCount, const char** uniformBlockNames,
+                                 BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
+                                 ZTest depthTest, bool depthWrite, bool colorWrite,
+                                 bool alphaWrite, CullMode culling, bool overwriteAlpha)
+    : GLShaderPipeline(parent, texCount, texNames, uniformBlockCount, uniformBlockNames,
+                       srcFac, dstFac, Primitive::Patches, depthTest, depthWrite, colorWrite,
+                       alphaWrite, culling, overwriteAlpha), m_patchSize(patchSize)
+    {}
+public:
+    ~GLTessellationShaderPipeline() = default;
+
+    void attachExtraStages() const
+    {
+        glAttachShader(m_prog, m_control.get().m_shader);
+        glAttachShader(m_prog, m_evaluation.get().m_shader);
+    }
+
+    void resetExtraStages() const
+    {
+        glDetachShader(m_prog, m_control.get().m_shader);
+        glDetachShader(m_prog, m_evaluation.get().m_shader);
+        m_control.reset();
+        m_evaluation.reset();
+    }
+
+    void setExtraParameters() const
+    {
+        glPatchParameteri(GL_PATCH_VERTICES, m_patchSize);
+    }
 };
 
-static const GLenum BLEND_FACTOR_TABLE[] =
+GLShareableShader::Token GLDataFactoryImpl::PrepareShaderStage(const char* source, GLenum stage)
 {
-    GL_ZERO,
-    GL_ONE,
-    GL_SRC_COLOR,
-    GL_ONE_MINUS_SRC_COLOR,
-    GL_DST_COLOR,
-    GL_ONE_MINUS_DST_COLOR,
-    GL_SRC_ALPHA,
-    GL_ONE_MINUS_SRC_ALPHA,
-    GL_DST_ALPHA,
-    GL_ONE_MINUS_DST_ALPHA,
-    GL_SRC1_COLOR,
-    GL_ONE_MINUS_SRC1_COLOR
-};
+    XXH64_state_t hashState;
+    XXH64_reset(&hashState, 0);
+    XXH64_update(&hashState, source, strlen(source));
+    uint64_t hash = XXH64_digest(&hashState);
+
+    GLint status;
+    auto search = m_sharedShaders.find(hash);
+    if (search != m_sharedShaders.end())
+    {
+        return search->second->lock();
+    }
+    else
+    {
+        GLuint sobj = glCreateShader(stage);
+        if (!sobj)
+        {
+            Log.report(logvisor::Fatal, "unable to create shader");
+            return {};
+        }
+
+        glShaderSource(sobj, 1, &source, nullptr);
+        glCompileShader(sobj);
+        glGetShaderiv(sobj, GL_COMPILE_STATUS, &status);
+        if (status != GL_TRUE)
+        {
+            GLint logLen;
+            glGetShaderiv(sobj, GL_INFO_LOG_LENGTH, &logLen);
+            std::unique_ptr<char[]> log(new char[logLen]);
+            glGetShaderInfoLog(sobj, logLen, nullptr, log.get());
+            Log.report(logvisor::Fatal, "unable to compile source\n%s\n%s\n", log.get(), source);
+            return {};
+        }
+
+        auto it =
+            m_sharedShaders.emplace(std::make_pair(hash,
+            std::make_unique<GLShareableShader>(*this, hash, sobj))).first;
+        return it->second->lock();
+    }
+}
 
 ObjToken<IShaderPipeline> GLDataFactory::Context::newShaderPipeline
 (const char* vertSource, const char* fragSource,
@@ -830,112 +987,43 @@ ObjToken<IShaderPipeline> GLDataFactory::Context::newShaderPipeline
  bool alphaWrite, CullMode culling, bool overwriteAlpha)
 {
     GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
-    ObjToken<IShaderPipeline> retval(new GLShaderPipeline(m_data));
+    ObjToken<IShaderPipeline> retval(new GLShaderPipeline(
+        m_data, texCount, texNames, uniformBlockCount, uniformBlockNames, srcFac, dstFac, prim,
+        depthTest, depthWrite, colorWrite, alphaWrite, culling, overwriteAlpha));
     GLShaderPipeline& shader = *retval.cast<GLShaderPipeline>();
 
-    XXH64_state_t hashState;
-    uint64_t hashes[2];
-    XXH64_reset(&hashState, 0);
-    XXH64_update(&hashState, vertSource, strlen(vertSource));
-    hashes[0] = XXH64_digest(&hashState);
-    XXH64_reset(&hashState, 0);
-    XXH64_update(&hashState, fragSource, strlen(fragSource));
-    hashes[1] = XXH64_digest(&hashState);
+    shader.m_vert = factory.PrepareShaderStage(vertSource, GL_VERTEX_SHADER);
+    shader.m_frag = factory.PrepareShaderStage(fragSource, GL_FRAGMENT_SHADER);
 
-    GLint status;
-    auto vertFind = factory.m_sharedShaders.find(hashes[0]);
-    if (vertFind != factory.m_sharedShaders.end())
-    {
-        shader.m_vert = vertFind->second->lock();
-    }
-    else
-    {
-        GLuint sobj = glCreateShader(GL_VERTEX_SHADER);
-        if (!sobj)
-        {
-            Log.report(logvisor::Fatal, "unable to create vert shader");
-            return {};
-        }
+    return retval;
+}
 
-        glShaderSource(sobj, 1, &vertSource, nullptr);
-        glCompileShader(sobj);
-        glGetShaderiv(sobj, GL_COMPILE_STATUS, &status);
-        if (status != GL_TRUE)
-        {
-            GLint logLen;
-            glGetShaderiv(sobj, GL_INFO_LOG_LENGTH, &logLen);
-            std::unique_ptr<char[]> log(new char[logLen]);
-            glGetShaderInfoLog(sobj, logLen, nullptr, log.get());
-            Log.report(logvisor::Fatal, "unable to compile vert source\n%s\n%s\n", log.get(), vertSource);
-            return {};
-        }
+ObjToken<IShaderPipeline> GLDataFactory::Context::newTessellationShaderPipeline
+(const char* vertSource, const char* fragSource,
+ const char* controlSource, const char* evaluationSource,
+ size_t texCount, const char** texNames,
+ size_t uniformBlockCount, const char** uniformBlockNames,
+ BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
+ ZTest depthTest, bool depthWrite, bool colorWrite,
+ bool alphaWrite, CullMode culling, bool overwriteAlpha)
+{
+    GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
 
-        auto it =
-        factory.m_sharedShaders.emplace(std::make_pair(hashes[0],
-            std::make_unique<GLShareableShader>(factory, hashes[0], sobj))).first;
-        shader.m_vert = it->second->lock();
-    }
-    auto fragFind = factory.m_sharedShaders.find(hashes[1]);
-    if (fragFind != factory.m_sharedShaders.end())
-    {
-        shader.m_frag = fragFind->second->lock();
-    }
-    else
-    {
-        GLuint sobj = glCreateShader(GL_FRAGMENT_SHADER);
-        if (!sobj)
-        {
-            Log.report(logvisor::Fatal, "unable to create frag shader");
-            return {};
-        }
+    if (!factory.m_hasTessellation)
+        Log.report(logvisor::Fatal, "Device does not support tessellation shaders");
+    if (patchSize > factory.m_maxPatchSize)
+        Log.report(logvisor::Fatal, "Device supports %d patch vertices, %d requested",
+                   int(factory.m_maxPatchSize), int(patchSize));
 
-        glShaderSource(sobj, 1, &fragSource, nullptr);
-        glCompileShader(sobj);
-        glGetShaderiv(sobj, GL_COMPILE_STATUS, &status);
-        if (status != GL_TRUE)
-        {
-            GLint logLen;
-            glGetShaderiv(sobj, GL_INFO_LOG_LENGTH, &logLen);
-            std::unique_ptr<char[]> log(new char[logLen]);
-            glGetShaderInfoLog(sobj, logLen, nullptr, log.get());
-            Log.report(logvisor::Fatal, "unable to compile frag source\n%s\n%s\n", log.get(), fragSource);
-            return {};
-        }
+    ObjToken<IShaderPipeline> retval(new GLTessellationShaderPipeline(
+        m_data, texCount, texNames, uniformBlockCount, uniformBlockNames, srcFac, dstFac, patchSize,
+        depthTest, depthWrite, colorWrite, alphaWrite, culling, overwriteAlpha));
+    GLTessellationShaderPipeline& shader = *retval.cast<GLTessellationShaderPipeline>();
 
-        auto it =
-        factory.m_sharedShaders.emplace(std::make_pair(hashes[1],
-            std::make_unique<GLShareableShader>(factory, hashes[1], sobj))).first;
-        shader.m_frag = it->second->lock();
-    }
-
-    shader.m_texNames.reserve(texCount);
-    for (int i=0 ; i<texCount ; ++i)
-        shader.m_texNames.emplace_back(texNames[i]);
-
-    shader.m_blockNames.reserve(uniformBlockCount);
-    for (int i=0 ; i<uniformBlockCount ; ++i)
-        shader.m_blockNames.emplace_back(uniformBlockNames[i]);
-
-    if (srcFac == BlendFactor::Subtract || dstFac == BlendFactor::Subtract)
-    {
-        shader.m_sfactor = GL_SRC_ALPHA;
-        shader.m_dfactor = GL_ONE;
-        shader.m_subtractBlend = true;
-    }
-    else
-    {
-        shader.m_sfactor = BLEND_FACTOR_TABLE[int(srcFac)];
-        shader.m_dfactor = BLEND_FACTOR_TABLE[int(dstFac)];
-        shader.m_subtractBlend = false;
-    }
-
-    shader.m_depthTest = depthTest;
-    shader.m_depthWrite = depthWrite;
-    shader.m_colorWrite = colorWrite;
-    shader.m_alphaWrite = alphaWrite;
-    shader.m_overwriteAlpha = overwriteAlpha;
-    shader.m_culling = culling;
-    shader.m_drawPrim = PRIMITIVE_TABLE[int(prim)];
+    shader.m_vert = factory.PrepareShaderStage(vertSource, GL_VERTEX_SHADER);
+    shader.m_frag = factory.PrepareShaderStage(fragSource, GL_FRAGMENT_SHADER);
+    shader.m_control = factory.PrepareShaderStage(controlSource, GL_TESS_CONTROL_SHADER);
+    shader.m_evaluation = factory.PrepareShaderStage(evaluationSource, GL_TESS_EVALUATION_SHADER);
 
     return retval;
 }

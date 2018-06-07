@@ -181,6 +181,31 @@ public:
                                      colorWrite, alphaWrite, culling);
         }
 
+        boo::ObjToken<IShaderPipeline> newTessellationShaderPipeline(const char* vertSource, const char* fragSource,
+                                                                     const char* controlSource, const char* evaluationSource,
+                                                                     std::vector<unsigned int>* vertBlobOut,
+                                                                     std::vector<unsigned int>* fragBlobOut,
+                                                                     std::vector<unsigned int>* controlBlobOut,
+                                                                     std::vector<unsigned int>* evaluationBlobOut,
+                                                                     std::vector<unsigned char>* pipelineBlob,
+                                                                     const boo::ObjToken<IVertexFormat>& vtxFmt,
+                                                                     BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
+                                                                     ZTest depthTest, bool depthWrite, bool colorWrite,
+                                                                     bool alphaWrite, CullMode culling, bool overwriteAlpha = true);
+
+        boo::ObjToken<IShaderPipeline> newTessellationShaderPipeline(const char* vertSource, const char* fragSource,
+                                                                     const char* controlSource, const char* evaluationSource,
+                                                                     const boo::ObjToken<IVertexFormat>& vtxFmt,
+                                                                     BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
+                                                                     ZTest depthTest, bool depthWrite, bool colorWrite,
+                                                                     bool alphaWrite, CullMode culling)
+        {
+            return newTessellationShaderPipeline(vertSource, fragSource, controlSource, evaluationSource,
+                                                 nullptr, nullptr, nullptr, nullptr, nullptr,
+                                                 vtxFmt, srcFac, dstFac, patchSize, depthTest, depthWrite,
+                                                 colorWrite, alphaWrite, culling);
+        }
+
         boo::ObjToken<IShaderDataBinding>
         newShaderDataBinding(const boo::ObjToken<IShaderPipeline>& pipeline,
                              const boo::ObjToken<IVertexFormat>& vtxFormat,

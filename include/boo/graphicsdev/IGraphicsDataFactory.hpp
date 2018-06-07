@@ -71,6 +71,7 @@ enum class TextureClampMode
 {
     Repeat,
     ClampToWhite,
+    ClampToBlack,
     ClampToEdge,
     ClampToEdgeNearest
 };
@@ -176,7 +177,8 @@ enum class PipelineStage
 enum class Primitive
 {
     Triangles,
-    TriStrips
+    TriStrips,
+    Patches /* Do not use directly, construct a tessellation pipeline instead */
 };
 
 /** Used by platform shader pipeline constructors */
@@ -293,10 +295,9 @@ struct IGraphicsDataFactory
     };
 
     virtual void commitTransaction(const std::function<bool(Context& ctx)>& __BooTraceArgs)=0;
-
     virtual ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs)=0;
-
     virtual void setDisplayGamma(float gamma)=0;
+    virtual bool isTessellationSupported(uint32_t& maxPatchSizeOut)=0;
 };
 
 using GraphicsDataFactoryContext = IGraphicsDataFactory::Context;
