@@ -228,16 +228,22 @@ public:
             sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
             m_3dCtx.m_ctx11.m_dev->CreateSamplerState(&sampDesc, &m_3dCtx.m_ctx11.m_ss[1]);
 
-            sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
-            sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
-            sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+            sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
+            sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
+            sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
+            std::fill(std::begin(sampDesc.BorderColor), std::end(sampDesc.BorderColor), 0.f);
             m_3dCtx.m_ctx11.m_dev->CreateSamplerState(&sampDesc, &m_3dCtx.m_ctx11.m_ss[2]);
 
             sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
             sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
             sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-            sampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
             m_3dCtx.m_ctx11.m_dev->CreateSamplerState(&sampDesc, &m_3dCtx.m_ctx11.m_ss[3]);
+
+            sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+            sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+            sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+            sampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+            m_3dCtx.m_ctx11.m_dev->CreateSamplerState(&sampDesc, &m_3dCtx.m_ctx11.m_ss[4]);
 
             Log.report(logvisor::Info, "initialized D3D11 renderer");
             return;
