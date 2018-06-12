@@ -52,6 +52,19 @@ public:
                                                     bool overwriteAlpha = true,
                                                     bool depthAttachment = true);
 
+        ObjToken<IShaderPipeline> newTessellationShaderPipeline(
+                                                    const char* computeSource, const char* fragSource,
+                                                    const char* evaluationSource,
+                                                    std::vector<uint8_t>* computeBlobOut,
+                                                    std::vector<uint8_t>* fragBlobOut,
+                                                    std::vector<uint8_t>* evaluationBlobOut,
+                                                    const ObjToken<IVertexFormat>& vtxFmt,
+                                                    BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
+                                                    ZTest depthTest, bool depthWrite, bool colorWrite,
+                                                    bool alphaWrite, CullMode culling,
+                                                    bool overwriteAlpha = true,
+                                                    bool depthAttachment = true);
+
         ObjToken<IShaderDataBinding>
         newShaderDataBinding(const ObjToken<IShaderPipeline>& pipeline,
                              const ObjToken<IVertexFormat>& vtxFormat,

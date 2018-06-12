@@ -462,7 +462,7 @@ struct TestApplicationCallback : IApplicationCallback
                 "using namespace metal;\n"
                 "struct VertToFrag {float4 out_pos [[ position ]]; float2 out_uv;};\n"
                 "fragment float4 fmain(VertToFrag d [[ stage_in ]],\n"
-                "                      sampler samp [[ sampler(2) ]],\n"
+                "                      sampler samp [[ sampler(3) ]],\n"
                 "                      texture2d<float> tex [[ texture(0) ]])\n"
                 "{\n"
                 "    return tex.sample(samp, d.out_uv);\n"

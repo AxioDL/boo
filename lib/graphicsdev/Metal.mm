@@ -50,7 +50,7 @@ static const char* GammaFS =
 "};\n"
 "\n"
 "fragment float4 fmain(VertToFrag vtf [[ stage_in ]],\n"
-"                      sampler clampSamp [[ sampler(2) ]],\n"
+"                      sampler clampSamp [[ sampler(3) ]],\n"
 "                      texture2d<float> screenTex [[ texture(0) ]],\n"
 "                      texture2d<float> gammaLUT [[ texture(1) ]])\n"
 "{\n"
@@ -82,6 +82,8 @@ class MetalDataFactoryImpl : public MetalDataFactory, public GraphicsDataFactory
     std::unordered_map<uint64_t, std::unique_ptr<MetalShareableShader>> m_sharedShaders;
     struct MetalContext* m_ctx;
 
+    bool m_hasTessellation = false;
+
     float m_gamma = 1.f;
     ObjToken<IShaderPipeline> m_gammaShader;
     ObjToken<ITextureD> m_gammaLUT;
@@ -90,6 +92,8 @@ class MetalDataFactoryImpl : public MetalDataFactory, public GraphicsDataFactory
     ObjToken<IShaderDataBinding> m_gammaBinding;
     void SetupGammaResources()
     {
+        m_hasTessellation = [m_ctx->m_dev supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily1_v2];
+
         commitTransaction([this](IGraphicsDataFactory::Context& ctx)
         {
             const VertexElementDescriptor vfmt[] = {
@@ -283,6 +287,73 @@ public:
         return 0;
     }
 
+    MetalShareableShader::Token PrepareShaderStage(const char* source, std::vector<uint8_t>* blobOut, NSString* funcName)
+    {
+        MTLCompileOptions* compOpts = [MTLCompileOptions new];
+        compOpts.languageVersion = MTLLanguageVersion1_2;
+        NSError* err = nullptr;
+
+        XXH64_state_t hashState;
+        uint64_t srcHash = 0;
+        uint64_t binHash = 0;
+        XXH64_reset(&hashState, 0);
+        if (source)
+        {
+            XXH64_update(&hashState, source, strlen(source));
+            srcHash = XXH64_digest(&hashState);
+            auto binSearch = m_sourceToBinary.find(srcHash);
+            if (binSearch != m_sourceToBinary.cend())
+                binHash = binSearch->second;
+        }
+        else if (blobOut && !blobOut->empty())
+        {
+            XXH64_update(&hashState, blobOut->data(), blobOut->size());
+            binHash = XXH64_digest(&hashState);
+        }
+
+        if (blobOut && blobOut->empty())
+            binHash = CompileLib(*blobOut, source, srcHash);
+
+        MetalShareableShader::Token shader;
+        auto search = binHash ? m_sharedShaders.find(binHash) : m_sharedShaders.end();
+        if (search != m_sharedShaders.end())
+        {
+            return search->second->lock();
+        }
+        else
+        {
+            id<MTLLibrary> shaderLib;
+            if (blobOut && !blobOut->empty())
+            {
+                if ((*blobOut)[0] == 1)
+                {
+                    dispatch_data_t data = dispatch_data_create(blobOut->data() + 1, blobOut->size() - 1, nullptr, nullptr);
+                    shaderLib = [m_ctx->m_dev newLibraryWithData:data error:&err];
+                    if (!shaderLib)
+                        Log.report(logvisor::Fatal, "error loading library: %s", [[err localizedDescription] UTF8String]);
+                }
+                else
+                {
+                    CompileLib(shaderLib, (char*)blobOut->data() + 1, 0, compOpts, &err);
+                }
+            }
+            else
+                binHash = CompileLib(shaderLib, source, srcHash, compOpts, &err);
+
+            if (!shaderLib)
+            {
+                printf("%s\n", source);
+                Log.report(logvisor::Fatal, "error compiling shader: %s", [[err localizedDescription] UTF8String]);
+            }
+            id<MTLFunction> func = [shaderLib newFunctionWithName:funcName];
+
+            auto it =
+                m_sharedShaders.emplace(std::make_pair(binHash,
+                std::make_unique<MetalShareableShader>(*this, srcHash, binHash, func))).first;
+            return it->second->lock();
+        }
+    }
+
     void setDisplayGamma(float gamma)
     {
         if (m_ctx->m_pixelFormat == MTLPixelFormatRGBA16Float)
@@ -291,6 +362,12 @@ public:
             m_gamma = gamma;
         if (m_gamma != 1.f)
             UpdateGammaLUT(m_gammaLUT.get(), m_gamma);
+    }
+
+    bool isTessellationSupported(uint32_t& maxPatchSize)
+    {
+        maxPatchSize = 32;
+        return m_hasTessellation;
     }
 };
 
@@ -831,6 +908,48 @@ struct MetalVertexFormat : GraphicsDataNode<IVertexFormat>
             attrDesc.format = SEMANTIC_TYPE_TABLE[semantic];
         }
     }
+
+    MTLStageInputOutputDescriptor* makeTessellationComputeLayout()
+    {
+        MTLStageInputOutputDescriptor* ret = [MTLStageInputOutputDescriptor stageInputOutputDescriptor];
+
+        MTLBufferLayoutDescriptor* layoutDesc = ret.layouts[0];
+        layoutDesc.stride = m_stride;
+        layoutDesc.stepFunction = MTLStepFunctionThreadPositionInGridX;
+        layoutDesc.stepRate = 1;
+
+        for (size_t i=0 ; i<m_elementCount ; ++i)
+        {
+            MTLVertexAttributeDescriptor* origAttrDesc = m_vdesc.attributes[i];
+            MTLAttributeDescriptor* attrDesc = ret.attributes[i];
+            attrDesc.format = MTLAttributeFormat(origAttrDesc.format);
+            attrDesc.offset = origAttrDesc.offset;
+            attrDesc.bufferIndex = origAttrDesc.bufferIndex;
+        }
+
+        return ret;
+    }
+
+    MTLVertexDescriptor* makeTessellationVertexLayout()
+    {
+        MTLVertexDescriptor* ret = [MTLVertexDescriptor vertexDescriptor];
+
+        MTLVertexBufferLayoutDescriptor* layoutDesc = ret.layouts[0];
+        layoutDesc.stride = m_stride;
+        layoutDesc.stepFunction = MTLVertexStepFunctionPerPatch;
+        layoutDesc.stepRate = 1;
+
+        for (size_t i=0 ; i<m_elementCount ; ++i)
+        {
+            MTLVertexAttributeDescriptor* origAttrDesc = m_vdesc.attributes[i];
+            MTLVertexAttributeDescriptor* attrDesc = ret.attributes[i];
+            attrDesc.format = origAttrDesc.format;
+            attrDesc.offset = origAttrDesc.offset;
+            attrDesc.bufferIndex = origAttrDesc.bufferIndex;
+        }
+
+        return ret;
+    }
 };
 
 static const MTLBlendFactor BLEND_FACTOR_TABLE[] =
@@ -857,13 +976,15 @@ static const MTLBlendFactor BLEND_FACTOR_TABLE[] =
 static const MTLPrimitiveType PRIMITIVE_TABLE[] =
 {
     MTLPrimitiveTypeTriangle,
-    MTLPrimitiveTypeTriangleStrip
+    MTLPrimitiveTypeTriangleStrip,
+    MTLPrimitiveTypePoint /* Actually patches */
 };
 
 #define COLOR_WRITE_MASK (MTLColorWriteMaskRed | MTLColorWriteMaskGreen | MTLColorWriteMaskBlue)
 
 class MetalShaderPipeline : public GraphicsDataNode<IShaderPipeline>
 {
+protected:
     friend class MetalDataFactory;
     friend struct MetalCommandQueue;
     friend struct MetalShaderDataBinding;
@@ -873,18 +994,28 @@ class MetalShaderPipeline : public GraphicsDataNode<IShaderPipeline>
     MetalShareableShader::Token m_frag;
 
     MetalShaderPipeline(const ObjToken<BaseGraphicsData>& parent,
-                        MetalContext* ctx,
                         MetalShareableShader::Token&& vert,
-                        MetalShareableShader::Token&& frag,
-                        const ObjToken<IVertexFormat>& vtxFmt, NSUInteger targetSamples,
-                        BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                        ZTest depthTest, bool depthWrite, bool colorWrite,
-                        bool alphaWrite, bool overwriteAlpha, CullMode culling,
-                        bool depthAttachment = true)
+                        MetalShareableShader::Token&& frag)
     : GraphicsDataNode<IShaderPipeline>(parent),
-      m_drawPrim(PRIMITIVE_TABLE[int(prim)]),
       m_vert(std::move(vert)), m_frag(std::move(frag))
+    {}
+
+    virtual void setupExtraStages(MetalContext* ctx, MTLRenderPipelineDescriptor* desc, MetalVertexFormat& cVtxFmt) {}
+
+    virtual void draw(MetalCommandQueue& q, size_t start, size_t count);
+    virtual void drawIndexed(MetalCommandQueue& q, size_t start, size_t count);
+    virtual void drawInstances(MetalCommandQueue& q, size_t start, size_t count, size_t instCount);
+    virtual void drawInstancesIndexed(MetalCommandQueue& q, size_t start, size_t count, size_t instCount);
+
+    void setup(MetalContext* ctx,
+               const ObjToken<IVertexFormat>& vtxFmt, NSUInteger targetSamples,
+               BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
+               ZTest depthTest, bool depthWrite, bool colorWrite,
+               bool alphaWrite, bool overwriteAlpha, CullMode culling,
+               bool depthAttachment = true)
     {
+        m_drawPrim = PRIMITIVE_TABLE[int(prim)];
+
         switch (culling)
         {
         case CullMode::None:
@@ -902,7 +1033,9 @@ class MetalShaderPipeline : public GraphicsDataNode<IShaderPipeline>
         MTLRenderPipelineDescriptor* desc = [MTLRenderPipelineDescriptor new];
         desc.vertexFunction = m_vert.get().m_shader;
         desc.fragmentFunction = m_frag.get().m_shader;
-        desc.vertexDescriptor = vtxFmt.cast<MetalVertexFormat>()->m_vdesc;
+        MetalVertexFormat& cVtxFmt = *vtxFmt.cast<MetalVertexFormat>();
+        desc.vertexDescriptor = cVtxFmt.m_vdesc;
+        setupExtraStages(ctx, desc, cVtxFmt);
         desc.sampleCount = targetSamples;
         desc.colorAttachments[0].pixelFormat = ctx->m_pixelFormat;
         desc.colorAttachments[0].writeMask = (colorWrite ? COLOR_WRITE_MASK : 0) |
@@ -975,6 +1108,7 @@ class MetalShaderPipeline : public GraphicsDataNode<IShaderPipeline>
         dsDesc.depthWriteEnabled = depthWrite;
         m_dsState = [ctx->m_dev newDepthStencilStateWithDescriptor:dsDesc];
     }
+
 public:
     id<MTLRenderPipelineState> m_state;
     id<MTLDepthStencilState> m_dsState;
@@ -988,6 +1122,58 @@ public:
         [enc setDepthStencilState:m_dsState];
         [enc setCullMode:m_cullMode];
     }
+};
+
+class MetalTessellationShaderPipeline : public MetalShaderPipeline
+{
+    friend class MetalDataFactory;
+    friend struct MetalCommandQueue;
+    friend struct MetalShaderDataBinding;
+    MetalShareableShader::Token m_compute;
+    uint32_t m_patchSize;
+
+    MetalTessellationShaderPipeline(
+                        const ObjToken<BaseGraphicsData>& parent,
+                        MetalShareableShader::Token&& compute,
+                        MetalShareableShader::Token&& frag,
+                        MetalShareableShader::Token&& evaluation,
+                        uint32_t patchSize)
+    : MetalShaderPipeline(parent, std::move(evaluation), std::move(frag)),
+      m_compute(std::move(compute)), m_patchSize(patchSize)
+    {}
+
+    void setupExtraStages(MetalContext* ctx, MTLRenderPipelineDescriptor* desc, MetalVertexFormat& cVtxFmt)
+    {
+        desc.maxTessellationFactor = 16;
+        desc.tessellationFactorScaleEnabled = NO;
+        desc.tessellationFactorFormat = MTLTessellationFactorFormatHalf;
+        desc.tessellationControlPointIndexType = MTLTessellationControlPointIndexTypeNone;
+        desc.tessellationFactorStepFunction = MTLTessellationFactorStepFunctionPerPatch;
+        desc.tessellationOutputWindingOrder = MTLWindingClockwise;
+        desc.tessellationPartitionMode = MTLTessellationPartitionModeInteger;
+        desc.vertexDescriptor = cVtxFmt.makeTessellationVertexLayout();
+
+        MTLComputePipelineDescriptor* compDesc = [MTLComputePipelineDescriptor new];
+        compDesc.computeFunction = m_compute.get().m_shader;
+        compDesc.stageInputDescriptor = cVtxFmt.makeTessellationComputeLayout();
+
+        NSError* err = nullptr;
+        m_computeState = [ctx->m_dev newComputePipelineStateWithDescriptor:compDesc options:MTLPipelineOptionNone
+                          reflection:nil error:&err];
+        if (err)
+            Log.report(logvisor::Fatal, "error making compute pipeline: %s",
+                       [[err localizedDescription] UTF8String]);
+    }
+
+    void draw(MetalCommandQueue& q, size_t start, size_t count);
+    void drawIndexed(MetalCommandQueue& q, size_t start, size_t count);
+    void drawInstances(MetalCommandQueue& q, size_t start, size_t count, size_t instCount);
+    void drawInstancesIndexed(MetalCommandQueue& q, size_t start, size_t count, size_t instCount);
+
+public:
+    id<MTLComputePipelineState> m_computeState;
+    ~MetalTessellationShaderPipeline() = default;
+
 };
 
 static id<MTLBuffer> GetBufferGPUResource(const ObjToken<IGraphicsBuffer>& buf, int idx)
@@ -1138,7 +1324,26 @@ struct MetalShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
             }
         for (size_t i=0 ; i<m_texs.size() ; ++i)
             if (m_texs[i].tex)
-                [enc setFragmentTexture:GetTextureGPUResource(m_texs[i].tex, b, m_texs[i].idx, m_texs[i].depth) atIndex:i];
+            {
+                [enc setFragmentTexture:GetTextureGPUResource(m_texs[i].tex, b, m_texs[i].idx,
+                                                              m_texs[i].depth) atIndex:i];
+                [enc setVertexTexture:GetTextureGPUResource(m_texs[i].tex, b, m_texs[i].idx,
+                                                            m_texs[i].depth) atIndex:i];
+            }
+    }
+
+    void bindCompute(id<MTLComputeCommandEncoder> enc, int b)
+    {
+        if (m_vbuf)
+        {
+            id<MTLBuffer> buf = GetBufferGPUResource(m_vbuf, b);
+            [enc setBuffer:buf offset:0 atIndex:0];
+        }
+        if (m_instVbo)
+        {
+            id<MTLBuffer> buf = GetBufferGPUResource(m_instVbo, b);
+            [enc setBuffer:buf offset:0 atIndex:1];
+        }
     }
 };
 
@@ -1151,7 +1356,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     IGraphicsContext* m_parent;
     id<MTLCommandBuffer> m_cmdBuf;
     id<MTLRenderCommandEncoder> m_enc;
-    id<MTLSamplerState> m_samplers[4];
+    id<MTLSamplerState> m_samplers[5];
     bool m_running = true;
 
     int m_fillBuf = 0;
@@ -1180,17 +1385,23 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             sampDesc.tAddressMode = MTLSamplerAddressModeClampToBorderColor;
             m_samplers[1] = [ctx->m_dev newSamplerStateWithDescriptor:sampDesc];
 
+            sampDesc.rAddressMode = MTLSamplerAddressModeClampToBorderColor;
+            sampDesc.sAddressMode = MTLSamplerAddressModeClampToBorderColor;
+            sampDesc.tAddressMode = MTLSamplerAddressModeClampToBorderColor;
+            sampDesc.borderColor = MTLSamplerBorderColorOpaqueBlack;
+            m_samplers[2] = [ctx->m_dev newSamplerStateWithDescriptor:sampDesc];
+
             sampDesc.rAddressMode = MTLSamplerAddressModeClampToEdge;
             sampDesc.sAddressMode = MTLSamplerAddressModeClampToEdge;
             sampDesc.tAddressMode = MTLSamplerAddressModeClampToEdge;
-            m_samplers[2] = [ctx->m_dev newSamplerStateWithDescriptor:sampDesc];
+            m_samplers[3] = [ctx->m_dev newSamplerStateWithDescriptor:sampDesc];
 
             sampDesc.rAddressMode = MTLSamplerAddressModeClampToEdge;
             sampDesc.sAddressMode = MTLSamplerAddressModeClampToEdge;
             sampDesc.tAddressMode = MTLSamplerAddressModeClampToEdge;
             sampDesc.minFilter = MTLSamplerMinMagFilterNearest;
             sampDesc.magFilter = MTLSamplerMinMagFilterNearest;
-            m_samplers[3] = [ctx->m_dev newSamplerStateWithDescriptor:sampDesc];
+            m_samplers[4] = [ctx->m_dev newSamplerStateWithDescriptor:sampDesc];
         }
     }
 
@@ -1212,7 +1423,6 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     }
 
     MetalShaderDataBinding* m_boundData = nullptr;
-    MTLPrimitiveType m_currentPrimitive = MTLPrimitiveTypeTriangle;
     void setShaderDataBinding(const ObjToken<IShaderDataBinding>& binding)
     {
         @autoreleasepool
@@ -1220,8 +1430,8 @@ struct MetalCommandQueue : IGraphicsCommandQueue
             MetalShaderDataBinding* cbind = binding.cast<MetalShaderDataBinding>();
             cbind->bind(m_enc, m_fillBuf);
             m_boundData = cbind;
-            m_currentPrimitive = cbind->m_pipeline.cast<MetalShaderPipeline>()->m_drawPrim;
-            [m_enc setFragmentSamplerStates:m_samplers withRange:NSMakeRange(0, 4)];
+            [m_enc setFragmentSamplerStates:m_samplers withRange:NSMakeRange(0, 5)];
+            [m_enc setVertexSamplerStates:m_samplers withRange:NSMakeRange(0, 5)];
         }
     }
 
@@ -1312,42 +1522,22 @@ struct MetalCommandQueue : IGraphicsCommandQueue
 
     void draw(size_t start, size_t count)
     {
-        [m_enc drawPrimitives:m_currentPrimitive
-                  vertexStart:start + m_boundData->m_baseVert
-                  vertexCount:count];
+        m_boundData->m_pipeline.cast<MetalShaderPipeline>()->draw(*this, start, count);
     }
 
     void drawIndexed(size_t start, size_t count)
     {
-        [m_enc drawIndexedPrimitives:m_currentPrimitive
-                          indexCount:count
-                           indexType:MTLIndexTypeUInt32
-                         indexBuffer:GetBufferGPUResource(m_boundData->m_ibuf, m_fillBuf)
-                   indexBufferOffset:start*4
-                       instanceCount:1
-                          baseVertex:m_boundData->m_baseVert
-                        baseInstance:0];
+        m_boundData->m_pipeline.cast<MetalShaderPipeline>()->drawIndexed(*this, start, count);
     }
 
     void drawInstances(size_t start, size_t count, size_t instCount)
     {
-        [m_enc drawPrimitives:m_currentPrimitive
-                  vertexStart:start + m_boundData->m_baseVert
-                  vertexCount:count
-                instanceCount:instCount
-                 baseInstance:m_boundData->m_baseInst];
+        m_boundData->m_pipeline.cast<MetalShaderPipeline>()->drawInstances(*this, start, count, instCount);
     }
 
     void drawInstancesIndexed(size_t start, size_t count, size_t instCount)
     {
-        [m_enc drawIndexedPrimitives:m_currentPrimitive
-                          indexCount:count
-                           indexType:MTLIndexTypeUInt32
-                         indexBuffer:GetBufferGPUResource(m_boundData->m_ibuf, m_fillBuf)
-                   indexBufferOffset:start*4
-                       instanceCount:instCount
-                          baseVertex:m_boundData->m_baseVert
-                        baseInstance:m_boundData->m_baseInst];
+        m_boundData->m_pipeline.cast<MetalShaderPipeline>()->drawInstancesIndexed(*this, start, count, instCount);
     }
 
     void _resolveBindTexture(MetalTextureR* tex, const SWindowRect& rect, bool tlOrigin,
@@ -1422,6 +1612,58 @@ struct MetalCommandQueue : IGraphicsCommandQueue
     void resolveDisplay(const ObjToken<ITextureR>& source)
     {
         m_needsDisplay = source;
+    }
+
+    id<MTLBuffer> m_tessFactorBuffer = nullptr;
+    id<MTLBuffer> ensureTessFactorBuffer(size_t patchCount)
+    {
+        size_t targetLength = sizeof(MTLQuadTessellationFactorsHalf) * patchCount;
+        if (!m_tessFactorBuffer)
+        {
+            m_tessFactorBuffer = [m_ctx->m_dev newBufferWithLength:targetLength * 2 options:MTLResourceStorageModePrivate];
+        }
+        else if (m_tessFactorBuffer.length < targetLength)
+        {
+            targetLength *= 2;
+            id<MTLBuffer> newBuf = [m_ctx->m_dev newBufferWithLength:targetLength options:MTLResourceStorageModePrivate];
+            id<MTLBlitCommandEncoder> enc = [m_cmdBuf blitCommandEncoder];
+            [enc copyFromBuffer:m_tessFactorBuffer sourceOffset:0 toBuffer:newBuf destinationOffset:0 size:m_tessFactorBuffer.length];
+            [enc endEncoding];
+            m_tessFactorBuffer = newBuf;
+        }
+        return m_tessFactorBuffer;
+    }
+
+    void dispatchTessKernel(id<MTLComputePipelineState> computeState, size_t patchStart,
+                            size_t patchCount, uint32_t patchSize)
+    {
+        struct KernelPatchInfo
+        {
+            uint32_t numPatches; // total number of patches to process.
+                                 // we need this because this value may
+                                 // not be a multiple of threadgroup size.
+            uint16_t numPatchesInThreadGroup; // number of patches processed by a
+                                              // thread-group
+            uint16_t numControlPointsPerPatch;
+        } patchInfo = {uint32_t(patchCount), 32, uint16_t(patchSize)};
+
+        [m_enc endEncoding];
+        m_enc = nullptr;
+        id<MTLBuffer> tessFactorBuf = ensureTessFactorBuffer(patchStart + patchCount);
+        id<MTLComputeCommandEncoder> computeEnc = [m_cmdBuf computeCommandEncoder];
+        [computeEnc setComputePipelineState:computeState];
+        m_boundData->bindCompute(computeEnc, m_fillBuf);
+        [computeEnc setStageInRegion:MTLRegionMake1D(patchStart, patchCount)];
+        [computeEnc setBytes:&patchInfo length:sizeof(patchInfo) atIndex:2];
+        [computeEnc setBuffer:tessFactorBuf
+                       offset:patchStart * sizeof(MTLQuadTessellationFactorsHalf) atIndex:3];
+        [computeEnc dispatchThreads:MTLSizeMake(patchCount, 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
+        [computeEnc endEncoding];
+        _setRenderTarget(m_boundTarget, false, false);
+        m_boundData->bind(m_enc, m_fillBuf);
+        [m_enc setFragmentSamplerStates:m_samplers withRange:NSMakeRange(0, 5)];
+        [m_enc setVertexSamplerStates:m_samplers withRange:NSMakeRange(0, 5)];
+        [m_enc setTessellationFactorBuffer:m_tessFactorBuffer offset:0 instanceStride:0];
     }
 
     bool m_inProgress = false;
@@ -1522,7 +1764,8 @@ struct MetalCommandQueue : IGraphicsCommandQueue
                             MetalShaderDataBinding* gammaBinding = gfxF->m_gammaBinding.cast<MetalShaderDataBinding>();
                             gammaBinding->m_texs[0].tex = m_needsDisplay.get();
                             gammaBinding->bind(enc, m_drawBuf);
-                            [enc setFragmentSamplerStates:m_samplers withRange:NSMakeRange(0, 4)];
+                            [enc setFragmentSamplerStates:m_samplers withRange:NSMakeRange(0, 5)];
+                            [enc setVertexSamplerStates:m_samplers withRange:NSMakeRange(0, 5)];
                             [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
                             gammaBinding->m_texs[0].tex.reset();
                             [enc endEncoding];
@@ -1575,6 +1818,98 @@ struct MetalCommandQueue : IGraphicsCommandQueue
         }
     }
 };
+
+void MetalShaderPipeline::draw(MetalCommandQueue& q, size_t start, size_t count)
+{
+    [q.m_enc drawPrimitives:m_drawPrim
+                vertexStart:start + q.m_boundData->m_baseVert
+                vertexCount:count];
+}
+
+void MetalShaderPipeline::drawIndexed(MetalCommandQueue& q, size_t start, size_t count)
+{
+    [q.m_enc drawIndexedPrimitives:m_drawPrim
+                        indexCount:count
+                         indexType:MTLIndexTypeUInt32
+                       indexBuffer:GetBufferGPUResource(q.m_boundData->m_ibuf, q.m_fillBuf)
+                 indexBufferOffset:start*4
+                     instanceCount:1
+                        baseVertex:q.m_boundData->m_baseVert
+                      baseInstance:0];
+}
+
+void MetalShaderPipeline::drawInstances(MetalCommandQueue& q, size_t start, size_t count, size_t instCount)
+{
+    [q.m_enc drawPrimitives:m_drawPrim
+                vertexStart:start + q.m_boundData->m_baseVert
+                vertexCount:count
+              instanceCount:instCount
+               baseInstance:q.m_boundData->m_baseInst];
+}
+
+void MetalShaderPipeline::drawInstancesIndexed(MetalCommandQueue& q, size_t start, size_t count, size_t instCount)
+{
+    [q.m_enc drawIndexedPrimitives:m_drawPrim
+                        indexCount:count
+                         indexType:MTLIndexTypeUInt32
+                       indexBuffer:GetBufferGPUResource(q.m_boundData->m_ibuf, q.m_fillBuf)
+                 indexBufferOffset:start*4
+                     instanceCount:instCount
+                        baseVertex:q.m_boundData->m_baseVert
+                      baseInstance:q.m_boundData->m_baseInst];
+}
+
+void MetalTessellationShaderPipeline::draw(MetalCommandQueue& q, size_t start, size_t count)
+{
+    q.dispatchTessKernel(m_computeState, start, count, m_patchSize);
+    [q.m_enc drawPatches:m_patchSize
+              patchStart:start
+              patchCount:count
+        patchIndexBuffer:nullptr
+  patchIndexBufferOffset:0
+           instanceCount:1
+            baseInstance:0];
+}
+
+void MetalTessellationShaderPipeline::drawIndexed(MetalCommandQueue& q, size_t start, size_t count)
+{
+    q.dispatchTessKernel(m_computeState, start, count, m_patchSize);
+    [q.m_enc drawIndexedPatches:m_patchSize
+                     patchStart:0
+                     patchCount:count
+               patchIndexBuffer:nullptr
+         patchIndexBufferOffset:0
+        controlPointIndexBuffer:GetBufferGPUResource(q.m_boundData->m_ibuf, q.m_fillBuf)
+  controlPointIndexBufferOffset:start*4
+                  instanceCount:1
+                   baseInstance:0];
+}
+
+void MetalTessellationShaderPipeline::drawInstances(MetalCommandQueue& q, size_t start, size_t count, size_t instCount)
+{
+    q.dispatchTessKernel(m_computeState, start, count, m_patchSize);
+    [q.m_enc drawPatches:m_patchSize
+              patchStart:start
+              patchCount:count
+        patchIndexBuffer:nullptr
+  patchIndexBufferOffset:0
+           instanceCount:instCount
+            baseInstance:0];
+}
+
+void MetalTessellationShaderPipeline::drawInstancesIndexed(MetalCommandQueue& q, size_t start, size_t count, size_t instCount)
+{
+    q.dispatchTessKernel(m_computeState, start, count, m_patchSize);
+    [q.m_enc drawIndexedPatches:m_patchSize
+                     patchStart:0
+                     patchCount:count
+               patchIndexBuffer:nullptr
+         patchIndexBufferOffset:0
+        controlPointIndexBuffer:GetBufferGPUResource(q.m_boundData->m_ibuf, q.m_fillBuf)
+  controlPointIndexBufferOffset:start*4
+                  instanceCount:instCount
+                   baseInstance:0];
+}
 
 MetalDataFactory::Context::Context(MetalDataFactory& parent __BooTraceArgs)
 : m_parent(parent), m_data(new BaseGraphicsData(static_cast<MetalDataFactoryImpl&>(parent) __BooTraceArgsUse)) {}
@@ -1668,131 +2003,48 @@ MetalDataFactory::Context::newShaderPipeline(const char* vertSource, const char*
     @autoreleasepool
     {
         MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
-        MTLCompileOptions* compOpts = [MTLCompileOptions new];
-        compOpts.languageVersion = MTLLanguageVersion1_1;
-        NSError* err = nullptr;
 
-        XXH64_state_t hashState;
-        uint64_t srcHashes[2] = {};
-        uint64_t binHashes[2] = {};
-        XXH64_reset(&hashState, 0);
-        if (vertSource)
-        {
-            XXH64_update(&hashState, vertSource, strlen(vertSource));
-            srcHashes[0] = XXH64_digest(&hashState);
-            auto binSearch = factory.m_sourceToBinary.find(srcHashes[0]);
-            if (binSearch != factory.m_sourceToBinary.cend())
-                binHashes[0] = binSearch->second;
-        }
-        else if (vertBlobOut && !vertBlobOut->empty())
-        {
-            XXH64_update(&hashState, vertBlobOut->data(), vertBlobOut->size());
-            binHashes[0] = XXH64_digest(&hashState);
-        }
-        XXH64_reset(&hashState, 0);
-        if (fragSource)
-        {
-            XXH64_update(&hashState, fragSource, strlen(fragSource));
-            srcHashes[1] = XXH64_digest(&hashState);
-            auto binSearch = factory.m_sourceToBinary.find(srcHashes[1]);
-            if (binSearch != factory.m_sourceToBinary.cend())
-                binHashes[1] = binSearch->second;
-        }
-        else if (fragBlobOut && !fragBlobOut->empty())
-        {
-            XXH64_update(&hashState, fragBlobOut->data(), fragBlobOut->size());
-            binHashes[1] = XXH64_digest(&hashState);
-        }
+        MetalShareableShader::Token vertShader = factory.PrepareShaderStage(vertSource, vertBlobOut, @"vmain");
+        MetalShareableShader::Token fragShader = factory.PrepareShaderStage(fragSource, fragBlobOut, @"fmain");
 
-        if (vertBlobOut && vertBlobOut->empty())
-            binHashes[0] = factory.CompileLib(*vertBlobOut, vertSource, srcHashes[0]);
+        MetalShaderPipeline* ret = new MetalShaderPipeline(m_data, std::move(vertShader), std::move(fragShader));
+        ret->setup(factory.m_ctx, vtxFmt, depthAttachment ? factory.m_ctx->m_sampleCount : 1,
+                   srcFac, dstFac, prim, depthTest, depthWrite,
+                   colorWrite, alphaWrite, overwriteAlpha, culling, depthAttachment);
+        return {ret};
+    }
+}
 
-        if (fragBlobOut && fragBlobOut->empty())
-            binHashes[1] = factory.CompileLib(*fragBlobOut, fragSource, srcHashes[1]);
+ObjToken<IShaderPipeline> MetalDataFactory::Context::newTessellationShaderPipeline(
+                                            const char* computeSource, const char* fragSource,
+                                            const char* evaluationSource,
+                                            std::vector<uint8_t>* computeBlobOut,
+                                            std::vector<uint8_t>* fragBlobOut,
+                                            std::vector<uint8_t>* evaluationBlobOut,
+                                            const ObjToken<IVertexFormat>& vtxFmt,
+                                            BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
+                                            ZTest depthTest, bool depthWrite, bool colorWrite,
+                                            bool alphaWrite, CullMode culling,
+                                            bool overwriteAlpha,
+                                            bool depthAttachment)
+{
+    @autoreleasepool
+    {
+        MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
 
-        MetalShareableShader::Token vertShader;
-        MetalShareableShader::Token fragShader;
-        auto vertFind = binHashes[0] ? factory.m_sharedShaders.find(binHashes[0]) :
-                        factory.m_sharedShaders.end();
-        if (vertFind != factory.m_sharedShaders.end())
-        {
-            vertShader = vertFind->second->lock();
-        }
-        else
-        {
-            id<MTLLibrary> vertShaderLib;
-            if (vertBlobOut && !vertBlobOut->empty())
-            {
-                if ((*vertBlobOut)[0] == 1)
-                {
-                    dispatch_data_t vertData = dispatch_data_create(vertBlobOut->data() + 1, vertBlobOut->size() - 1, nullptr, nullptr);
-                    vertShaderLib = [factory.m_ctx->m_dev newLibraryWithData:vertData error:&err];
-                    if (!vertShaderLib)
-                        Log.report(logvisor::Fatal, "error loading vert library: %s", [[err localizedDescription] UTF8String]);
-                }
-                else
-                {
-                    factory.CompileLib(vertShaderLib, (char*)vertBlobOut->data() + 1, 0, compOpts, &err);
-                }
-            }
-            else
-                binHashes[0] = factory.CompileLib(vertShaderLib, vertSource, srcHashes[0], compOpts, &err);
+        if (!factory.m_hasTessellation)
+            Log.report(logvisor::Fatal, "Device does not support tessellation");
 
-            if (!vertShaderLib)
-            {
-                printf("%s\n", vertSource);
-                Log.report(logvisor::Fatal, "error compiling vert shader: %s", [[err localizedDescription] UTF8String]);
-            }
-            id<MTLFunction> vertFunc = [vertShaderLib newFunctionWithName:@"vmain"];
+        MetalShareableShader::Token computeShader = factory.PrepareShaderStage(computeSource, computeBlobOut, @"cmain");
+        MetalShareableShader::Token fragShader = factory.PrepareShaderStage(fragSource, fragBlobOut, @"fmain");
+        MetalShareableShader::Token evaluationShader = factory.PrepareShaderStage(evaluationSource, evaluationBlobOut, @"emain");
 
-            auto it =
-                factory.m_sharedShaders.emplace(std::make_pair(binHashes[0],
-                    std::make_unique<MetalShareableShader>(factory, srcHashes[0], binHashes[0], vertFunc))).first;
-            vertShader = it->second->lock();
-        }
-        auto fragFind = binHashes[1] ? factory.m_sharedShaders.find(binHashes[1]) :
-                        factory.m_sharedShaders.end();
-        if (fragFind != factory.m_sharedShaders.end())
-        {
-            fragShader = fragFind->second->lock();
-        }
-        else
-        {
-            id<MTLLibrary> fragShaderLib;
-            if (fragBlobOut && !fragBlobOut->empty())
-            {
-                if ((*fragBlobOut)[0] == 1)
-                {
-                    dispatch_data_t fragData = dispatch_data_create(fragBlobOut->data() + 1, fragBlobOut->size() - 1, nullptr, nullptr);
-                    fragShaderLib = [factory.m_ctx->m_dev newLibraryWithData:fragData error:&err];
-                    if (!fragShaderLib)
-                        Log.report(logvisor::Fatal, "error loading frag library: %s", [[err localizedDescription] UTF8String]);
-                }
-                else
-                {
-                    factory.CompileLib(fragShaderLib, (char*)fragBlobOut->data() + 1, 0, compOpts, &err);
-                }
-            }
-            else
-                binHashes[1] = factory.CompileLib(fragShaderLib, fragSource, srcHashes[1], compOpts, &err);
-
-            if (!fragShaderLib)
-            {
-                printf("%s\n", fragSource);
-                Log.report(logvisor::Fatal, "error compiling frag shader: %s", [[err localizedDescription] UTF8String]);
-            }
-            id<MTLFunction> fragFunc = [fragShaderLib newFunctionWithName:@"fmain"];
-
-            auto it =
-                factory.m_sharedShaders.emplace(std::make_pair(binHashes[1],
-                    std::make_unique<MetalShareableShader>(factory, srcHashes[1], binHashes[1], fragFunc))).first;
-            fragShader = it->second->lock();
-        }
-
-        return {new MetalShaderPipeline(m_data, factory.m_ctx, std::move(vertShader), std::move(fragShader),
-                                        vtxFmt, depthAttachment ? factory.m_ctx->m_sampleCount : 1,
-                                        srcFac, dstFac, prim, depthTest, depthWrite,
-                                        colorWrite, alphaWrite, overwriteAlpha, culling, depthAttachment)};
+        MetalTessellationShaderPipeline* ret = new MetalTessellationShaderPipeline(m_data,
+                   std::move(computeShader), std::move(fragShader), std::move(evaluationShader), patchSize);
+        ret->setup(factory.m_ctx, vtxFmt, depthAttachment ? factory.m_ctx->m_sampleCount : 1,
+                   srcFac, dstFac, Primitive::Patches, depthTest, depthWrite,
+                   colorWrite, alphaWrite, overwriteAlpha, culling, depthAttachment);
+        return {ret};
     }
 }
 

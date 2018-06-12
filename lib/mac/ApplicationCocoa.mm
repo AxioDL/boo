@@ -254,6 +254,10 @@ int ApplicationRun(IApplication::EPlatformType platform,
             APP = new ApplicationCocoa(cb, uniqueName, friendlyName, pname, args,
                                        gfxApi, samples, anisotropy, deepColor);
         }
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
+        if ([NSApp respondsToSelector:@selector(setAppearance:)])
+            [NSApp setAppearance:[NSAppearance appearanceNamed:NSAppearanceNameDarkAqua]];
+#endif
         [NSApp run];
         ApplicationCocoa* appCocoa = static_cast<ApplicationCocoa*>(APP);
         if (appCocoa->m_clientThread.joinable())

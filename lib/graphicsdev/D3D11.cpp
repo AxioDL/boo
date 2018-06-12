@@ -730,6 +730,7 @@ class D3D11TessellationShaderPipeline : public D3D11ShaderPipeline
     }
 
 public:
+    ~D3D11TessellationShaderPipeline() = default;
 
     void bindExtraStages(ID3D11DeviceContext* ctx)
     {
