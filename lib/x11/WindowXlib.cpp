@@ -998,10 +998,6 @@ public:
                 m_openGL = true;
             }
 
-            /* Default screen */
-            Screen* screen = ScreenOfDisplay(display, defaultScreen);
-            m_pixelFactor = screen->width / (float)screen->mwidth / REF_DPMM;
-
             XVisualInfo visTemplate;
             visTemplate.screen = defaultScreen;
             int numVisuals;
@@ -1018,6 +1014,7 @@ public:
             XFree(visualList);
 
             /* Create colormap */
+            Screen* screen = ScreenOfDisplay(display, defaultScreen);
             m_colormapId = XCreateColormap(m_xDisp, screen->root, selectedVisual, AllocNone);
 
             /* Create window */
@@ -1025,9 +1022,15 @@ public:
             int nmonitors = 0;
             XRRMonitorInfo* mInfo = XRRGetMonitors(m_xDisp, screen->root, true, &nmonitors);
             if (nmonitors)
+            {
                 genFrameDefault(mInfo, x, y, w, h);
+                m_pixelFactor = mInfo->width / (float)mInfo->mwidth / REF_DPMM;
+            }
             else
+            {
                 genFrameDefault(screen, x, y, w, h);
+                m_pixelFactor = screen->width / (float)screen->mwidth / REF_DPMM;
+            }
             XRRFreeMonitors(mInfo);
             XSetWindowAttributes swa;
             swa.colormap = m_colormapId;
