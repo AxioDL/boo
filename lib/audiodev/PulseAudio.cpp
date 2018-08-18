@@ -41,6 +41,7 @@ struct PulseAudioVoiceEngine : LinuxMidi
     pa_context* m_ctx = nullptr;
     pa_stream* m_stream = nullptr;
     std::string m_sinkName;
+    bool m_handleMove = false;
     pa_sample_spec m_sampleSpec = {};
     pa_channel_map m_chanMap = {};
 
@@ -60,7 +61,7 @@ struct PulseAudioVoiceEngine : LinuxMidi
         return retval;
     }
 
-    int _paIterate(pa_operation* op)
+    int _paIterate(pa_operation* op) const
     {
         int retval = 0;
         while (pa_operation_get_state(op) == PA_OPERATION_RUNNING)
@@ -68,42 +69,16 @@ struct PulseAudioVoiceEngine : LinuxMidi
         return retval;
     }
 
-    PulseAudioVoiceEngine()
+    bool _setupSink()
     {
-        if (!(m_mainloop = pa_mainloop_new()))
+        if (m_stream)
         {
-            Log.report(logvisor::Error, "Unable to pa_mainloop_new()");
-            return;
-        }
-
-        pa_mainloop_api* mlApi = pa_mainloop_get_api(m_mainloop);
-        pa_proplist* propList = pa_proplist_new();
-        pa_proplist_sets(propList, PA_PROP_APPLICATION_ICON_NAME, APP->getUniqueName().data());
-        char pidStr[16];
-        snprintf(pidStr, 16, "%d", int(getpid()));
-        pa_proplist_sets(propList, PA_PROP_APPLICATION_PROCESS_ID, pidStr);
-        if (!(m_ctx = pa_context_new_with_proplist(mlApi, APP->getFriendlyName().data(), propList)))
-        {
-            Log.report(logvisor::Error, "Unable to pa_context_new_with_proplist()");
-            pa_mainloop_free(m_mainloop);
-            m_mainloop = nullptr;
-            return;
+            pa_stream_disconnect(m_stream);
+            pa_stream_unref(m_stream);
+            m_stream = nullptr;
         }
 
         pa_operation* op;
-
-        if (pa_context_connect(m_ctx, nullptr, PA_CONTEXT_NOFLAGS, nullptr))
-        {
-            Log.report(logvisor::Error, "Unable to pa_context_connect()");
-            goto err;
-        }
-
-        _paWaitReady();
-
-        op = pa_context_get_server_info(m_ctx, pa_server_info_cb_t(_getServerInfoReply), this);
-        _paIterate(op);
-        pa_operation_unref(op);
-
         m_sampleSpec.format = PA_SAMPLE_INVALID;
         op = pa_context_get_sink_info_by_name(m_ctx, m_sinkName.c_str(), pa_sink_info_cb_t(_getSinkInfoReply), this);
         _paIterate(op);
@@ -142,9 +117,12 @@ struct PulseAudioVoiceEngine : LinuxMidi
             goto err;
         }
 
+        pa_stream_set_moved_callback(m_stream, pa_stream_notify_cb_t(_streamMoved), this);
+
         _paStreamWaitReady();
 
-        return;
+        _resetSampleRate();
+        return true;
     err:
         if (m_stream)
         {
@@ -152,6 +130,50 @@ struct PulseAudioVoiceEngine : LinuxMidi
             pa_stream_unref(m_stream);
             m_stream = nullptr;
         }
+        return false;
+    }
+
+    PulseAudioVoiceEngine()
+    {
+        if (!(m_mainloop = pa_mainloop_new()))
+        {
+            Log.report(logvisor::Error, "Unable to pa_mainloop_new()");
+            return;
+        }
+
+        pa_mainloop_api* mlApi = pa_mainloop_get_api(m_mainloop);
+        pa_proplist* propList = pa_proplist_new();
+        pa_proplist_sets(propList, PA_PROP_APPLICATION_ICON_NAME, APP->getUniqueName().data());
+        char pidStr[16];
+        snprintf(pidStr, 16, "%d", int(getpid()));
+        pa_proplist_sets(propList, PA_PROP_APPLICATION_PROCESS_ID, pidStr);
+        if (!(m_ctx = pa_context_new_with_proplist(mlApi, APP->getFriendlyName().data(), propList)))
+        {
+            Log.report(logvisor::Error, "Unable to pa_context_new_with_proplist()");
+            pa_mainloop_free(m_mainloop);
+            m_mainloop = nullptr;
+            return;
+        }
+
+        pa_operation* op;
+
+        if (pa_context_connect(m_ctx, nullptr, PA_CONTEXT_NOFLAGS, nullptr))
+        {
+            Log.report(logvisor::Error, "Unable to pa_context_connect()");
+            goto err;
+        }
+
+        _paWaitReady();
+
+        op = pa_context_get_server_info(m_ctx, pa_server_info_cb_t(_getServerInfoReply), this);
+        _paIterate(op);
+        pa_operation_unref(op);
+
+        if (!_setupSink())
+            goto err;
+
+        return;
+    err:
         pa_context_disconnect(m_ctx);
         pa_context_unref(m_ctx);
         m_ctx = nullptr;
@@ -175,6 +197,12 @@ struct PulseAudioVoiceEngine : LinuxMidi
         {
             pa_mainloop_free(m_mainloop);
         }
+    }
+
+    static void _streamMoved(pa_stream* p, PulseAudioVoiceEngine* userdata)
+    {
+        userdata->m_sinkName = pa_stream_get_device_name(p);
+        userdata->m_handleMove = true;
     }
 
     static void _getServerInfoReply(pa_context* c, const pa_server_info* i, PulseAudioVoiceEngine* userdata)
@@ -274,7 +302,7 @@ struct PulseAudioVoiceEngine : LinuxMidi
         }
     }
 
-    static void _getSinkInfoReply(pa_context *c, const pa_sink_info* i, int eol, PulseAudioVoiceEngine* userdata)
+    static void _getSinkInfoReply(pa_context* c, const pa_sink_info* i, int eol, PulseAudioVoiceEngine* userdata)
     {
         if (!i)
             return;
@@ -282,6 +310,59 @@ struct PulseAudioVoiceEngine : LinuxMidi
         userdata->m_sampleSpec.rate = i->sample_spec.rate;
         userdata->m_sampleSpec.channels = i->sample_spec.channels;
         userdata->_parseAudioChannelSet(&i->channel_map);
+    }
+
+    mutable std::vector<std::pair<std::string, std::string>> m_sinks;
+    static void _getSinkInfoListReply(pa_context* c, const pa_sink_info* i, int eol, PulseAudioVoiceEngine* userdata)
+    {
+        if (i)
+            userdata->m_sinks.push_back(std::make_pair(i->name, i->description));
+    }
+    std::vector<std::pair<std::string, std::string>> enumerateAudioOutputs() const
+    {
+        pa_operation* op = pa_context_get_sink_info_list(m_ctx, pa_sink_info_cb_t(_getSinkInfoListReply), (void*)this);
+        _paIterate(op);
+        pa_operation_unref(op);
+        std::vector<std::pair<std::string, std::string>> ret;
+        ret.swap(m_sinks);
+        return ret;
+    }
+
+    std::string getCurrentAudioOutput() const
+    {
+        return m_sinkName;
+    }
+
+    bool m_sinkOk = false;
+    static void _checkAudioSinkReply(pa_context* c, const pa_sink_info* i, int eol, PulseAudioVoiceEngine* userdata)
+    {
+        if (i)
+            userdata->m_sinkOk = true;
+    }
+    bool setCurrentAudioOutput(const char* name)
+    {
+        m_sinkOk = false;
+        pa_operation* op;
+        op = pa_context_get_sink_info_by_name(m_ctx, name, pa_sink_info_cb_t(_checkAudioSinkReply), this);
+        _paIterate(op);
+        pa_operation_unref(op);
+        if (m_sinkOk)
+        {
+            m_sinkName = name;
+            return _setupSink();
+        }
+        return false;
+    }
+
+    void _doIterate()
+    {
+        int retval;
+        pa_mainloop_iterate(m_mainloop, 1, &retval);
+        if (m_handleMove)
+        {
+            m_handleMove = false;
+            _setupSink();
+        }
     }
 
     void pumpAndMixVoices()
@@ -307,10 +388,9 @@ struct PulseAudioVoiceEngine : LinuxMidi
         size_t writableFrames = writableSz / frameSz;
         size_t writablePeriods = writableFrames / m_mixInfo.m_periodFrames;
 
-        int retval;
         if (!writablePeriods)
         {
-            pa_mainloop_iterate(m_mainloop, 1, &retval);
+            _doIterate();
             return;
         }
 
@@ -322,7 +402,7 @@ struct PulseAudioVoiceEngine : LinuxMidi
             pa_stream_state_t st = pa_stream_get_state(m_stream);
             Log.report(logvisor::Error, "Unable to pa_stream_begin_write(): %s %d",
                        pa_strerror(pa_context_errno(m_ctx)), st);
-            pa_mainloop_iterate(m_mainloop, 1, &retval);
+            _doIterate();
             return;
         }
 
@@ -333,7 +413,7 @@ struct PulseAudioVoiceEngine : LinuxMidi
         if (pa_stream_write(m_stream, data, nbytes, nullptr, 0, PA_SEEK_RELATIVE))
             Log.report(logvisor::Error, "Unable to pa_stream_write()");
 
-        pa_mainloop_iterate(m_mainloop, 1, &retval);
+        _doIterate();
     }
 };
 

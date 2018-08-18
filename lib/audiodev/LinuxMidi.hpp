@@ -19,7 +19,7 @@ static inline double TimespecToDouble(struct timespec& ts)
 
 struct LinuxMidi : BaseAudioVoiceEngine
 {
-    std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const
+    std::vector<std::pair<std::string, std::string>> enumerateMIDIInputs() const
     {
         std::vector<std::pair<std::string, std::string>> ret;
         int status;
@@ -29,6 +29,9 @@ struct LinuxMidi : BaseAudioVoiceEngine
             return {};
         if (card < 0)
             return {};
+
+        snd_rawmidi_info_t* info;
+        snd_rawmidi_info_malloc(&info);
 
         while (card >= 0)
         {
@@ -46,9 +49,9 @@ struct LinuxMidi : BaseAudioVoiceEngine
                     break;
                 if (device >= 0)
                 {
-                    snd_rawmidi_info_t *info;
-                    snd_rawmidi_info_alloca(&info);
                     snd_rawmidi_info_set_device(info, device);
+                    if (snd_rawmidi_info_get_stream(info) != SND_RAWMIDI_STREAM_INPUT)
+                        continue;
                     sprintf(name + strlen(name), ",%d", device);
                     ret.push_back(std::make_pair(name, snd_rawmidi_info_get_name(info)));
                 }
@@ -59,6 +62,8 @@ struct LinuxMidi : BaseAudioVoiceEngine
             if ((status = snd_card_next(&card)) < 0)
                 break;
         }
+
+        snd_rawmidi_info_free(info);
 
         return ret;
     }

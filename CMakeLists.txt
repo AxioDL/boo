@@ -191,15 +191,12 @@ else(NOT GEKKO)
 
   find_path(PULSEAUDIO_INCLUDE_DIR
             NAMES pulse/pulseaudio.h)
-
-  if (PULSEAUDIO_INCLUDE_DIR)
-    list(APPEND PLAT_SRCS lib/audiodev/PulseAudio.cpp)
-    list(APPEND _BOO_SYS_LIBS pulse)
-    message(STATUS "Using PulseAudio backend")
-  else()
-    list(APPEND PLAT_SRCS lib/audiodev/ALSA.cpp)
-    message(STATUS "Using ALSA backend")
+  if(PULSEAUDIO_INCLUDE_DIR-NOTFOUND)
+    message(FATAL_ERROR "Unix build of boo requires pulseaudio")
   endif()
+
+  list(APPEND PLAT_SRCS lib/audiodev/PulseAudio.cpp)
+  list(APPEND _BOO_SYS_LIBS pulse)
 
   if(DBUS_INCLUDE_DIR-NOTFOUND)
     message(FATAL_ERROR "Unix build of boo requires dbus")

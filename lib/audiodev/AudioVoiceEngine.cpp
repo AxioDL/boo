@@ -91,6 +91,16 @@ template void BaseAudioVoiceEngine::_pumpAndMixVoices<int16_t>(size_t frames, in
 template void BaseAudioVoiceEngine::_pumpAndMixVoices<int32_t>(size_t frames, int32_t* dataOut);
 template void BaseAudioVoiceEngine::_pumpAndMixVoices<float>(size_t frames, float* dataOut);
 
+void BaseAudioVoiceEngine::_resetSampleRate()
+{
+    if (m_voiceHead)
+        for (boo::AudioVoice& vox : *m_voiceHead)
+            vox._resetSampleRate(vox.m_sampleRateIn);
+    if (m_submixHead)
+        for (boo::AudioSubmix& smx : *m_submixHead)
+            smx._resetOutputSampleRate();
+}
+
 ObjToken<IAudioVoice>
 BaseAudioVoiceEngine::allocateNewMonoVoice(double sampleRate,
                                            IAudioVoiceCallback* cb,

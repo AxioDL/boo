@@ -64,8 +64,17 @@ struct IAudioVoiceEngine
     /** Enable or disable Lt/Rt surround encoding. If successful, getAvailableSet() will return Surround51 */
     virtual bool enableLtRt(bool enable)=0;
 
-    /** Get list of MIDI devices found on system */
-    virtual std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const=0;
+    /** Get current Audio output in use */
+    virtual std::string getCurrentAudioOutput() const=0;
+
+    /** Set current Audio output to use */
+    virtual bool setCurrentAudioOutput(const char* name)=0;
+
+    /** Get list of Audio output devices found on system */
+    virtual std::vector<std::pair<std::string, std::string>> enumerateAudioOutputs() const=0;
+
+    /** Get list of MIDI input devices found on system */
+    virtual std::vector<std::pair<std::string, std::string>> enumerateMIDIInputs() const=0;
 
     /** Create ad-hoc MIDI in port and register with system */
     virtual std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver)=0;

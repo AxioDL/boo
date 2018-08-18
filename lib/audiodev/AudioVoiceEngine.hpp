@@ -53,6 +53,8 @@ protected:
     template <typename T>
     void _pumpAndMixVoices(size_t frames, T* dataOut);
 
+    void _resetSampleRate();
+
 public:
     BaseAudioVoiceEngine() : m_mainSubmix(std::make_unique<AudioSubmix>(*this, nullptr, -1, false)) {}
     ~BaseAudioVoiceEngine();

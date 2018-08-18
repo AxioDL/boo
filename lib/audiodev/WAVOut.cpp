@@ -13,7 +13,22 @@ struct WAVOutVoiceEngine : boo::BaseAudioVoiceEngine
         return boo::AudioChannelSet::Stereo;
     }
 
-    std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const
+    std::string getCurrentAudioOutput() const
+    {
+        return "wavout";
+    }
+
+    bool setCurrentAudioOutput(const char* name)
+    {
+        return false;
+    }
+
+    std::vector<std::pair<std::string, std::string>> enumerateAudioOutputs() const
+    {
+        return {{"wavout", "WAVOut"}};
+    }
+
+    std::vector<std::pair<std::string, std::string>> enumerateMIDIInputs() const
     {
         return {};
     }
@@ -161,13 +176,7 @@ struct WAVOutVoiceEngine : boo::BaseAudioVoiceEngine
         m_mixInfo.m_periodFrames = periodFrames;
         m_mixInfo.m_sampleRate = sampleRate;
         _buildAudioRenderClient();
-
-        if (m_voiceHead)
-            for (boo::AudioVoice& vox : *m_voiceHead)
-                vox._resetSampleRate(vox.m_sampleRateIn);
-        if (m_submixHead)
-            for (boo::AudioSubmix& smx : *m_submixHead)
-                smx._resetOutputSampleRate();
+        _resetSampleRate();
     }
 
     void pumpAndMixVoices()
