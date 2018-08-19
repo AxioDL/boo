@@ -19,6 +19,30 @@ static inline double TimespecToDouble(struct timespec& ts)
 
 struct LinuxMidi : BaseAudioVoiceEngine
 {
+    std::unordered_map<std::string, IMIDIPort*> m_openHandles;
+    void _addOpenHandle(const char* name, IMIDIPort* port)
+    {
+        m_openHandles[name] = port;
+    }
+    void _removeOpenHandle(IMIDIPort* port)
+    {
+        for (auto it = m_openHandles.begin(); it != m_openHandles.end();)
+        {
+            if (it->second == port)
+            {
+                it = m_openHandles.erase(it);
+                continue;
+            }
+            ++it;
+        }
+    }
+
+    ~LinuxMidi()
+    {
+        for (auto& p : m_openHandles)
+            p.second->_disown();
+    }
+
     std::vector<std::pair<std::string, std::string>> enumerateMIDIInputs() const
     {
         std::vector<std::pair<std::string, std::string>> ret;
@@ -49,11 +73,21 @@ struct LinuxMidi : BaseAudioVoiceEngine
                     break;
                 if (device >= 0)
                 {
-                    snd_rawmidi_info_set_device(info, device);
-                    if (snd_rawmidi_info_get_stream(info) != SND_RAWMIDI_STREAM_INPUT)
-                        continue;
                     sprintf(name + strlen(name), ",%d", device);
-                    ret.push_back(std::make_pair(name, snd_rawmidi_info_get_name(info)));
+                    auto search = m_openHandles.find(name);
+                    if (search != m_openHandles.cend())
+                    {
+                        ret.push_back(std::make_pair(name, search->second->description()));
+                        continue;
+                    }
+
+                    snd_rawmidi_t* midi;
+                    if (!snd_rawmidi_open(&midi, nullptr, name, SND_RAWMIDI_NONBLOCK))
+                    {
+                        snd_rawmidi_info(midi, info);
+                        ret.push_back(std::make_pair(name, snd_rawmidi_info_get_name(info)));
+                        snd_rawmidi_close(midi);
+                    }
                 }
             } while (device >= 0);
 
@@ -66,6 +100,11 @@ struct LinuxMidi : BaseAudioVoiceEngine
         snd_rawmidi_info_free(info);
 
         return ret;
+    }
+
+    bool supportsVirtualMIDIIn() const
+    {
+        return true;
     }
 
     static void MIDIFreeProc(void* midiStatus)
@@ -112,12 +151,14 @@ struct LinuxMidi : BaseAudioVoiceEngine
         snd_rawmidi_t* m_midi;
         std::thread m_midiThread;
 
-        MIDIIn(snd_rawmidi_t* midi, bool virt, ReceiveFunctor&& receiver)
-            : IMIDIIn(virt, std::move(receiver)), m_midi(midi),
+        MIDIIn(LinuxMidi* parent, snd_rawmidi_t* midi, bool virt, ReceiveFunctor&& receiver)
+            : IMIDIIn(parent, virt, std::move(receiver)), m_midi(midi),
               m_midiThread(std::bind(MIDIReceiveProc, m_midi, m_receiver)) {}
 
         ~MIDIIn()
         {
+            if (m_parent)
+                static_cast<LinuxMidi*>(m_parent)->_removeOpenHandle(this);
             pthread_cancel(m_midiThread.native_handle());
             if (m_midiThread.joinable())
                 m_midiThread.join();
@@ -137,10 +178,15 @@ struct LinuxMidi : BaseAudioVoiceEngine
     struct MIDIOut : public IMIDIOut
     {
         snd_rawmidi_t* m_midi;
-        MIDIOut(snd_rawmidi_t* midi, bool virt)
-            : IMIDIOut(virt), m_midi(midi) {}
+        MIDIOut(LinuxMidi* parent, snd_rawmidi_t* midi, bool virt)
+            : IMIDIOut(parent, virt), m_midi(midi) {}
 
-        ~MIDIOut() {snd_rawmidi_close(m_midi);}
+        ~MIDIOut()
+        {
+            if (m_parent)
+                static_cast<LinuxMidi*>(m_parent)->_removeOpenHandle(this);
+            snd_rawmidi_close(m_midi);
+        }
 
         std::string description() const
         {
@@ -163,12 +209,14 @@ struct LinuxMidi : BaseAudioVoiceEngine
         snd_rawmidi_t* m_midiOut;
         std::thread m_midiThread;
 
-        MIDIInOut(snd_rawmidi_t* midiIn, snd_rawmidi_t* midiOut, bool virt, ReceiveFunctor&& receiver)
-            : IMIDIInOut(virt, std::move(receiver)), m_midiIn(midiIn), m_midiOut(midiOut),
+        MIDIInOut(LinuxMidi* parent, snd_rawmidi_t* midiIn, snd_rawmidi_t* midiOut, bool virt, ReceiveFunctor&& receiver)
+            : IMIDIInOut(parent, virt, std::move(receiver)), m_midiIn(midiIn), m_midiOut(midiOut),
               m_midiThread(std::bind(MIDIReceiveProc, m_midiIn, m_receiver)) {}
 
         ~MIDIInOut()
         {
+            if (m_parent)
+                static_cast<LinuxMidi*>(m_parent)->_removeOpenHandle(this);
             pthread_cancel(m_midiThread.native_handle());
             if (m_midiThread.joinable())
                 m_midiThread.join();
@@ -198,7 +246,7 @@ struct LinuxMidi : BaseAudioVoiceEngine
         status = snd_rawmidi_open(&midi, nullptr, "virtual", 0);
         if (status)
             return {};
-        return std::make_unique<MIDIIn>(midi, true, std::move(receiver));
+        return std::make_unique<MIDIIn>(nullptr, midi, true, std::move(receiver));
     }
 
     std::unique_ptr<IMIDIOut> newVirtualMIDIOut()
@@ -208,7 +256,7 @@ struct LinuxMidi : BaseAudioVoiceEngine
         status = snd_rawmidi_open(nullptr, &midi, "virtual", 0);
         if (status)
             return {};
-        return std::make_unique<MIDIOut>(midi, true);
+        return std::make_unique<MIDIOut>(nullptr, midi, true);
     }
 
     std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver)
@@ -219,7 +267,7 @@ struct LinuxMidi : BaseAudioVoiceEngine
         status = snd_rawmidi_open(&midiIn, &midiOut, "virtual", 0);
         if (status)
             return {};
-        return std::make_unique<MIDIInOut>(midiIn, midiOut, true, std::move(receiver));
+        return std::make_unique<MIDIInOut>(nullptr, midiIn, midiOut, true, std::move(receiver));
     }
 
     std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver)
@@ -228,7 +276,9 @@ struct LinuxMidi : BaseAudioVoiceEngine
         int status = snd_rawmidi_open(&midi, nullptr, name, 0);
         if (status)
             return {};
-        return std::make_unique<MIDIIn>(midi, true, std::move(receiver));
+        auto ret = std::make_unique<MIDIIn>(this, midi, true, std::move(receiver));
+        _addOpenHandle(name, ret.get());
+        return ret;
     }
 
     std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name)
@@ -237,7 +287,9 @@ struct LinuxMidi : BaseAudioVoiceEngine
         int status = snd_rawmidi_open(nullptr, &midi, name, 0);
         if (status)
             return {};
-        return std::make_unique<MIDIOut>(midi, true);
+        auto ret = std::make_unique<MIDIOut>(this, midi, true);
+        _addOpenHandle(name, ret.get());
+        return ret;
     }
 
     std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver)
@@ -247,7 +299,9 @@ struct LinuxMidi : BaseAudioVoiceEngine
         int status = snd_rawmidi_open(&midiIn, &midiOut, name, 0);
         if (status)
             return {};
-        return std::make_unique<MIDIInOut>(midiIn, midiOut, true, std::move(receiver));
+        auto ret = std::make_unique<MIDIInOut>(this, midiIn, midiOut, true, std::move(receiver));
+        _addOpenHandle(name, ret.get());
+        return ret;
     }
 
     bool useMIDILock() const {return true;}

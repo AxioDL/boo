@@ -33,12 +33,17 @@ struct WAVOutVoiceEngine : boo::BaseAudioVoiceEngine
         return {};
     }
 
+    bool supportsVirtualMIDIIn() const
+    {
+        return false;
+    }
+
     boo::ReceiveFunctor* m_midiReceiver = nullptr;
 
     struct MIDIIn : public boo::IMIDIIn
     {
-        MIDIIn(bool virt, boo::ReceiveFunctor&& receiver)
-        : IMIDIIn(virt, std::move(receiver)) {}
+        MIDIIn(WAVOutVoiceEngine* parent, bool virt, boo::ReceiveFunctor&& receiver)
+        : IMIDIIn(parent, virt, std::move(receiver)) {}
 
         std::string description() const
         {
@@ -48,7 +53,7 @@ struct WAVOutVoiceEngine : boo::BaseAudioVoiceEngine
 
     std::unique_ptr<boo::IMIDIIn> newVirtualMIDIIn(boo::ReceiveFunctor&& receiver)
     {
-        std::unique_ptr<boo::IMIDIIn> ret = std::make_unique<MIDIIn>(true, std::move(receiver));
+        std::unique_ptr<boo::IMIDIIn> ret = std::make_unique<MIDIIn>(nullptr, true, std::move(receiver));
         m_midiReceiver = &ret->m_receiver;
         return ret;
     }

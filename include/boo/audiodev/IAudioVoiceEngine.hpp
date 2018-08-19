@@ -76,6 +76,9 @@ struct IAudioVoiceEngine
     /** Get list of MIDI input devices found on system */
     virtual std::vector<std::pair<std::string, std::string>> enumerateMIDIInputs() const=0;
 
+    /** Query if system supports creating a virtual MIDI input */
+    virtual bool supportsVirtualMIDIIn() const=0;
+
     /** Create ad-hoc MIDI in port and register with system */
     virtual std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver)=0;
 
