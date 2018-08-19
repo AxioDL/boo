@@ -5,6 +5,7 @@
 #include <Mmdeviceapi.h>
 #include <Audioclient.h>
 #include <mmsystem.h>
+#include <Functiondiscoverykeys_devpkey.h>
 
 #include <iterator>
 
@@ -35,6 +36,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
 #endif
     ComPtr<IAudioClient> m_audClient;
     ComPtr<IAudioRenderClient> m_renderClient;
+    std::string m_sinkName;
 
     size_t m_curBufFrame = 0;
     std::vector<float> m_5msBuffer;
@@ -136,11 +138,14 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
     void _buildAudioRenderClient()
     {
 #if !WINDOWS_STORE
-        if (FAILED(m_enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &m_device)))
+        if (!m_device)
         {
-            Log.report(logvisor::Error, L"unable to obtain default audio device");
-            m_device.Reset();
-            return;
+            if (FAILED(m_enumerator->GetDevice(MBSTWCS(m_sinkName.c_str()).c_str(), &m_device)))
+            {
+                Log.report(logvisor::Error, "unable to obtain audio device %s", m_sinkName.c_str());
+                m_device.Reset();
+                return;
+            }
         }
 
         if (FAILED(m_device->Activate(IID_IAudioClient, CLSCTX_ALL, nullptr, &m_audClient)))
@@ -396,6 +401,17 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
             return;
         }
 
+        if (FAILED(m_enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &m_device)))
+        {
+            Log.report(logvisor::Error, L"unable to obtain default audio device");
+            m_device.Reset();
+            return;
+        }
+        LPWSTR sinkName = nullptr;
+        m_device->GetId(&sinkName);
+        m_sinkName = WCSTMBS(sinkName);
+        CoTaskMemFree(sinkName);
+
         _buildAudioRenderClient();
 #else
         auto deviceIdStr = MediaDevice::GetDefaultAudioRenderId(Windows::Media::Devices::AudioDeviceRole::Default);
@@ -418,12 +434,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
          if (m_mixInfo.m_sampleFormat != oldFmt)
              Log.report(logvisor::Fatal, L"audio device sample format changed, boo doesn't support this!!");
 
-         if (m_voiceHead)
-             for (AudioVoice& vox : *m_voiceHead)
-                 vox._resetSampleRate(vox.m_sampleRateIn);
-         if (m_submixHead)
-             for (AudioSubmix& smx : *m_submixHead)
-                 smx._resetOutputSampleRate();
+         _resetSampleRate();
     }
 
     void pumpAndMixVoices()
@@ -443,7 +454,10 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
                 Log.report(logvisor::Fatal, L"unable to setup AudioRenderClient");
 
             if (m_rebuild)
+            {
+                m_device.Reset();
                 _rebuildAudioRenderClient();
+            }
 
             HRESULT res;
             if (!m_started)
@@ -511,14 +525,64 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         }
     }
 
+    std::string getCurrentAudioOutput() const
+    {
+        return m_sinkName;
+    }
+
+    bool setCurrentAudioOutput(const char* name)
+    {
+        ComPtr<IMMDevice> newDevice;
+        if (FAILED(m_enumerator->GetDevice(MBSTWCS(name).c_str(), &newDevice)))
+        {
+            Log.report(logvisor::Error, "unable to obtain audio device %s", name);
+            return false;
+        }
+        m_device = newDevice;
+        m_sinkName = name;
+        _rebuildAudioRenderClient();
+        return true;
+    }
+
+    std::vector<std::pair<std::string, std::string>> enumerateAudioOutputs() const
+    {
+        std::vector<std::pair<std::string, std::string>> ret;
+
+        ComPtr<IMMDeviceCollection> collection;
+        if (FAILED(m_enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &collection)))
+        {
+            Log.report(logvisor::Error, L"unable to enumerate audio outputs");
+            return ret;
+        }
+
+        UINT count = 0;
+        collection->GetCount(&count);
+        for (UINT i = 0; i < count; ++i)
+        {
+            ComPtr<IMMDevice> device;
+            collection->Item(i, &device);
+            LPWSTR devName;
+            device->GetId(&devName);
+            ComPtr<IPropertyStore> props;
+            device->OpenPropertyStore(STGM_READ, &props);
+            PROPVARIANT val = {};
+            props->GetValue(PKEY_Device_FriendlyName, &val);
+            std::string friendlyName;
+            if (val.vt == VT_LPWSTR)
+                friendlyName = WCSTMBS(val.pwszVal);
+            ret.emplace_back(WCSTMBS(devName), std::move(friendlyName));
+        }
+
+        return ret;
+    }
+
 #if !WINDOWS_STORE
-    std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const
+    std::vector<std::pair<std::string, std::string>> enumerateMIDIInputs() const
     {
         std::vector<std::pair<std::string, std::string>> ret;
 
         UINT numInDevices = midiInGetNumDevs();
-        UINT numOutDevices = midiOutGetNumDevs();
-        ret.reserve(numInDevices + numOutDevices);
+        ret.reserve(numInDevices);
 
         for (UINT i=0 ; i<numInDevices ; ++i)
         {
@@ -536,6 +600,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
 #endif
         }
 
+#if 0
         for (UINT i=0 ; i<numOutDevices ; ++i)
         {
             char name[256];
@@ -551,8 +616,14 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
             ret.push_back(std::make_pair(std::string(name), std::string(caps.szPname)));
 #endif
         }
+#endif
 
         return ret;
+    }
+
+    bool supportsVirtualMIDIIn() const
+    {
+        return false;
     }
 
     static void CALLBACK MIDIReceiveProc(HMIDIIN   hMidiIn,
@@ -573,8 +644,8 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
     {
         HMIDIIN m_midi = 0;
 
-        MIDIIn(bool virt, ReceiveFunctor&& receiver)
-        : IMIDIIn(virt, std::move(receiver)) {}
+        MIDIIn(WASAPIAudioVoiceEngine* parent, bool virt, ReceiveFunctor&& receiver)
+        : IMIDIIn(parent, virt, std::move(receiver)) {}
 
         ~MIDIIn()
         {
@@ -604,7 +675,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         uint8_t m_buf[512];
         MIDIHDR m_hdr = {};
 
-        MIDIOut(bool virt) : IMIDIOut(virt) {}
+        MIDIOut(WASAPIAudioVoiceEngine* parent, bool virt) : IMIDIOut(parent, virt) {}
 
         void prepare()
         {
@@ -657,8 +728,8 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         uint8_t m_buf[512];
         MIDIHDR m_hdr = {};
 
-        MIDIInOut(bool virt, ReceiveFunctor&& receiver)
-        : IMIDIInOut(virt, std::move(receiver)) {}
+        MIDIInOut(WASAPIAudioVoiceEngine* parent, bool virt, ReceiveFunctor&& receiver)
+        : IMIDIInOut(parent, virt, std::move(receiver)) {}
 
         void prepare()
         {
@@ -721,28 +792,29 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
 
     std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver)
     {
-        if (strcmp(name, "in"))
+        if (strncmp(name, "in", 2))
             return {};
         long id = strtol(name + 2, nullptr, 10);
 
-        std::unique_ptr<IMIDIIn> ret = std::make_unique<MIDIIn>(false, std::move(receiver));
+        std::unique_ptr<IMIDIIn> ret = std::make_unique<MIDIIn>(this, false, std::move(receiver));
         if (!ret)
             return {};
 
         if (FAILED(midiInOpen(&static_cast<MIDIIn&>(*ret).m_midi, id, DWORD_PTR(MIDIReceiveProc),
                               DWORD_PTR(static_cast<IMIDIReceiver*>(ret.get())), CALLBACK_FUNCTION)))
             return {};
+        midiInStart(static_cast<MIDIIn&>(*ret).m_midi);
 
         return ret;
     }
 
     std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name)
     {
-        if (strcmp(name, "out"))
+        if (strncmp(name, "out", 3))
             return {};
         long id = strtol(name + 3, nullptr, 10);
 
-        std::unique_ptr<IMIDIOut> ret = std::make_unique<MIDIOut>(false);
+        std::unique_ptr<IMIDIOut> ret = std::make_unique<MIDIOut>(this, false);
         if (!ret)
             return {};
 
@@ -765,13 +837,14 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         long inId = strtol(in + 2, nullptr, 10);
         long outId = strtol(out + 3, nullptr, 10);
 
-        std::unique_ptr<IMIDIInOut> ret = std::make_unique<MIDIInOut>(false, std::move(receiver));
+        std::unique_ptr<IMIDIInOut> ret = std::make_unique<MIDIInOut>(this, false, std::move(receiver));
         if (!ret)
             return {};
 
         if (FAILED(midiInOpen(&static_cast<MIDIInOut&>(*ret).m_midiIn, inId, DWORD_PTR(MIDIReceiveProc),
                               DWORD_PTR(static_cast<IMIDIReceiver*>(ret.get())), CALLBACK_FUNCTION)))
             return {};
+        midiInStart(static_cast<MIDIInOut&>(*ret).m_midiIn);
 
         if (FAILED(midiOutOpen(&static_cast<MIDIInOut&>(*ret).m_midiOut, outId, NULL,
                                NULL, CALLBACK_NULL)))

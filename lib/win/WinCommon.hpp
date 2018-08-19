@@ -125,4 +125,12 @@ static inline std::string WCSTMBS(const wchar_t* wstr)
     return strTo;
 }
 
+static inline std::wstring MBSTWCS(const char* str)
+{
+    int sizeNeeded = MultiByteToWideChar(CP_UTF8, 0, str, -1, nullptr, 0) - 1;
+    std::wstring strTo(sizeNeeded, 0);
+    MultiByteToWideChar(CP_UTF8, 0, str, -1, &strTo[0], sizeNeeded);
+    return strTo;
+}
+
 #endif // BOO_WINCOMMON_HPP
