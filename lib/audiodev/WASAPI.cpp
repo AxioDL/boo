@@ -1,6 +1,7 @@
 #include "../win/Win32Common.hpp"
 #include "AudioVoiceEngine.hpp"
 #include "logvisor/logvisor.hpp"
+#include "boo/IApplication.hpp"
 
 #include <Mmdeviceapi.h>
 #include <Audioclient.h>
@@ -8,6 +9,20 @@
 #include <Functiondiscoverykeys_devpkey.h>
 
 #include <iterator>
+
+#ifdef TE_VIRTUAL_MIDI
+#include <teVirtualMIDI.h>
+typedef LPVM_MIDI_PORT (CALLBACK *pfnvirtualMIDICreatePortEx2)
+( LPCWSTR portName, LPVM_MIDI_DATA_CB callback, DWORD_PTR dwCallbackInstance, DWORD maxSysexLength, DWORD flags );
+typedef void (CALLBACK *pfnvirtualMIDIClosePort)( LPVM_MIDI_PORT midiPort );
+typedef BOOL (CALLBACK *pfnvirtualMIDISendData)( LPVM_MIDI_PORT midiPort, LPBYTE midiDataBytes, DWORD length );
+typedef LPCWSTR (CALLBACK *pfnvirtualMIDIGetDriverVersion)( PWORD major, PWORD minor, PWORD release, PWORD build );
+static pfnvirtualMIDICreatePortEx2 virtualMIDICreatePortEx2PROC = nullptr;
+static pfnvirtualMIDIClosePort virtualMIDIClosePortPROC = nullptr;
+static pfnvirtualMIDISendData virtualMIDISendDataPROC = nullptr;
+static pfnvirtualMIDIGetDriverVersion virtualMIDIGetDriverVersionPROC = nullptr;
+static double PerfFrequency = 0.0;
+#endif
 
 #if !WINDOWS_STORE
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
@@ -385,6 +400,20 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
 #endif
     {
 #if !WINDOWS_STORE
+#ifdef TE_VIRTUAL_MIDI
+        HMODULE virtualMidiModule;
+        if (!virtualMIDICreatePortEx2PROC && (virtualMidiModule = LoadLibraryW(L"teVirtualMIDI64.dll")))
+        {
+            virtualMIDICreatePortEx2PROC = (pfnvirtualMIDICreatePortEx2)GetProcAddress(virtualMidiModule, "virtualMIDICreatePortEx2");
+            virtualMIDIClosePortPROC = (pfnvirtualMIDIClosePort)GetProcAddress(virtualMidiModule, "virtualMIDIClosePort");
+            virtualMIDISendDataPROC = (pfnvirtualMIDISendData)GetProcAddress(virtualMidiModule, "virtualMIDISendData");
+            virtualMIDIGetDriverVersionPROC = (pfnvirtualMIDIGetDriverVersion)GetProcAddress(virtualMidiModule, "virtualMIDIGetDriverVersion");
+            LARGE_INTEGER pf;
+            QueryPerformanceFrequency(&pf);
+            PerfFrequency = double(pf.QuadPart);
+        }
+#endif
+
         /* Enumerate default audio device */
         if (FAILED(CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr,
                                     CLSCTX_ALL, IID_IMMDeviceEnumerator,
@@ -623,8 +652,33 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
 
     bool supportsVirtualMIDIIn() const
     {
+#ifdef TE_VIRTUAL_MIDI
+        WORD major, minor, release, build;
+        return virtualMIDIGetDriverVersionPROC &&
+               virtualMIDIGetDriverVersionPROC(&major, &minor, &release, &build) != nullptr;
+#else
         return false;
+#endif
     }
+
+#ifdef TE_VIRTUAL_MIDI
+    static void CALLBACK VirtualMIDIReceiveProc(LPVM_MIDI_PORT midiPort,
+                                                LPBYTE midiDataBytes,
+                                                DWORD length,
+                                                IMIDIReceiver* dwInstance)
+    {
+        std::vector<uint8_t> bytes;
+        bytes.resize(length);
+        memcpy(&bytes[0], midiDataBytes, length);
+
+        double timestamp;
+        LARGE_INTEGER perf;
+        QueryPerformanceCounter(&perf);
+        timestamp = perf.QuadPart / PerfFrequency;
+
+        dwInstance->m_receiver(std::move(bytes), timestamp);
+    }
+#endif
 
     static void CALLBACK MIDIReceiveProc(HMIDIIN   hMidiIn,
                                          UINT      wMsg,
@@ -640,12 +694,77 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         }
     }
 
+#ifdef TE_VIRTUAL_MIDI
+    struct VMIDIIn : public IMIDIIn
+    {
+        LPVM_MIDI_PORT m_midi = 0;
+
+        VMIDIIn(WASAPIAudioVoiceEngine* parent, ReceiveFunctor&& receiver)
+        : IMIDIIn(parent, true, std::move(receiver)) {}
+
+        ~VMIDIIn()
+        {
+            virtualMIDIClosePortPROC(m_midi);
+        }
+
+        std::string description() const
+        {
+            return "Virtual MIDI-In";
+        }
+    };
+
+    struct VMIDIOut : public IMIDIOut
+    {
+        LPVM_MIDI_PORT m_midi = 0;
+
+        VMIDIOut(WASAPIAudioVoiceEngine* parent) : IMIDIOut(parent, true) {}
+
+        ~VMIDIOut()
+        {
+            virtualMIDIClosePortPROC(m_midi);
+        }
+
+        std::string description() const
+        {
+            return "Virtual MIDI-Out";
+        }
+
+        size_t send(const void* buf, size_t len) const
+        {
+            return virtualMIDISendDataPROC(m_midi, (LPBYTE)buf, len) ? len : 0;
+        }
+    };
+
+    struct VMIDIInOut : public IMIDIInOut
+    {
+        LPVM_MIDI_PORT m_midi = 0;
+
+        VMIDIInOut(WASAPIAudioVoiceEngine* parent, ReceiveFunctor&& receiver)
+        : IMIDIInOut(parent, true, std::move(receiver)) {}
+
+        ~VMIDIInOut()
+        {
+            virtualMIDIClosePortPROC(m_midi);
+        }
+
+        std::string description() const
+        {
+            return "Virtual MIDI-In/Out";
+        }
+
+        size_t send(const void* buf, size_t len) const
+        {
+            return virtualMIDISendDataPROC(m_midi, (LPBYTE)buf, len) ? len : 0;
+        }
+    };
+#endif
+
     struct MIDIIn : public IMIDIIn
     {
         HMIDIIN m_midi = 0;
 
-        MIDIIn(WASAPIAudioVoiceEngine* parent, bool virt, ReceiveFunctor&& receiver)
-        : IMIDIIn(parent, virt, std::move(receiver)) {}
+        MIDIIn(WASAPIAudioVoiceEngine* parent, ReceiveFunctor&& receiver)
+        : IMIDIIn(parent, false, std::move(receiver)) {}
 
         ~MIDIIn()
         {
@@ -675,7 +794,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         uint8_t m_buf[512];
         MIDIHDR m_hdr = {};
 
-        MIDIOut(WASAPIAudioVoiceEngine* parent, bool virt) : IMIDIOut(parent, virt) {}
+        MIDIOut(WASAPIAudioVoiceEngine* parent) : IMIDIOut(parent, false) {}
 
         void prepare()
         {
@@ -728,8 +847,8 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         uint8_t m_buf[512];
         MIDIHDR m_hdr = {};
 
-        MIDIInOut(WASAPIAudioVoiceEngine* parent, bool virt, ReceiveFunctor&& receiver)
-        : IMIDIInOut(parent, virt, std::move(receiver)) {}
+        MIDIInOut(WASAPIAudioVoiceEngine* parent, ReceiveFunctor&& receiver)
+        : IMIDIInOut(parent, false, std::move(receiver)) {}
 
         void prepare()
         {
@@ -777,17 +896,70 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
 
     std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver)
     {
+#ifdef TE_VIRTUAL_MIDI
+        if (!virtualMIDICreatePortEx2PROC)
+            return {};
+
+        std::unique_ptr<IMIDIIn> ret = std::make_unique<VMIDIIn>(this, std::move(receiver));
+        if (!ret)
+            return {};
+
+        SystemString name = SystemString(APP->getFriendlyName()) + _S(" MIDI-In");
+        auto port = virtualMIDICreatePortEx2PROC(name.c_str(), LPVM_MIDI_DATA_CB(VirtualMIDIReceiveProc),
+                                                 DWORD_PTR(static_cast<IMIDIReceiver*>(ret.get())), 512,
+                                                 TE_VM_FLAGS_PARSE_RX | TE_VM_FLAGS_INSTANTIATE_RX_ONLY);
+        if (!port)
+            return {};
+        static_cast<VMIDIIn&>(*ret).m_midi = port;
+        return ret;
+#else
         return {};
+#endif
     }
 
     std::unique_ptr<IMIDIOut> newVirtualMIDIOut()
     {
+#ifdef TE_VIRTUAL_MIDI
+        if (!virtualMIDICreatePortEx2PROC)
+            return {};
+
+        std::unique_ptr<IMIDIOut> ret = std::make_unique<VMIDIOut>(this);
+        if (!ret)
+            return {};
+
+        SystemString name = SystemString(APP->getFriendlyName()) + _S(" MIDI-Out");
+        auto port = virtualMIDICreatePortEx2PROC(name.c_str(), nullptr, 0, 512,
+                                                 TE_VM_FLAGS_PARSE_TX | TE_VM_FLAGS_INSTANTIATE_TX_ONLY);
+        if (!port)
+            return {};
+        static_cast<VMIDIOut&>(*ret).m_midi = port;
+        return ret;
+#else
         return {};
+#endif
     }
 
     std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver)
     {
+#ifdef TE_VIRTUAL_MIDI
+        if (!virtualMIDICreatePortEx2PROC)
+            return {};
+
+        std::unique_ptr<IMIDIInOut> ret = std::make_unique<VMIDIInOut>(this, std::move(receiver));
+        if (!ret)
+            return {};
+
+        SystemString name = SystemString(APP->getFriendlyName()) + _S(" MIDI-In/Out");
+        auto port = virtualMIDICreatePortEx2PROC(name.c_str(), LPVM_MIDI_DATA_CB(VirtualMIDIReceiveProc),
+                                                 DWORD_PTR(static_cast<IMIDIReceiver*>(ret.get())), 512,
+                                                 TE_VM_FLAGS_SUPPORTED);
+        if (!port)
+            return {};
+        static_cast<VMIDIInOut&>(*ret).m_midi = port;
+        return ret;
+#else
         return {};
+#endif
     }
 
     std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver)
@@ -796,7 +968,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
             return {};
         long id = strtol(name + 2, nullptr, 10);
 
-        std::unique_ptr<IMIDIIn> ret = std::make_unique<MIDIIn>(this, false, std::move(receiver));
+        std::unique_ptr<IMIDIIn> ret = std::make_unique<MIDIIn>(this, std::move(receiver));
         if (!ret)
             return {};
 
@@ -814,7 +986,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
             return {};
         long id = strtol(name + 3, nullptr, 10);
 
-        std::unique_ptr<IMIDIOut> ret = std::make_unique<MIDIOut>(this, false);
+        std::unique_ptr<IMIDIOut> ret = std::make_unique<MIDIOut>(this);
         if (!ret)
             return {};
 
@@ -837,7 +1009,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         long inId = strtol(in + 2, nullptr, 10);
         long outId = strtol(out + 3, nullptr, 10);
 
-        std::unique_ptr<IMIDIInOut> ret = std::make_unique<MIDIInOut>(this, false, std::move(receiver));
+        std::unique_ptr<IMIDIInOut> ret = std::make_unique<MIDIInOut>(this, std::move(receiver));
         if (!ret)
             return {};
 

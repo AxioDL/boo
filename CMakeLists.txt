@@ -82,6 +82,15 @@ elseif(WIN32)
          lib/graphicsdev/VulkanDispatchTable.cpp)
   endif()
 
+  find_file(TE_VIRTUAL_MIDI_H teVirtualMIDI.h PATHS
+            "$ENV{PROGRAMFILES\(X86\)}/Tobias Erichsen/teVirtualMIDISDK/C-Binding")
+  if (TE_VIRTUAL_MIDI_H)
+    message(STATUS "Enabling teVirtualMIDI")
+    get_filename_component(TE_VIRTUAL_MIDI_DIR ${TE_VIRTUAL_MIDI_H} DIRECTORY)
+    include_directories(${TE_VIRTUAL_MIDI_DIR})
+    add_definitions("-DTE_VIRTUAL_MIDI=1")
+  endif()
+
   list(APPEND PLAT_SRCS
        lib/win/ApplicationWin32.cpp
        lib/win/WindowWin32.cpp
