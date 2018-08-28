@@ -1259,10 +1259,8 @@ public:
         return std::unique_ptr<uint8_t[]>();
     }
 
-    void waitForRetrace(IAudioVoiceEngine* engine)
+    void waitForRetrace()
     {
-        if (engine)
-            engine->pumpAndMixVoices();
         m_gfxCtx->m_output->WaitForVBlank();
     }
 
