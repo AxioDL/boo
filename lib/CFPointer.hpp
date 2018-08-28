@@ -44,12 +44,12 @@ public:
         return *this;
     }
 
-    CFTypeRef* operator&()
+    T* operator&()
     {
         if (CFTypeRef pointer = storage) {
             CFRelease(pointer);
         }
-        return &storage;
+        return (T*)&storage;
     }
     operator bool() const { return storage != nullptr; }
 

@@ -1,7 +1,7 @@
 #ifndef __IOKITPOINTER_HPP__
 #define __IOKITPOINTER_HPP__
 
-#include "CFPointer.hpp"
+#include "../CFPointer.hpp"
 #include <IOKit/IOTypes.h>
 #include <IOKit/IOKitLib.h>
 #include <IOKit/IOCFPlugIn.h>
