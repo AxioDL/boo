@@ -84,7 +84,7 @@ elseif(WIN32)
 
   find_file(TE_VIRTUAL_MIDI_H teVirtualMIDI.h PATHS
             "$ENV{PROGRAMFILES\(X86\)}/Tobias Erichsen/teVirtualMIDISDK/C-Binding")
-  if (TE_VIRTUAL_MIDI_H)
+  if (NO AND TE_VIRTUAL_MIDI_H)
     message(STATUS "Enabling teVirtualMIDI")
     get_filename_component(TE_VIRTUAL_MIDI_DIR ${TE_VIRTUAL_MIDI_H} DIRECTORY)
     include_directories(${TE_VIRTUAL_MIDI_DIR})
