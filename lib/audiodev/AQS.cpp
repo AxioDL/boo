@@ -1,5 +1,7 @@
 #include "AudioVoiceEngine.hpp"
 #include "logvisor/logvisor.hpp"
+#include "boo/IApplication.hpp"
+#include "../CFPointer.hpp"
 
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreMIDI/CoreMIDI.h>
@@ -11,6 +13,8 @@
 namespace boo
 {
 static logvisor::Module Log("boo::AQS");
+
+#define AQS_NUM_BUFFERS 24
 
 static AudioChannel AQSChannelToBooChannel(AudioChannelLabel ch)
 {
@@ -38,105 +42,181 @@ static AudioChannel AQSChannelToBooChannel(AudioChannelLabel ch)
 
 struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 {
+    CFPointer<CFStringRef> m_runLoopMode;
+    CFPointer<CFStringRef> m_devName;
+
     AudioQueueRef m_queue = nullptr;
-    AudioQueueBufferRef m_buffers[3];
+    AudioQueueBufferRef m_buffers[AQS_NUM_BUFFERS];
     size_t m_frameBytes;
 
     MIDIClientRef m_midiClient = 0;
 
-    std::mutex m_engineMutex;
-    std::condition_variable m_engineEnterCv;
-    std::condition_variable m_engineLeaveCv;
-    bool m_inRetrace = false;
-    bool m_inCb = false;
     bool m_cbRunning = true;
+    bool m_needsRebuild = false;
 
     static void Callback(AQSAudioVoiceEngine* engine, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer)
     {
         if (!engine->m_cbRunning)
             return;
-
-        std::unique_lock<std::mutex> lk(engine->m_engineMutex);
-        engine->m_inCb = true;
-        if (!engine->m_inRetrace)
-        {
-            if (engine->m_engineEnterCv.wait_for(lk,
-            std::chrono::nanoseconds(engine->m_mixInfo.m_periodFrames * 1000000000 /
-                                     size_t(engine->m_mixInfo.m_sampleRate))) == std::cv_status::timeout ||
-                                     !engine->m_inRetrace)
-            {
-                inBuffer->mAudioDataByteSize = engine->m_frameBytes;
-                memset(inBuffer->mAudioData, 0, engine->m_frameBytes);
-                AudioQueueEnqueueBuffer(inAQ, inBuffer, 0, nullptr);
-                engine->m_engineLeaveCv.notify_one();
-                engine->m_inCb = false;
-                return;
-            }
-        }
-
         engine->_pumpAndMixVoices(engine->m_mixInfo.m_periodFrames,
                                   reinterpret_cast<float*>(inBuffer->mAudioData));
         inBuffer->mAudioDataByteSize = engine->m_frameBytes;
         AudioQueueEnqueueBuffer(inAQ, inBuffer, 0, nullptr);
-
-        engine->m_engineLeaveCv.notify_one();
-        engine->m_inCb = false;
     }
 
     static void DummyCallback(AQSAudioVoiceEngine* engine, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer) {}
 
-    AudioChannelSet _getAvailableSet()
+    std::pair<AudioChannelSet, Float64> _getAvailableSetAndRate()
     {
-        const unsigned chCount = 8;
-        AudioStreamBasicDescription desc = {};
-        desc.mSampleRate = 96000;
-        desc.mFormatID = kAudioFormatLinearPCM;
-        desc.mFormatFlags = kLinearPCMFormatFlagIsFloat;
-        desc.mBytesPerPacket = chCount * 4;
-        desc.mFramesPerPacket = 1;
-        desc.mBytesPerFrame = chCount * 4;
-        desc.mChannelsPerFrame = chCount;
-        desc.mBitsPerChannel = 32;
+        AudioObjectPropertyAddress  propertyAddress;
+        UInt32                      argSize;
+        int                         numStreams;
+        std::vector<AudioStreamID>  streamIDs;
 
-        AudioQueueRef queue;
-        if (AudioQueueNewOutput(&desc, AudioQueueOutputCallback(DummyCallback),
-                                this, nullptr, nullptr, 0, &queue))
-        {
-            Log.report(logvisor::Error, "unable to create output audio queue");
-            return AudioChannelSet::Unknown;
+        CFStringRef devName = m_devName.get();
+        AudioObjectID devId;
+        propertyAddress.mSelector = kAudioHardwarePropertyTranslateUIDToDevice;
+        propertyAddress.mScope = kAudioObjectPropertyScopeGlobal;
+        propertyAddress.mElement = kAudioObjectPropertyElementMaster;
+        argSize = sizeof(devId);
+        if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &propertyAddress, sizeof(devName), &devName, &argSize, &devId) != noErr) {
+            Log.report(logvisor::Error, "unable to resolve audio device UID %s, using default",
+                CFStringGetCStringPtr(devName, kCFStringEncodingUTF8));
+            argSize = sizeof(devId);
+            propertyAddress.mSelector = kAudioHardwarePropertyDefaultOutputDevice;
+            if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &propertyAddress, 0, NULL, &argSize, &devId) == noErr) {
+                argSize = sizeof(CFStringRef);
+                AudioObjectPropertyAddress deviceAddress;
+                deviceAddress.mSelector = kAudioDevicePropertyDeviceUID;
+                AudioObjectGetPropertyData(devId, &deviceAddress, 0, NULL, &argSize, &m_devName);
+            } else {
+                Log.report(logvisor::Fatal, "unable determine default audio device");
+                return {AudioChannelSet::Unknown, 48000.0};
+            }
         }
 
-        UInt32 hwChannels;
-        UInt32 channelsSz = sizeof(UInt32);
-        if (AudioQueueGetProperty(queue, kAudioQueueDeviceProperty_NumberChannels, &hwChannels, &channelsSz))
-        {
-            Log.report(logvisor::Error, "unable to get channel count from audio queue");
-            AudioQueueDispose(queue, true);
-            return AudioChannelSet::Unknown;
+        propertyAddress.mSelector = kAudioDevicePropertyStreams;
+        if (AudioObjectGetPropertyDataSize(devId, &propertyAddress, 0, NULL, &argSize) == noErr) {
+            numStreams = argSize / sizeof(AudioStreamID);
+            streamIDs.resize(numStreams);
+
+            if (AudioObjectGetPropertyData(devId, &propertyAddress, 0, NULL, &argSize, &streamIDs[0]) == noErr) {
+                propertyAddress.mSelector = kAudioStreamPropertyDirection;
+                for (int stm = 0; stm < numStreams; stm++) {
+                    UInt32 streamDir;
+                    argSize = sizeof(streamDir);
+                    if (AudioObjectGetPropertyData(streamIDs[stm], &propertyAddress, 0, NULL, &argSize, &streamDir) == noErr) {
+                        if (streamDir == 0) {
+                            propertyAddress.mSelector = kAudioStreamPropertyPhysicalFormat;
+                            AudioStreamBasicDescription asbd;
+                            argSize = sizeof(asbd);
+                            if (AudioObjectGetPropertyData(streamIDs[stm], &propertyAddress, 0, NULL, &argSize, &asbd) == noErr) {
+                                switch (asbd.mChannelsPerFrame)
+                                {
+                                case 2:
+                                    return {AudioChannelSet::Stereo, asbd.mSampleRate};
+                                case 4:
+                                    return {AudioChannelSet::Quad, asbd.mSampleRate};
+                                case 6:
+                                    return {AudioChannelSet::Surround51, asbd.mSampleRate};
+                                case 8:
+                                    return {AudioChannelSet::Surround71, asbd.mSampleRate};
+                                default: break;
+                                }
+                                if (asbd.mChannelsPerFrame > 8)
+                                    return {AudioChannelSet::Surround71, asbd.mSampleRate};
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
-        AudioQueueDispose(queue, true);
-
-        switch (hwChannels)
-        {
-        case 2:
-            return AudioChannelSet::Stereo;
-        case 4:
-            return AudioChannelSet::Quad;
-        case 6:
-            return AudioChannelSet::Surround51;
-        case 8:
-            return AudioChannelSet::Surround71;
-        default: break;
-        }
-
-        if (hwChannels > 8)
-            return AudioChannelSet::Surround71;
-
-        return AudioChannelSet::Unknown;
+        return {AudioChannelSet::Unknown, 48000.0};
     }
 
-    std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const
+    std::string getCurrentAudioOutput() const
+    {
+        return CFStringGetCStringPtr(m_devName.get(), kCFStringEncodingUTF8);
+    }
+
+    bool setCurrentAudioOutput(const char* name)
+    {
+        m_devName = CFPointer<CFStringRef>::adopt(CFStringCreateWithCString(nullptr, name, kCFStringEncodingUTF8));
+        _rebuildAudioQueue();
+        return true;
+    }
+
+    /*
+     * https://stackoverflow.com/questions/1983984/how-to-get-audio-device-uid-to-pass-into-nssounds-setplaybackdeviceidentifier
+     */
+    std::vector<std::pair<std::string, std::string>> enumerateAudioOutputs() const
+    {
+        std::vector<std::pair<std::string, std::string>> ret;
+
+        AudioObjectPropertyAddress  propertyAddress;
+        std::vector<AudioObjectID>  deviceIDs;
+        UInt32                      propertySize;
+        int                         numDevices;
+
+        std::vector<AudioStreamID>  streamIDs;
+        int                         numStreams;
+
+        propertyAddress.mSelector = kAudioHardwarePropertyDevices;
+        propertyAddress.mScope = kAudioObjectPropertyScopeGlobal;
+        propertyAddress.mElement = kAudioObjectPropertyElementMaster;
+        if (AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &propertyAddress, 0, NULL, &propertySize) == noErr) {
+            numDevices = propertySize / sizeof(AudioDeviceID);
+            ret.reserve(numDevices);
+            deviceIDs.resize(numDevices);
+
+            if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &propertyAddress, 0, NULL, &propertySize, &deviceIDs[0]) == noErr) {
+                char deviceName[64];
+
+                for (int idx = 0; idx < numDevices; idx++) {
+                    propertyAddress.mSelector = kAudioDevicePropertyStreams;
+                    if (AudioObjectGetPropertyDataSize(deviceIDs[idx], &propertyAddress, 0, NULL, &propertySize) == noErr) {
+                        numStreams = propertySize / sizeof(AudioStreamID);
+                        streamIDs.resize(numStreams);
+
+                        if (AudioObjectGetPropertyData(deviceIDs[idx], &propertyAddress, 0, NULL, &propertySize, &streamIDs[0]) == noErr) {
+                            propertyAddress.mSelector = kAudioStreamPropertyDirection;
+                            bool foundOutput = false;
+                            for (int stm = 0; stm < numStreams; stm++) {
+                                UInt32 streamDir;
+                                propertySize = sizeof(streamDir);
+                                if (AudioObjectGetPropertyData(streamIDs[stm], &propertyAddress, 0, NULL, &propertySize, &streamDir) == noErr) {
+                                    if (streamDir == 0) {
+                                        foundOutput = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!foundOutput)
+                                continue;
+                        }
+                    }
+
+                    propertySize = sizeof(deviceName);
+                    propertyAddress.mSelector = kAudioDevicePropertyDeviceName;
+                    if (AudioObjectGetPropertyData(deviceIDs[idx], &propertyAddress, 0, NULL, &propertySize, deviceName) == noErr) {
+                        CFPointer<CFStringRef> uidString;
+
+                        propertySize = sizeof(CFStringRef);
+                        propertyAddress.mSelector = kAudioDevicePropertyDeviceUID;
+                        if (AudioObjectGetPropertyData(deviceIDs[idx], &propertyAddress, 0, NULL, &propertySize, &uidString) == noErr) {
+                            ret.emplace_back(CFStringGetCStringPtr(uidString.get(), kCFStringEncodingUTF8), deviceName);
+                        }
+                    }
+                }
+            }
+        }
+
+        return ret;
+    }
+
+    std::vector<std::pair<std::string, std::string>> enumerateMIDIInputs() const
     {
         if (!m_midiClient)
             return {};
@@ -151,30 +231,48 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
             if (!dev)
                 continue;
 
+            bool isInput = false;
+            ItemCount numEnt = MIDIDeviceGetNumberOfEntities(dev);
+            for (ItemCount j=0 ; j<numEnt ; ++j)
+            {
+                MIDIEntityRef ent = MIDIDeviceGetEntity(dev, j);
+                if (ent)
+                {
+                    ItemCount numSrc = MIDIEntityGetNumberOfSources(ent);
+                    if (numSrc)
+                    {
+                        isInput = true;
+                        break;
+                    }
+                }
+            }
+            if (!isInput)
+                continue;
+
             SInt32 idNum;
             if (MIDIObjectGetIntegerProperty(dev, kMIDIPropertyUniqueID, &idNum))
                 continue;
 
-            CFStringRef namestr;
+            CFPointer<CFStringRef> namestr;
             const char* nameCstr;
             if (MIDIObjectGetStringProperty(dev, kMIDIPropertyName, &namestr))
                 continue;
 
-            if (!(nameCstr = CFStringGetCStringPtr(namestr, kCFStringEncodingUTF8)))
-            {
-                CFRelease(namestr);
+            if (!(nameCstr = CFStringGetCStringPtr(namestr.get(), kCFStringEncodingUTF8)))
                 continue;
-            }
 
             char idStr[9];
             snprintf(idStr, 9, "%08X\n", idNum);
             ret.push_back(std::make_pair(std::string(idStr),
                                          std::string(nameCstr)));
-
-            CFRelease(namestr);
         }
 
         return ret;
+    }
+
+    bool supportsVirtualMIDIIn() const
+    {
+        return true;
     }
 
     static MIDIDeviceRef LookupMIDIDevice(const char* name)
@@ -269,8 +367,8 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         MIDIEndpointRef m_midi = 0;
         MIDIPortRef m_midiPort = 0;
 
-        MIDIIn(bool virt, ReceiveFunctor&& receiver)
-        : IMIDIIn(virt, std::move(receiver)) {}
+        MIDIIn(AQSAudioVoiceEngine* parent, bool virt, ReceiveFunctor&& receiver)
+        : IMIDIIn(parent, virt, std::move(receiver)) {}
 
         ~MIDIIn()
         {
@@ -282,18 +380,14 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
         std::string description() const
         {
-            CFStringRef namestr;
+            CFPointer<CFStringRef> namestr;
             const char* nameCstr;
             if (MIDIObjectGetStringProperty(m_midi, kMIDIPropertyName, &namestr))
                 return {};
 
-            if (!(nameCstr = CFStringGetCStringPtr(namestr, kCFStringEncodingUTF8)))
-            {
-                CFRelease(namestr);
+            if (!(nameCstr = CFStringGetCStringPtr(namestr.get(), kCFStringEncodingUTF8)))
                 return {};
-            }
 
-            CFRelease(namestr);
             return nameCstr;
         }
     };
@@ -303,8 +397,8 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         MIDIEndpointRef m_midi = 0;
         MIDIPortRef m_midiPort = 0;
 
-        MIDIOut(bool virt)
-        : IMIDIOut(virt) {}
+        MIDIOut(AQSAudioVoiceEngine* parent, bool virt)
+        : IMIDIOut(parent, virt) {}
 
         ~MIDIOut()
         {
@@ -316,18 +410,14 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
         std::string description() const
         {
-            CFStringRef namestr;
+            CFPointer<CFStringRef> namestr;
             const char* nameCstr;
             if (MIDIObjectGetStringProperty(m_midi, kMIDIPropertyName, &namestr))
                 return {};
 
-            if (!(nameCstr = CFStringGetCStringPtr(namestr, kCFStringEncodingUTF8)))
-            {
-                CFRelease(namestr);
+            if (!(nameCstr = CFStringGetCStringPtr(namestr.get(), kCFStringEncodingUTF8)))
                 return {};
-            }
 
-            CFRelease(namestr);
             return nameCstr;
         }
 
@@ -359,8 +449,8 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         MIDIEndpointRef m_midiOut = 0;
         MIDIPortRef m_midiPortOut = 0;
 
-        MIDIInOut(bool virt, ReceiveFunctor&& receiver)
-        : IMIDIInOut(virt, std::move(receiver)) {}
+        MIDIInOut(AQSAudioVoiceEngine* parent, bool virt, ReceiveFunctor&& receiver)
+        : IMIDIInOut(parent, virt, std::move(receiver)) {}
 
         ~MIDIInOut()
         {
@@ -376,18 +466,14 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
         std::string description() const
         {
-            CFStringRef namestr;
+            CFPointer<CFStringRef> namestr;
             const char* nameCstr;
             if (MIDIObjectGetStringProperty(m_midiIn, kMIDIPropertyName, &namestr))
                 return {};
 
-            if (!(nameCstr = CFStringGetCStringPtr(namestr, kCFStringEncodingUTF8)))
-            {
-                CFRelease(namestr);
+            if (!(nameCstr = CFStringGetCStringPtr(namestr.get(), kCFStringEncodingUTF8)))
                 return {};
-            }
 
-            CFRelease(namestr);
             return nameCstr;
         }
 
@@ -420,19 +506,24 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         if (!m_midiClient)
             return {};
 
-        std::unique_ptr<IMIDIIn> ret = std::make_unique<MIDIIn>(true, std::move(receiver));
+        std::unique_ptr<IMIDIIn> ret = std::make_unique<MIDIIn>(this, true, std::move(receiver));
         if (!ret)
             return {};
 
         char name[256];
-        snprintf(name, 256, "Boo MIDI Virtual In %u", m_midiInCounter++);
-        CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, name, kCFStringEncodingUTF8, kCFAllocatorNull);
+        auto appName = APP->getFriendlyName();
+        if (!m_midiInCounter)
+            snprintf(name, 256, "%s MIDI-In", appName.data());
+        else
+            snprintf(name, 256, "%s MIDI-In %u", appName.data(), m_midiInCounter);
+        m_midiInCounter++;
+        CFPointer<CFStringRef> midiName = CFPointer<CFStringRef>::adopt(
+            CFStringCreateWithCStringNoCopy(nullptr, name, kCFStringEncodingUTF8, kCFAllocatorNull));
         OSStatus stat;
-        if ((stat = MIDIDestinationCreate(m_midiClient, midiName, MIDIReadProc(MIDIReceiveProc),
+        if ((stat = MIDIDestinationCreate(m_midiClient, midiName.get(), MIDIReadProc(MIDIReceiveProc),
                                   static_cast<IMIDIReceiver*>(ret.get()),
                                   &static_cast<MIDIIn&>(*ret).m_midi)))
             ret.reset();
-        CFRelease(midiName);
 
         return ret;
     }
@@ -442,16 +533,21 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         if (!m_midiClient)
             return {};
 
-        std::unique_ptr<IMIDIOut> ret = std::make_unique<MIDIOut>(true);
+        std::unique_ptr<IMIDIOut> ret = std::make_unique<MIDIOut>(this, true);
         if (!ret)
             return {};
 
         char name[256];
-        snprintf(name, 256, "Boo MIDI Virtual Out %u", m_midiOutCounter++);
-        CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, name, kCFStringEncodingUTF8, kCFAllocatorNull);
-        if (MIDISourceCreate(m_midiClient, midiName, &static_cast<MIDIOut&>(*ret).m_midi))
+        auto appName = APP->getFriendlyName();
+        if (!m_midiOutCounter)
+            snprintf(name, 256, "%s MIDI-Out", appName.data());
+        else
+            snprintf(name, 256, "%s MIDI-Out %u", appName.data(), m_midiOutCounter);
+        m_midiOutCounter++;
+        CFPointer<CFStringRef> midiName = CFPointer<CFStringRef>::adopt(
+            CFStringCreateWithCStringNoCopy(nullptr, name, kCFStringEncodingUTF8, kCFAllocatorNull));
+        if (MIDISourceCreate(m_midiClient, midiName.get(), &static_cast<MIDIOut&>(*ret).m_midi))
             ret.reset();
-        CFRelease(midiName);
 
         return ret;
     }
@@ -461,27 +557,36 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         if (!m_midiClient)
             return {};
 
-        std::unique_ptr<IMIDIInOut> ret = std::make_unique<MIDIInOut>(true, std::move(receiver));
+        std::unique_ptr<IMIDIInOut> ret = std::make_unique<MIDIInOut>(this, true, std::move(receiver));
         if (!ret)
             return {};
 
         char name[256];
-        snprintf(name, 256, "Boo MIDI Virtual In %u", m_midiInCounter++);
-        CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, name, kCFStringEncodingUTF8, kCFAllocatorNull);
-        if (MIDIDestinationCreate(m_midiClient, midiName, MIDIReadProc(MIDIReceiveProc),
+        auto appName = APP->getFriendlyName();
+        if (!m_midiInCounter)
+            snprintf(name, 256, "%s MIDI-In", appName.data());
+        else
+            snprintf(name, 256, "%s MIDI-In %u", appName.data(), m_midiInCounter);
+        m_midiInCounter++;
+        CFPointer<CFStringRef> midiName = CFPointer<CFStringRef>::adopt(
+            CFStringCreateWithCStringNoCopy(nullptr, name, kCFStringEncodingUTF8, kCFAllocatorNull));
+        if (MIDIDestinationCreate(m_midiClient, midiName.get(), MIDIReadProc(MIDIReceiveProc),
                                   static_cast<IMIDIReceiver*>(ret.get()),
                                   &static_cast<MIDIInOut&>(*ret).m_midiIn))
             ret.reset();
-        CFRelease(midiName);
 
         if (!ret)
             return {};
 
-        snprintf(name, 256, "Boo MIDI Virtual Out %u", m_midiOutCounter++);
-        midiName = CFStringCreateWithCStringNoCopy(nullptr, name, kCFStringEncodingUTF8, kCFAllocatorNull);
-        if (MIDISourceCreate(m_midiClient, midiName, &static_cast<MIDIInOut&>(*ret).m_midiOut))
+        if (!m_midiOutCounter)
+            snprintf(name, 256, "%s MIDI-Out", appName.data());
+        else
+            snprintf(name, 256, "%s MIDI-Out %u", appName.data(), m_midiOutCounter);
+        m_midiOutCounter++;
+        midiName = CFPointer<CFStringRef>::adopt(
+            CFStringCreateWithCStringNoCopy(nullptr, name, kCFStringEncodingUTF8, kCFAllocatorNull));
+        if (MIDISourceCreate(m_midiClient, midiName.get(), &static_cast<MIDIInOut&>(*ret).m_midiOut))
             ret.reset();
-        CFRelease(midiName);
 
         return ret;
     }
@@ -495,20 +600,20 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         if (!src)
             return {};
 
-        std::unique_ptr<IMIDIIn> ret = std::make_unique<MIDIIn>(false, std::move(receiver));
+        std::unique_ptr<IMIDIIn> ret = std::make_unique<MIDIIn>(this, false, std::move(receiver));
         if (!ret)
             return {};
 
         char mname[256];
         snprintf(mname, 256, "Boo MIDI Real In %u", m_midiInCounter++);
-        CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, mname, kCFStringEncodingUTF8, kCFAllocatorNull);
-        if (MIDIInputPortCreate(m_midiClient, midiName, MIDIReadProc(MIDIReceiveProc),
+        CFPointer<CFStringRef> midiName = CFPointer<CFStringRef>::adopt(
+            CFStringCreateWithCStringNoCopy(nullptr, mname, kCFStringEncodingUTF8, kCFAllocatorNull));
+        if (MIDIInputPortCreate(m_midiClient, midiName.get(), MIDIReadProc(MIDIReceiveProc),
                                 static_cast<IMIDIReceiver*>(ret.get()),
                                 &static_cast<MIDIIn&>(*ret).m_midiPort))
             ret.reset();
         else
             MIDIPortConnectSource(static_cast<MIDIIn&>(*ret).m_midiPort, src, nullptr);
-        CFRelease(midiName);
 
         return ret;
     }
@@ -522,18 +627,18 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         if (!dst)
             return {};
 
-        std::unique_ptr<IMIDIOut> ret = std::make_unique<MIDIOut>(false);
+        std::unique_ptr<IMIDIOut> ret = std::make_unique<MIDIOut>(this, false);
         if (!ret)
             return {};
 
         char mname[256];
         snprintf(mname, 256, "Boo MIDI Real Out %u", m_midiOutCounter++);
-        CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, mname, kCFStringEncodingUTF8, kCFAllocatorNull);
-        if (MIDIOutputPortCreate(m_midiClient, midiName, &static_cast<MIDIOut&>(*ret).m_midiPort))
+        CFPointer<CFStringRef> midiName = CFPointer<CFStringRef>::adopt(
+            CFStringCreateWithCStringNoCopy(nullptr, mname, kCFStringEncodingUTF8, kCFAllocatorNull));
+        if (MIDIOutputPortCreate(m_midiClient, midiName.get(), &static_cast<MIDIOut&>(*ret).m_midiPort))
             ret.reset();
         else
             static_cast<MIDIOut&>(*ret).m_midi = dst;
-        CFRelease(midiName);
 
         return ret;
     }
@@ -551,44 +656,60 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         if (!dst)
             return {};
 
-        std::unique_ptr<IMIDIInOut> ret = std::make_unique<MIDIInOut>(false, std::move(receiver));
+        std::unique_ptr<IMIDIInOut> ret = std::make_unique<MIDIInOut>(this, false, std::move(receiver));
         if (!ret)
             return {};
 
         char mname[256];
         snprintf(mname, 256, "Boo MIDI Real In %u", m_midiInCounter++);
-        CFStringRef midiName = CFStringCreateWithCStringNoCopy(nullptr, mname, kCFStringEncodingUTF8, kCFAllocatorNull);
-        if (MIDIInputPortCreate(m_midiClient, midiName, MIDIReadProc(MIDIReceiveProc),
+        CFPointer<CFStringRef> midiName = CFPointer<CFStringRef>::adopt(
+            CFStringCreateWithCStringNoCopy(nullptr, mname, kCFStringEncodingUTF8, kCFAllocatorNull));
+        if (MIDIInputPortCreate(m_midiClient, midiName.get(), MIDIReadProc(MIDIReceiveProc),
                                 static_cast<IMIDIReceiver*>(ret.get()),
                                 &static_cast<MIDIInOut&>(*ret).m_midiPortIn))
             ret.reset();
         else
             MIDIPortConnectSource(static_cast<MIDIInOut&>(*ret).m_midiPortIn, src, nullptr);
-        CFRelease(midiName);
 
         if (!ret)
             return {};
 
         snprintf(mname, 256, "Boo MIDI Real Out %u", m_midiOutCounter++);
-        midiName = CFStringCreateWithCStringNoCopy(nullptr, mname, kCFStringEncodingUTF8, kCFAllocatorNull);
-        if (MIDIOutputPortCreate(m_midiClient, midiName, &static_cast<MIDIInOut&>(*ret).m_midiPortOut))
+        midiName = CFPointer<CFStringRef>::adopt(
+            CFStringCreateWithCStringNoCopy(nullptr, mname, kCFStringEncodingUTF8, kCFAllocatorNull));
+        if (MIDIOutputPortCreate(m_midiClient, midiName.get(), &static_cast<MIDIInOut&>(*ret).m_midiPortOut))
             ret.reset();
         else
             static_cast<MIDIInOut&>(*ret).m_midiOut = dst;
-        CFRelease(midiName);
 
         return ret;
     }
 
     bool useMIDILock() const {return true;}
 
-    AQSAudioVoiceEngine()
+    static void SampleRateChanged(AQSAudioVoiceEngine* engine,
+                                  AudioQueueRef        inAQ,
+                                  AudioQueuePropertyID inID)
     {
-        m_mixInfo.m_channels = _getAvailableSet();
+        engine->m_needsRebuild = true;
+    }
+
+    void _rebuildAudioQueue()
+    {
+        if (m_queue)
+        {
+            m_cbRunning = false;
+            AudioQueueDispose(m_queue, true);
+            m_cbRunning = true;
+            m_queue = nullptr;
+        }
+
+        auto setAndRate = _getAvailableSetAndRate();
+        m_mixInfo.m_channels = setAndRate.first;
         unsigned chCount = ChannelCount(m_mixInfo.m_channels);
 
         AudioStreamBasicDescription desc = {};
-        desc.mSampleRate = 96000;
+        desc.mSampleRate = setAndRate.second;
         desc.mFormatID = kAudioFormatLinearPCM;
         desc.mFormatFlags = kLinearPCMFormatFlagIsFloat;
         desc.mBytesPerPacket = chCount * 4;
@@ -599,34 +720,26 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
         OSStatus err;
         if ((err = AudioQueueNewOutput(&desc, AudioQueueOutputCallback(Callback),
-                                       this, nullptr, nullptr, 0, &m_queue)))
+                                       this, CFRunLoopGetCurrent(), m_runLoopMode.get(), 0, &m_queue)))
         {
             Log.report(logvisor::Fatal, "unable to create output audio queue");
             return;
         }
 
-        Float64 actualSampleRate;
-        UInt32 argSize = 8;
-        err = AudioQueueGetProperty(m_queue, kAudioQueueDeviceProperty_SampleRate, &actualSampleRate, &argSize);
-        AudioQueueDispose(m_queue, true);
-        if (err)
+        CFStringRef devName = m_devName.get();
+        if ((err = AudioQueueSetProperty(m_queue, kAudioQueueProperty_CurrentDevice, &devName, sizeof(devName))))
         {
-            Log.report(logvisor::Fatal, "unable to get native sample rate from audio queue");
+            Log.report(logvisor::Fatal, "unable to set current device into audio queue");
             return;
         }
 
-        desc.mSampleRate = actualSampleRate;
-        if ((err = AudioQueueNewOutput(&desc, AudioQueueOutputCallback(Callback),
-                                       this, nullptr, nullptr, 0, &m_queue)))
-        {
-            Log.report(logvisor::Fatal, "unable to create output audio queue");
-            return;
-        }
+        AudioQueueAddPropertyListener(m_queue, kAudioQueueDeviceProperty_SampleRate,
+            AudioQueuePropertyListenerProc(SampleRateChanged), this);
 
-        m_mixInfo.m_sampleRate = actualSampleRate;
+        m_mixInfo.m_sampleRate = desc.mSampleRate;
         m_mixInfo.m_sampleFormat = SOXR_FLOAT32_I;
         m_mixInfo.m_bitsPerSample = 32;
-        m_5msFrames = actualSampleRate * 5 / 1000;
+        m_5msFrames = desc.mSampleRate * 5 / 1000;
 
         ChannelMap& chMapOut = m_mixInfo.m_channelMap;
         chMapOut.m_channelCount = 0;
@@ -741,8 +854,8 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         while (chMapOut.m_channelCount < chCount)
             chMapOut.m_channels[chMapOut.m_channelCount++] = AudioChannel::Unknown;
 
-        m_mixInfo.m_periodFrames = m_5msFrames * 3;
-        for (int i=0 ; i<3 ; ++i)
+        m_mixInfo.m_periodFrames = m_5msFrames;
+        for (int i=0 ; i<AQS_NUM_BUFFERS ; ++i)
             if (AudioQueueAllocateBuffer(m_queue, m_mixInfo.m_periodFrames * chCount * 4, &m_buffers[i]))
             {
                 Log.report(logvisor::Fatal, "unable to create audio queue buffer");
@@ -753,7 +866,9 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
 
         m_frameBytes = m_mixInfo.m_periodFrames * m_mixInfo.m_channelMap.m_channelCount * 4;
 
-        for (unsigned i=0 ; i<3 ; ++i)
+        _resetSampleRate();
+
+        for (unsigned i=0 ; i<AQS_NUM_BUFFERS ; ++i)
         {
             memset(m_buffers[i]->mAudioData, 0, m_frameBytes);
             m_buffers[i]->mAudioDataByteSize = m_frameBytes;
@@ -761,6 +876,51 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
         }
         AudioQueuePrime(m_queue, 0, nullptr);
         AudioQueueStart(m_queue, nullptr);
+    }
+
+    static OSStatus AudioDeviceChanged(AudioObjectID                       inObjectID,
+                                       UInt32                              inNumberAddresses,
+                                       const AudioObjectPropertyAddress*   inAddresses,
+                                       AQSAudioVoiceEngine*                engine)
+    {
+        AudioObjectID defaultDeviceId;
+        UInt32 argSize = sizeof(defaultDeviceId);
+        if (AudioObjectGetPropertyData(inObjectID, inAddresses, 0, NULL, &argSize, &defaultDeviceId) == noErr) {
+            argSize = sizeof(CFStringRef);
+            AudioObjectPropertyAddress deviceAddress;
+            deviceAddress.mSelector = kAudioDevicePropertyDeviceUID;
+            AudioObjectGetPropertyData(defaultDeviceId, &deviceAddress, 0, NULL, &argSize, &engine->m_devName);
+        }
+        engine->m_needsRebuild = true;
+        return noErr;
+    }
+
+    AQSAudioVoiceEngine()
+    : m_runLoopMode(CFPointer<CFStringRef>::adopt(
+        CFStringCreateWithCStringNoCopy(nullptr, "BooAQSMode", kCFStringEncodingUTF8, kCFAllocatorNull)))
+    {
+        AudioObjectPropertyAddress  propertyAddress;
+        propertyAddress.mScope = kAudioObjectPropertyScopeGlobal;
+        propertyAddress.mElement = kAudioObjectPropertyElementMaster;
+
+        AudioObjectID defaultDeviceId;
+        UInt32 argSize = sizeof(defaultDeviceId);
+        propertyAddress.mSelector = kAudioHardwarePropertyDefaultOutputDevice;
+        if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &propertyAddress, 0, NULL, &argSize, &defaultDeviceId) == noErr) {
+            argSize = sizeof(CFStringRef);
+            AudioObjectPropertyAddress deviceAddress;
+            deviceAddress.mSelector = kAudioDevicePropertyDeviceUID;
+            AudioObjectGetPropertyData(defaultDeviceId, &deviceAddress, 0, NULL, &argSize, &m_devName);
+        } else {
+            Log.report(logvisor::Fatal, "unable determine default audio device");
+            return;
+        }
+
+        propertyAddress.mSelector = kAudioHardwarePropertyDefaultOutputDevice;
+        AudioObjectAddPropertyListener(kAudioObjectSystemObject, &propertyAddress,
+            AudioObjectPropertyListenerProc(AudioDeviceChanged), this);
+
+        _rebuildAudioQueue();
 
         /* Also create shared MIDI client */
         MIDIClientCreate(CFSTR("Boo MIDI"), nullptr, nullptr, &m_midiClient);
@@ -769,49 +929,19 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine
     ~AQSAudioVoiceEngine()
     {
         m_cbRunning = false;
-        if (m_inCb)
-            m_engineEnterCv.notify_one();
         AudioQueueDispose(m_queue, true);
         if (m_midiClient)
             MIDIClientDispose(m_midiClient);
     }
 
-    /* This is temperamental for AudioQueueServices
-     * (which has unpredictable buffering windows).
-     * _pumpAndMixVoicesRetrace() is highly recommended. */
     void pumpAndMixVoices()
     {
-        std::unique_lock<std::mutex> lk(m_engineMutex);
-        if (m_inCb)
+        while (CFRunLoopRunInMode(m_runLoopMode.get(), 0, true) == kCFRunLoopRunHandledSource) {}
+        if (m_needsRebuild)
         {
-            /* Wake up callback */
-            m_engineEnterCv.notify_one();
-            /* Wait for callback completion */
-            m_engineLeaveCv.wait(lk);
+            _rebuildAudioQueue();
+            m_needsRebuild = false;
         }
-    }
-
-    void _pumpAndMixVoicesRetrace()
-    {
-        std::unique_lock<std::mutex> lk(m_engineMutex);
-        m_inRetrace = true;
-        while (m_inRetrace)
-        {
-            if (m_inCb) /* Wake up callback */
-                m_engineEnterCv.notify_one();
-            /* Wait for callback completion */
-            m_engineLeaveCv.wait(lk);
-        }
-    }
-
-    void _retraceBreak()
-    {
-        std::unique_lock<std::mutex> lk(m_engineMutex);
-        m_inRetrace = false;
-        if (m_inCb) /* Break out of callback */
-            m_engineEnterCv.notify_one();
-        else /* Break out of client */
-            m_engineLeaveCv.notify_one();
     }
 };
 

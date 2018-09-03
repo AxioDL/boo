@@ -102,12 +102,6 @@ struct IAudioVoiceEngine
 
     /** Get canonical count of frames for each 5ms output block */
     virtual size_t get5MsFrames() const=0;
-
-    /** IWindow::waitForRetrace() enter - for platforms that spend v-sync waits synchronously pumping audio */
-    virtual void _pumpAndMixVoicesRetrace() { pumpAndMixVoices(); }
-
-    /** IWindow::waitForRetrace() break - signal retrace event to break out of pumping cycles */
-    virtual void _retraceBreak() {}
 };
 
 /** Construct host platform's voice engine */

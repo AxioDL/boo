@@ -9,7 +9,7 @@
 #include <IOKit/IOCFPlugIn.h>
 #include <sys/utsname.h>
 #include "IOKitPointer.hpp"
-#include "CFPointer.hpp"
+#include "../CFPointer.hpp"
 
 namespace boo
 {
@@ -182,9 +182,9 @@ class HIDListenerIOKit : public IHIDListener
 
                 /* Game controllers only */
                 CFPointer<CFNumberRef> usagePage;
-                dev->getProperty(dev.storage(), CFSTR(kIOHIDPrimaryUsagePageKey), &usagePage);
+                dev->getProperty(dev.storage(), CFSTR(kIOHIDPrimaryUsagePageKey), (CFTypeRef*)&usagePage);
                 CFPointer<CFNumberRef> usage;
-                dev->getProperty(dev.storage(), CFSTR(kIOHIDPrimaryUsageKey), &usage);
+                dev->getProperty(dev.storage(), CFSTR(kIOHIDPrimaryUsageKey), (CFTypeRef*)&usage);
                 int usagePageV, usageV;
                 CFNumberGetValue(usagePage.get(), kCFNumberIntType, &usagePageV);
                 CFNumberGetValue(usage.get(), kCFNumberIntType, &usageV);
@@ -199,14 +199,14 @@ class HIDListenerIOKit : public IHIDListener
                 }
 
                 CFPointer<CFNumberRef> vid, pid;
-                dev->getProperty(dev.storage(), CFSTR(kIOHIDVendorIDKey), &vid);
-                dev->getProperty(dev.storage(), CFSTR(kIOHIDProductIDKey), &pid);
+                dev->getProperty(dev.storage(), CFSTR(kIOHIDVendorIDKey), (CFTypeRef*)&vid);
+                dev->getProperty(dev.storage(), CFSTR(kIOHIDProductIDKey), (CFTypeRef*)&pid);
                 CFNumberGetValue(vid.get(), kCFNumberIntType, &vidv);
                 CFNumberGetValue(pid.get(), kCFNumberIntType, &pidv);
 
                 CFPointer<CFStringRef> vstridx, pstridx;
-                dev->getProperty(dev.storage(), CFSTR(kIOHIDManufacturerKey), &vstridx);
-                dev->getProperty(dev.storage(), CFSTR(kIOHIDProductKey), &pstridx);
+                dev->getProperty(dev.storage(), CFSTR(kIOHIDManufacturerKey), (CFTypeRef*)&vstridx);
+                dev->getProperty(dev.storage(), CFSTR(kIOHIDProductKey), (CFTypeRef*)&pstridx);
 
                 if (vstridx)
                     CFStringGetCString(vstridx.get(), vstr, 128, kCFStringEncodingUTF8);

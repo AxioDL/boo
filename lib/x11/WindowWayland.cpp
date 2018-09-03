@@ -205,10 +205,8 @@ struct WindowWayland : IWindow
         return std::unique_ptr<uint8_t[]>();
     }
 
-    void waitForRetrace(IAudioVoiceEngine* engine)
+    void waitForRetrace()
     {
-        if (engine)
-            engine->pumpAndMixVoices();
     }
 
     uintptr_t getPlatformHandle() const

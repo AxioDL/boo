@@ -123,8 +123,8 @@ elseif(APPLE)
                               PROPERTIES COMPILE_FLAGS -fobjc-arc)
 
   list(APPEND PLAT_HDRS
+       lib/CFPointer.hpp
        include/boo/graphicsdev/Metal.hpp
-       lib/inputdev/CFPointer.hpp
        lib/inputdev/IOKitPointer.hpp)
 
   find_library(APPKIT_LIBRARY AppKit)

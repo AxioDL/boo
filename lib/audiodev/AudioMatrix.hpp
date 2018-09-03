@@ -46,7 +46,7 @@ class AudioMatrixMono
     Coefs m_coefs = {};
     Coefs m_oldCoefs = {};
     size_t m_slewFrames = 0;
-    size_t m_curSlewFrame = 0;
+    size_t m_curSlewFrame = ~size_t(0);
 public:
     AudioMatrixMono() {setDefaultMatrixCoefficients(AudioChannelSet::Stereo);}
 
@@ -54,19 +54,23 @@ public:
     void setMatrixCoefficients(const float coefs[8], size_t slewFrames=0)
     {
         m_slewFrames = slewFrames;
-        m_curSlewFrame = 0;
 #if __SSE__
-        m_oldCoefs.q[0] = m_coefs.q[0];
-        m_oldCoefs.q[1] = m_coefs.q[1];
+        if (m_curSlewFrame != 0)
+        {
+            m_oldCoefs.q[0] = m_coefs.q[0];
+            m_oldCoefs.q[1] = m_coefs.q[1];
+        }
         m_coefs.q[0] = _mm_loadu_ps(coefs);
         m_coefs.q[1] = _mm_loadu_ps(&coefs[4]);
 #else
         for (int i=0 ; i<8 ; ++i)
         {
-            m_oldCoefs.v[i] = m_coefs.v[i];
+            if (m_curSlewFrame != 0)
+                m_oldCoefs.v[i] = m_coefs.v[i];
             m_coefs.v[i] = coefs[i];
         }
 #endif
+        m_curSlewFrame = 0;
     }
 
     int16_t* mixMonoSampleData(const AudioVoiceEngineMixInfo& info,
@@ -102,7 +106,7 @@ class AudioMatrixStereo
     Coefs m_coefs = {};
     Coefs m_oldCoefs = {};
     size_t m_slewFrames = 0;
-    size_t m_curSlewFrame = 0;
+    size_t m_curSlewFrame = ~size_t(0);
 public:
     AudioMatrixStereo() {setDefaultMatrixCoefficients(AudioChannelSet::Stereo);}
 
@@ -110,12 +114,14 @@ public:
     void setMatrixCoefficients(const float coefs[8][2], size_t slewFrames=0)
     {
         m_slewFrames = slewFrames;
-        m_curSlewFrame = 0;
 #if __SSE__
-        m_oldCoefs.q[0] = m_coefs.q[0];
-        m_oldCoefs.q[1] = m_coefs.q[1];
-        m_oldCoefs.q[2] = m_coefs.q[2];
-        m_oldCoefs.q[3] = m_coefs.q[3];
+        if (m_curSlewFrame != 0)
+        {
+            m_oldCoefs.q[0] = m_coefs.q[0];
+            m_oldCoefs.q[1] = m_coefs.q[1];
+            m_oldCoefs.q[2] = m_coefs.q[2];
+            m_oldCoefs.q[3] = m_coefs.q[3];
+        }
         m_coefs.q[0] = _mm_loadu_ps(coefs[0]);
         m_coefs.q[1] = _mm_loadu_ps(coefs[2]);
         m_coefs.q[2] = _mm_loadu_ps(coefs[4]);
@@ -123,12 +129,16 @@ public:
 #else
         for (int i=0 ; i<8 ; ++i)
         {
-            m_oldCoefs.v[i][0] = m_coefs.v[i][0];
-            m_oldCoefs.v[i][1] = m_coefs.v[i][1];
+            if (m_curSlewFrame != 0)
+            {
+                m_oldCoefs.v[i][0] = m_coefs.v[i][0];
+                m_oldCoefs.v[i][1] = m_coefs.v[i][1];
+            }
             m_coefs.v[i][0] = coefs.v[i][0];
             m_coefs.v[i][1] = coefs.v[i][1];
         }
 #endif
+        m_curSlewFrame = 0;
     }
 
     int16_t* mixStereoSampleData(const AudioVoiceEngineMixInfo& info,
