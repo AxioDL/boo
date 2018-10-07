@@ -1,6 +1,5 @@
 // This file is generated.
-#ifndef HELPERSDISPATCHTABLE_H
-#define HELPERSDISPATCHTABLE_H
+#pragma once
 
 #include <vulkan/vulkan.h>
 
@@ -216,4 +215,3 @@ void init_dispatch_table_bottom(VkInstance instance, VkDevice dev);
 
 } // namespace vk
 
-#endif // HELPERSDISPATCHTABLE_H

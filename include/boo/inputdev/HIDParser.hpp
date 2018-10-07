@@ -1,5 +1,4 @@
-#ifndef HIDPARSER_HPP
-#define HIDPARSER_HPP
+#pragma once
 
 #include "boo/System.hpp"
 #include <vector>
@@ -219,4 +218,3 @@ public:
 
 }
 
-#endif // HIDPARSER_HPP

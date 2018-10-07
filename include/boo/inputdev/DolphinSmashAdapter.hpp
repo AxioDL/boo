@@ -1,5 +1,4 @@
-#ifndef CDOLPHINSMASHADAPTER_HPP
-#define CDOLPHINSMASHADAPTER_HPP
+#pragma once
 
 #include <cstdint>
 #include "DeviceBase.hpp"
@@ -90,4 +89,3 @@ public:
 
 }
 
-#endif // CDOLPHINSMASHADAPTER_HPP

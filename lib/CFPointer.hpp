@@ -1,5 +1,4 @@
-#ifndef __CFPOINTER_HPP__
-#define __CFPOINTER_HPP__
+#pragma once
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreFoundation/CFPlugInCOM.h>
@@ -154,4 +153,3 @@ private:
     }
 };
 
-#endif // __CFPOINTER_HPP__

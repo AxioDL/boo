@@ -1,5 +1,4 @@
-#ifndef BOO_AUDIOMATRIX_HPP
-#define BOO_AUDIOMATRIX_HPP
+#pragma once
 
 #include "boo/audiodev/IAudioVoice.hpp"
 #include <vector>
@@ -163,4 +162,3 @@ public:
 
 }
 
-#endif // BOO_AUDIOMATRIX_HPP

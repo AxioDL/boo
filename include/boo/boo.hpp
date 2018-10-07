@@ -1,5 +1,4 @@
-#ifndef BOO_HPP
-#define BOO_HPP
+#pragma once
 
 #include "IApplication.hpp"
 #include "IWindow.hpp"
@@ -12,4 +11,3 @@
 #include "graphicsdev/IGraphicsDataFactory.hpp"
 #include "DeferredWindowEvents.hpp"
 
-#endif // BOO_HPP

@@ -1,5 +1,4 @@
-#ifndef CDEVICEFINDER_HPP
-#define CDEVICEFINDER_HPP
+#pragma once
 
 #include <unordered_set>
 #include <typeindex>
@@ -165,4 +164,3 @@ public:
 
 }
 
-#endif // CDEVICEFINDER_HPP

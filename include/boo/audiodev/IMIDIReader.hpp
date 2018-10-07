@@ -1,5 +1,4 @@
-#ifndef BOO_IMIDIREADER_HPP
-#define BOO_IMIDIREADER_HPP
+#pragma once
 
 #include <cstdlib>
 #include <cstdint>
@@ -40,4 +39,3 @@ public:
 
 }
 
-#endif // BOO_IMIDIREADER_HPP

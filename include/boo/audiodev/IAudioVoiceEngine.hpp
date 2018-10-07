@@ -1,5 +1,4 @@
-#ifndef BOO_IAUDIOVOICEENGINE_HPP
-#define BOO_IAUDIOVOICEENGINE_HPP
+#pragma once
 
 #include "IAudioVoice.hpp"
 #include "IAudioSubmix.hpp"
@@ -115,4 +114,3 @@ std::unique_ptr<IAudioVoiceEngine> NewWAVAudioVoiceEngine(const wchar_t* path, d
 
 }
 
-#endif // BOO_IAUDIOVOICEENGINE_HPP

@@ -1,5 +1,4 @@
-#ifndef CDEVICEBASE
-#define CDEVICEBASE
+#pragma once
 
 #include <cstdint>
 #include <cstdlib>
@@ -91,4 +90,3 @@ public:
 
 }
 
-#endif // CDEVICEBASE

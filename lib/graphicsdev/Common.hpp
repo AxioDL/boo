@@ -1,5 +1,4 @@
-#ifndef BOO_GRAPHICSDEV_COMMON_HPP
-#define BOO_GRAPHICSDEV_COMMON_HPP
+#pragma once
 
 /* Private header for managing shader data
  * binding lifetimes through rendering cycle */
@@ -163,4 +162,3 @@ void UpdateGammaLUT(ITextureD* tex, float gamma);
 
 }
 
-#endif // BOO_GRAPHICSDEV_COMMON_HPP

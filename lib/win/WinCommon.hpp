@@ -1,5 +1,4 @@
-#ifndef BOO_WINCOMMON_HPP
-#define BOO_WINCOMMON_HPP
+#pragma once
 
 #include <unordered_map>
 #include "boo/IWindow.hpp"
@@ -133,4 +132,3 @@ static inline std::wstring MBSTWCS(const char* str)
     return strTo;
 }
 
-#endif // BOO_WINCOMMON_HPP

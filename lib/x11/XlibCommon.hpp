@@ -1,5 +1,4 @@
-#ifndef BOO_XLIBCOMMON_HPP
-#define BOO_XLIBCOMMON_HPP
+#pragma once
 
 #include <X11/Xlib.h>
 
@@ -19,4 +18,3 @@ extern XlibCursors X_CURSORS;
 
 }
 
-#endif // BOO_XLIBCOMMON_HPP

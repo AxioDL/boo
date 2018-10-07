@@ -1,5 +1,4 @@
-#ifndef BOO_IAUDIOSUBMIX_HPP
-#define BOO_IAUDIOSUBMIX_HPP
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -54,4 +53,3 @@ struct IAudioSubmixCallback
 
 }
 
-#endif // BOO_IAUDIOVOICE_HPP

@@ -1,5 +1,4 @@
-#ifndef CDUALSHOCKPAD_HPP
-#define CDUALSHOCKPAD_HPP
+#pragma once
 #include <cstdint>
 #include <type_traits>
 #include "DeviceBase.hpp"
@@ -183,4 +182,3 @@ public:
 
 }
 
-#endif // CDUALSHOCKPAD_HPP

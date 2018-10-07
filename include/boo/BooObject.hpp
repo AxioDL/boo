@@ -1,5 +1,4 @@
-#ifndef BOOOBJECT_HPP
-#define BOOOBJECT_HPP
+#pragma once
 
 #include <atomic>
 #include <mutex>
@@ -52,4 +51,3 @@ public:
 
 }
 
-#endif // BOOOBJECT_HPP

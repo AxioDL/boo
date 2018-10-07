@@ -1,5 +1,4 @@
-#ifndef BOO_AUDIOVOICE_HPP
-#define BOO_AUDIOVOICE_HPP
+#pragma once
 
 #include <soxr.h>
 #include <list>
@@ -131,4 +130,3 @@ public:
 
 }
 
-#endif // BOO_AUDIOVOICE_HPP

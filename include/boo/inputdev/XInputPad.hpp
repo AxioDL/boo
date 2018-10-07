@@ -1,5 +1,4 @@
-#ifndef XINPUTPAD_HPP
-#define XINPUTPAD_HPP
+#pragma once
 
 #include "DeviceBase.hpp"
 #include "DeviceSignature.hpp"
@@ -65,4 +64,3 @@ public:
 
 }
 
-#endif // XINPUTPAD_HPP

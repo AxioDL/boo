@@ -1,5 +1,4 @@
-#ifndef GDEV_D3D_HPP
-#define GDEV_D3D_HPP
+#pragma once
 
 #if _WIN32
 
@@ -53,4 +52,3 @@ public:
 }
 
 #endif // _WIN32
-#endif // GDEV_D3D_HPP

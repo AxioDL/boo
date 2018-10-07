@@ -1,5 +1,4 @@
-#ifndef SDeviceSignature_HPP
-#define SDeviceSignature_HPP
+#pragma once
 
 #include <vector>
 #include <functional>
@@ -50,5 +49,4 @@ extern const DeviceSignature BOO_DEVICE_SIGS[];
 
 }
 
-#endif // SDeviceSignature_HPP
 

@@ -1,9 +1,7 @@
-#ifndef CREVOLUTIONPAD_HPP
-#define CREVOLUTIONPAD_HPP
+#pragma once
 
 namespace boo
 {
 
 }
 
-#endif // CREVOLUTIONPAD_HPP

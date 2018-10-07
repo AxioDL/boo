@@ -1,5 +1,4 @@
-#ifndef BOO_DEFERREDWINDOWEVENTS_HPP
-#define BOO_DEFERREDWINDOWEVENTS_HPP
+#pragma once
 
 #include <boo/boo.hpp>
 #include <mutex>
@@ -272,4 +271,3 @@ struct DeferredWindowEvents : public IWindowCallback
 
 }
 
-#endif // BOO_DEFERREDWINDOWEVENTS_HPP

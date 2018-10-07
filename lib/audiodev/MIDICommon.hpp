@@ -1,5 +1,4 @@
-#ifndef BOO_MIDICOMMON_HPP
-#define BOO_MIDICOMMON_HPP
+#pragma once
 
 namespace boo
 {
@@ -29,4 +28,3 @@ enum class Status
 
 }
 
-#endif // BOO_MIDICOMMON_HPP

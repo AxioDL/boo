@@ -1,5 +1,4 @@
-#ifndef IGFXCONTEXT_HPP
-#define IGFXCONTEXT_HPP
+#pragma once
 
 #include <memory>
 #include <cstdint>
@@ -62,4 +61,3 @@ public:
     
 }
 
-#endif // IGFXCONTEXT_HPP

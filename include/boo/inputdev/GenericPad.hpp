@@ -1,5 +1,4 @@
-#ifndef CGENERICPAD_HPP
-#define CGENERICPAD_HPP
+#pragma once
 
 #include "DeviceBase.hpp"
 #include "HIDParser.hpp"
@@ -32,4 +31,3 @@ public:
 
 }
 
-#endif // CGENERICPAD_HPP

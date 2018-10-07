@@ -1,5 +1,4 @@
-#ifndef IGFXDATAFACTORY_HPP
-#define IGFXDATAFACTORY_HPP
+#pragma once
 
 #include <memory>
 #include <functional>
@@ -358,4 +357,3 @@ using FactoryCommitFunc = std::function<bool(GraphicsDataFactoryContext& ctx)>;
 
 }
 
-#endif // IGFXDATAFACTORY_HPP

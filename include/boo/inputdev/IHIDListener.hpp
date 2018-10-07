@@ -1,5 +1,4 @@
-#ifndef IHIDLISTENER_HPP
-#define IHIDLISTENER_HPP
+#pragma once
 
 #include <unordered_map>
 #include <mutex>
@@ -37,4 +36,3 @@ std::unique_ptr<IHIDListener> IHIDListenerNew(DeviceFinder& finder);
 
 }
 
-#endif // IHIDLISTENER_HPP

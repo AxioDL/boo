@@ -1,5 +1,4 @@
-#ifndef BOO_THREADLOCALPTR_HPP
-#define BOO_THREADLOCALPTR_HPP
+#pragma once
 
 #ifndef __SWITCH__
 
@@ -32,4 +31,3 @@ public:
 
 #endif
 
-#endif // BOO_THREADLOCALPTR_HPP

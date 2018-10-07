@@ -1,5 +1,4 @@
-#ifndef GDEV_GLSLMACROS_HPP
-#define GDEV_GLSLMACROS_HPP
+#pragma once
 
 #define BOO_GLSL_MAX_UNIFORM_COUNT 8
 #define BOO_GLSL_MAX_TEXTURE_COUNT 8
@@ -51,4 +50,3 @@
 "#define TBINDING7\n" \
 "#endif\n"
 
-#endif // GDEV_GLSLMACROS_HPP

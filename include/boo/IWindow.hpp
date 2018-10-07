@@ -1,5 +1,4 @@
-#ifndef IWINDOW_HPP
-#define IWINDOW_HPP
+#pragma once
 
 #include "System.hpp"
 #include <memory>
@@ -321,4 +320,3 @@ public:
     
 }
 
-#endif // IWINDOW_HPP

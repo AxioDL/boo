@@ -1,5 +1,4 @@
-#ifndef __IOKITPOINTER_HPP__
-#define __IOKITPOINTER_HPP__
+#pragma once
 
 #include "../CFPointer.hpp"
 #include <IOKit/IOTypes.h>
@@ -118,4 +117,3 @@ private:
     }
 };
 
-#endif // __IOKITPOINTER_HPP__

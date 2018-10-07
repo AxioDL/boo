@@ -1,5 +1,4 @@
-#ifndef GDEV_VULKAN_HPP
-#define GDEV_VULKAN_HPP
+#pragma once
 #if BOO_HAS_VULKAN
 
 #include "IGraphicsDataFactory.hpp"
@@ -184,4 +183,3 @@ public:
 }
 
 #endif
-#endif // GDEV_VULKAN_HPP

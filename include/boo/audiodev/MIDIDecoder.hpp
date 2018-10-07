@@ -1,5 +1,4 @@
-#ifndef BOO_MIDIDECODER_HPP
-#define BOO_MIDIDECODER_HPP
+#pragma once
 
 #include "boo/audiodev/IMIDIReader.hpp"
 #include "boo/audiodev/IMIDIPort.hpp"
@@ -25,4 +24,3 @@ public:
 
 }
 
-#endif // BOO_MIDIDECODER_HPP

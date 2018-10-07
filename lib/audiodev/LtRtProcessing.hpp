@@ -1,5 +1,4 @@
-#ifndef BOO_LTRTPROCESSING_HPP
-#define BOO_LTRTPROCESSING_HPP
+#pragma once
 
 #include "boo/System.hpp"
 #include "boo/audiodev/IAudioVoice.hpp"
@@ -80,4 +79,3 @@ public:
 
 }
 
-#endif // BOO_LTRTPROCESSING_HPP

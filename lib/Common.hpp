@@ -1,5 +1,4 @@
-#ifndef BOO_INTERNAL_COMMON_HPP
-#define BOO_INTERNAL_COMMON_HPP
+#pragma once
 
 #include "boo/BooObject.hpp"
 #include <iterator>
@@ -78,4 +77,3 @@ static inline uint32_t flp2(uint32_t x)
 
 }
 
-#endif // BOO_INTERNAL_COMMON_HPP

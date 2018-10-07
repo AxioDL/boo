@@ -1,5 +1,4 @@
-#ifndef BOO_SYSTEM_HPP
-#define BOO_SYSTEM_HPP
+#pragma once
 
 #ifdef _WIN32
 #include <winapifamily.h>
@@ -88,4 +87,3 @@ namespace boo
 
 }
 
-#endif

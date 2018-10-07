@@ -1,9 +1,7 @@
-#ifndef CCAFEPROPAD_HPP
-#define CCAFEPROPAD_HPP
+#pragma once
 
 namespace boo
 {
 
 }
 
-#endif // CCAFEPROPAD_HPP

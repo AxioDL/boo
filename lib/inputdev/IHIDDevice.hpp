@@ -1,5 +1,4 @@
-#ifndef IHIDDEVICE_HPP
-#define IHIDDEVICE_HPP
+#pragma once
 
 #include "boo/inputdev/DeviceToken.hpp"
 #include "boo/inputdev/DeviceBase.hpp"
@@ -35,4 +34,3 @@ public:
 
 }
 
-#endif // IHIDDEVICE_HPP

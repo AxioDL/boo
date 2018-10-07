@@ -1,5 +1,4 @@
-#ifndef GDEV_GL_HPP
-#define GDEV_GL_HPP
+#pragma once
 #if BOO_HAS_GL
 
 #include "IGraphicsDataFactory.hpp"
@@ -68,4 +67,3 @@ public:
 }
 
 #endif
-#endif // GDEV_GL_HPP

@@ -1,5 +1,4 @@
-#ifndef BOO_AUDIOCOMMON_HPP
-#define BOO_AUDIOCOMMON_HPP
+#pragma once
 
 #include <soxr.h>
 #include "../Common.hpp"
@@ -21,4 +20,3 @@ struct AudioVoiceEngineMixInfo
 
 }
 
-#endif // BOO_AUDIOCOMMON_HPP

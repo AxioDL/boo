@@ -1,5 +1,4 @@
-#ifndef BOO_IAUDIOVOICE_HPP
-#define BOO_IAUDIOVOICE_HPP
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -109,4 +108,3 @@ struct IAudioVoiceCallback
 
 }
 
-#endif // BOO_IAUDIOVOICE_HPP

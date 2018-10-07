@@ -1,5 +1,4 @@
-#ifndef BOO_COCOACOMMON_HPP
-#define BOO_COCOACOMMON_HPP
+#pragma once
 #if __APPLE__
 
 #if !__has_feature(objc_arc)
@@ -42,4 +41,3 @@ namespace boo
 #endif
 
 #endif // __APPLE__
-#endif // BOO_COCOACOMMON_HPP

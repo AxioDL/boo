@@ -1,5 +1,4 @@
-#ifndef NINTENDOPOWERA_HPP
-#define NINTENDOPOWERA_HPP
+#pragma once
 #include "DeviceBase.hpp"
 #include "boo/System.hpp"
 
@@ -51,4 +50,3 @@ public:
 };
 }
 
-#endif // NINTENDOPWERA_HPP

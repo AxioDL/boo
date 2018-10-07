@@ -1,5 +1,4 @@
-#ifndef CDEVICETOKEN
-#define CDEVICETOKEN
+#pragma once
 
 #include <string>
 #include "DeviceBase.hpp"
@@ -77,4 +76,3 @@ public:
 
 }
 
-#endif // CDEVICETOKEN

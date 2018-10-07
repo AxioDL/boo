@@ -1,5 +1,4 @@
-#ifndef BOO_AUDIOSUBMIX_HPP
-#define BOO_AUDIOSUBMIX_HPP
+#pragma once
 
 #include "boo/audiodev/IAudioSubmix.hpp"
 #include <list>
@@ -101,4 +100,3 @@ template <> inline float*& AudioSubmix::_getRedirect<float>() { return m_redirec
 
 }
 
-#endif // BOO_AUDIOSUBMIX_HPP

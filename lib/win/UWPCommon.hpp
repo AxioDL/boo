@@ -1,5 +1,4 @@
-#ifndef BOO_UWPCOMMON_HPP
-#define BOO_UWPCOMMON_HPP
+#pragma once
 
 #include "WinCommon.hpp"
 
@@ -84,4 +83,3 @@ struct Boo3DAppContextUWP : Boo3DAppContext
     }
 };
 
-#endif // BOO_UWPCOMMON_HPP

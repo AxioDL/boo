@@ -1,5 +1,4 @@
-#ifndef BOO_WIN32COMMON_HPP
-#define BOO_WIN32COMMON_HPP
+#pragma once
 
 #ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS 1 /* STFU MSVC */
@@ -168,4 +167,3 @@ namespace boo
 extern Win32Cursors WIN32_CURSORS;
 }
 
-#endif // BOO_WIN32COMMON_HPP

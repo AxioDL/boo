@@ -1,5 +1,4 @@
-#ifndef GDEV_METAL_HPP
-#define GDEV_METAL_HPP
+#pragma once
 #ifdef __APPLE__
 #if BOO_HAS_METAL
 
@@ -83,4 +82,3 @@ public:
 
 #endif
 #endif // __APPLE__
-#endif // GDEV_METAL_HPP

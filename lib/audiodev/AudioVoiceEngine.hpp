@@ -1,5 +1,4 @@
-#ifndef BOO_AUDIOVOICEENGINE_HPP
-#define BOO_AUDIOVOICEENGINE_HPP
+#pragma once
 
 #include "boo/audiodev/IAudioVoiceEngine.hpp"
 #include "LtRtProcessing.hpp"
@@ -93,4 +92,3 @@ template <> inline std::vector<float>& BaseAudioVoiceEngine::_getLtRtIn<float>()
 
 }
 
-#endif // BOO_AUDIOVOICEENGINE_HPP

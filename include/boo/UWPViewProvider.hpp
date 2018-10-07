@@ -1,5 +1,4 @@
-#ifndef UWPVIEWPROVIDER_HPP
-#define UWPVIEWPROVIDER_HPP
+#pragma once
 
 #include "IApplication.hpp"
 
@@ -43,4 +42,3 @@ internal:
     
 }
 
-#endif // UWPVIEWPROVIDER_HPP

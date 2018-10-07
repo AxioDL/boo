@@ -1,5 +1,4 @@
-#ifndef BOO_IMIDIPORT_HPP
-#define BOO_IMIDIPORT_HPP
+#pragma once
 
 #include <string>
 #include <functional>
@@ -61,4 +60,3 @@ public:
 
 }
 
-#endif // BOO_IMIDIPORT_HPP

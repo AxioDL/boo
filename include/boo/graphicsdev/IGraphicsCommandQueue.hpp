@@ -1,5 +1,4 @@
-#ifndef IGFXCOMMANDQUEUE_HPP
-#define IGFXCOMMANDQUEUE_HPP
+#pragma once
 
 #include "IGraphicsDataFactory.hpp"
 #include "boo/IWindow.hpp"
@@ -43,4 +42,3 @@ struct IGraphicsCommandQueue
 
 }
 
-#endif // IGFXCOMMANDQUEUE_HPP

@@ -1,5 +1,4 @@
-#ifndef IAPPLICATION_HPP
-#define IAPPLICATION_HPP
+#pragma once
 
 #include <memory>
 #include <string>
@@ -93,4 +92,3 @@ ApplicationRun(IApplication::EPlatformType platform,
     
 }
 
-#endif // IAPPLICATION_HPP

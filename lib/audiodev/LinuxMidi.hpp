@@ -1,5 +1,4 @@
-#ifndef BOO_LINUXMIDI_HPP
-#define BOO_LINUXMIDI_HPP
+#pragma once
 
 #include "AudioVoiceEngine.hpp"
 #include "logvisor/logvisor.hpp"
@@ -309,4 +308,3 @@ struct LinuxMidi : BaseAudioVoiceEngine
 
 }
 
-#endif // BOO_LINUXMIDI_HPP
