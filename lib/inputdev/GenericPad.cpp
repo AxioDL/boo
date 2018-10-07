@@ -5,7 +5,7 @@ namespace boo
 {
 
 GenericPad::GenericPad(DeviceToken* token)
-: TDeviceBase<IGenericPadCallback>(token)
+: TDeviceBase<IGenericPadCallback>(dev_typeid(GenericPad), token)
 {
 
 }

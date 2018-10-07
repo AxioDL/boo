@@ -4,6 +4,7 @@
 #include <boo/boo.hpp>
 #include <mutex>
 #include <condition_variable>
+#include "nxstl/condition_variable"
 
 namespace boo
 {

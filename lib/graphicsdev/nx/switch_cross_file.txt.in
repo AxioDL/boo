@@ -1,0 +1,25 @@
+[binaries]
+c = '@CMAKE_C_COMPILER@'
+cpp = '@CMAKE_CXX_COMPILER@'
+ar = '@CMAKE_AR@'
+strip = '@CMAKE_STRIP@'
+
+[properties]
+sizeof_int = 4
+sizeof_wchar_t = 4
+sizeof_void* = 8
+
+alignment_char = 1
+alignment_void* = 8
+alignment_double = 8
+
+c_args = ['-march=armv8-a', '-mtune=cortex-a57', '-mtp=soft', '-fPIC', '-D__SWITCH__', '-I@DEVKITPRO@/libnx/include',
+          '-I@LIBDRM_DIR@/include', '-DDEBUG=1', '-DHAVE_LIBDRM', '-D_GNU_SOURCE']
+cpp_args = ['-march=armv8-a', '-mtune=cortex-a57', '-mtp=soft', '-fPIC', '-D__SWITCH__', '-I@DEVKITPRO@/libnx/include',
+            '-I@LIBDRM_DIR@/include', '-DDEBUG=1', '-DHAVE_LIBDRM', '-D_GNU_SOURCE']
+
+[host_machine]
+system = 'switch'
+cpu_family = 'armv8-a'
+cpu = 'cortex-a57'
+endian = 'little'

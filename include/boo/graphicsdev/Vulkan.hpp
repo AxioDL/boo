@@ -134,7 +134,7 @@ extern VulkanContext g_VulkanContext;
 class VulkanDataFactory : public IGraphicsDataFactory
 {
 public:
-    class Context : public IGraphicsDataFactory::Context
+    class Context final : public IGraphicsDataFactory::Context
     {
         friend class VulkanDataFactoryImpl;
         VulkanDataFactory& m_parent;
@@ -143,7 +143,7 @@ public:
         ~Context();
     public:
         Platform platform() const {return Platform::Vulkan;}
-        const SystemChar* platformName() const {return _S("Vulkan");}
+        const SystemChar* platformName() const {return _SYS_STR("Vulkan");}
 
         boo::ObjToken<IGraphicsBufferS> newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
         boo::ObjToken<IGraphicsBufferD> newDynamicBuffer(BufferUse use, size_t stride, size_t count);
@@ -157,58 +157,17 @@ public:
         boo::ObjToken<ITextureR> newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
                                                   size_t colorBindCount, size_t depthBindCount);
 
-        bool bindingNeedsVertexFormat() const {return false;}
-        boo::ObjToken<IVertexFormat> newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
-                                                     size_t baseVert = 0, size_t baseInst = 0);
+        ObjToken<IShaderStage>
+        newShaderStage(const uint8_t* data, size_t size, PipelineStage stage);
 
-        boo::ObjToken<IShaderPipeline> newShaderPipeline(const char* vertSource, const char* fragSource,
-                                                         std::vector<unsigned int>* vertBlobOut,
-                                                         std::vector<unsigned int>* fragBlobOut,
-                                                         std::vector<unsigned char>* pipelineBlob,
-                                                         const boo::ObjToken<IVertexFormat>& vtxFmt,
-                                                         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                                                         ZTest depthTest, bool depthWrite, bool colorWrite,
-                                                         bool alphaWrite, CullMode culling, bool overwriteAlpha = true);
-
-        boo::ObjToken<IShaderPipeline> newShaderPipeline(const char* vertSource, const char* fragSource,
-                                                         const boo::ObjToken<IVertexFormat>& vtxFmt,
-                                                         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                                                         ZTest depthTest, bool depthWrite, bool colorWrite,
-                                                         bool alphaWrite, CullMode culling)
-        {
-            return newShaderPipeline(vertSource, fragSource, nullptr, nullptr, nullptr,
-                                     vtxFmt, srcFac, dstFac, prim, depthTest, depthWrite,
-                                     colorWrite, alphaWrite, culling);
-        }
-
-        boo::ObjToken<IShaderPipeline> newTessellationShaderPipeline(const char* vertSource, const char* fragSource,
-                                                                     const char* controlSource, const char* evaluationSource,
-                                                                     std::vector<unsigned int>* vertBlobOut,
-                                                                     std::vector<unsigned int>* fragBlobOut,
-                                                                     std::vector<unsigned int>* controlBlobOut,
-                                                                     std::vector<unsigned int>* evaluationBlobOut,
-                                                                     std::vector<unsigned char>* pipelineBlob,
-                                                                     const boo::ObjToken<IVertexFormat>& vtxFmt,
-                                                                     BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
-                                                                     ZTest depthTest, bool depthWrite, bool colorWrite,
-                                                                     bool alphaWrite, CullMode culling, bool overwriteAlpha = true);
-
-        boo::ObjToken<IShaderPipeline> newTessellationShaderPipeline(const char* vertSource, const char* fragSource,
-                                                                     const char* controlSource, const char* evaluationSource,
-                                                                     const boo::ObjToken<IVertexFormat>& vtxFmt,
-                                                                     BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
-                                                                     ZTest depthTest, bool depthWrite, bool colorWrite,
-                                                                     bool alphaWrite, CullMode culling)
-        {
-            return newTessellationShaderPipeline(vertSource, fragSource, controlSource, evaluationSource,
-                                                 nullptr, nullptr, nullptr, nullptr, nullptr,
-                                                 vtxFmt, srcFac, dstFac, patchSize, depthTest, depthWrite,
-                                                 colorWrite, alphaWrite, culling);
-        }
+        ObjToken<IShaderPipeline>
+        newShaderPipeline(ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment,
+                          ObjToken<IShaderStage> geometry, ObjToken<IShaderStage> control,
+                          ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
+                          const AdditionalPipelineInfo& additionalInfo);
 
         boo::ObjToken<IShaderDataBinding>
         newShaderDataBinding(const boo::ObjToken<IShaderPipeline>& pipeline,
-                             const boo::ObjToken<IVertexFormat>& vtxFormat,
                              const boo::ObjToken<IGraphicsBuffer>& vbo,
                              const boo::ObjToken<IGraphicsBuffer>& instVbo,
                              const boo::ObjToken<IGraphicsBuffer>& ibo,
@@ -218,6 +177,8 @@ public:
                              const int* bindIdxs, const bool* bindDepth,
                              size_t baseVert = 0, size_t baseInst = 0);
     };
+
+    static std::vector<uint8_t> CompileGLSL(const char* source, PipelineStage stage);
 };
 
 }

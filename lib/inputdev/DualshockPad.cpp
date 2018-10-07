@@ -1,4 +1,5 @@
 #include "boo/inputdev/DualshockPad.hpp"
+#include "boo/inputdev/DeviceSignature.hpp"
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include <iostream>
@@ -33,7 +34,7 @@ static const uint8_t defaultReport[49] = {
 };
 
 DualshockPad::DualshockPad(DeviceToken* token)
-    : TDeviceBase<IDualshockPadCallback>(token),
+    : TDeviceBase<IDualshockPadCallback>(dev_typeid(DualshockPad), token),
       m_rumbleRequest(EDualshockMotor::None),
       m_rumbleState(EDualshockMotor::None)
 {

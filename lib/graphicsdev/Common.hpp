@@ -45,6 +45,7 @@ struct BaseGraphicsData : ListNode<BaseGraphicsData, GraphicsDataFactoryHead*>
 
     __BooTraceFields
 
+    GraphicsDataNode<IShaderStage, BaseGraphicsData>* m_Ss = nullptr;
     GraphicsDataNode<IShaderPipeline, BaseGraphicsData>* m_SPs = nullptr;
     GraphicsDataNode<IShaderDataBinding, BaseGraphicsData>* m_SBinds = nullptr;
     GraphicsDataNode<IGraphicsBufferS, BaseGraphicsData>* m_SBufs = nullptr;
@@ -53,7 +54,6 @@ struct BaseGraphicsData : ListNode<BaseGraphicsData, GraphicsDataFactoryHead*>
     GraphicsDataNode<ITextureSA, BaseGraphicsData>* m_SATexs = nullptr;
     GraphicsDataNode<ITextureD, BaseGraphicsData>* m_DTexs = nullptr;
     GraphicsDataNode<ITextureR, BaseGraphicsData>* m_RTexs = nullptr;
-    GraphicsDataNode<IVertexFormat, BaseGraphicsData>* m_VFmts = nullptr;
     template<class T> GraphicsDataNode<T, BaseGraphicsData>*& getHead();
     template<class T> size_t countForward()
     { auto* head = getHead<T>(); return head ? head->countForward() : 0; }
@@ -65,6 +65,8 @@ struct BaseGraphicsData : ListNode<BaseGraphicsData, GraphicsDataFactoryHead*>
     {}
 };
 
+template <> inline GraphicsDataNode<IShaderStage, BaseGraphicsData>*&
+BaseGraphicsData::getHead<IShaderStage>() { return m_Ss; }
 template <> inline GraphicsDataNode<IShaderPipeline, BaseGraphicsData>*&
 BaseGraphicsData::getHead<IShaderPipeline>() { return m_SPs; }
 template <> inline GraphicsDataNode<IShaderDataBinding, BaseGraphicsData>*&
@@ -81,8 +83,6 @@ template <> inline GraphicsDataNode<ITextureD, BaseGraphicsData>*&
 BaseGraphicsData::getHead<ITextureD>() { return m_DTexs; }
 template <> inline GraphicsDataNode<ITextureR, BaseGraphicsData>*&
 BaseGraphicsData::getHead<ITextureR>() { return m_RTexs; }
-template <> inline GraphicsDataNode<IVertexFormat, BaseGraphicsData>*&
-BaseGraphicsData::getHead<IVertexFormat>() { return m_VFmts; }
 
 /** Private generalized pool container class.
  *  Keeps head pointer to exactly one dynamic buffer while otherwise conforming to BaseGraphicsData
@@ -157,46 +157,6 @@ struct GraphicsDataNode : ListNode<GraphicsDataNode<NodeCls, DataCls>, ObjToken<
             ++ret;
         return ret;
     }
-};
-
-/** Hash table entry for owning sharable shader objects */
-template <class FactoryImpl, class ShaderImpl>
-class IShareableShader
-{
-    std::atomic_int m_refCount = {0};
-    FactoryImpl& m_factory;
-    uint64_t m_srckey, m_binKey;
-public:
-    IShareableShader(FactoryImpl& factory, uint64_t srcKey, uint64_t binKey)
-    : m_factory(factory), m_srckey(srcKey), m_binKey(binKey) {}
-    void increment() { m_refCount++; }
-    void decrement()
-    {
-        if (m_refCount.fetch_sub(1) == 1)
-            m_factory._unregisterShareableShader(m_srckey, m_binKey);
-    }
-
-    class Token
-    {
-        IShareableShader<FactoryImpl, ShaderImpl>* m_parent = nullptr;
-    public:
-        Token() = default;
-        Token(IShareableShader* p)
-        : m_parent(p)
-        { m_parent->increment(); }
-        Token& operator=(const Token&) = delete;
-        Token(const Token&) = delete;
-        Token& operator=(Token&& other)
-        { m_parent = other.m_parent; other.m_parent = nullptr; return *this; }
-        Token(Token&& other)
-        { m_parent = other.m_parent; other.m_parent = nullptr; }
-        void reset() { if (m_parent) m_parent->decrement(); m_parent = nullptr; }
-        ~Token() { if (m_parent) m_parent->decrement(); }
-        operator bool() const { return m_parent != nullptr; }
-        ShaderImpl& get() const { return static_cast<ShaderImpl&>(*m_parent); }
-    };
-
-    Token lock() { return Token(this); }
 };
 
 void UpdateGammaLUT(ITextureD* tex, float gamma);

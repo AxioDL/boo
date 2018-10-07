@@ -1,6 +1,8 @@
 #ifndef BOO_THREADLOCALPTR_HPP
 #define BOO_THREADLOCALPTR_HPP
 
+#ifndef __SWITCH__
+
 #if _WIN32
 #else
 #include <pthread.h>
@@ -27,5 +29,7 @@ public:
 #endif
     T* operator->() {return get();}
 };
+
+#endif
 
 #endif // BOO_THREADLOCALPTR_HPP

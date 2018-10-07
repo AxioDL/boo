@@ -93,7 +93,7 @@ public:
     };
 
     /* Application must specify its interested device-types */
-    DeviceFinder(std::unordered_set<std::type_index> types)
+    DeviceFinder(std::unordered_set<uint64_t> types)
     {
         if (skDevFinder)
         {
@@ -101,12 +101,12 @@ public:
             abort();
         }
         skDevFinder = this;
-        for (const std::type_index& typeIdx : types)
+        for (const uint64_t& typeHash : types)
         {
             const DeviceSignature* sigIter = BOO_DEVICE_SIGS;
             while (sigIter->m_name)
             {
-                if (sigIter->m_typeIdx == typeIdx)
+                if (sigIter->m_typeHash == typeHash)
                     m_types.push_back(sigIter);
                 ++sigIter;
             }

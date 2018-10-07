@@ -4,3 +4,9 @@
 [submodule "logvisor"]
 	path = logvisor
 	url = ../logvisor.git
+[submodule "lib/graphicsdev/NX/mesa"]
+	path = lib/graphicsdev/nx/mesa
+	url = ../mesa.git
+[submodule "lib/graphicsdev/NX/libdrm_nouveau"]
+	path = lib/graphicsdev/nx/libdrm_nouveau
+	url = https://github.com/devkitPro/libdrm_nouveau.git

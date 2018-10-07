@@ -13,13 +13,14 @@ bool DeviceSignature::DeviceMatchToken(const DeviceToken& token, const TDeviceSi
 {
     if (token.getDeviceType() == DeviceType::HID)
     {
+        uint64_t genPadHash = dev_typeid(GenericPad);
         bool hasGenericPad = false;
         for (const DeviceSignature* sig : sigSet)
         {
             if (sig->m_vid == token.getVendorId() && sig->m_pid == token.getProductId() &&
                 sig->m_type != DeviceType::HID)
                 return false;
-            if (sig->m_typeIdx == typeid(GenericPad))
+            if (sig->m_typeHash == genPadHash)
                 hasGenericPad = true;
         }
         return hasGenericPad;

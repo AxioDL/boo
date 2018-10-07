@@ -41,7 +41,8 @@ public:
         UWP         = 7,
         Revolution  = 8,
         Cafe        = 9,
-        Qt          = 10
+        NX          = 10,
+        Qt          = 11
     };
     virtual EPlatformType getPlatformType() const=0;
     

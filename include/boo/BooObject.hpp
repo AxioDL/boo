@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <mutex>
+#include "nxstl/mutex"
 
 namespace boo
 {

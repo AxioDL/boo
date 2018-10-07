@@ -32,9 +32,14 @@ add_subdirectory(soxr)
 
 set(BOO_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE PATH "boo include path" FORCE)
 
-include_directories(include xxhash ${LOGVISOR_INCLUDE_DIR})
+include_directories(include ${CMAKE_CURRENT_SOURCE_DIR} ${LOGVISOR_INCLUDE_DIR})
 
-if(NOT GEKKO AND NOT CAFE AND NOT WINDOWS_STORE)
+add_subdirectory(lib/graphicsdev/nx)
+if(TARGET nx_compiler)
+  list(APPEND _BOO_SYS_DEFINES -DHECL_NOUVEAU_NX=1)
+endif()
+
+if(NOT GEKKO AND NOT CAFE AND NOT WINDOWS_STORE AND NOT NX)
 list(APPEND PLAT_SRCS
     lib/graphicsdev/GL.cpp
     lib/graphicsdev/glew.c)
@@ -59,7 +64,8 @@ if(WINDOWS_STORE)
        lib/inputdev/HIDDeviceUWP.cpp
        lib/graphicsdev/D3D11.cpp
        lib/graphicsdev/D3D12.cpp
-       lib/audiodev/WASAPI.cpp)
+       lib/audiodev/WASAPI.cpp
+       lib/audiodev/AudioMatrixSSE.cpp)
 
   list(APPEND PLAT_HDRS
         include/boo/UWPViewProvider.hpp
@@ -99,7 +105,8 @@ elseif(WIN32)
        lib/inputdev/HIDListenerWinUSB.cpp
        lib/inputdev/HIDDeviceWinUSB.cpp
        lib/graphicsdev/D3D11.cpp
-       lib/audiodev/WASAPI.cpp)
+       lib/audiodev/WASAPI.cpp
+       lib/audiodev/AudioMatrixSSE.cpp)
 
   list(APPEND PLAT_HDRS
         include/boo/graphicsdev/D3D.hpp)
@@ -116,7 +123,8 @@ elseif(APPLE)
        lib/inputdev/HIDListenerIOKit.cpp
        lib/inputdev/HIDDeviceIOKit.cpp
        lib/graphicsdev/Metal.mm
-       lib/audiodev/AQS.cpp)
+       lib/audiodev/AQS.cpp
+       lib/audiodev/AudioMatrixSSE.cpp)
   set_source_files_properties(lib/mac/ApplicationCocoa.mm
                               lib/mac/WindowCocoa.mm
                               lib/graphicsdev/Metal.mm
@@ -146,6 +154,16 @@ elseif(APPLE)
   list(APPEND _BOO_SYS_LIBS ${APPKIT_LIBRARY} ${IOKIT_LIBRARY} ${OPENGL_LIBRARY} ${METAL_LIBRARY}
                             ${QUARTZCORE_LIBRARY} ${COREVIDEO_LIBRARY} ${AUDIOTOOLBOX_LIBRARY}
                             ${COREAUDIO_LIBRARY} ${COREMIDI_LIBRARY})
+
+elseif(NX)
+  list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_NX=1)
+  list(APPEND PLAT_SRCS
+       lib/nx/ApplicationNX.cpp
+       lib/nx/WindowNX.cpp
+       lib/audiodev/AudioMatrix.cpp
+       lib/inputdev/HIDListenerNX.cpp
+       lib/inputdev/HIDDeviceNX.cpp)
+  list(APPEND _BOO_SYS_LIBS nx_runtime)
 
 else(NOT GEKKO)
   list(APPEND PLAT_SRCS
@@ -226,37 +244,41 @@ else(NOT GEKKO)
     endif()
     list(APPEND PLAT_SRCS
          lib/inputdev/HIDListenerUdev.cpp
-         lib/inputdev/HIDDeviceUdev.cpp)
+         lib/inputdev/HIDDeviceUdev.cpp
+         lib/audiodev/AudioMatrixSSE.cpp)
     list(APPEND _BOO_SYS_LIBS xcb X11-xcb dl udev)
   else()
     list(APPEND PLAT_SRCS
         lib/inputdev/HIDListenerBSD.cpp
-        lib/inputdev/HIDDeviceBSD.cpp)
+        lib/inputdev/HIDDeviceBSD.cpp
+        lib/audiodev/AudioMatrixSSE.cpp)
     list(APPEND _BOO_SYS_LIBS execinfo)
   endif()
 
 endif()
 
-# For some reason, clang takes forever if glew.c is not built with -Os
-if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "AppleClang")
-  set_source_files_properties(lib/graphicsdev/glew.c PROPERTIES COMPILE_FLAGS -Os)
+if(NOT NX)
+  # For some reason, clang takes forever if glew.c is not built with -Os
+  if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "AppleClang")
+    set_source_files_properties(lib/graphicsdev/glew.c PROPERTIES COMPILE_FLAGS -Os)
+  endif()
+
+  # Empty link args for boo's use
+  function(glslang_set_link_args TARGET)
+  endfunction(glslang_set_link_args)
+
+  add_definitions("-DENABLE_OPT=0")
+  add_subdirectory(glslang/glslang)
+  add_subdirectory(glslang/OGLCompilersDLL)
+  add_subdirectory(glslang/SPIRV)
+  add_subdirectory(glslang/StandAlone)
+
+  target_include_directories(glslang-default-resource-limits
+      PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/glslang
+  )
+
+  list(APPEND _BOO_SYS_LIBS glslang soxr xxhash OSDependent OGLCompiler SPIRV glslang-default-resource-limits)
 endif()
-
-# Empty link args for boo's use
-function(glslang_set_link_args TARGET)
-endfunction(glslang_set_link_args)
-
-add_definitions("-DENABLE_OPT=0")
-add_subdirectory(glslang/glslang)
-add_subdirectory(glslang/OGLCompilersDLL)
-add_subdirectory(glslang/SPIRV)
-add_subdirectory(glslang/StandAlone)
-
-target_include_directories(glslang-default-resource-limits
-    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/glslang
-)
-
-list(APPEND _BOO_SYS_LIBS glslang soxr xxhash OSDependent OGLCompiler SPIRV glslang-default-resource-limits)
 
 set(BOO_SYS_LIBS ${_BOO_SYS_LIBS} CACHE PATH "boo system libraries" FORCE)
 set(BOO_SYS_DEFINES ${_BOO_SYS_DEFINES} CACHE STRING "boo system defines" FORCE)
@@ -281,8 +303,6 @@ add_library(boo
             lib/audiodev/Common.hpp
             lib/audiodev/WAVOut.cpp
             lib/audiodev/AudioMatrix.hpp
-            #lib/audiodev/AudioMatrix.cpp
-            lib/audiodev/AudioMatrixSSE.cpp
             lib/audiodev/AudioVoiceEngine.hpp
             lib/audiodev/AudioVoiceEngine.cpp
             lib/audiodev/AudioVoice.hpp

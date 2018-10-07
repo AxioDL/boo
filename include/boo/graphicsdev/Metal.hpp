@@ -14,7 +14,7 @@ struct BaseGraphicsData;
 class MetalDataFactory : public IGraphicsDataFactory
 {
 public:
-    class Context : public IGraphicsDataFactory::Context
+    class Context final : public IGraphicsDataFactory::Context
     {
         friend class MetalDataFactoryImpl;
         MetalDataFactory& m_parent;

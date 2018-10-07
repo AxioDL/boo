@@ -8,6 +8,10 @@
 #include "boo/ThreadLocalPtr.hpp"
 #include "boo/BooObject.hpp"
 
+#ifdef __SWITCH__
+#include <ctype.h>
+#endif
+
 namespace boo
 {
 struct IGraphicsCommandQueue;
@@ -120,11 +124,6 @@ protected:
     ITextureR() : ITexture(TextureType::Render) {}
 };
 
-/** Opaque token for representing the data layout of a vertex
- *  in a VBO. Also able to reference buffers for platforms like
- *  OpenGL that cache object refs */
-struct IVertexFormat : IObj {};
-
 /** Types of vertex attributes */
 enum class VertexSemantic
 {
@@ -147,15 +146,34 @@ ENABLE_BITWISE_ENUM(VertexSemantic)
 /** Used to create IVertexFormat */
 struct VertexElementDescriptor
 {
-    ObjToken<IGraphicsBuffer> vertBuffer;
-    ObjToken<IGraphicsBuffer> indexBuffer;
     VertexSemantic semantic;
     int semanticIdx = 0;
     VertexElementDescriptor() = default;
-    VertexElementDescriptor(const ObjToken<IGraphicsBuffer>& v, const ObjToken<IGraphicsBuffer>& i,
-                            VertexSemantic s, int idx=0)
-    : vertBuffer(v), indexBuffer(i), semantic(s), semanticIdx(idx) {}
+    VertexElementDescriptor(VertexSemantic s, int idx=0)
+    : semantic(s), semanticIdx(idx) {}
 };
+
+/** Structure for passing vertex format info for pipeline construction */
+struct VertexFormatInfo
+{
+    size_t elementCount = 0;
+    const VertexElementDescriptor* elements = nullptr;
+
+    VertexFormatInfo() = default;
+
+    VertexFormatInfo(size_t sz, const VertexElementDescriptor* elem)
+    : elementCount(sz), elements(elem) {}
+
+    template<typename T>
+    VertexFormatInfo(const T& tp)
+    : elementCount(std::extent_v<T>), elements(tp) {}
+
+    VertexFormatInfo(const std::initializer_list<VertexElementDescriptor>& l)
+    : elementCount(l.size()), elements(l.begin()) {}
+};
+
+/** Opaque token for referencing a shader stage usable in a graphics pipeline */
+struct IShaderStage : IObj {};
 
 /** Opaque token for referencing a complete graphics pipeline state necessary
  *  to rasterize geometry (shaders and blending modes mainly) */
@@ -169,8 +187,12 @@ struct IShaderDataBinding : IObj {};
 /** Used wherever distinction of pipeline stages is needed */
 enum class PipelineStage
 {
+    Null,
     Vertex,
-    Fragment
+    Fragment,
+    Geometry,
+    Control,
+    Evaluation
 };
 
 /** Used by platform shader pipeline constructors */
@@ -178,7 +200,7 @@ enum class Primitive
 {
     Triangles,
     TriStrips,
-    Patches /* Do not use directly, construct a tessellation pipeline instead */
+    Patches
 };
 
 /** Used by platform shader pipeline constructors */
@@ -219,6 +241,22 @@ enum class BlendFactor
     Subtract
 };
 
+/** Structure for passing additional pipeline construction information */
+struct AdditionalPipelineInfo
+{
+    BlendFactor srcFac = BlendFactor::One;
+    BlendFactor dstFac = BlendFactor::Zero;
+    Primitive prim = Primitive::TriStrips;
+    ZTest depthTest = ZTest::LEqual;
+    bool depthWrite = true;
+    bool colorWrite = true;
+    bool alphaWrite = false;
+    CullMode culling = CullMode::Backface;
+    uint32_t patchSize = 0;
+    bool overwriteAlpha = true;
+    bool depthAttachment = true;
+};
+
 /** Factory object for creating batches of resources as an IGraphicsData token */
 struct IGraphicsDataFactory
 {
@@ -232,7 +270,7 @@ struct IGraphicsDataFactory
         Metal,
         Vulkan,
         GX,
-        GX2
+        NX
     };
     virtual Platform platform() const=0;
     virtual const SystemChar* platformName() const=0;
@@ -259,14 +297,30 @@ struct IGraphicsDataFactory
         newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
                          size_t colorBindingCount, size_t depthBindingCount)=0;
 
-        virtual bool bindingNeedsVertexFormat() const=0;
-        virtual ObjToken<IVertexFormat>
-        newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
-                        size_t baseVert = 0, size_t baseInst = 0)=0;
+        virtual ObjToken<IShaderStage>
+        newShaderStage(const uint8_t* data, size_t size, PipelineStage stage)=0;
+
+        ObjToken<IShaderStage>
+        newShaderStage(const std::vector<uint8_t>& data, PipelineStage stage)
+        {
+            return newShaderStage(data.data(), data.size(), stage);
+        }
+
+        virtual ObjToken<IShaderPipeline>
+        newShaderPipeline(ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment,
+                          ObjToken<IShaderStage> geometry, ObjToken<IShaderStage> control,
+                          ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
+                          const AdditionalPipelineInfo& additionalInfo)=0;
+
+        ObjToken<IShaderPipeline>
+        newShaderPipeline(ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment,
+                          const VertexFormatInfo& vtxFmt, const AdditionalPipelineInfo& additionalInfo)
+        {
+            return newShaderPipeline(vertex, fragment, {}, {}, {}, vtxFmt, additionalInfo);
+        }
 
         virtual ObjToken<IShaderDataBinding>
         newShaderDataBinding(const ObjToken<IShaderPipeline>& pipeline,
-                             const ObjToken<IVertexFormat>& vtxFormat,
                              const ObjToken<IGraphicsBuffer>& vbo,
                              const ObjToken<IGraphicsBuffer>& instVbo,
                              const ObjToken<IGraphicsBuffer>& ibo,
@@ -278,7 +332,6 @@ struct IGraphicsDataFactory
 
         ObjToken<IShaderDataBinding>
         newShaderDataBinding(const ObjToken<IShaderPipeline>& pipeline,
-                             const ObjToken<IVertexFormat>& vtxFormat,
                              const ObjToken<IGraphicsBuffer>& vbo,
                              const ObjToken<IGraphicsBuffer>& instVbo,
                              const ObjToken<IGraphicsBuffer>& ibo,
@@ -287,7 +340,7 @@ struct IGraphicsDataFactory
                              const int* texBindIdx, const bool* depthBind,
                              size_t baseVert = 0, size_t baseInst = 0)
         {
-            return newShaderDataBinding(pipeline, vtxFormat, vbo, instVbo, ibo,
+            return newShaderDataBinding(pipeline, vbo, instVbo, ibo,
                                         ubufCount, ubufs, ubufStages, nullptr,
                                         nullptr, texCount, texs, texBindIdx, depthBind,
                                         baseVert, baseInst);

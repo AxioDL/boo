@@ -8,7 +8,7 @@
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
-#include "xxhash.h"
+#include "xxhash/xxhash.h"
 
 #if !__has_feature(objc_arc)
 #error ARC Required

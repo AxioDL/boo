@@ -9,7 +9,7 @@
 #include <SPIRV/disassemble.h>
 #include "boo/graphicsdev/GLSLMacros.hpp"
 #include "Common.hpp"
-#include "xxhash.h"
+#include "xxhash/xxhash.h"
 
 #define AMD_PAL_HACK 1
 
@@ -70,15 +70,6 @@ class VulkanDataFactoryImpl;
 struct VulkanCommandQueue;
 struct VulkanDescriptorPool;
 
-struct VulkanShareableShader : IShareableShader<VulkanDataFactoryImpl, VulkanShareableShader>
-{
-    VkShaderModule m_shader;
-    VulkanShareableShader(VulkanDataFactoryImpl& fac, uint64_t srcKey, uint64_t binKey,
-                          VkShaderModule s)
-    : IShareableShader(fac, srcKey, binKey), m_shader(s) {}
-    ~VulkanShareableShader() { vk::DestroyShaderModule(g_VulkanContext.m_dev, m_shader, nullptr); }
-};
-
 class VulkanDataFactoryImpl : public VulkanDataFactory, public GraphicsDataFactoryHead
 {
     friend struct VulkanCommandQueue;
@@ -90,28 +81,30 @@ class VulkanDataFactoryImpl : public VulkanDataFactory, public GraphicsDataFacto
     IGraphicsContext* m_parent;
     VulkanContext* m_ctx;
     VulkanDescriptorPool* m_descPoolHead = nullptr;
-    std::unordered_map<uint64_t, std::unique_ptr<VulkanShareableShader>> m_sharedShaders;
-    std::unordered_map<uint64_t, uint64_t> m_sourceToBinary;
-    std::vector<int> m_texUnis;
 
     float m_gamma = 1.f;
     ObjToken<IShaderPipeline> m_gammaShader;
     ObjToken<ITextureD> m_gammaLUT;
     ObjToken<IGraphicsBufferS> m_gammaVBO;
-    ObjToken<IVertexFormat> m_gammaVFMT;
     ObjToken<IShaderDataBinding> m_gammaBinding;
     void SetupGammaResources()
     {
         commitTransaction([this](IGraphicsDataFactory::Context& ctx)
         {
+            auto vertexSiprv = VulkanDataFactory::CompileGLSL(GammaVS, PipelineStage::Vertex);
+            auto vertexShader = ctx.newShaderStage(vertexSiprv, PipelineStage::Vertex);
+            auto fragmentSiprv = VulkanDataFactory::CompileGLSL(GammaFS, PipelineStage::Fragment);
+            auto fragmentShader = ctx.newShaderStage(fragmentSiprv, PipelineStage::Fragment);
             const VertexElementDescriptor vfmt[] = {
-                {nullptr, nullptr, VertexSemantic::Position4},
-                {nullptr, nullptr, VertexSemantic::UV4}
+                {VertexSemantic::Position4},
+                {VertexSemantic::UV4}
             };
-            m_gammaVFMT = ctx.newVertexFormat(2, vfmt);
-            m_gammaShader = static_cast<Context&>(ctx).newShaderPipeline(GammaVS, GammaFS,
-                m_gammaVFMT, BlendFactor::One, BlendFactor::Zero,
-                Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None);
+            AdditionalPipelineInfo info =
+            {
+                BlendFactor::One, BlendFactor::Zero,
+                Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None
+            };
+            m_gammaShader = ctx.newShaderPipeline(vertexShader, fragmentShader, vfmt, info);
             m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
             setDisplayGamma(1.f);
             const struct Vert {
@@ -125,7 +118,7 @@ class VulkanDataFactoryImpl : public VulkanDataFactory, public GraphicsDataFacto
             };
             m_gammaVBO = ctx.newStaticBuffer(BufferUse::Vertex, verts, 32, 4);
             ObjToken<ITexture> texs[] = {{}, m_gammaLUT.get()};
-            m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVFMT, m_gammaVBO.get(), {}, {},
+            m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVBO.get(), {}, {},
                                                       0, nullptr, nullptr, 2, texs, nullptr, nullptr);
             return true;
         } BooTrace);
@@ -134,7 +127,6 @@ class VulkanDataFactoryImpl : public VulkanDataFactory, public GraphicsDataFacto
     void DestroyGammaResources()
     {
         m_gammaBinding.reset();
-        m_gammaVFMT.reset();
         m_gammaVBO.reset();
         m_gammaLUT.reset();
         m_gammaShader.reset();
@@ -148,20 +140,13 @@ public:
     }
 
     Platform platform() const {return Platform::Vulkan;}
-    const SystemChar* platformName() const {return _S("Vulkan");}
+    const SystemChar* platformName() const {return _SYS_STR("Vulkan");}
 
     boo::ObjToken<VulkanDescriptorPool> allocateDescriptorSets(VkDescriptorSet* out);
 
     void commitTransaction(const FactoryCommitFunc& __BooTraceArgs);
 
     boo::ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs);
-
-    void _unregisterShareableShader(uint64_t srcKey, uint64_t binKey)
-    {
-        if (srcKey)
-            m_sourceToBinary.erase(srcKey);
-        m_sharedShaders.erase(binKey);
-    }
 
     void setDisplayGamma(float gamma)
     {
@@ -178,10 +163,6 @@ public:
         maxPatchSizeOut = m_ctx->m_gpuProps.limits.maxTessellationPatchSize;
         return true;
     }
-
-    VulkanShareableShader::Token PrepareShaderStage(const char* source, std::vector<unsigned int>* blobOut,
-                                                    EShLanguage lang);
-    uint64_t Compile(std::vector<unsigned int>& out, const char* source, uint64_t srcKey, EShLanguage lang);
 };
 
 static inline void ThrowIfFailed(VkResult res)
@@ -433,6 +414,7 @@ bool VulkanContext::initVulkan(std::string_view appName, PFN_vkGetInstanceProcAd
 
 #ifndef NDEBUG
     m_layerNames.push_back("VK_LAYER_LUNARG_standard_validation");
+    //m_layerNames.push_back("VK_LAYER_RENDERDOC_Capture");
     //m_layerNames.push_back("VK_LAYER_LUNARG_api_dump");
     //m_layerNames.push_back("VK_LAYER_LUNARG_core_validation");
     //m_layerNames.push_back("VK_LAYER_LUNARG_object_tracker");
@@ -1282,7 +1264,7 @@ class VulkanGraphicsBufferS : public GraphicsDataNode<IGraphicsBufferS>
     VulkanGraphicsBufferS(const boo::ObjToken<BaseGraphicsData>& parent, BufferUse use,
                           VulkanContext* ctx, const void* data, size_t stride, size_t count)
     : GraphicsDataNode<IGraphicsBufferS>(parent),
-      m_ctx(ctx), m_stride(stride), m_count(count), m_sz(stride * count),
+      m_ctx(ctx), m_sz(stride * count),
       m_stagingBuf(new uint8_t[m_sz]), m_use(use)
     {
         memmove(m_stagingBuf.get(), data, m_sz);
@@ -1290,8 +1272,6 @@ class VulkanGraphicsBufferS : public GraphicsDataNode<IGraphicsBufferS>
     }
 public:
     size_t size() const {return m_sz;}
-    size_t m_stride;
-    size_t m_count;
     VkDescriptorBufferInfo m_bufferInfo;
     BufferUse m_use;
 
@@ -1331,8 +1311,7 @@ class VulkanGraphicsBufferD : public GraphicsDataNode<IGraphicsBufferD, DataCls>
     VulkanGraphicsBufferD(const boo::ObjToken<DataCls>& parent, BufferUse use,
                           VulkanContext* ctx, size_t stride, size_t count)
     : GraphicsDataNode<IGraphicsBufferD, DataCls>(parent),
-      m_ctx(ctx), m_stride(stride), m_count(count),
-      m_cpuSz(stride * count), m_cpuBuf(new uint8_t[m_cpuSz]), m_use(use)
+      m_ctx(ctx), m_cpuSz(stride * count), m_cpuBuf(new uint8_t[m_cpuSz]), m_use(use)
     {
         m_bufferInfo[0].range = m_cpuSz;
         m_bufferInfo[1].range = m_cpuSz;
@@ -1340,8 +1319,6 @@ class VulkanGraphicsBufferD : public GraphicsDataNode<IGraphicsBufferD, DataCls>
     void update(int b);
 
 public:
-    size_t m_stride;
-    size_t m_count;
     VkDescriptorBufferInfo m_bufferInfo[2];
     uint8_t* m_bufferPtrs[2] = {};
     BufferUse m_use;
@@ -2105,7 +2082,7 @@ static const VkFormat SEMANTIC_TYPE_TABLE[] =
     VK_FORMAT_R32G32B32A32_SFLOAT
 };
 
-struct VulkanVertexFormat : GraphicsDataNode<IVertexFormat>
+struct VulkanVertexFormat
 {
     VkVertexInputBindingDescription m_bindings[2];
     std::unique_ptr<VkVertexInputAttributeDescription[]> m_attributes;
@@ -2113,22 +2090,20 @@ struct VulkanVertexFormat : GraphicsDataNode<IVertexFormat>
     size_t m_stride = 0;
     size_t m_instStride = 0;
 
-    VulkanVertexFormat(const boo::ObjToken<BaseGraphicsData>& parent, size_t elementCount,
-                       const VertexElementDescriptor* elements)
-    : GraphicsDataNode<IVertexFormat>(parent),
-      m_attributes(new VkVertexInputAttributeDescription[elementCount])
+    VulkanVertexFormat(const VertexFormatInfo& info)
+    : m_attributes(new VkVertexInputAttributeDescription[info.elementCount])
     {
         m_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         m_info.pNext = nullptr;
         m_info.flags = 0;
         m_info.vertexBindingDescriptionCount = 0;
         m_info.pVertexBindingDescriptions = m_bindings;
-        m_info.vertexAttributeDescriptionCount = elementCount;
+        m_info.vertexAttributeDescriptionCount = info.elementCount;
         m_info.pVertexAttributeDescriptions = m_attributes.get();
 
-        for (size_t i=0 ; i<elementCount ; ++i)
+        for (size_t i=0 ; i<info.elementCount ; ++i)
         {
-            const VertexElementDescriptor* elemin = &elements[i];
+            const VertexElementDescriptor* elemin = &info.elements[i];
             VkVertexInputAttributeDescription& attribute = m_attributes[i];
             int semantic = int(elemin->semantic & boo::VertexSemantic::SemanticMask);
             attribute.location = i;
@@ -2187,6 +2162,32 @@ static const VkBlendFactor BLEND_FACTOR_TABLE[] =
     VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR
 };
 
+class VulkanShaderStage : public GraphicsDataNode<IShaderStage>
+{
+    friend class VulkanDataFactory;
+    VulkanContext* m_ctx;
+    VkShaderModule m_module;
+    VulkanShaderStage(const boo::ObjToken<BaseGraphicsData>& parent, VulkanContext* ctx,
+                      const uint8_t* data, size_t size, PipelineStage stage)
+    : GraphicsDataNode<IShaderStage>(parent), m_ctx(ctx)
+    {
+        VkShaderModuleCreateInfo smCreateInfo = {};
+        smCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        smCreateInfo.pNext = nullptr;
+        smCreateInfo.flags = 0;
+
+        smCreateInfo.codeSize = size;
+        smCreateInfo.pCode = (uint32_t*)data;
+        ThrowIfFailed(vk::CreateShaderModule(m_ctx->m_dev, &smCreateInfo, nullptr, &m_module));
+    }
+public:
+    ~VulkanShaderStage()
+    {
+        vk::DestroyShaderModule(m_ctx->m_dev, m_module, nullptr);
+    }
+    VkShaderModule shader() const { return m_module; }
+};
+
 class VulkanShaderPipeline : public GraphicsDataNode<IShaderPipeline>
 {
 protected:
@@ -2194,9 +2195,12 @@ protected:
     friend struct VulkanShaderDataBinding;
     VulkanContext* m_ctx;
     VkPipelineCache m_pipelineCache;
-    boo::ObjToken<IVertexFormat> m_vtxFmt;
-    mutable VulkanShareableShader::Token m_vert;
-    mutable VulkanShareableShader::Token m_frag;
+    mutable VulkanVertexFormat m_vtxFmt;
+    mutable ObjToken<IShaderStage> m_vertex;
+    mutable ObjToken<IShaderStage> m_fragment;
+    mutable ObjToken<IShaderStage> m_geometry;
+    mutable ObjToken<IShaderStage> m_control;
+    mutable ObjToken<IShaderStage> m_evaluation;
     BlendFactor m_srcFac;
     BlendFactor m_dstFac;
     Primitive m_prim;
@@ -2206,22 +2210,27 @@ protected:
     bool m_alphaWrite;
     bool m_overwriteAlpha;
     CullMode m_culling;
+    uint32_t m_patchSize;
     mutable VkPipeline m_pipeline = VK_NULL_HANDLE;
 
     VulkanShaderPipeline(const boo::ObjToken<BaseGraphicsData>& parent,
                          VulkanContext* ctx,
-                         VulkanShareableShader::Token&& vert,
-                         VulkanShareableShader::Token&& frag,
+                         ObjToken<IShaderStage> vertex,
+                         ObjToken<IShaderStage> fragment,
+                         ObjToken<IShaderStage> geometry,
+                         ObjToken<IShaderStage> control,
+                         ObjToken<IShaderStage> evaluation,
                          VkPipelineCache pipelineCache,
-                         const boo::ObjToken<IVertexFormat>& vtxFmt,
-                         BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                         ZTest depthTest, bool depthWrite, bool colorWrite,
-                         bool alphaWrite, bool overwriteAlpha, CullMode culling)
+                         const VertexFormatInfo& vtxFmt,
+                         const AdditionalPipelineInfo& info)
     : GraphicsDataNode<IShaderPipeline>(parent),
       m_ctx(ctx), m_pipelineCache(pipelineCache), m_vtxFmt(vtxFmt),
-      m_vert(std::move(vert)), m_frag(std::move(frag)), m_srcFac(srcFac), m_dstFac(dstFac),
-      m_prim(prim), m_depthTest(depthTest), m_depthWrite(depthWrite), m_colorWrite(colorWrite),
-      m_alphaWrite(alphaWrite), m_overwriteAlpha(overwriteAlpha), m_culling(culling)
+      m_vertex(vertex), m_fragment(fragment), m_geometry(geometry), m_control(control), m_evaluation(evaluation),
+      m_srcFac(info.srcFac), m_dstFac(info.dstFac), m_prim(info.prim),
+      m_depthTest(info.depthTest), m_depthWrite(info.depthWrite),
+      m_colorWrite(info.colorWrite), m_alphaWrite(info.alphaWrite),
+      m_overwriteAlpha(info.overwriteAlpha), m_culling(info.culling),
+      m_patchSize(info.patchSize)
     {}
 public:
     ~VulkanShaderPipeline()
@@ -2233,9 +2242,6 @@ public:
     }
     VulkanShaderPipeline& operator=(const VulkanShaderPipeline&) = delete;
     VulkanShaderPipeline(const VulkanShaderPipeline&) = delete;
-    virtual uint32_t defineExtraStages(VkPipelineShaderStageCreateInfo* stages) const { return 0; }
-    virtual const VkPipelineTessellationStateCreateInfo* getTessellationInfo() const { return nullptr; }
-    virtual void resetExtraStages() const {}
     VkPipeline bind(VkRenderPass rPass = 0) const
     {
         if (!m_pipeline)
@@ -2265,25 +2271,63 @@ public:
             dynamicState.pDynamicStates = dynamicStateEnables;
             dynamicState.dynamicStateCount = 0;
 
-            VkPipelineShaderStageCreateInfo stages[4] = {};
+            VkPipelineShaderStageCreateInfo stages[5] = {};
+            uint32_t numStages = 0;
 
-            stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-            stages[0].pNext = nullptr;
-            stages[0].flags = 0;
-            stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-            stages[0].module = m_vert.get().m_shader;
-            stages[0].pName = "main";
-            stages[0].pSpecializationInfo = nullptr;
+            if (m_vertex)
+            {
+                stages[numStages].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+                stages[numStages].pNext = nullptr;
+                stages[numStages].flags = 0;
+                stages[numStages].stage = VK_SHADER_STAGE_VERTEX_BIT;
+                stages[numStages].module = m_vertex.cast<VulkanShaderStage>()->shader();
+                stages[numStages].pName = "main";
+                stages[numStages++].pSpecializationInfo = nullptr;
+            }
 
-            stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-            stages[1].pNext = nullptr;
-            stages[1].flags = 0;
-            stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-            stages[1].module = m_frag.get().m_shader;
-            stages[1].pName = "main";
-            stages[1].pSpecializationInfo = nullptr;
+            if (m_fragment)
+            {
+                stages[numStages].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+                stages[numStages].pNext = nullptr;
+                stages[numStages].flags = 0;
+                stages[numStages].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+                stages[numStages].module = m_fragment.cast<VulkanShaderStage>()->shader();
+                stages[numStages].pName = "main";
+                stages[numStages++].pSpecializationInfo = nullptr;
+            }
 
-            uint32_t extraStages = defineExtraStages(&stages[2]);
+            if (m_geometry)
+            {
+                stages[numStages].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+                stages[numStages].pNext = nullptr;
+                stages[numStages].flags = 0;
+                stages[numStages].stage = VK_SHADER_STAGE_GEOMETRY_BIT;
+                stages[numStages].module = m_geometry.cast<VulkanShaderStage>()->shader();
+                stages[numStages].pName = "main";
+                stages[numStages++].pSpecializationInfo = nullptr;
+            }
+
+            if (m_control)
+            {
+                stages[numStages].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+                stages[numStages].pNext = nullptr;
+                stages[numStages].flags = 0;
+                stages[numStages].stage = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+                stages[numStages].module = m_control.cast<VulkanShaderStage>()->shader();
+                stages[numStages].pName = "main";
+                stages[numStages++].pSpecializationInfo = nullptr;
+            }
+
+            if (m_evaluation)
+            {
+                stages[numStages].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+                stages[numStages].pNext = nullptr;
+                stages[numStages].flags = 0;
+                stages[numStages].stage = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+                stages[numStages].module = m_evaluation.cast<VulkanShaderStage>()->shader();
+                stages[numStages].pName = "main";
+                stages[numStages++].pSpecializationInfo = nullptr;
+            }
 
             VkPipelineInputAssemblyStateCreateInfo assemblyInfo = {};
             assemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -2291,6 +2335,12 @@ public:
             assemblyInfo.flags = 0;
             assemblyInfo.topology = PRIMITIVE_TABLE[int(m_prim)];
             assemblyInfo.primitiveRestartEnable = VK_TRUE;
+
+            VkPipelineTessellationStateCreateInfo tessInfo = {};
+            tessInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
+            tessInfo.pNext = nullptr;
+            tessInfo.flags = 0;
+            tessInfo.patchControlPoints = m_patchSize;
 
             VkPipelineViewportStateCreateInfo viewportInfo = {};
             viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -2408,11 +2458,11 @@ public:
             pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
             pipelineCreateInfo.pNext = nullptr;
             pipelineCreateInfo.flags = 0;
-            pipelineCreateInfo.stageCount = 2 + extraStages;
+            pipelineCreateInfo.stageCount = numStages;
             pipelineCreateInfo.pStages = stages;
-            pipelineCreateInfo.pVertexInputState = &m_vtxFmt.cast<VulkanVertexFormat>()->m_info;
+            pipelineCreateInfo.pVertexInputState = &m_vtxFmt.m_info;
             pipelineCreateInfo.pInputAssemblyState = &assemblyInfo;
-            pipelineCreateInfo.pTessellationState = getTessellationInfo();
+            pipelineCreateInfo.pTessellationState = &tessInfo;
             pipelineCreateInfo.pViewportState = &viewportInfo;
             pipelineCreateInfo.pRasterizationState = &rasterizationInfo;
             pipelineCreateInfo.pMultisampleState = &multisampleInfo;
@@ -2425,78 +2475,13 @@ public:
             ThrowIfFailed(vk::CreateGraphicsPipelines(m_ctx->m_dev, m_pipelineCache, 1, &pipelineCreateInfo,
                                                       nullptr, &m_pipeline));
 
-            m_vert.reset();
-            m_frag.reset();
-            resetExtraStages();
+            m_vertex.reset();
+            m_fragment.reset();
+            m_geometry.reset();
+            m_control.reset();
+            m_evaluation.reset();
         }
         return m_pipeline;
-    }
-};
-
-class VulkanTessellationShaderPipeline : public VulkanShaderPipeline
-{
-    friend class VulkanDataFactory;
-    friend struct VulkanShaderDataBinding;
-
-    mutable VulkanShareableShader::Token m_control;
-    mutable VulkanShareableShader::Token m_evaluation;
-
-    VkPipelineTessellationStateCreateInfo m_tessInfo;
-
-    VulkanTessellationShaderPipeline(const boo::ObjToken<BaseGraphicsData>& parent,
-                                     VulkanContext* ctx,
-                                     VulkanShareableShader::Token&& vert,
-                                     VulkanShareableShader::Token&& frag,
-                                     VulkanShareableShader::Token&& control,
-                                     VulkanShareableShader::Token&& evaluation,
-                                     VkPipelineCache pipelineCache,
-                                     const boo::ObjToken<IVertexFormat>& vtxFmt,
-                                     BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
-                                     ZTest depthTest, bool depthWrite, bool colorWrite,
-                                     bool alphaWrite, bool overwriteAlpha, CullMode culling)
-    : VulkanShaderPipeline(parent, ctx, std::move(vert), std::move(frag), pipelineCache, vtxFmt, srcFac, dstFac,
-                           Primitive::Patches, depthTest, depthWrite, colorWrite, alphaWrite, overwriteAlpha, culling),
-      m_control(std::move(control)), m_evaluation(std::move(evaluation))
-    {
-        m_tessInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
-        m_tessInfo.pNext = nullptr;
-        m_tessInfo.flags = 0;
-        m_tessInfo.patchControlPoints = patchSize;
-    }
-
-public:
-    ~VulkanTessellationShaderPipeline() = default;
-
-    uint32_t defineExtraStages(VkPipelineShaderStageCreateInfo* stages) const
-    {
-        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[0].pNext = nullptr;
-        stages[0].flags = 0;
-        stages[0].stage = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-        stages[0].module = m_control.get().m_shader;
-        stages[0].pName = "main";
-        stages[0].pSpecializationInfo = nullptr;
-
-        stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[1].pNext = nullptr;
-        stages[1].flags = 0;
-        stages[1].stage = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-        stages[1].module = m_evaluation.get().m_shader;
-        stages[1].pName = "main";
-        stages[1].pSpecializationInfo = nullptr;
-
-        return 2;
-    }
-
-    const VkPipelineTessellationStateCreateInfo* getTessellationInfo() const
-    {
-        return &m_tessInfo;
-    }
-
-    void resetExtraStages() const
-    {
-        m_control.reset();
-        m_evaluation.reset();
     }
 };
 
@@ -2596,9 +2581,9 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
       m_ibuf(ibuf)
     {
         VulkanShaderPipeline* cpipeline = m_pipeline.cast<VulkanShaderPipeline>();
-        VulkanVertexFormat* vtxFmt = cpipeline->m_vtxFmt.cast<VulkanVertexFormat>();
-        m_vertOffset = baseVert * vtxFmt->m_stride;
-        m_instOffset = baseInst * vtxFmt->m_instStride;
+        VulkanVertexFormat& vtxFmt = cpipeline->m_vtxFmt;
+        m_vertOffset = baseVert * vtxFmt.m_stride;
+        m_instOffset = baseInst * vtxFmt.m_instStride;
 
         if (ubufOffs && ubufSizes)
         {
@@ -2798,7 +2783,7 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
 struct VulkanCommandQueue : IGraphicsCommandQueue
 {
     Platform platform() const {return IGraphicsDataFactory::Platform::Vulkan;}
-    const SystemChar* platformName() const {return _S("Vulkan");}
+    const SystemChar* platformName() const {return _SYS_STR("Vulkan");}
     VulkanContext* m_ctx;
     VulkanContext::Window* m_windowCtx;
     IGraphicsContext* m_parent;
@@ -3573,203 +3558,6 @@ void VulkanTextureD::unmap()
 VulkanDataFactoryImpl::VulkanDataFactoryImpl(IGraphicsContext* parent, VulkanContext* ctx)
 : m_parent(parent), m_ctx(ctx) {}
 
-VulkanShareableShader::Token VulkanDataFactoryImpl::PrepareShaderStage(const char* source,
-                                                                       std::vector<unsigned int>* blobOut,
-                                                                       EShLanguage lang)
-{
-    uint64_t srcHash = 0;
-    uint64_t binHash = 0;
-    XXH64_state_t hashState;
-    XXH64_reset(&hashState, 0);
-    if (source)
-    {
-        XXH64_update(&hashState, source, strlen(source));
-        srcHash = XXH64_digest(&hashState);
-        auto binSearch = m_sourceToBinary.find(srcHash);
-        if (binSearch != m_sourceToBinary.cend())
-            binHash = binSearch->second;
-    }
-    else if (blobOut && blobOut->size())
-    {
-        XXH64_update(&hashState, blobOut->data(), blobOut->size() * sizeof(unsigned int));
-        binHash = XXH64_digest(&hashState);
-    }
-
-    if (blobOut && blobOut->empty())
-        binHash = Compile(*blobOut, source, srcHash, lang);
-
-    auto search = binHash ? m_sharedShaders.find(binHash) : m_sharedShaders.end();
-    if (search != m_sharedShaders.end())
-    {
-        return search->second->lock();
-    }
-    else
-    {
-        std::vector<unsigned int> blob;
-        const std::vector<unsigned int>* useBlob;
-        if (blobOut)
-        {
-            useBlob = blobOut;
-        }
-        else
-        {
-            useBlob = &blob;
-            binHash = Compile(blob, source, srcHash, lang);
-        }
-
-        VkShaderModuleCreateInfo smCreateInfo = {};
-        smCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        smCreateInfo.pNext = nullptr;
-        smCreateInfo.flags = 0;
-
-        VkShaderModule module;
-        smCreateInfo.codeSize = useBlob->size() * sizeof(unsigned int);
-        smCreateInfo.pCode = useBlob->data();
-        ThrowIfFailed(vk::CreateShaderModule(m_ctx->m_dev, &smCreateInfo, nullptr, &module));
-
-        auto it =
-            m_sharedShaders.emplace(std::make_pair(binHash,
-            std::make_unique<VulkanShareableShader>(*this, srcHash, binHash, module))).first;
-        return it->second->lock();
-    }
-}
-
-uint64_t VulkanDataFactoryImpl::Compile(std::vector<unsigned int>& out, const char* source,
-                                        uint64_t srcKey, EShLanguage lang)
-{
-    const EShMessages messages = EShMessages(EShMsgSpvRules | EShMsgVulkanRules);
-    glslang::TShader shader(lang);
-    shader.setStrings(&source, 1);
-    if (!shader.parse(&glslang::DefaultTBuiltInResource, 110, false, messages))
-    {
-        printf("%s\n", source);
-        Log.report(logvisor::Fatal, "unable to compile shader\n%s", shader.getInfoLog());
-    }
-
-    glslang::TProgram prog;
-    prog.addShader(&shader);
-    if (!prog.link(messages))
-    {
-        Log.report(logvisor::Fatal, "unable to link shader program\n%s", prog.getInfoLog());
-    }
-    glslang::GlslangToSpv(*prog.getIntermediate(lang), out);
-    //spv::Disassemble(std::cerr, out);
-
-    XXH64_state_t hashState;
-    XXH64_reset(&hashState, 0);
-    XXH64_update(&hashState, out.data(), out.size() * sizeof(unsigned int));
-    uint64_t binKey = XXH64_digest(&hashState);
-    m_sourceToBinary[srcKey] = binKey;
-    return binKey;
-}
-
-boo::ObjToken<IShaderPipeline> VulkanDataFactory::Context::newShaderPipeline
-(const char* vertSource, const char* fragSource,
- std::vector<unsigned int>* vertBlobOut, std::vector<unsigned int>* fragBlobOut,
- std::vector<unsigned char>* pipelineBlob, const boo::ObjToken<IVertexFormat>& vtxFmt,
- BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
- ZTest depthTest, bool depthWrite, bool colorWrite,
- bool alphaWrite, CullMode culling, bool overwriteAlpha)
-{
-    VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
-
-    VulkanShareableShader::Token vertShader = factory.PrepareShaderStage(vertSource, vertBlobOut, EShLangVertex);
-    VulkanShareableShader::Token fragShader = factory.PrepareShaderStage(fragSource, fragBlobOut, EShLangFragment);
-
-    VkPipelineCache pipelineCache = VK_NULL_HANDLE;
-    if (pipelineBlob)
-    {
-        VkPipelineCacheCreateInfo cacheDataInfo = {};
-        cacheDataInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-        cacheDataInfo.pNext = nullptr;
-
-        cacheDataInfo.initialDataSize = pipelineBlob->size();
-        if (cacheDataInfo.initialDataSize)
-            cacheDataInfo.pInitialData = pipelineBlob->data();
-
-        ThrowIfFailed(vk::CreatePipelineCache(factory.m_ctx->m_dev, &cacheDataInfo, nullptr, &pipelineCache));
-    }
-
-    VulkanShaderPipeline* retval = new VulkanShaderPipeline(m_data, factory.m_ctx, std::move(vertShader),
-                                                            std::move(fragShader), pipelineCache, vtxFmt, srcFac,
-                                                            dstFac, prim, depthTest, depthWrite, colorWrite,
-                                                            alphaWrite, overwriteAlpha, culling);
-
-    if (pipelineBlob && pipelineBlob->empty())
-    {
-        size_t cacheSz = 0;
-        ThrowIfFailed(vk::GetPipelineCacheData(factory.m_ctx->m_dev, pipelineCache, &cacheSz, nullptr));
-        if (cacheSz)
-        {
-            pipelineBlob->resize(cacheSz);
-            ThrowIfFailed(vk::GetPipelineCacheData(factory.m_ctx->m_dev, pipelineCache,
-                                                   &cacheSz, pipelineBlob->data()));
-            pipelineBlob->resize(cacheSz);
-        }
-    }
-
-    return {retval};
-}
-
-boo::ObjToken<IShaderPipeline> VulkanDataFactory::Context::newTessellationShaderPipeline
-(const char* vertSource, const char* fragSource, const char* controlSource, const char* evaluationSource,
- std::vector<unsigned int>* vertBlobOut, std::vector<unsigned int>* fragBlobOut,
- std::vector<unsigned int>* controlBlobOut, std::vector<unsigned int>* evaluationBlobOut,
- std::vector<unsigned char>* pipelineBlob, const boo::ObjToken<IVertexFormat>& vtxFmt,
- BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
- ZTest depthTest, bool depthWrite, bool colorWrite,
- bool alphaWrite, CullMode culling, bool overwriteAlpha)
-{
-    VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
-
-    if (!factory.m_ctx->m_features.tessellationShader)
-        Log.report(logvisor::Fatal, "Device does not support tessellation shaders");
-    if (patchSize > factory.m_ctx->m_gpuProps.limits.maxTessellationPatchSize)
-        Log.report(logvisor::Fatal, "Device supports %d patch vertices, %d requested",
-                   int(factory.m_ctx->m_gpuProps.limits.maxTessellationPatchSize), int(patchSize));
-
-    VulkanShareableShader::Token vertShader = factory.PrepareShaderStage(vertSource, vertBlobOut, EShLangVertex);
-    VulkanShareableShader::Token fragShader = factory.PrepareShaderStage(fragSource, fragBlobOut, EShLangFragment);
-    VulkanShareableShader::Token controlShader = factory.PrepareShaderStage(controlSource, controlBlobOut, EShLangTessControl);
-    VulkanShareableShader::Token evaluationShader = factory.PrepareShaderStage(evaluationSource, evaluationBlobOut, EShLangTessEvaluation);
-
-    VkPipelineCache pipelineCache = VK_NULL_HANDLE;
-    if (pipelineBlob)
-    {
-        VkPipelineCacheCreateInfo cacheDataInfo = {};
-        cacheDataInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-        cacheDataInfo.pNext = nullptr;
-
-        cacheDataInfo.initialDataSize = pipelineBlob->size();
-        if (cacheDataInfo.initialDataSize)
-            cacheDataInfo.pInitialData = pipelineBlob->data();
-
-        ThrowIfFailed(vk::CreatePipelineCache(factory.m_ctx->m_dev, &cacheDataInfo, nullptr, &pipelineCache));
-    }
-
-    VulkanShaderPipeline* retval =
-        new VulkanTessellationShaderPipeline(m_data, factory.m_ctx, std::move(vertShader),
-                                             std::move(fragShader), std::move(controlShader),
-                                             std::move(evaluationShader), pipelineCache, vtxFmt, srcFac,
-                                             dstFac, patchSize, depthTest, depthWrite, colorWrite,
-                                             alphaWrite, overwriteAlpha, culling);
-
-    if (pipelineBlob && pipelineBlob->empty())
-    {
-        size_t cacheSz = 0;
-        ThrowIfFailed(vk::GetPipelineCacheData(factory.m_ctx->m_dev, pipelineCache, &cacheSz, nullptr));
-        if (cacheSz)
-        {
-            pipelineBlob->resize(cacheSz);
-            ThrowIfFailed(vk::GetPipelineCacheData(factory.m_ctx->m_dev, pipelineCache,
-                                                   &cacheSz, pipelineBlob->data()));
-            pipelineBlob->resize(cacheSz);
-        }
-    }
-
-    return {retval};
-}
-
 VulkanDataFactory::Context::Context(VulkanDataFactory& parent __BooTraceArgs)
 : m_parent(parent), m_data(new VulkanData(static_cast<VulkanDataFactoryImpl&>(parent) __BooTraceArgsUse)) {}
 VulkanDataFactory::Context::~Context() {}
@@ -3785,7 +3573,6 @@ boo::ObjToken<IGraphicsBufferD>
 VulkanDataFactory::Context::newDynamicBuffer(BufferUse use, size_t stride, size_t count)
 {
     VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
-    VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(factory.m_parent->getCommandQueue());
     return {new VulkanGraphicsBufferD<BaseGraphicsData>(m_data, use, factory.m_ctx, stride, count)};
 }
 
@@ -3825,18 +3612,44 @@ VulkanDataFactory::Context::newRenderTexture(size_t width, size_t height, Textur
     return {new VulkanTextureR(m_data, q, width, height, clampMode, colorBindCount, depthBindCount)};
 }
 
-boo::ObjToken<IVertexFormat>
-VulkanDataFactory::Context::newVertexFormat(size_t elementCount,
-                                            const VertexElementDescriptor* elements,
-                                            size_t baseVert, size_t baseInst)
+ObjToken<IShaderStage>
+VulkanDataFactory::Context::newShaderStage(const uint8_t* data, size_t size, PipelineStage stage)
 {
-    return {new struct VulkanVertexFormat(m_data, elementCount, elements)};
+    VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
+
+    if (stage == PipelineStage::Control || stage == PipelineStage::Evaluation)
+    {
+        if (!factory.m_ctx->m_features.tessellationShader)
+            Log.report(logvisor::Fatal, "Device does not support tessellation shaders");
+    }
+
+    return {new VulkanShaderStage(m_data, factory.m_ctx, data, size, stage)};
+}
+
+ObjToken<IShaderPipeline>
+VulkanDataFactory::Context::newShaderPipeline(ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment,
+                                              ObjToken<IShaderStage> geometry, ObjToken<IShaderStage> control,
+                                              ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
+                                              const AdditionalPipelineInfo& additionalInfo)
+{
+    VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
+
+    if (control || evaluation)
+    {
+        if (!factory.m_ctx->m_features.tessellationShader)
+            Log.report(logvisor::Fatal, "Device does not support tessellation shaders");
+        if (additionalInfo.patchSize > factory.m_ctx->m_gpuProps.limits.maxTessellationPatchSize)
+            Log.report(logvisor::Fatal, "Device supports %d patch vertices, %d requested",
+                       int(factory.m_ctx->m_gpuProps.limits.maxTessellationPatchSize), int(additionalInfo.patchSize));
+    }
+
+    return {new VulkanShaderPipeline(m_data, factory.m_ctx, vertex, fragment, geometry,
+        control, evaluation, VK_NULL_HANDLE, vtxFmt, additionalInfo)};
 }
 
 boo::ObjToken<IShaderDataBinding>
 VulkanDataFactory::Context::newShaderDataBinding(
         const boo::ObjToken<IShaderPipeline>& pipeline,
-        const boo::ObjToken<IVertexFormat>& /*vtxFormat*/,
         const boo::ObjToken<IGraphicsBuffer>& vbuf,
         const boo::ObjToken<IGraphicsBuffer>& instVbuf,
         const boo::ObjToken<IGraphicsBuffer>& ibuf,
@@ -4163,6 +3976,44 @@ std::unique_ptr<IGraphicsCommandQueue> _NewVulkanCommandQueue(VulkanContext* ctx
 std::unique_ptr<IGraphicsDataFactory> _NewVulkanDataFactory(IGraphicsContext* parent, VulkanContext* ctx)
 {
     return std::make_unique<VulkanDataFactoryImpl>(parent, ctx);
+}
+
+static const EShLanguage ShaderTypes[] =
+{
+    EShLangVertex,
+    EShLangVertex,
+    EShLangFragment,
+    EShLangGeometry,
+    EShLangTessControl,
+    EShLangTessEvaluation
+};
+
+std::vector<uint8_t> VulkanDataFactory::CompileGLSL(const char* source, PipelineStage stage)
+{
+    EShLanguage lang = ShaderTypes[int(stage)];
+    const EShMessages messages = EShMessages(EShMsgSpvRules | EShMsgVulkanRules);
+    glslang::TShader shader(lang);
+    shader.setStrings(&source, 1);
+    if (!shader.parse(&glslang::DefaultTBuiltInResource, 110, false, messages))
+    {
+        printf("%s\n", source);
+        Log.report(logvisor::Fatal, "unable to compile shader\n%s", shader.getInfoLog());
+    }
+
+    glslang::TProgram prog;
+    prog.addShader(&shader);
+    if (!prog.link(messages))
+    {
+        Log.report(logvisor::Fatal, "unable to link shader program\n%s", prog.getInfoLog());
+    }
+
+    std::vector<unsigned int> out;
+    glslang::GlslangToSpv(*prog.getIntermediate(lang), out);
+    //spv::Disassemble(std::cerr, out);
+
+    std::vector<uint8_t> ret(out.size() * 4);
+    memcpy(ret.data(), out.data(), ret.size());
+    return ret;
 }
 
 }

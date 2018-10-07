@@ -134,8 +134,8 @@ public:
                 m_oldCoefs.v[i][0] = m_coefs.v[i][0];
                 m_oldCoefs.v[i][1] = m_coefs.v[i][1];
             }
-            m_coefs.v[i][0] = coefs.v[i][0];
-            m_coefs.v[i][1] = coefs.v[i][1];
+            m_coefs.v[i][0] = coefs[i][0];
+            m_coefs.v[i][1] = coefs[i][1];
         }
 #endif
         m_curSlewFrame = 0;

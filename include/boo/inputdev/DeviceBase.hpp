@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 #include <mutex>
+#include "nxstl/mutex"
 #include "boo/System.hpp"
 
 #if _WIN32
@@ -31,13 +32,17 @@ class DeviceBase : public std::enable_shared_from_this<DeviceBase>
     friend struct DeviceSignature;
     friend class HIDDeviceIOKit;
 
+    uint64_t m_typeHash;
     class DeviceToken* m_token;
     std::shared_ptr<IHIDDevice> m_hidDev;
     void _deviceDisconnected();
 
 public:
-    DeviceBase(DeviceToken* token);
+    DeviceBase(uint64_t typeHash, DeviceToken* token);
     virtual ~DeviceBase() = default;
+
+    uint64_t getTypeHash() const { return m_typeHash; }
+
     void closeDevice();
     
     /* Callbacks */
@@ -76,7 +81,7 @@ protected:
     std::mutex m_callbackLock;
     CB* m_callback = nullptr;
 public:
-    TDeviceBase(DeviceToken* token) : DeviceBase(token) {}
+    TDeviceBase(uint64_t typeHash, DeviceToken* token) : DeviceBase(typeHash, token) {}
     void setCallback(CB* cb)
     {
         std::lock_guard<std::mutex> lk(m_callbackLock);

@@ -23,7 +23,7 @@ class D3DDataFactory : public IGraphicsDataFactory
 public:
     virtual ~D3DDataFactory() {}
 
-    class Context : public IGraphicsDataFactory::Context
+    class Context final : public IGraphicsDataFactory::Context
     {
     public:
         bool bindingNeedsVertexFormat() const {return false;}

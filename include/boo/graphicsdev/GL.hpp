@@ -21,7 +21,7 @@ struct GLContext
 class GLDataFactory : public IGraphicsDataFactory
 {
 public:
-    class Context : public IGraphicsDataFactory::Context
+    class Context final : public IGraphicsDataFactory::Context
     {
         friend class GLDataFactoryImpl;
         GLDataFactory& m_parent;
@@ -30,7 +30,7 @@ public:
         ~Context();
     public:
         Platform platform() const { return Platform::OpenGL; }
-        const SystemChar* platformName() const { return _S("OpenGL"); }
+        const SystemChar* platformName() const { return _SYS_STR("OpenGL"); }
 
         ObjToken<IGraphicsBufferS> newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
         ObjToken<IGraphicsBufferD> newDynamicBuffer(BufferUse use, size_t stride, size_t count);
@@ -43,28 +43,17 @@ public:
         ObjToken<ITextureR> newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
                                              size_t colorBindingCount, size_t depthBindingCount);
 
-        bool bindingNeedsVertexFormat() const { return true; }
-        ObjToken<IVertexFormat> newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
-                                                size_t baseVert = 0, size_t baseInst = 0);
+        ObjToken<IShaderStage>
+        newShaderStage(const uint8_t* data, size_t size, PipelineStage stage);
 
-        ObjToken<IShaderPipeline> newShaderPipeline(const char* vertSource, const char* fragSource,
-                                                    size_t texCount, const char** texNames,
-                                                    size_t uniformBlockCount, const char** uniformBlockNames,
-                                                    BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                                                    ZTest depthTest, bool depthWrite, bool colorWrite,
-                                                    bool alphaWrite, CullMode culling, bool overwriteAlpha = true);
-
-        ObjToken<IShaderPipeline> newTessellationShaderPipeline(const char* vertSource, const char* fragSource,
-                                                    const char* controlSource, const char* evaluationSource,
-                                                    size_t texCount, const char** texNames,
-                                                    size_t uniformBlockCount, const char** uniformBlockNames,
-                                                    BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
-                                                    ZTest depthTest, bool depthWrite, bool colorWrite,
-                                                    bool alphaWrite, CullMode culling, bool overwriteAlpha = true);
+        ObjToken<IShaderPipeline>
+        newShaderPipeline(ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment,
+                          ObjToken<IShaderStage> geometry, ObjToken<IShaderStage> control,
+                          ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
+                          const AdditionalPipelineInfo& additionalInfo);
 
         ObjToken<IShaderDataBinding>
         newShaderDataBinding(const ObjToken<IShaderPipeline>& pipeline,
-                             const ObjToken<IVertexFormat>& vtxFormat,
                              const ObjToken<IGraphicsBuffer>& vbo,
                              const ObjToken<IGraphicsBuffer>& instVbo,
                              const ObjToken<IGraphicsBuffer>& ibo,

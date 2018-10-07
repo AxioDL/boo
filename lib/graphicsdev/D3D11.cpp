@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <atomic>
 #include <forward_list>
-#include "xxhash.h"
+#include "xxhash/xxhash.h"
 
 #undef min
 #undef max

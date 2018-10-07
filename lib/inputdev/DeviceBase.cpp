@@ -6,8 +6,8 @@
 namespace boo
 {
 
-DeviceBase::DeviceBase(DeviceToken* token)
-: m_token(token)
+DeviceBase::DeviceBase(uint64_t typeHash, DeviceToken* token)
+: m_typeHash(typeHash), m_token(token)
 {
 }
 

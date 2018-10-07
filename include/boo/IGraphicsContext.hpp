@@ -26,7 +26,8 @@ public:
         D3D11      = 4,
         Metal      = 6,
         GX         = 7,
-        GX2        = 8
+        GX2        = 8,
+        NX         = 9
     };
     
     enum class EPixelFormat
@@ -39,7 +40,7 @@ public:
         RGBAF32_Z24 = 5
     };
     
-    virtual ~IGraphicsContext() {}
+    virtual ~IGraphicsContext() = default;
     
     virtual EGraphicsAPI getAPI() const=0;
     virtual EPixelFormat getPixelFormat() const=0;

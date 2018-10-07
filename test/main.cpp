@@ -132,35 +132,34 @@ class TestDeviceFinder : public DeviceFinder
     GenericPadCallback m_genericCb;
 public:
     TestDeviceFinder()
-    : DeviceFinder({typeid(DolphinSmashAdapter), typeid(NintendoPowerA), typeid(GenericPad)})
+    : DeviceFinder({dev_typeid(DolphinSmashAdapter), dev_typeid(NintendoPowerA), dev_typeid(GenericPad)})
     {}
     void deviceConnected(DeviceToken& tok)
     {
-        m_smashAdapter = std::dynamic_pointer_cast<DolphinSmashAdapter>(tok.openAndGetDevice());
-        if (m_smashAdapter)
+        auto dev = tok.openAndGetDevice();
+        if (!dev)
+            return;
+
+        if (dev->getTypeHash() == dev_typeid(DolphinSmashAdapter))
         {
+            m_smashAdapter = std::static_pointer_cast<DolphinSmashAdapter>(dev);
             m_smashAdapter->setCallback(&m_cb);
-            m_smashAdapter->startRumble(0);
-            return;
         }
-        m_nintendoPowerA = std::dynamic_pointer_cast<NintendoPowerA>(tok.openAndGetDevice());
-        if (m_nintendoPowerA)
+        else if (dev->getTypeHash() == dev_typeid(NintendoPowerA))
         {
+            m_nintendoPowerA = std::static_pointer_cast<NintendoPowerA>(dev);
             m_nintendoPowerA->setCallback(&m_nintendoPowerACb);
-            return;
         }
-        m_ds3 = std::dynamic_pointer_cast<DualshockPad>(tok.openAndGetDevice());
-        if (m_ds3)
+        else if (dev->getTypeHash() == dev_typeid(DualshockPad))
         {
+            m_ds3 = std::static_pointer_cast<DualshockPad>(dev);
             m_ds3->setCallback(&m_ds3CB);
             m_ds3->setLED(EDualshockLED::LED_1);
-            return;
         }
-        m_generic = std::dynamic_pointer_cast<GenericPad>(tok.openAndGetDevice());
-        if (m_generic)
+        else if (dev->getTypeHash() == dev_typeid(GenericPad))
         {
+            m_generic = std::static_pointer_cast<GenericPad>(dev);
             m_generic->setCallback(&m_genericCb);
-            return;
         }
     }
     void deviceDisconnected(DeviceToken&, DeviceBase* device)
@@ -315,10 +314,9 @@ struct TestApplicationCallback : IApplicationCallback
             /* Make vertex format */
             VertexElementDescriptor descs[2] =
             {
-                {vbo.get(), nullptr, VertexSemantic::Position3},
-                {vbo.get(), nullptr, VertexSemantic::UV2}
+                {VertexSemantic::Position3},
+                {VertexSemantic::UV2}
             };
-            auto vfmt = ctx.newVertexFormat(2, descs);
 
             /* Make ramp texture */
             using Pixel = uint8_t[4];
@@ -337,16 +335,23 @@ struct TestApplicationCallback : IApplicationCallback
             /* Make shader pipeline */
             boo::ObjToken<IShaderPipeline> pipeline;
             auto plat = ctx.platform();
+
+            AdditionalPipelineInfo info =
+            {
+                BlendFactor::One, BlendFactor::Zero,
+                Primitive::TriStrips, boo::ZTest::LEqual,
+                true, true, false, CullMode::None
+            };
+
 #if BOO_HAS_GL
             if (plat == IGraphicsDataFactory::Platform::OpenGL)
             {
-                GLDataFactory::Context& glF = dynamic_cast<GLDataFactory::Context&>(ctx);
-
                 static const char* VS =
                 "#version 330\n"
+                BOO_GLSL_BINDING_HEAD
                 "layout(location=0) in vec3 in_pos;\n"
                 "layout(location=1) in vec2 in_uv;\n"
-                "out vec2 out_uv;\n"
+                "SBINDING(0) out vec2 out_uv;\n"
                 "void main()\n"
                 "{\n"
                 "    gl_Position = vec4(in_pos, 1.0);\n"
@@ -359,26 +364,25 @@ struct TestApplicationCallback : IApplicationCallback
                 "precision highp float;\n"
                 "TBINDING0 uniform sampler2D tex;\n"
                 "layout(location=0) out vec4 out_frag;\n"
-                "in vec2 out_uv;\n"
+                "SBINDING(0) in vec2 out_uv;\n"
                 "void main()\n"
                 "{\n"
                 "    //out_frag = texture(tex, out_uv);\n"
                 "    out_frag = vec4(out_uv.xy, 0.0, 1.0);\n"
                 "}\n";
 
-                static const char* texName = "tex";
 
-                pipeline = glF.newShaderPipeline(VS, FS, 1, &texName, 0, nullptr,
-                                                 BlendFactor::One, BlendFactor::Zero,
-                                                 Primitive::TriStrips, boo::ZTest::LEqual,
-                                                 true, true, false, CullMode::None);
+                auto vertex = ctx.newShaderStage((uint8_t*)VS, 0, PipelineStage::Vertex);
+                auto fragment = ctx.newShaderStage((uint8_t*)FS, 0, PipelineStage::Fragment);
+
+                pipeline = ctx.newShaderPipeline(vertex, fragment,
+                                                 {{VertexSemantic::Position3},
+                                                  {VertexSemantic::UV2}}, info);
             } else
 #endif
 #if BOO_HAS_VULKAN
             if (plat == IGraphicsDataFactory::Platform::Vulkan)
             {
-                VulkanDataFactory::Context& vkF = dynamic_cast<VulkanDataFactory::Context&>(ctx);
-
                 static const char* VS =
                 "#version 330\n"
                 BOO_GLSL_BINDING_HEAD
@@ -403,9 +407,11 @@ struct TestApplicationCallback : IApplicationCallback
                 "    out_frag = texture(texs[0], out_uv);\n"
                 "}\n";
 
-                pipeline = vkF.newShaderPipeline(VS, FS, vfmt, BlendFactor::One, BlendFactor::Zero,
-                                                 Primitive::TriStrips, boo::ZTest::LEqual,
-                                                 true, true, false, CullMode::None);
+                auto vertexSiprv = VulkanDataFactory::CompileGLSL(VS, PipelineStage::Vertex);
+                auto vertexShader = ctx.newShaderStage(vertexSiprv, PipelineStage::Vertex);
+                auto fragmentSiprv = VulkanDataFactory::CompileGLSL(FS, PipelineStage::Fragment);
+                auto fragmentShader = ctx.newShaderStage(fragmentSiprv, PipelineStage::Fragment);
+                pipeline = ctx.newShaderPipeline(vertexShader, fragmentShader, descs, info);
             } else
 #endif
 #if _WIN32
@@ -477,7 +483,7 @@ struct TestApplicationCallback : IApplicationCallback
 
             /* Make shader data binding */
             self->m_binding =
-            ctx.newShaderDataBinding(pipeline, vfmt, vbo.get(), nullptr, nullptr, 0, nullptr, nullptr,
+            ctx.newShaderDataBinding(pipeline, vbo.get(), nullptr, nullptr, 0, nullptr, nullptr,
                                      1, &texture, nullptr, nullptr);
 
             return true;
@@ -486,7 +492,7 @@ struct TestApplicationCallback : IApplicationCallback
 
     int appMain(IApplication* app)
     {
-        mainWindow = app->newWindow(_S("YAY!"));
+        mainWindow = app->newWindow(_SYS_STR("YAY!"));
         mainWindow->setCallback(&windowCallback);
         mainWindow->showWindow();
         windowCallback.m_lastRect = mainWindow->getWindowFrame();
@@ -588,7 +594,7 @@ int main(int argc, const boo::SystemChar** argv)
     logvisor::RegisterConsoleLogger();
     boo::TestApplicationCallback appCb;
     int ret = ApplicationRun(boo::IApplication::EPlatformType::Auto,
-        appCb, _S("boo"), _S("boo"), argc, argv, {}, 1, 1, true);
+        appCb, _SYS_STR("boo"), _SYS_STR("boo"), argc, argv, {}, 1, 1, true);
     printf("IM DYING!!\n");
     return ret;
 }

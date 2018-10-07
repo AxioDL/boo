@@ -7,7 +7,10 @@
 #include <array>
 #include <unordered_map>
 #include <unordered_set>
-#include "xxhash.h"
+#include "xxhash/xxhash.h"
+#include "glslang/Public/ShaderLang.h"
+#include "glslang/Include/Types.h"
+#include "StandAlone/ResourceLimits.h"
 
 #if _WIN32
 #include "../win/WinCommon.hpp"
@@ -60,21 +63,12 @@ namespace boo
 static logvisor::Module Log("boo::GL");
 class GLDataFactoryImpl;
 
-struct GLShareableShader : IShareableShader<GLDataFactoryImpl, GLShareableShader>
-{
-    GLuint m_shader = 0;
-    GLShareableShader(GLDataFactoryImpl& fac, uint64_t srcKey, GLuint s)
-    : IShareableShader(fac, srcKey, 0), m_shader(s) {}
-    ~GLShareableShader() { glDeleteShader(m_shader); }
-};
-
 class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead
 {
     friend struct GLCommandQueue;
     friend class GLDataFactory::Context;
     IGraphicsContext* m_parent;
     GLContext* m_glCtx;
-    std::unordered_map<uint64_t, std::unique_ptr<GLShareableShader>> m_sharedShaders;
 
     bool m_hasTessellation = false;
     uint32_t m_maxPatchSize = 0;
@@ -83,10 +77,13 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead
     ObjToken<IShaderPipeline> m_gammaShader;
     ObjToken<ITextureD> m_gammaLUT;
     ObjToken<IGraphicsBufferS> m_gammaVBO;
-    ObjToken<IVertexFormat> m_gammaVFMT;
+    ObjToken<IShaderDataBinding> m_gammaBinding;
     void SetupGammaResources()
     {
         /* Good enough place for this */
+        if (!glslang::InitializeProcess())
+            Log.report(logvisor::Error, "unable to initialize glslang");
+
         if (GLEW_ARB_tessellation_shader)
         {
             m_hasTessellation = true;
@@ -97,10 +94,18 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead
 
         commitTransaction([this](IGraphicsDataFactory::Context& ctx)
         {
-            const char* texNames[] = {"screenTex", "gammaLUT"};
-            m_gammaShader = static_cast<Context&>(ctx).newShaderPipeline(GammaVS, GammaFS,
-                2, texNames, 0, nullptr, BlendFactor::One, BlendFactor::Zero,
-                Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None);
+            auto vertex = ctx.newShaderStage((uint8_t*)GammaVS, 0, PipelineStage::Vertex);
+            auto fragment = ctx.newShaderStage((uint8_t*)GammaFS, 0, PipelineStage::Fragment);
+            AdditionalPipelineInfo info =
+            {
+                BlendFactor::One, BlendFactor::Zero,
+                Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None
+            };
+            const VertexElementDescriptor vfmt[] = {
+                {VertexSemantic::Position4},
+                {VertexSemantic::UV4}
+            };
+            m_gammaShader = ctx.newShaderPipeline(vertex, fragment, vfmt, info);
             m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
             const struct Vert {
                 float pos[4];
@@ -112,11 +117,9 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead
                 {{ 1.f,  1.f, 0.f, 1.f}, {1.f, 1.f, 0.f, 0.f}}
             };
             m_gammaVBO = ctx.newStaticBuffer(BufferUse::Vertex, verts, 32, 4);
-            const VertexElementDescriptor vfmt[] = {
-                {m_gammaVBO.get(), nullptr, VertexSemantic::Position4},
-                {m_gammaVBO.get(), nullptr, VertexSemantic::UV4}
-            };
-            m_gammaVFMT = ctx.newVertexFormat(2, vfmt);
+            ObjToken<ITexture> texs[] = {{}, m_gammaLUT.get()};
+            m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVBO.get(), {}, {},
+                                                      0, nullptr, nullptr, 2, texs, nullptr, nullptr);
             return true;
         } BooTrace);
     }
@@ -126,10 +129,9 @@ public:
     : m_parent(parent), m_glCtx(glCtx) {}
 
     Platform platform() const { return Platform::OpenGL; }
-    const SystemChar* platformName() const { return _S("OpenGL"); }
+    const SystemChar* platformName() const { return _SYS_STR("OpenGL"); }
     void commitTransaction(const FactoryCommitFunc& trans __BooTraceArgs);
     ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs);
-    void _unregisterShareableShader(uint64_t srcKey, uint64_t binKey) { m_sharedShaders.erase(srcKey); }
 
     void setDisplayGamma(float gamma)
     {
@@ -143,8 +145,6 @@ public:
         maxPatchSizeOut = m_maxPatchSize;
         return m_hasTessellation;
     }
-
-    GLShareableShader::Token PrepareShaderStage(const char* source, GLenum stage);
 };
 
 static const GLenum USE_TABLE[] =
@@ -705,14 +705,120 @@ static const GLenum BLEND_FACTOR_TABLE[] =
     GL_ONE_MINUS_SRC1_COLOR
 };
 
+static const GLenum SHADER_STAGE_TABLE[] =
+{
+    0,
+    GL_VERTEX_SHADER,
+    GL_FRAGMENT_SHADER,
+    GL_GEOMETRY_SHADER,
+    GL_TESS_CONTROL_SHADER,
+    GL_TESS_EVALUATION_SHADER
+};
+
+class GLShaderStage : public GraphicsDataNode<IShaderStage>
+{
+    friend class GLDataFactory;
+    GLuint m_shad = 0;
+    std::vector<std::pair<std::string, int>> m_texNames;
+    std::vector<std::string> m_blockNames;
+
+    static constexpr EShLanguage ShaderTypes[] =
+    {
+        EShLangVertex,
+        EShLangVertex,
+        EShLangFragment,
+        EShLangGeometry,
+        EShLangTessControl,
+        EShLangTessEvaluation
+    };
+
+    /* Use glslang's reflection API to pull out uniform indices from Vulkan
+     * version of shader. Aids in glGetUniformBlockIndex and glGetUniformLocation calls */
+    void BuildNameLists(const char* source, PipelineStage stage)
+    {
+        EShLanguage lang = ShaderTypes[int(stage)];
+        const EShMessages messages = EShMessages(EShMsgSpvRules | EShMsgVulkanRules);
+        glslang::TShader shader(lang);
+        shader.setStrings(&source, 1);
+        if (!shader.parse(&glslang::DefaultTBuiltInResource, 110, false, messages))
+        {
+            printf("%s\n", source);
+            Log.report(logvisor::Fatal, "unable to compile shader\n%s", shader.getInfoLog());
+        }
+
+        glslang::TProgram prog;
+        prog.addShader(&shader);
+        if (!prog.link(messages))
+        {
+            Log.report(logvisor::Fatal, "unable to link shader program\n%s", prog.getInfoLog());
+        }
+
+        prog.buildReflection();
+        int count = prog.getNumLiveUniformVariables();
+        for (int i = 0; i < count; ++i)
+        {
+            const glslang::TType* tp = prog.getUniformTType(i);
+            if (tp->getBasicType() != glslang::TBasicType::EbtSampler)
+                continue;
+            const auto& qual = tp->getQualifier();
+            if (!qual.hasBinding())
+                Log.report(logvisor::Fatal, "shader uniform %s does not have layout binding", prog.getUniformName(i));
+            m_texNames.emplace_back(std::make_pair(prog.getUniformName(i),
+                                    qual.layoutBinding - BOO_GLSL_MAX_UNIFORM_COUNT));
+        }
+        count = prog.getNumLiveUniformBlocks();
+        m_blockNames.reserve(count);
+        for (int i = 0; i < count; ++i)
+            m_blockNames.emplace_back(prog.getUniformBlockName(i));
+    }
+
+    GLShaderStage(const ObjToken<BaseGraphicsData>& parent, const char* source, PipelineStage stage)
+    : GraphicsDataNode<IShaderStage>(parent)
+    {
+        BuildNameLists(source, stage);
+
+        m_shad = glCreateShader(SHADER_STAGE_TABLE[int(stage)]);
+        if (!m_shad)
+        {
+            Log.report(logvisor::Fatal, "unable to create shader");
+            return;
+        }
+
+        glShaderSource(m_shad, 1, &source, nullptr);
+        glCompileShader(m_shad);
+        GLint status;
+        glGetShaderiv(m_shad, GL_COMPILE_STATUS, &status);
+        if (status != GL_TRUE)
+        {
+            GLint logLen;
+            glGetShaderiv(m_shad, GL_INFO_LOG_LENGTH, &logLen);
+            std::unique_ptr<char[]> log(new char[logLen]);
+            glGetShaderInfoLog(m_shad, logLen, nullptr, log.get());
+            Log.report(logvisor::Fatal, "unable to compile source\n%s\n%s\n", log.get(), source);
+            return;
+        }
+    }
+public:
+    ~GLShaderStage() { if (m_shad) glDeleteShader(m_shad); }
+    GLuint getShader() const { return m_shad; }
+    const std::vector<std::pair<std::string, int>>& getTexNames() const { return m_texNames; }
+    const std::vector<std::string>& getBlockNames() const { return m_blockNames; }
+};
+
 class GLShaderPipeline : public GraphicsDataNode<IShaderPipeline>
 {
 protected:
     friend class GLDataFactory;
     friend struct GLCommandQueue;
     friend struct GLShaderDataBinding;
-    mutable GLShareableShader::Token m_vert;
-    mutable GLShareableShader::Token m_frag;
+    mutable ObjToken<IShaderStage> m_vertex;
+    mutable ObjToken<IShaderStage> m_fragment;
+    mutable ObjToken<IShaderStage> m_geometry;
+    mutable ObjToken<IShaderStage> m_control;
+    mutable ObjToken<IShaderStage> m_evaluation;
+    std::vector<VertexElementDescriptor> m_elements;
+    size_t baseVert = 0;
+    size_t baseInst = 0;
     mutable GLuint m_prog = 0;
     GLenum m_sfactor = GL_ONE;
     GLenum m_dfactor = GL_ZERO;
@@ -724,26 +830,12 @@ protected:
     bool m_subtractBlend = false;
     bool m_overwriteAlpha = false;
     CullMode m_culling;
+    uint32_t m_patchSize = 0;
     mutable std::vector<GLint> m_uniLocs;
-    mutable std::vector<std::string> m_texNames;
-    mutable std::vector<std::string> m_blockNames;
-    GLShaderPipeline(const ObjToken<BaseGraphicsData>& parent,
-                     size_t texCount, const char** texNames,
-                     size_t uniformBlockCount, const char** uniformBlockNames,
-                     BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                     ZTest depthTest, bool depthWrite, bool colorWrite,
-                     bool alphaWrite, CullMode culling, bool overwriteAlpha)
+    GLShaderPipeline(const ObjToken<BaseGraphicsData>& parent, const AdditionalPipelineInfo& info)
     : GraphicsDataNode<IShaderPipeline>(parent)
     {
-        m_texNames.reserve(texCount);
-        for (int i=0 ; i<texCount ; ++i)
-            m_texNames.emplace_back(texNames[i]);
-
-        m_blockNames.reserve(uniformBlockCount);
-        for (int i=0 ; i<uniformBlockCount ; ++i)
-            m_blockNames.emplace_back(uniformBlockNames[i]);
-
-        if (srcFac == BlendFactor::Subtract || dstFac == BlendFactor::Subtract)
+        if (info.srcFac == BlendFactor::Subtract || info.dstFac == BlendFactor::Subtract)
         {
             m_sfactor = GL_SRC_ALPHA;
             m_dfactor = GL_ONE;
@@ -751,25 +843,22 @@ protected:
         }
         else
         {
-            m_sfactor = BLEND_FACTOR_TABLE[int(srcFac)];
-            m_dfactor = BLEND_FACTOR_TABLE[int(dstFac)];
+            m_sfactor = BLEND_FACTOR_TABLE[int(info.srcFac)];
+            m_dfactor = BLEND_FACTOR_TABLE[int(info.dstFac)];
             m_subtractBlend = false;
         }
 
-        m_depthTest = depthTest;
-        m_depthWrite = depthWrite;
-        m_colorWrite = colorWrite;
-        m_alphaWrite = alphaWrite;
-        m_overwriteAlpha = overwriteAlpha;
-        m_culling = culling;
-        m_drawPrim = PRIMITIVE_TABLE[int(prim)];
+        m_depthTest = info.depthTest;
+        m_depthWrite = info.depthWrite;
+        m_colorWrite = info.colorWrite;
+        m_alphaWrite = info.alphaWrite;
+        m_overwriteAlpha = info.overwriteAlpha;
+        m_culling = info.culling;
+        m_drawPrim = PRIMITIVE_TABLE[int(info.prim)];
+        m_patchSize = info.patchSize;
     }
 public:
     ~GLShaderPipeline() { if (m_prog) glDeleteProgram(m_prog); }
-
-    virtual void attachExtraStages() const {}
-    virtual void resetExtraStages() const {}
-    virtual void setExtraParameters() const {}
 
     GLuint bind() const
     {
@@ -782,18 +871,29 @@ public:
                 return 0;
             }
 
-            glAttachShader(m_prog, m_vert.get().m_shader);
-            glAttachShader(m_prog, m_frag.get().m_shader);
-            attachExtraStages();
+            if (m_vertex)
+                glAttachShader(m_prog, m_vertex.cast<GLShaderStage>()->getShader());
+            if (m_fragment)
+                glAttachShader(m_prog, m_fragment.cast<GLShaderStage>()->getShader());
+            if (m_geometry)
+                glAttachShader(m_prog, m_geometry.cast<GLShaderStage>()->getShader());
+            if (m_control)
+                glAttachShader(m_prog, m_control.cast<GLShaderStage>()->getShader());
+            if (m_evaluation)
+                glAttachShader(m_prog, m_evaluation.cast<GLShaderStage>()->getShader());
 
             glLinkProgram(m_prog);
 
-            glDetachShader(m_prog, m_vert.get().m_shader);
-            glDetachShader(m_prog, m_frag.get().m_shader);
-
-            m_vert.reset();
-            m_frag.reset();
-            resetExtraStages();
+            if (m_vertex)
+                glDetachShader(m_prog, m_vertex.cast<GLShaderStage>()->getShader());
+            if (m_fragment)
+                glDetachShader(m_prog, m_fragment.cast<GLShaderStage>()->getShader());
+            if (m_geometry)
+                glDetachShader(m_prog, m_geometry.cast<GLShaderStage>()->getShader());
+            if (m_control)
+                glDetachShader(m_prog, m_control.cast<GLShaderStage>()->getShader());
+            if (m_evaluation)
+                glDetachShader(m_prog, m_evaluation.cast<GLShaderStage>()->getShader());
 
             GLint status;
             glGetProgramiv(m_prog, GL_LINK_STATUS, &status);
@@ -809,31 +909,33 @@ public:
 
             glUseProgram(m_prog);
 
-            if (m_blockNames.size())
+            for (const auto& shader : {m_vertex, m_fragment, m_geometry, m_control, m_evaluation})
             {
-                m_uniLocs.reserve(m_blockNames.size());
-                for (size_t i=0 ; i<m_blockNames.size() ; ++i)
+                if (const GLShaderStage* stage = shader.cast<GLShaderStage>())
                 {
-                    GLint uniLoc = glGetUniformBlockIndex(m_prog, m_blockNames[i].c_str());
-                    //if (uniLoc < 0)
-                    //    Log.report(logvisor::Warning, "unable to find uniform block '%s'", uniformBlockNames[i]);
-                    m_uniLocs.push_back(uniLoc);
+                    for (const auto& name : stage->getBlockNames())
+                    {
+                        GLint uniLoc = glGetUniformBlockIndex(m_prog, name.c_str());
+                        //if (uniLoc < 0)
+                        //    Log.report(logvisor::Warning, "unable to find uniform block '%s'", uniformBlockNames[i]);
+                        m_uniLocs.push_back(uniLoc);
+                    }
+                    for (const auto& name : stage->getTexNames())
+                    {
+                        GLint texLoc = glGetUniformLocation(m_prog, name.first.c_str());
+                        if (texLoc < 0)
+                        { /* Log.report(logvisor::Warning, "unable to find sampler variable '%s'", texNames[i]); */ }
+                        else
+                            glUniform1i(texLoc, name.second);
+                    }
                 }
-                m_blockNames = std::vector<std::string>();
             }
 
-            if (m_texNames.size())
-            {
-                for (int i=0 ; i<m_texNames.size() ; ++i)
-                {
-                    GLint texLoc = glGetUniformLocation(m_prog, m_texNames[i].c_str());
-                    if (texLoc < 0)
-                    { /* Log.report(logvisor::Warning, "unable to find sampler variable '%s'", texNames[i]); */ }
-                    else
-                        glUniform1i(texLoc, i);
-                }
-                m_texNames = std::vector<std::string>();
-            }
+            m_vertex.reset();
+            m_fragment.reset();
+            m_geometry.reset();
+            m_control.reset();
+            m_evaluation.reset();
         }
         else
         {
@@ -889,161 +991,65 @@ public:
         else
             glDisable(GL_CULL_FACE);
 
-        setExtraParameters();
+        glPatchParameteri(GL_PATCH_VERTICES, m_patchSize);
 
         return m_prog;
     }
 };
 
-class GLTessellationShaderPipeline : public GLShaderPipeline
-{
-    friend class GLDataFactory;
-    friend struct GLCommandQueue;
-    friend struct GLShaderDataBinding;
-    GLint m_patchSize;
-    mutable GLShareableShader::Token m_control;
-    mutable GLShareableShader::Token m_evaluation;
-    GLTessellationShaderPipeline(const ObjToken<BaseGraphicsData>& parent,
-                                 size_t texCount, const char** texNames,
-                                 size_t uniformBlockCount, const char** uniformBlockNames,
-                                 BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
-                                 ZTest depthTest, bool depthWrite, bool colorWrite,
-                                 bool alphaWrite, CullMode culling, bool overwriteAlpha)
-    : GLShaderPipeline(parent, texCount, texNames, uniformBlockCount, uniformBlockNames,
-                       srcFac, dstFac, Primitive::Patches, depthTest, depthWrite, colorWrite,
-                       alphaWrite, culling, overwriteAlpha), m_patchSize(patchSize)
-    {}
-public:
-    ~GLTessellationShaderPipeline() = default;
-
-    void attachExtraStages() const
-    {
-        glAttachShader(m_prog, m_control.get().m_shader);
-        glAttachShader(m_prog, m_evaluation.get().m_shader);
-    }
-
-    void resetExtraStages() const
-    {
-        glDetachShader(m_prog, m_control.get().m_shader);
-        glDetachShader(m_prog, m_evaluation.get().m_shader);
-        m_control.reset();
-        m_evaluation.reset();
-    }
-
-    void setExtraParameters() const
-    {
-        glPatchParameteri(GL_PATCH_VERTICES, m_patchSize);
-    }
-};
-
-GLShareableShader::Token GLDataFactoryImpl::PrepareShaderStage(const char* source, GLenum stage)
-{
-    XXH64_state_t hashState;
-    XXH64_reset(&hashState, 0);
-    XXH64_update(&hashState, source, strlen(source));
-    uint64_t hash = XXH64_digest(&hashState);
-
-    GLint status;
-    auto search = m_sharedShaders.find(hash);
-    if (search != m_sharedShaders.end())
-    {
-        return search->second->lock();
-    }
-    else
-    {
-        GLuint sobj = glCreateShader(stage);
-        if (!sobj)
-        {
-            Log.report(logvisor::Fatal, "unable to create shader");
-            return {};
-        }
-
-        glShaderSource(sobj, 1, &source, nullptr);
-        glCompileShader(sobj);
-        glGetShaderiv(sobj, GL_COMPILE_STATUS, &status);
-        if (status != GL_TRUE)
-        {
-            GLint logLen;
-            glGetShaderiv(sobj, GL_INFO_LOG_LENGTH, &logLen);
-            std::unique_ptr<char[]> log(new char[logLen]);
-            glGetShaderInfoLog(sobj, logLen, nullptr, log.get());
-            Log.report(logvisor::Fatal, "unable to compile source\n%s\n%s\n", log.get(), source);
-            return {};
-        }
-
-        auto it =
-            m_sharedShaders.emplace(std::make_pair(hash,
-            std::make_unique<GLShareableShader>(*this, hash, sobj))).first;
-        return it->second->lock();
-    }
-}
-
-ObjToken<IShaderPipeline> GLDataFactory::Context::newShaderPipeline
-(const char* vertSource, const char* fragSource,
- size_t texCount, const char** texNames,
- size_t uniformBlockCount, const char** uniformBlockNames,
- BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
- ZTest depthTest, bool depthWrite, bool colorWrite,
- bool alphaWrite, CullMode culling, bool overwriteAlpha)
+ObjToken<IShaderStage>
+GLDataFactory::Context::newShaderStage(const uint8_t* data, size_t size, PipelineStage stage)
 {
     GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
-    ObjToken<IShaderPipeline> retval(new GLShaderPipeline(
-        m_data, texCount, texNames, uniformBlockCount, uniformBlockNames, srcFac, dstFac, prim,
-        depthTest, depthWrite, colorWrite, alphaWrite, culling, overwriteAlpha));
+
+    if (stage == PipelineStage::Control || stage == PipelineStage::Evaluation)
+    {
+        if (!factory.m_hasTessellation)
+            Log.report(logvisor::Fatal, "Device does not support tessellation shaders");
+    }
+
+    return {new GLShaderStage(m_data, (char*)data, stage)};
+}
+
+ObjToken<IShaderPipeline>
+GLDataFactory::Context::newShaderPipeline(ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment,
+                                          ObjToken<IShaderStage> geometry, ObjToken<IShaderStage> control,
+                                          ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
+                                          const AdditionalPipelineInfo& additionalInfo)
+{
+    GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
+
+    if (control || evaluation)
+    {
+        if (!factory.m_hasTessellation)
+            Log.report(logvisor::Fatal, "Device does not support tessellation shaders");
+        if (additionalInfo.patchSize > factory.m_maxPatchSize)
+            Log.report(logvisor::Fatal, "Device supports %d patch vertices, %d requested",
+                       int(factory.m_maxPatchSize), int(additionalInfo.patchSize));
+    }
+
+    ObjToken<IShaderPipeline> retval(new GLShaderPipeline(m_data, additionalInfo));
     GLShaderPipeline& shader = *retval.cast<GLShaderPipeline>();
 
-    shader.m_vert = factory.PrepareShaderStage(vertSource, GL_VERTEX_SHADER);
-    shader.m_frag = factory.PrepareShaderStage(fragSource, GL_FRAGMENT_SHADER);
+    shader.m_vertex = vertex;
+    shader.m_fragment = fragment;
+    shader.m_geometry = geometry;
+    shader.m_control = control;
+    shader.m_evaluation = evaluation;
+
+    shader.m_elements.reserve(vtxFmt.elementCount);
+    for (size_t i=0 ; i<vtxFmt.elementCount ; ++i)
+        shader.m_elements.push_back(vtxFmt.elements[i]);
 
     return retval;
 }
-
-ObjToken<IShaderPipeline> GLDataFactory::Context::newTessellationShaderPipeline
-(const char* vertSource, const char* fragSource,
- const char* controlSource, const char* evaluationSource,
- size_t texCount, const char** texNames,
- size_t uniformBlockCount, const char** uniformBlockNames,
- BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
- ZTest depthTest, bool depthWrite, bool colorWrite,
- bool alphaWrite, CullMode culling, bool overwriteAlpha)
-{
-    GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
-
-    if (!factory.m_hasTessellation)
-        Log.report(logvisor::Fatal, "Device does not support tessellation shaders");
-    if (patchSize > factory.m_maxPatchSize)
-        Log.report(logvisor::Fatal, "Device supports %d patch vertices, %d requested",
-                   int(factory.m_maxPatchSize), int(patchSize));
-
-    ObjToken<IShaderPipeline> retval(new GLTessellationShaderPipeline(
-        m_data, texCount, texNames, uniformBlockCount, uniformBlockNames, srcFac, dstFac, patchSize,
-        depthTest, depthWrite, colorWrite, alphaWrite, culling, overwriteAlpha));
-    GLTessellationShaderPipeline& shader = *retval.cast<GLTessellationShaderPipeline>();
-
-    shader.m_vert = factory.PrepareShaderStage(vertSource, GL_VERTEX_SHADER);
-    shader.m_frag = factory.PrepareShaderStage(fragSource, GL_FRAGMENT_SHADER);
-    shader.m_control = factory.PrepareShaderStage(controlSource, GL_TESS_CONTROL_SHADER);
-    shader.m_evaluation = factory.PrepareShaderStage(evaluationSource, GL_TESS_EVALUATION_SHADER);
-
-    return retval;
-}
-
-struct GLVertexFormat : GraphicsDataNode<IVertexFormat>
-{
-    GLuint m_vao[3] = {};
-    GLuint m_baseVert, m_baseInst;
-    std::vector<VertexElementDescriptor> m_elements;
-    GLVertexFormat(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue* q,
-                   size_t elementCount, const VertexElementDescriptor* elements,
-                   size_t baseVert, size_t baseInst);
-    ~GLVertexFormat() { glDeleteVertexArrays(3, m_vao); }
-    void bind(int idx) const { glBindVertexArray(m_vao[idx]); }
-};
 
 struct GLShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
 {
     ObjToken<IShaderPipeline> m_pipeline;
-    ObjToken<IVertexFormat> m_vtxFormat;
+    ObjToken<IGraphicsBuffer> m_vbo;
+    ObjToken<IGraphicsBuffer> m_instVbo;
+    ObjToken<IGraphicsBuffer> m_ibo;
     std::vector<ObjToken<IGraphicsBuffer>> m_ubufs;
     std::vector<std::pair<size_t,size_t>> m_ubufOffs;
     struct BoundTex
@@ -1053,18 +1059,22 @@ struct GLShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
         bool depth;
     };
     std::vector<BoundTex> m_texs;
+    size_t m_baseVert;
+    size_t m_baseInst;
+    GLuint m_vao[3] = {};
 
     GLShaderDataBinding(const ObjToken<BaseGraphicsData>& d,
                         const ObjToken<IShaderPipeline>& pipeline,
-                        const ObjToken<IVertexFormat>& vtxFormat,
+                        const ObjToken<IGraphicsBuffer>& vbo,
+                        const ObjToken<IGraphicsBuffer>& instVbo,
+                        const ObjToken<IGraphicsBuffer>& ibo,
                         size_t ubufCount, const ObjToken<IGraphicsBuffer>* ubufs,
                         const size_t* ubufOffs, const size_t* ubufSizes,
                         size_t texCount, const ObjToken<ITexture>* texs,
-                        const int* bindTexIdx,
-                        const bool* depthBind)
+                        const int* bindTexIdx, const bool* depthBind,
+                        size_t baseVert, size_t baseInst)
     : GraphicsDataNode<IShaderDataBinding>(d),
-      m_pipeline(pipeline),
-      m_vtxFormat(vtxFormat)
+      m_pipeline(pipeline), m_vbo(vbo), m_instVbo(instVbo), m_ibo(ibo), m_baseVert(baseVert), m_baseInst(baseInst)
     {
         if (ubufOffs && ubufSizes)
         {
@@ -1093,11 +1103,17 @@ struct GLShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
             m_texs.push_back({texs[i], bindTexIdx ? bindTexIdx[i] : 0, depthBind ? depthBind[i] : false});
         }
     }
+
+    ~GLShaderDataBinding()
+    {
+        glDeleteVertexArrays(3, m_vao);
+    }
+
     void bind(int b) const
     {
         GLShaderPipeline& pipeline = *m_pipeline.cast<GLShaderPipeline>();
         GLuint prog = pipeline.bind();
-        m_vtxFormat.cast<GLVertexFormat>()->bind(b);
+        glBindVertexArray(m_vao[b]);
         if (m_ubufOffs.size())
         {
             for (size_t i=0 ; i<m_ubufs.size() && i<pipeline.m_uniLocs.size() ; ++i)
@@ -1154,23 +1170,6 @@ struct GLShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
         }
     }
 };
-
-ObjToken<IShaderDataBinding>
-GLDataFactory::Context::newShaderDataBinding(const ObjToken<IShaderPipeline>& pipeline,
-                                             const ObjToken<IVertexFormat>& vtxFormat,
-                                             const ObjToken<IGraphicsBuffer>& vbo,
-                                             const ObjToken<IGraphicsBuffer>& instVbo,
-                                             const ObjToken<IGraphicsBuffer>& ibo,
-                                             size_t ubufCount, const ObjToken<IGraphicsBuffer>* ubufs,
-                                             const PipelineStage* ubufStages,
-                                             const size_t* ubufOffs, const size_t* ubufSizes,
-                                             size_t texCount, const ObjToken<ITexture>* texs,
-                                             const int* texBindIdx, const bool* depthBind,
-                                             size_t baseVert, size_t baseInst)
-{
-    return {new GLShaderDataBinding(m_data, pipeline, vtxFormat, ubufCount, ubufs,
-                                    ubufOffs, ubufSizes, texCount, texs, texBindIdx, depthBind)};
-}
 
 GLDataFactory::Context::Context(GLDataFactory& parent __BooTraceArgs)
 : m_parent(parent), m_data(new BaseGraphicsData(static_cast<GLDataFactoryImpl&>(parent) __BooTraceArgsUse))
@@ -1244,7 +1243,7 @@ static const GLenum SEMANTIC_TYPE_TABLE[] =
 struct GLCommandQueue : IGraphicsCommandQueue
 {
     Platform platform() const { return IGraphicsDataFactory::Platform::OpenGL; }
-    const SystemChar* platformName() const { return _S("OpenGL"); }
+    const SystemChar* platformName() const { return _SYS_STR("OpenGL"); }
     IGraphicsContext* m_parent = nullptr;
     GLContext* m_glCtx = nullptr;
 
@@ -1318,18 +1317,19 @@ struct GLCommandQueue : IGraphicsCommandQueue
     std::vector<RenderTextureResize> m_pendingResizes;
     std::vector<std::function<void(void)>> m_pendingPosts1;
     std::vector<std::function<void(void)>> m_pendingPosts2;
-    std::vector<ObjToken<IVertexFormat>> m_pendingFmtAdds;
+    std::vector<ObjToken<IShaderDataBinding>> m_pendingFmtAdds;
     std::vector<ObjToken<ITextureR>> m_pendingFboAdds;
 
-    static void ConfigureVertexFormat(GLVertexFormat* fmt)
+    static void ConfigureVertexFormat(GLShaderDataBinding* fmt)
     {
         glGenVertexArrays(3, fmt->m_vao);
 
         size_t stride = 0;
         size_t instStride = 0;
-        for (size_t i=0 ; i<fmt->m_elements.size() ; ++i)
+        auto pipeline = fmt->m_pipeline.cast<GLShaderPipeline>();
+        for (size_t i=0 ; i<pipeline->m_elements.size() ; ++i)
         {
-            const VertexElementDescriptor& desc = fmt->m_elements[i];
+            const VertexElementDescriptor& desc = pipeline->m_elements[i];
             if ((desc.semantic & VertexSemantic::Instanced) != VertexSemantic::None)
                 instStride += SEMANTIC_SIZE_TABLE[int(desc.semantic & VertexSemantic::SemanticMask)];
             else
@@ -1343,20 +1343,23 @@ struct GLCommandQueue : IGraphicsCommandQueue
             glBindVertexArray(fmt->m_vao[b]);
             IGraphicsBuffer* lastVBO = nullptr;
             IGraphicsBuffer* lastEBO = nullptr;
-            for (size_t i=0 ; i<fmt->m_elements.size() ; ++i)
+            for (size_t i=0 ; i<pipeline->m_elements.size() ; ++i)
             {
-                const VertexElementDescriptor& desc = fmt->m_elements[i];
-                if (desc.vertBuffer.get() != lastVBO)
+                const VertexElementDescriptor& desc = pipeline->m_elements[i];
+                IGraphicsBuffer* vbo = (desc.semantic & VertexSemantic::Instanced) != VertexSemantic::None
+                                       ? fmt->m_instVbo.get() : fmt->m_vbo.get();
+                IGraphicsBuffer* ebo = fmt->m_ibo.get();
+                if (vbo != lastVBO)
                 {
-                    lastVBO = desc.vertBuffer.get();
+                    lastVBO = vbo;
                     if (lastVBO->dynamic())
                         static_cast<GLGraphicsBufferD<BaseGraphicsData>*>(lastVBO)->bindVertex(b);
                     else
                         static_cast<GLGraphicsBufferS*>(lastVBO)->bindVertex();
                 }
-                if (desc.indexBuffer.get() != lastEBO)
+                if (ebo != lastEBO)
                 {
-                    lastEBO = desc.indexBuffer.get();
+                    lastEBO = ebo;
                     if (lastEBO->dynamic())
                         static_cast<GLGraphicsBufferD<BaseGraphicsData>*>(lastEBO)->bindIndex(b);
                     else
@@ -1474,8 +1477,8 @@ struct GLCommandQueue : IGraphicsCommandQueue
 
                 if (self->m_pendingFmtAdds.size())
                 {
-                    for (ObjToken<IVertexFormat>& fmt : self->m_pendingFmtAdds)
-                        if (fmt) ConfigureVertexFormat(fmt.cast<GLVertexFormat>());
+                    for (ObjToken<IShaderDataBinding>& fmt : self->m_pendingFmtAdds)
+                        if (fmt) ConfigureVertexFormat(fmt.cast<GLShaderDataBinding>());
                     self->m_pendingFmtAdds.clear();
                 }
 
@@ -1628,9 +1631,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
                             }
 
                             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-                            dataFactory->m_gammaShader.cast<GLShaderPipeline>()->bind();
-                            dataFactory->m_gammaVFMT.cast<GLVertexFormat>()->bind(self->m_drawBuf);
-                            dataFactory->m_gammaLUT.cast<GLTextureD>()->bind(1, self->m_drawBuf);
+                            dataFactory->m_gammaBinding.cast<GLShaderDataBinding>()->bind(self->m_drawBuf);
                             glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
                         }
                         else
@@ -1809,7 +1810,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
         cmds.back().source = source;
     }
 
-    void addVertexFormat(const ObjToken<IVertexFormat>& fmt)
+    void addVertexFormat(const ObjToken<IShaderDataBinding>& fmt)
     {
         std::unique_lock<std::mutex> lk(m_mt);
         m_pendingFmtAdds.push_back(fmt);
@@ -1955,25 +1956,24 @@ GLDataFactory::Context::newRenderTexture(size_t width, size_t height, TextureCla
     return retval;
 }
 
-GLVertexFormat::GLVertexFormat(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue* q,
-                               size_t elementCount, const VertexElementDescriptor* elements,
-                               size_t baseVert, size_t baseInst)
-: GraphicsDataNode<IVertexFormat>(parent),
-  m_baseVert(baseVert), m_baseInst(baseInst)
-{
-    m_elements.reserve(elementCount);
-    for (size_t i=0 ; i<elementCount ; ++i)
-        m_elements.push_back(elements[i]);
-    q->addVertexFormat(this);
-}
-
-ObjToken<IVertexFormat> GLDataFactory::Context::newVertexFormat
-(size_t elementCount, const VertexElementDescriptor* elements,
- size_t baseVert, size_t baseInst)
+ObjToken<IShaderDataBinding>
+GLDataFactory::Context::newShaderDataBinding(const ObjToken<IShaderPipeline>& pipeline,
+                                             const ObjToken<IGraphicsBuffer>& vbo,
+                                             const ObjToken<IGraphicsBuffer>& instVbo,
+                                             const ObjToken<IGraphicsBuffer>& ibo,
+                                             size_t ubufCount, const ObjToken<IGraphicsBuffer>* ubufs,
+                                             const PipelineStage* ubufStages,
+                                             const size_t* ubufOffs, const size_t* ubufSizes,
+                                             size_t texCount, const ObjToken<ITexture>* texs,
+                                             const int* texBindIdx, const bool* depthBind,
+                                             size_t baseVert, size_t baseInst)
 {
     GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
     GLCommandQueue* q = static_cast<GLCommandQueue*>(factory.m_parent->getCommandQueue());
-    return {new GLVertexFormat(m_data, q, elementCount, elements, baseVert, baseInst)};
+    ObjToken<GLShaderDataBinding> ret = {new GLShaderDataBinding(m_data, pipeline, vbo, instVbo, ibo, ubufCount, ubufs,
+                                         ubufOffs, ubufSizes, texCount, texs, texBindIdx, depthBind, baseVert, baseInst)};
+    q->addVertexFormat(ret.get());
+    return ret.get();
 }
 
 std::unique_ptr<IGraphicsCommandQueue> _NewGLCommandQueue(IGraphicsContext* parent, GLContext* glCtx)

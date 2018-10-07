@@ -2,6 +2,7 @@
 #define XINPUTPAD_HPP
 
 #include "DeviceBase.hpp"
+#include "DeviceSignature.hpp"
 #include "boo/System.hpp"
 
 namespace boo
@@ -39,7 +40,7 @@ class XInputPad final : public TDeviceBase<IXInputPadCallback>
     uint16_t m_rumbleRequest[2] = {};
     uint16_t m_rumbleState[2] = {};
 public:
-    XInputPad(DeviceToken* token) : TDeviceBase<IXInputPadCallback>(token) {}
+    XInputPad(DeviceToken* token) : TDeviceBase<IXInputPadCallback>(dev_typeid(XInputPad), token) {}
     void deviceDisconnected()
     {
         std::lock_guard<std::mutex> lk(m_callbackLock);

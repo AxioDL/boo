@@ -1,4 +1,5 @@
 #include "boo/inputdev/DolphinSmashAdapter.hpp"
+#include "boo/inputdev/DeviceSignature.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -8,7 +9,8 @@ namespace boo
  * Reference: https://github.com/ToadKing/wii-u-gc-adapter/blob/master/wii-u-gc-adapter.c
  */
 
-DolphinSmashAdapter::DolphinSmashAdapter(DeviceToken* token) : TDeviceBase<IDolphinSmashAdapterCallback>(token) {}
+DolphinSmashAdapter::DolphinSmashAdapter(DeviceToken* token)
+: TDeviceBase<IDolphinSmashAdapterCallback>(dev_typeid(DolphinSmashAdapter), token) {}
 
 DolphinSmashAdapter::~DolphinSmashAdapter() {}
 
