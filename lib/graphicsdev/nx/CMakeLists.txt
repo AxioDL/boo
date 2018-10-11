@@ -1,8 +1,9 @@
+option(ENABLE_NX "Build mesa for offline NX shader compilation and runtime" ON)
 find_program(MESON_PROG meson)
 find_program(NINJA_PROG ninja)
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/mesa/meson.build AND
    EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/libdrm_nouveau/Makefile AND
-   MESON_PROG AND NINJA_PROG)
+   MESON_PROG AND NINJA_PROG AND ENABLE_NX)
 message(STATUS "Enabling NX support")
 
 set(LIBDRM_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libdrm_nouveau)
@@ -147,7 +148,7 @@ endif()
 else()
   if(NX)
     message(FATAL_ERROR "Unable to find meson or ninja or mesa submodules; this is required for NX.")
-  else()
+  elseif(ENABLE_NX)
     message(STATUS "Unable to find meson or ninja or mesa submodules; skipping NX support.")
   endif()
 endif()

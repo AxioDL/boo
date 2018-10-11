@@ -720,7 +720,7 @@ class GLShaderStage : public GraphicsDataNode<IShaderStage>
     friend class GLDataFactory;
     GLuint m_shad = 0;
     std::vector<std::pair<std::string, int>> m_texNames;
-    std::vector<std::string> m_blockNames;
+    std::vector<std::pair<std::string, int>> m_blockNames;
 
     static constexpr EShLanguage ShaderTypes[] =
     {
@@ -750,6 +750,7 @@ class GLShaderStage : public GraphicsDataNode<IShaderStage>
         prog.addShader(&shader);
         if (!prog.link(messages))
         {
+            printf("%s\n", source);
             Log.report(logvisor::Fatal, "unable to link shader program\n%s", prog.getInfoLog());
         }
 
@@ -769,7 +770,13 @@ class GLShaderStage : public GraphicsDataNode<IShaderStage>
         count = prog.getNumLiveUniformBlocks();
         m_blockNames.reserve(count);
         for (int i = 0; i < count; ++i)
-            m_blockNames.emplace_back(prog.getUniformBlockName(i));
+        {
+            const glslang::TType* tp = prog.getUniformBlockTType(i);
+            const auto& qual = tp->getQualifier();
+            if (!qual.hasBinding())
+                Log.report(logvisor::Fatal, "shader uniform %s does not have layout binding", prog.getUniformBlockName(i));
+            m_blockNames.emplace_back(std::make_pair(prog.getUniformBlockName(i), qual.layoutBinding));
+        }
     }
 
     GLShaderStage(const ObjToken<BaseGraphicsData>& parent, const char* source, PipelineStage stage)
@@ -802,7 +809,7 @@ public:
     ~GLShaderStage() { if (m_shad) glDeleteShader(m_shad); }
     GLuint getShader() const { return m_shad; }
     const std::vector<std::pair<std::string, int>>& getTexNames() const { return m_texNames; }
-    const std::vector<std::string>& getBlockNames() const { return m_blockNames; }
+    const std::vector<std::pair<std::string, int>>& getBlockNames() const { return m_blockNames; }
 };
 
 class GLShaderPipeline : public GraphicsDataNode<IShaderPipeline>
@@ -831,10 +838,12 @@ protected:
     bool m_overwriteAlpha = false;
     CullMode m_culling;
     uint32_t m_patchSize = 0;
-    mutable std::vector<GLint> m_uniLocs;
+    mutable GLint m_uniLocs[BOO_GLSL_MAX_UNIFORM_COUNT];
     GLShaderPipeline(const ObjToken<BaseGraphicsData>& parent, const AdditionalPipelineInfo& info)
     : GraphicsDataNode<IShaderPipeline>(parent)
     {
+        std::fill(std::begin(m_uniLocs), std::end(m_uniLocs), -1);
+
         if (info.srcFac == BlendFactor::Subtract || info.dstFac == BlendFactor::Subtract)
         {
             m_sfactor = GL_SRC_ALPHA;
@@ -915,10 +924,10 @@ public:
                 {
                     for (const auto& name : stage->getBlockNames())
                     {
-                        GLint uniLoc = glGetUniformBlockIndex(m_prog, name.c_str());
+                        GLint uniLoc = glGetUniformBlockIndex(m_prog, name.first.c_str());
                         //if (uniLoc < 0)
                         //    Log.report(logvisor::Warning, "unable to find uniform block '%s'", uniformBlockNames[i]);
-                        m_uniLocs.push_back(uniLoc);
+                        m_uniLocs[name.second] = uniLoc;
                     }
                     for (const auto& name : stage->getTexNames())
                     {
@@ -1116,7 +1125,7 @@ struct GLShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
         glBindVertexArray(m_vao[b]);
         if (m_ubufOffs.size())
         {
-            for (size_t i=0 ; i<m_ubufs.size() && i<pipeline.m_uniLocs.size() ; ++i)
+            for (size_t i=0 ; i<m_ubufs.size() ; ++i)
             {
                 GLint loc = pipeline.m_uniLocs[i];
                 if (loc < 0)
@@ -1132,7 +1141,7 @@ struct GLShaderDataBinding : GraphicsDataNode<IShaderDataBinding>
         }
         else
         {
-            for (size_t i=0 ; i<m_ubufs.size() && i<pipeline.m_uniLocs.size() ; ++i)
+            for (size_t i=0 ; i<m_ubufs.size() ; ++i)
             {
                 GLint loc = pipeline.m_uniLocs[i];
                 if (loc < 0)
