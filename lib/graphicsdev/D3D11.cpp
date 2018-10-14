@@ -64,18 +64,6 @@ namespace boo
 static logvisor::Module Log("boo::D3D11");
 class D3D11DataFactory;
 
-struct D3D11ShareableShader : IShareableShader<D3D11DataFactory, D3D11ShareableShader>
-{
-    ComPtr<ID3D11DeviceChild> m_shader;
-    ComPtr<ID3DBlob> m_vtxBlob;
-    D3D11ShareableShader(D3D11DataFactory& fac, uint64_t srcKey, uint64_t binKey,
-                         ComPtr<ID3D11DeviceChild>&& s, ComPtr<ID3DBlob>&& vb)
-    : IShareableShader(fac, srcKey, binKey), m_shader(std::move(s)), m_vtxBlob(std::move(vb)) {}
-    D3D11ShareableShader(D3D11DataFactory& fac, uint64_t srcKey, uint64_t binKey,
-                         ComPtr<ID3D11DeviceChild>&& s)
-    : IShareableShader(fac, srcKey, binKey), m_shader(std::move(s)) {}
-};
-
 static inline void ThrowIfFailed(HRESULT hr)
 {
     if (FAILED(hr))
@@ -101,7 +89,7 @@ static const D3D11_BIND_FLAG USE_TABLE[] =
 
 class D3D11GraphicsBufferS : public GraphicsDataNode<IGraphicsBufferS>
 {
-    friend class D3D11DataFactory;
+    friend class D3D11DataFactory::Context;
     friend struct D3D11CommandQueue;
 
     size_t m_sz;
@@ -125,7 +113,8 @@ public:
 template <class DataCls>
 class D3D11GraphicsBufferD : public GraphicsDataNode<IGraphicsBufferD, DataCls>
 {
-    friend class D3D11DataFactory;
+    friend class D3D11DataFactory::Context;
+    friend class D3D11DataFactoryImpl;
     friend struct D3D11CommandQueue;
 
     D3D11CommandQueue* m_q;
@@ -161,7 +150,7 @@ public:
 
 class D3D11TextureS : public GraphicsDataNode<ITextureS>
 {
-    friend class D3D11DataFactory;
+    friend class D3D11DataFactory::Context;
 
     D3D11TextureS(const boo::ObjToken<BaseGraphicsData>& parent,
                   D3D11Context* ctx, size_t width, size_t height, size_t mips,
@@ -226,7 +215,7 @@ public:
 
 class D3D11TextureSA : public GraphicsDataNode<ITextureSA>
 {
-    friend class D3D11DataFactory;
+    friend class D3D11DataFactory::Context;
 
     D3D11TextureSA(const boo::ObjToken<BaseGraphicsData>& parent,
                    D3D11Context* ctx, size_t width, size_t height, size_t layers,
@@ -287,7 +276,7 @@ public:
 
 class D3D11TextureD : public GraphicsDataNode<ITextureD>
 {
-    friend class D3D11DataFactory;
+    friend class D3D11DataFactory::Context;
     friend struct D3D11CommandQueue;
 
     size_t m_width = 0;
@@ -347,7 +336,7 @@ public:
 
 class D3D11TextureR : public GraphicsDataNode<ITextureR>
 {
-    friend class D3D11DataFactory;
+    friend class D3D11DataFactory::Context;
     friend struct D3D11CommandQueue;
 
     size_t m_width = 0;
@@ -491,45 +480,6 @@ static const DXGI_FORMAT SEMANTIC_TYPE_TABLE[] =
     DXGI_FORMAT_R32G32B32A32_FLOAT
 };
 
-struct D3D11VertexFormat : GraphicsDataNode<IVertexFormat>
-{
-    size_t m_elementCount;
-    std::unique_ptr<D3D11_INPUT_ELEMENT_DESC[]> m_elements;
-    size_t m_stride = 0;
-    size_t m_instStride = 0;
-
-    D3D11VertexFormat(const boo::ObjToken<BaseGraphicsData>& parent,
-                      size_t elementCount, const VertexElementDescriptor* elements)
-    : GraphicsDataNode<IVertexFormat>(parent), m_elementCount(elementCount),
-      m_elements(new D3D11_INPUT_ELEMENT_DESC[elementCount])
-    {
-        memset(m_elements.get(), 0, elementCount * sizeof(D3D11_INPUT_ELEMENT_DESC));
-        for (size_t i=0 ; i<elementCount ; ++i)
-        {
-            const VertexElementDescriptor* elemin = &elements[i];
-            D3D11_INPUT_ELEMENT_DESC& elem = m_elements[i];
-            int semantic = int(elemin->semantic & boo::VertexSemantic::SemanticMask);
-            elem.SemanticName = SEMANTIC_NAME_TABLE[semantic];
-            elem.SemanticIndex = elemin->semanticIdx;
-            elem.Format = SEMANTIC_TYPE_TABLE[semantic];
-            if ((elemin->semantic & boo::VertexSemantic::Instanced) != boo::VertexSemantic::None)
-            {
-                elem.InputSlotClass = D3D11_INPUT_PER_INSTANCE_DATA;
-                elem.InstanceDataStepRate = 1;
-                elem.InputSlot = 1;
-                elem.AlignedByteOffset = m_instStride;
-                m_instStride += SEMANTIC_SIZE_TABLE[semantic];
-            }
-            else
-            {
-                elem.InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
-                elem.AlignedByteOffset = m_stride;
-                m_stride += SEMANTIC_SIZE_TABLE[semantic];
-            }
-        }
-    }
-};
-
 static const D3D11_PRIMITIVE_TOPOLOGY PRIMITIVE_TABLE[] =
 {
     D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,
@@ -553,32 +503,93 @@ static const D3D11_BLEND BLEND_FACTOR_TABLE[] =
     D3D11_BLEND_INV_SRC1_COLOR
 };
 
+class D3D11ShaderStage : public GraphicsDataNode<IShaderStage>
+{
+    friend class D3D11DataFactory;
+    ComPtr<ID3D11DeviceChild> m_shader;
+    D3D11ShaderStage(const boo::ObjToken<BaseGraphicsData>& parent, D3D11Context* ctx,
+                     const uint8_t* data, size_t size, PipelineStage stage)
+    : GraphicsDataNode<IShaderStage>(parent)
+    {
+        switch (stage)
+        {
+        case PipelineStage::Vertex:
+        {
+            ThrowIfFailed(D3DCreateBlobPROC(size, &m_vtxBlob));
+            memcpy(m_vtxBlob->GetBufferPointer(), data, size);
+            ComPtr<ID3D11VertexShader> vShader;
+            ThrowIfFailed(ctx->m_dev->CreateVertexShader(data, size, nullptr, &vShader));
+            m_shader = vShader;
+            break;
+        }
+        case PipelineStage::Fragment:
+        {
+            ComPtr<ID3D11PixelShader> pShader;
+            ThrowIfFailed(ctx->m_dev->CreatePixelShader(data, size, nullptr, &pShader));
+            m_shader = pShader;
+            break;
+        }
+        case PipelineStage::Geometry:
+        {
+            ComPtr<ID3D11GeometryShader> gShader;
+            ThrowIfFailed(ctx->m_dev->CreateGeometryShader(data, size, nullptr, &gShader));
+            m_shader = gShader;
+            break;
+        }
+        case PipelineStage::Control:
+        {
+            ComPtr<ID3D11HullShader> hShader;
+            ThrowIfFailed(ctx->m_dev->CreateHullShader(data, size, nullptr, &hShader));
+            m_shader = hShader;
+            break;
+        }
+        case PipelineStage::Evaluation:
+        {
+            ComPtr<ID3D11DomainShader> dShader;
+            ThrowIfFailed(ctx->m_dev->CreateDomainShader(data, size, nullptr, &dShader));
+            m_shader = dShader;
+            break;
+        }
+        default:
+            break;
+        }
+    }
+public:
+    ComPtr<ID3DBlob> m_vtxBlob;
+    template <class T>
+    void shader(ComPtr<T>& ret) const { m_shader.As<T>(&ret); }
+};
+
 class D3D11ShaderPipeline : public GraphicsDataNode<IShaderPipeline>
 {
-protected:
     friend class D3D11DataFactory;
     friend struct D3D11ShaderDataBinding;
-    boo::ObjToken<IVertexFormat> m_vtxFmt;
-    D3D11ShareableShader::Token m_vert;
-    D3D11ShareableShader::Token m_pixel;
 
     D3D11ShaderPipeline(const boo::ObjToken<BaseGraphicsData>& parent,
                         D3D11Context* ctx,
-                        D3D11ShareableShader::Token&& vert,
-                        D3D11ShareableShader::Token&& pixel,
-                        const boo::ObjToken<IVertexFormat>& vtxFmt,
-                        BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                        ZTest depthTest, bool depthWrite, bool colorWrite,
-                        bool alphaWrite, bool overwriteAlpha, CullMode culling)
-    : GraphicsDataNode<IShaderPipeline>(parent), m_vtxFmt(vtxFmt),
-      m_vert(std::move(vert)), m_pixel(std::move(pixel)),
-      m_topology(PRIMITIVE_TABLE[int(prim)])
+                        ObjToken<IShaderStage> vertex,
+                        ObjToken<IShaderStage> fragment,
+                        ObjToken<IShaderStage> geometry,
+                        ObjToken<IShaderStage> control,
+                        ObjToken<IShaderStage> evaluation,
+                        const VertexFormatInfo& vtxFmt,
+                        const AdditionalPipelineInfo& info)
+    : GraphicsDataNode<IShaderPipeline>(parent),
+      m_topology(PRIMITIVE_TABLE[int(info.prim)])
     {
-        m_vert.get().m_shader.As<ID3D11VertexShader>(&m_vShader);
-        m_pixel.get().m_shader.As<ID3D11PixelShader>(&m_pShader);
+        if (auto* s = vertex.cast<D3D11ShaderStage>())
+            s->shader(m_vShader);
+        if (auto* s = fragment.cast<D3D11ShaderStage>())
+            s->shader(m_pShader);
+        if (auto* s = geometry.cast<D3D11ShaderStage>())
+            s->shader(m_gShader);
+        if (auto* s = control.cast<D3D11ShaderStage>())
+            s->shader(m_hShader);
+        if (auto* s = evaluation.cast<D3D11ShaderStage>())
+            s->shader(m_dShader);
 
         D3D11_CULL_MODE cullMode;
-        switch (culling)
+        switch (info.culling)
         {
         case CullMode::None:
         default:
@@ -598,9 +609,9 @@ protected:
         ThrowIfFailed(ctx->m_dev->CreateRasterizerState(&rasDesc, &m_rasState));
 
         CD3D11_DEPTH_STENCIL_DESC dsDesc(D3D11_DEFAULT);
-        dsDesc.DepthEnable = depthTest != ZTest::None;
-        dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK(depthWrite);
-        switch (depthTest)
+        dsDesc.DepthEnable = info.depthTest != ZTest::None;
+        dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK(info.depthWrite);
+        switch (info.depthTest)
         {
         case ZTest::None:
         default:
@@ -622,13 +633,13 @@ protected:
         ThrowIfFailed(ctx->m_dev->CreateDepthStencilState(&dsDesc, &m_dsState));
 
         CD3D11_BLEND_DESC blDesc(D3D11_DEFAULT);
-        blDesc.RenderTarget[0].BlendEnable = (dstFac != BlendFactor::Zero);
-        if (srcFac == BlendFactor::Subtract || dstFac == BlendFactor::Subtract)
+        blDesc.RenderTarget[0].BlendEnable = (info.dstFac != BlendFactor::Zero);
+        if (info.srcFac == BlendFactor::Subtract || info.dstFac == BlendFactor::Subtract)
         {
             blDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
             blDesc.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
             blDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_REV_SUBTRACT;
-            if (overwriteAlpha)
+            if (info.overwriteAlpha)
             {
                 blDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
                 blDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
@@ -643,99 +654,89 @@ protected:
         }
         else
         {
-            blDesc.RenderTarget[0].SrcBlend = BLEND_FACTOR_TABLE[int(srcFac)];
-            blDesc.RenderTarget[0].DestBlend = BLEND_FACTOR_TABLE[int(dstFac)];
+            blDesc.RenderTarget[0].SrcBlend = BLEND_FACTOR_TABLE[int(info.srcFac)];
+            blDesc.RenderTarget[0].DestBlend = BLEND_FACTOR_TABLE[int(info.dstFac)];
             blDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
-            if (overwriteAlpha)
+            if (info.overwriteAlpha)
             {
                 blDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
                 blDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
             }
             else
             {
-                blDesc.RenderTarget[0].SrcBlendAlpha = BLEND_FACTOR_TABLE[int(srcFac)];
-                blDesc.RenderTarget[0].DestBlendAlpha = BLEND_FACTOR_TABLE[int(dstFac)];
+                blDesc.RenderTarget[0].SrcBlendAlpha = BLEND_FACTOR_TABLE[int(info.srcFac)];
+                blDesc.RenderTarget[0].DestBlendAlpha = BLEND_FACTOR_TABLE[int(info.dstFac)];
             }
             blDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
         }
         blDesc.RenderTarget[0].RenderTargetWriteMask =
-                (colorWrite ? (D3D11_COLOR_WRITE_ENABLE_RED |
-                               D3D11_COLOR_WRITE_ENABLE_GREEN |
-                               D3D11_COLOR_WRITE_ENABLE_BLUE) : 0) |
-                (alphaWrite ? D3D11_COLOR_WRITE_ENABLE_ALPHA : 0);
+                (info.colorWrite ? (D3D11_COLOR_WRITE_ENABLE_RED |
+                                    D3D11_COLOR_WRITE_ENABLE_GREEN |
+                                    D3D11_COLOR_WRITE_ENABLE_BLUE) : 0) |
+                (info.alphaWrite ? D3D11_COLOR_WRITE_ENABLE_ALPHA : 0);
         ThrowIfFailed(ctx->m_dev->CreateBlendState(&blDesc, &m_blState));
 
-        const auto& vertBuf = m_vert.get().m_vtxBlob;
-        D3D11VertexFormat* cvtxFmt = vtxFmt.cast<D3D11VertexFormat>();
-        ThrowIfFailed(ctx->m_dev->CreateInputLayout(cvtxFmt->m_elements.get(), cvtxFmt->m_elementCount,
-            vertBuf->GetBufferPointer(), vertBuf->GetBufferSize(), &m_inLayout));
+        {
+            std::vector<D3D11_INPUT_ELEMENT_DESC> elements(vtxFmt.elementCount);
+
+            for (size_t i=0 ; i<vtxFmt.elementCount ; ++i)
+            {
+                const VertexElementDescriptor* elemin = &vtxFmt.elements[i];
+                D3D11_INPUT_ELEMENT_DESC& elem = elements[i];
+                int semantic = int(elemin->semantic & boo::VertexSemantic::SemanticMask);
+                elem.SemanticName = SEMANTIC_NAME_TABLE[semantic];
+                elem.SemanticIndex = elemin->semanticIdx;
+                elem.Format = SEMANTIC_TYPE_TABLE[semantic];
+                if ((elemin->semantic & boo::VertexSemantic::Instanced) != boo::VertexSemantic::None)
+                {
+                    elem.InputSlotClass = D3D11_INPUT_PER_INSTANCE_DATA;
+                    elem.InstanceDataStepRate = 1;
+                    elem.InputSlot = 1;
+                    elem.AlignedByteOffset = m_instStride;
+                    m_instStride += SEMANTIC_SIZE_TABLE[semantic];
+                }
+                else
+                {
+                    elem.InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
+                    elem.AlignedByteOffset = m_stride;
+                    m_stride += SEMANTIC_SIZE_TABLE[semantic];
+                }
+            }
+
+            const auto& vertBuf = vertex.cast<D3D11ShaderStage>()->m_vtxBlob;
+            ThrowIfFailed(ctx->m_dev->CreateInputLayout(elements.data(), vtxFmt.elementCount,
+                vertBuf->GetBufferPointer(), vertBuf->GetBufferSize(), &m_inLayout));
+        }
     }
 public:
     ComPtr<ID3D11VertexShader> m_vShader;
     ComPtr<ID3D11PixelShader> m_pShader;
+    ComPtr<ID3D11GeometryShader> m_gShader;
+    ComPtr<ID3D11HullShader> m_hShader;
+    ComPtr<ID3D11DomainShader> m_dShader;
     ComPtr<ID3D11RasterizerState> m_rasState;
     ComPtr<ID3D11DepthStencilState> m_dsState;
     ComPtr<ID3D11BlendState> m_blState;
     ComPtr<ID3D11InputLayout> m_inLayout;
     D3D11_PRIMITIVE_TOPOLOGY m_topology;
+    size_t m_stride = 0;
+    size_t m_instStride = 0;
     ~D3D11ShaderPipeline() = default;
     D3D11ShaderPipeline& operator=(const D3D11ShaderPipeline&) = delete;
     D3D11ShaderPipeline(const D3D11ShaderPipeline&) = delete;
-
-    virtual void bindExtraStages(ID3D11DeviceContext* ctx)
-    {
-        ctx->HSSetShader(nullptr, nullptr, 0);
-        ctx->DSSetShader(nullptr, nullptr, 0);
-    }
 
     void bind(ID3D11DeviceContext* ctx)
     {
         ctx->VSSetShader(m_vShader.Get(), nullptr, 0);
         ctx->PSSetShader(m_pShader.Get(), nullptr, 0);
-        bindExtraStages(ctx);
+        ctx->GSSetShader(m_gShader.Get(), nullptr, 0);
+        ctx->HSSetShader(m_hShader.Get(), nullptr, 0);
+        ctx->DSSetShader(m_dShader.Get(), nullptr, 0);
         ctx->RSSetState(m_rasState.Get());
         ctx->OMSetDepthStencilState(m_dsState.Get(), 0);
         ctx->OMSetBlendState(m_blState.Get(), nullptr, 0xffffffff);
         ctx->IASetInputLayout(m_inLayout.Get());
         ctx->IASetPrimitiveTopology(m_topology);
-    }
-};
-
-class D3D11TessellationShaderPipeline : public D3D11ShaderPipeline
-{
-    friend class D3D11DataFactory;
-    friend struct D3D11ShaderDataBinding;
-    D3D11ShareableShader::Token m_hull;
-    D3D11ShareableShader::Token m_domain;
-    ComPtr<ID3D11HullShader> m_hShader;
-    ComPtr<ID3D11DomainShader> m_dShader;
-
-    D3D11TessellationShaderPipeline(const boo::ObjToken<BaseGraphicsData>& parent,
-                                    D3D11Context* ctx,
-                                    D3D11ShareableShader::Token&& vert,
-                                    D3D11ShareableShader::Token&& pixel,
-                                    D3D11ShareableShader::Token&& hull,
-                                    D3D11ShareableShader::Token&& domain,
-                                    const boo::ObjToken<IVertexFormat>& vtxFmt,
-                                    BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
-                                    ZTest depthTest, bool depthWrite, bool colorWrite,
-                                    bool alphaWrite, bool overwriteAlpha, CullMode culling)
-    : D3D11ShaderPipeline(parent, ctx, std::move(vert), std::move(pixel), vtxFmt, srcFac, dstFac,
-                          Primitive::Patches, depthTest, depthWrite, colorWrite, alphaWrite,
-                          overwriteAlpha, culling), m_hull(std::move(hull)), m_domain(std::move(domain))
-    {
-        m_topology = D3D11_PRIMITIVE_TOPOLOGY(int(D3D11_PRIMITIVE_TOPOLOGY_1_CONTROL_POINT_PATCHLIST) + patchSize - 1);
-        m_hull.get().m_shader.As<ID3D11HullShader>(&m_hShader);
-        m_domain.get().m_shader.As<ID3D11DomainShader>(&m_dShader);
-    }
-
-public:
-    ~D3D11TessellationShaderPipeline() = default;
-
-    void bindExtraStages(ID3D11DeviceContext* ctx)
-    {
-        ctx->HSSetShader(m_hShader.Get(), nullptr, 0);
-        ctx->DSSetShader(m_dShader.Get(), nullptr, 0);
     }
 };
 
@@ -779,9 +780,8 @@ struct D3D11ShaderDataBinding : public GraphicsDataNode<IShaderDataBinding>
         m_texs.reserve(texCount);
 
         D3D11ShaderPipeline* cpipeline = m_pipeline.cast<D3D11ShaderPipeline>();
-        D3D11VertexFormat* vtxFmt = cpipeline->m_vtxFmt.cast<D3D11VertexFormat>();
-        m_baseOffsets[0] = UINT(baseVert * vtxFmt->m_stride);
-        m_baseOffsets[1] = UINT(baseInst * vtxFmt->m_instStride);
+        m_baseOffsets[0] = UINT(baseVert * cpipeline->m_stride);
+        m_baseOffsets[1] = UINT(baseInst * cpipeline->m_instStride);
 
         if (ubufStages)
         {
@@ -1016,7 +1016,7 @@ struct D3D11ShaderDataBinding : public GraphicsDataNode<IShaderDataBinding>
 struct D3D11CommandQueue : IGraphicsCommandQueue
 {
     Platform platform() const {return IGraphicsDataFactory::Platform::D3D11;}
-    const SystemChar* platformName() const {return _S("D3D11");}
+    const SystemChar* platformName() const {return _SYS_STR("D3D11");}
     D3D11Context* m_ctx;
     D3D11Context::Window* m_windowCtx;
     IGraphicsContext* m_parent;
@@ -1304,32 +1304,36 @@ void D3D11TextureD::unmap()
     m_q->m_dynamicLock.unlock();
 }
 
-class D3D11DataFactory : public D3DDataFactory, public GraphicsDataFactoryHead
+class D3D11DataFactoryImpl : public D3D11DataFactory, public GraphicsDataFactoryHead
 {
     friend struct D3D11CommandQueue;
+    friend class D3D11DataFactory::Context;
     IGraphicsContext* m_parent;
     struct D3D11Context* m_ctx;
-    std::unordered_map<uint64_t, std::unique_ptr<D3D11ShareableShader>> m_sharedShaders;
-    std::unordered_map<uint64_t, uint64_t> m_sourceToBinary;
 
     float m_gamma = 1.f;
     ObjToken<IShaderPipeline> m_gammaShader;
     ObjToken<ITextureD> m_gammaLUT;
     ObjToken<IGraphicsBufferS> m_gammaVBO;
-    ObjToken<IVertexFormat> m_gammaVFMT;
     ObjToken<IShaderDataBinding> m_gammaBinding;
     void SetupGammaResources()
     {
         commitTransaction([this](IGraphicsDataFactory::Context& ctx)
         {
+            auto vertexHlsl = D3D11DataFactory::CompileHLSL(GammaVS, PipelineStage::Vertex);
+            auto vertexShader = ctx.newShaderStage(vertexHlsl, PipelineStage::Vertex);
+            auto fragmentHlsl = D3D11DataFactory::CompileHLSL(GammaFS, PipelineStage::Fragment);
+            auto fragmentShader = ctx.newShaderStage(fragmentHlsl, PipelineStage::Fragment);
             const VertexElementDescriptor vfmt[] = {
-                {nullptr, nullptr, VertexSemantic::Position4},
-                {nullptr, nullptr, VertexSemantic::UV4}
+                {VertexSemantic::Position4},
+                {VertexSemantic::UV4}
             };
-            m_gammaVFMT = ctx.newVertexFormat(2, vfmt);
-            m_gammaShader = static_cast<Context&>(ctx).newShaderPipeline(GammaVS, GammaFS,
-                nullptr, nullptr, nullptr, m_gammaVFMT, BlendFactor::One, BlendFactor::Zero,
-                Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None, true);
+            AdditionalPipelineInfo info =
+            {
+                BlendFactor::One, BlendFactor::Zero,
+                Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None
+            };
+            m_gammaShader = ctx.newShaderPipeline(vertexShader, fragmentShader, vfmt, info);
             m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
             setDisplayGamma(1.f);
             const struct Vert {
@@ -1343,14 +1347,14 @@ class D3D11DataFactory : public D3DDataFactory, public GraphicsDataFactoryHead
             };
             m_gammaVBO = ctx.newStaticBuffer(BufferUse::Vertex, verts, 32, 4);
             ObjToken<ITexture> texs[] = {{}, m_gammaLUT.get()};
-            m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVFMT, m_gammaVBO.get(), {}, {},
+            m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVBO.get(), {}, {},
                                                       0, nullptr, nullptr, 2, texs, nullptr, nullptr);
             return true;
         } BooTrace);
     }
 
 public:
-    D3D11DataFactory(IGraphicsContext* parent, D3D11Context* ctx)
+    D3D11DataFactoryImpl(IGraphicsContext* parent, D3D11Context* ctx)
     : m_parent(parent), m_ctx(ctx)
     {
         UINT qLevels;
@@ -1358,241 +1362,6 @@ public:
                          (m_ctx->m_fbFormat, m_ctx->m_sampleCount, &qLevels)) && !qLevels)
             m_ctx->m_sampleCount = flp2(m_ctx->m_sampleCount - 1);
     }
-
-    Platform platform() const {return Platform::D3D11;}
-    const SystemChar* platformName() const {return _S("D3D11");}
-
-#if _DEBUG && 0
-#define BOO_D3DCOMPILE_FLAG D3DCOMPILE_DEBUG | D3DCOMPILE_OPTIMIZATION_LEVEL0
-#else
-#define BOO_D3DCOMPILE_FLAG D3DCOMPILE_OPTIMIZATION_LEVEL3
-#endif
-
-    uint64_t Compile(ComPtr<ID3DBlob>& blobOut, const char* source, uint64_t srcKey, const char* shaderType)
-    {
-        ComPtr<ID3DBlob> errBlob;
-        if (FAILED(D3DCompilePROC(source, strlen(source), "Boo HLSL Source", nullptr, nullptr, "main",
-            shaderType, BOO_D3DCOMPILE_FLAG, 0, &blobOut, &errBlob)))
-        {
-            printf("%s\n", source);
-            Log.report(logvisor::Fatal, "error compiling shader: %s", errBlob->GetBufferPointer());
-        }
-
-        XXH64_state_t hashState;
-        XXH64_reset(&hashState, 0);
-        XXH64_update(&hashState, blobOut->GetBufferPointer(), blobOut->GetBufferSize());
-        uint64_t binKey = XXH64_digest(&hashState);
-        m_sourceToBinary[srcKey] = binKey;
-        return binKey;
-    }
-
-    D3D11ShareableShader::Token PrepareShaderStage(const char* source, ComPtr<ID3DBlob>* blobOut,
-        const char* shaderType, const std::function<ComPtr<ID3D11DeviceChild>(ID3DBlob* blob)>& MakeShader)
-    {
-        XXH64_state_t hashState;
-        uint64_t srcHash = 0;
-        uint64_t binHash = 0;
-        XXH64_reset(&hashState, 0);
-        if (source)
-        {
-            XXH64_update(&hashState, source, strlen(source));
-            srcHash = XXH64_digest(&hashState);
-            auto binSearch = m_sourceToBinary.find(srcHash);
-            if (binSearch != m_sourceToBinary.cend())
-                binHash = binSearch->second;
-        }
-        else if (blobOut && *blobOut)
-        {
-            XXH64_update(&hashState, (*blobOut)->GetBufferPointer(), (*blobOut)->GetBufferSize());
-            binHash = XXH64_digest(&hashState);
-        }
-
-        if (blobOut && !*blobOut)
-            binHash = Compile(*blobOut, source, srcHash, shaderType);
-
-        auto search = binHash ? m_sharedShaders.find(binHash) : m_sharedShaders.end();
-        if (search != m_sharedShaders.end())
-        {
-            return search->second->lock();
-        }
-        else
-        {
-            ComPtr<ID3DBlob> useBlob;
-            if (blobOut)
-                useBlob = *blobOut;
-            else
-                binHash = Compile(useBlob, source, srcHash, shaderType);
-
-            ComPtr<ID3D11DeviceChild> comShader = MakeShader(useBlob.Get());
-
-            auto it =
-            m_sharedShaders.emplace(std::make_pair(binHash,
-                std::make_unique<D3D11ShareableShader>(*this, srcHash, binHash,
-                                                       std::move(comShader), std::move(useBlob)))).first;
-            return it->second->lock();
-        }
-    }
-
-    class Context : public D3DDataFactory::Context
-    {
-        friend class D3D11DataFactory;
-        D3D11DataFactory& m_parent;
-        boo::ObjToken<BaseGraphicsData> m_data;
-        Context(D3D11DataFactory& parent __BooTraceArgs)
-        : m_parent(parent), m_data(new BaseGraphicsData(parent __BooTraceArgsUse)) {}
-    public:
-        Platform platform() const {return Platform::D3D11;}
-        const SystemChar* platformName() const {return _S("D3D11");}
-
-        boo::ObjToken<IGraphicsBufferS> newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count)
-        {
-            return {new D3D11GraphicsBufferS(m_data, use, m_parent.m_ctx, data, stride, count)};
-        }
-
-        boo::ObjToken<IGraphicsBufferD> newDynamicBuffer(BufferUse use, size_t stride, size_t count)
-        {
-            D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent.m_parent->getCommandQueue());
-            return {new D3D11GraphicsBufferD<BaseGraphicsData>(m_data, q, use, m_parent.m_ctx, stride, count)};
-        }
-
-        boo::ObjToken<ITextureS> newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-            TextureClampMode clampMode, const void* data, size_t sz)
-        {
-            return {new D3D11TextureS(m_data, m_parent.m_ctx, width, height, mips, fmt, data, sz)};
-        }
-
-        boo::ObjToken<ITextureSA> newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
-                                          TextureFormat fmt, TextureClampMode clampMode, const void* data, size_t sz)
-        {
-            return {new D3D11TextureSA(m_data, m_parent.m_ctx, width, height, layers, mips, fmt, data, sz)};
-        }
-
-        boo::ObjToken<ITextureD> newDynamicTexture(size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode)
-        {
-            D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent.m_parent->getCommandQueue());
-            return {new D3D11TextureD(m_data, q, m_parent.m_ctx, width, height, fmt)};
-        }
-
-        boo::ObjToken<ITextureR> newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
-                                    size_t colorBindCount, size_t depthBindCount)
-        {
-            return {new D3D11TextureR(m_data, m_parent.m_ctx, width, height, m_parent.m_ctx->m_sampleCount,
-                                      colorBindCount, depthBindCount)};
-        }
-
-        boo::ObjToken<IVertexFormat> newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
-                                       size_t baseVert, size_t baseInst)
-        {
-            return {new struct D3D11VertexFormat(m_data, elementCount, elements)};
-        }
-
-        boo::ObjToken<IShaderPipeline> newShaderPipeline
-            (const char* vertSource, const char* fragSource,
-             ComPtr<ID3DBlob>* vertBlobOut, ComPtr<ID3DBlob>* fragBlobOut,
-             ComPtr<ID3DBlob>* pipelineBlob, const boo::ObjToken<IVertexFormat>& vtxFmt,
-             BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-             ZTest depthTest, bool depthWrite, bool colorWrite,
-             bool alphaWrite, CullMode culling, bool overwriteAlpha)
-        {
-            struct D3D11Context* ctx = m_parent.m_ctx;
-
-            D3D11ShareableShader::Token vertShader =
-            m_parent.PrepareShaderStage(vertSource, vertBlobOut, "vs_5_0", [ctx](ID3DBlob* blob)
-            {
-                ComPtr<ID3D11VertexShader> vShader;
-                ThrowIfFailed(ctx->m_dev->CreateVertexShader(blob->GetBufferPointer(),
-                                                             blob->GetBufferSize(), nullptr, &vShader));
-                return vShader;
-            });
-
-            D3D11ShareableShader::Token fragShader =
-            m_parent.PrepareShaderStage(fragSource, fragBlobOut, "ps_5_0", [ctx](ID3DBlob* blob)
-            {
-                ComPtr<ID3D11PixelShader> pShader;
-                ThrowIfFailed(ctx->m_dev->CreatePixelShader(blob->GetBufferPointer(),
-                                                            blob->GetBufferSize(), nullptr, &pShader));
-                return pShader;
-            });
-
-            return {new D3D11ShaderPipeline(m_data, ctx,
-                std::move(vertShader), std::move(fragShader),
-                vtxFmt, srcFac, dstFac, prim, depthTest, depthWrite, colorWrite,
-                alphaWrite, overwriteAlpha, culling)};
-        }
-
-        boo::ObjToken<IShaderPipeline> newTessellationShaderPipeline
-            (const char* vertSource, const char* fragSource,
-             const char* controlSource, const char* evaluationSource,
-             ComPtr<ID3DBlob>* vertBlobOut, ComPtr<ID3DBlob>* fragBlobOut,
-             ComPtr<ID3DBlob>* controlBlobOut, ComPtr<ID3DBlob>* evaluationBlobOut,
-             ComPtr<ID3DBlob>* pipelineBlob,
-             const boo::ObjToken<IVertexFormat>& vtxFmt,
-             BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
-             ZTest depthTest, bool depthWrite, bool colorWrite,
-             bool alphaWrite, CullMode culling, bool overwriteAlpha)
-        {
-            struct D3D11Context* ctx = m_parent.m_ctx;
-
-            D3D11ShareableShader::Token vertShader =
-            m_parent.PrepareShaderStage(vertSource, vertBlobOut, "vs_5_0", [ctx](ID3DBlob* blob)
-            {
-                ComPtr<ID3D11VertexShader> vShader;
-                ThrowIfFailed(ctx->m_dev->CreateVertexShader(blob->GetBufferPointer(),
-                                                             blob->GetBufferSize(), nullptr, &vShader));
-                return vShader;
-            });
-
-            D3D11ShareableShader::Token fragShader =
-            m_parent.PrepareShaderStage(fragSource, fragBlobOut, "ps_5_0", [ctx](ID3DBlob* blob)
-            {
-                ComPtr<ID3D11PixelShader> pShader;
-                ThrowIfFailed(ctx->m_dev->CreatePixelShader(blob->GetBufferPointer(),
-                                                            blob->GetBufferSize(), nullptr, &pShader));
-                return pShader;
-            });
-
-            D3D11ShareableShader::Token controlShader =
-            m_parent.PrepareShaderStage(controlSource, controlBlobOut, "hs_5_0", [ctx](ID3DBlob* blob)
-            {
-                ComPtr<ID3D11HullShader> hShader;
-                ThrowIfFailed(ctx->m_dev->CreateHullShader(blob->GetBufferPointer(),
-                                                           blob->GetBufferSize(), nullptr, &hShader));
-                return hShader;
-            });
-
-            D3D11ShareableShader::Token evaluationShader =
-            m_parent.PrepareShaderStage(evaluationSource, evaluationBlobOut, "ds_5_0", [ctx](ID3DBlob* blob)
-            {
-                ComPtr<ID3D11DomainShader> dShader;
-                ThrowIfFailed(ctx->m_dev->CreateDomainShader(blob->GetBufferPointer(),
-                                                             blob->GetBufferSize(), nullptr, &dShader));
-                return dShader;
-            });
-
-            return {new D3D11TessellationShaderPipeline(m_data, ctx,
-                std::move(vertShader), std::move(fragShader),
-                std::move(controlShader), std::move(evaluationShader),
-                vtxFmt, srcFac, dstFac, patchSize, depthTest, depthWrite, colorWrite,
-                alphaWrite, overwriteAlpha, culling)};
-        }
-
-        boo::ObjToken<IShaderDataBinding> newShaderDataBinding(
-                const boo::ObjToken<IShaderPipeline>& pipeline,
-                const boo::ObjToken<IVertexFormat>& vtxFormat,
-                const boo::ObjToken<IGraphicsBuffer>& vbuf,
-                const boo::ObjToken<IGraphicsBuffer>& instVbo,
-                const boo::ObjToken<IGraphicsBuffer>& ibuf,
-                size_t ubufCount, const boo::ObjToken<IGraphicsBuffer>* ubufs, const PipelineStage* ubufStages,
-                const size_t* ubufOffs, const size_t* ubufSizes,
-                size_t texCount, const boo::ObjToken<ITexture>* texs,
-                const int* texBindIdx, const bool* depthBind,
-                size_t baseVert, size_t baseInst)
-        {
-            return {new D3D11ShaderDataBinding(m_data, m_parent.m_ctx, pipeline, vbuf, instVbo, ibuf,
-                                               ubufCount, ubufs, ubufStages, ubufOffs, ubufSizes, texCount, texs,
-                                               texBindIdx, depthBind, baseVert, baseInst)};
-        }
-    };
 
     boo::ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs)
     {
@@ -1605,13 +1374,6 @@ public:
     {
         D3D11DataFactory::Context ctx(*this __BooTraceArgsUse);
         trans(ctx);
-    }
-
-    void _unregisterShareableShader(uint64_t srcKey, uint64_t binKey)
-    {
-        if (srcKey)
-            m_sourceToBinary.erase(srcKey);
-        m_sharedShaders.erase(binKey);
     }
 
     void setDisplayGamma(float gamma)
@@ -1631,13 +1393,101 @@ public:
     }
 };
 
+D3D11DataFactory::Context::Context(D3D11DataFactory& parent __BooTraceArgs)
+: m_parent(parent), m_data(new BaseGraphicsData(static_cast<D3D11DataFactoryImpl&>(parent) __BooTraceArgsUse)) {}
+
+D3D11DataFactory::Context::~Context() {}
+
+boo::ObjToken<IGraphicsBufferS> D3D11DataFactory::Context::newStaticBuffer(
+        BufferUse use, const void* data, size_t stride, size_t count)
+{
+    D3D11DataFactoryImpl& factory = static_cast<D3D11DataFactoryImpl&>(m_parent);
+    return {new D3D11GraphicsBufferS(m_data, use, factory.m_ctx, data, stride, count)};
+}
+
+boo::ObjToken<IGraphicsBufferD> D3D11DataFactory::Context::newDynamicBuffer(
+        BufferUse use, size_t stride, size_t count)
+{
+    D3D11DataFactoryImpl& factory = static_cast<D3D11DataFactoryImpl&>(m_parent);
+    D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(factory.m_parent->getCommandQueue());
+    return {new D3D11GraphicsBufferD<BaseGraphicsData>(m_data, q, use, factory.m_ctx, stride, count)};
+}
+
+boo::ObjToken<ITextureS> D3D11DataFactory::Context::newStaticTexture(
+        size_t width, size_t height, size_t mips, TextureFormat fmt,
+        TextureClampMode clampMode, const void* data, size_t sz)
+{
+    D3D11DataFactoryImpl& factory = static_cast<D3D11DataFactoryImpl&>(m_parent);
+    return {new D3D11TextureS(m_data, factory.m_ctx, width, height, mips, fmt, data, sz)};
+}
+
+boo::ObjToken<ITextureSA> D3D11DataFactory::Context::newStaticArrayTexture(
+        size_t width, size_t height, size_t layers, size_t mips,
+        TextureFormat fmt, TextureClampMode clampMode, const void* data, size_t sz)
+{
+    D3D11DataFactoryImpl& factory = static_cast<D3D11DataFactoryImpl&>(m_parent);
+    return {new D3D11TextureSA(m_data, factory.m_ctx, width, height, layers, mips, fmt, data, sz)};
+}
+
+boo::ObjToken<ITextureD> D3D11DataFactory::Context::newDynamicTexture(
+        size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode)
+{
+    D3D11DataFactoryImpl& factory = static_cast<D3D11DataFactoryImpl&>(m_parent);
+    D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(factory.m_parent->getCommandQueue());
+    return {new D3D11TextureD(m_data, q, factory.m_ctx, width, height, fmt)};
+}
+
+boo::ObjToken<ITextureR> D3D11DataFactory::Context::newRenderTexture(
+        size_t width, size_t height, TextureClampMode clampMode,
+        size_t colorBindCount, size_t depthBindCount)
+{
+    D3D11DataFactoryImpl& factory = static_cast<D3D11DataFactoryImpl&>(m_parent);
+    return {new D3D11TextureR(m_data, factory.m_ctx, width, height, factory.m_ctx->m_sampleCount,
+                              colorBindCount, depthBindCount)};
+}
+
+boo::ObjToken<IShaderStage> D3D11DataFactory::Context::newShaderStage(
+        const uint8_t* data, size_t size, PipelineStage stage)
+{
+    D3D11DataFactoryImpl& factory = static_cast<D3D11DataFactoryImpl&>(m_parent);
+    return {new D3D11ShaderStage(m_data, factory.m_ctx, data, size, stage)};
+}
+
+boo::ObjToken<IShaderPipeline> D3D11DataFactory::Context::newShaderPipeline
+    (ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment,
+     ObjToken<IShaderStage> geometry, ObjToken<IShaderStage> control,
+     ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
+     const AdditionalPipelineInfo& additionalInfo)
+{
+    D3D11DataFactoryImpl& factory = static_cast<D3D11DataFactoryImpl&>(m_parent);
+    struct D3D11Context* ctx = factory.m_ctx;
+    return {new D3D11ShaderPipeline(m_data, ctx, vertex, fragment, geometry, control, evaluation, vtxFmt, additionalInfo)};
+}
+
+boo::ObjToken<IShaderDataBinding> D3D11DataFactory::Context::newShaderDataBinding(
+        const boo::ObjToken<IShaderPipeline>& pipeline,
+        const boo::ObjToken<IGraphicsBuffer>& vbuf,
+        const boo::ObjToken<IGraphicsBuffer>& instVbo,
+        const boo::ObjToken<IGraphicsBuffer>& ibuf,
+        size_t ubufCount, const boo::ObjToken<IGraphicsBuffer>* ubufs, const PipelineStage* ubufStages,
+        const size_t* ubufOffs, const size_t* ubufSizes,
+        size_t texCount, const boo::ObjToken<ITexture>* texs,
+        const int* texBindIdx, const bool* depthBind,
+        size_t baseVert, size_t baseInst)
+{
+    D3D11DataFactoryImpl& factory = static_cast<D3D11DataFactoryImpl&>(m_parent);
+    return {new D3D11ShaderDataBinding(m_data, factory.m_ctx, pipeline, vbuf, instVbo, ibuf,
+                                       ubufCount, ubufs, ubufStages, ubufOffs, ubufSizes, texCount, texs,
+                                       texBindIdx, depthBind, baseVert, baseInst)};
+}
+
 void D3D11CommandQueue::RenderingWorker(D3D11CommandQueue* self)
 {
     {
         std::unique_lock<std::mutex> lk(self->m_initmt);
     }
     self->m_initcv.notify_one();
-    D3D11DataFactory* dataFactory = static_cast<D3D11DataFactory*>(self->m_parent->getDataFactory());
+    D3D11DataFactoryImpl* dataFactory = static_cast<D3D11DataFactoryImpl*>(self->m_parent->getDataFactory());
     while (self->m_running)
     {
         {
@@ -1743,7 +1593,7 @@ void D3D11CommandQueue::RenderingWorker(D3D11CommandQueue* self)
 
 void D3D11CommandQueue::startRenderer()
 {
-    static_cast<D3D11DataFactory*>(m_parent->getDataFactory())->SetupGammaResources();
+    static_cast<D3D11DataFactoryImpl*>(m_parent->getDataFactory())->SetupGammaResources();
 }
 
 void D3D11CommandQueue::execute()
@@ -1774,7 +1624,7 @@ void D3D11CommandQueue::execute()
 
 void D3D11CommandQueue::ProcessDynamicLoads(ID3D11DeviceContext* ctx)
 {
-    D3D11DataFactory* gfxF = static_cast<D3D11DataFactory*>(m_parent->getDataFactory());
+    D3D11DataFactoryImpl* gfxF = static_cast<D3D11DataFactoryImpl*>(m_parent->getDataFactory());
     std::unique_lock<std::recursive_mutex> lk(m_dynamicLock);
     std::unique_lock<std::recursive_mutex> datalk(gfxF->m_dataMutex);
 
@@ -1810,7 +1660,39 @@ _NewD3D11CommandQueue(D3D11Context* ctx, D3D11Context::Window* windowCtx, IGraph
 std::unique_ptr<IGraphicsDataFactory>
 _NewD3D11DataFactory(D3D11Context* ctx, IGraphicsContext* parent)
 {
-    return std::make_unique<D3D11DataFactory>(parent, ctx);
+    return std::make_unique<D3D11DataFactoryImpl>(parent, ctx);
+}
+
+static const char* D3DShaderTypes[] =
+{
+    nullptr,
+    "vs_5_0",
+    "ps_5_0",
+    "gs_5_0",
+    "hs_5_0",
+    "ds_5_0"
+};
+
+#if _DEBUG && 0
+#define BOO_D3DCOMPILE_FLAG D3DCOMPILE_DEBUG | D3DCOMPILE_OPTIMIZATION_LEVEL0
+#else
+#define BOO_D3DCOMPILE_FLAG D3DCOMPILE_OPTIMIZATION_LEVEL3
+#endif
+
+std::vector<uint8_t> D3D11DataFactory::CompileHLSL(const char* source, PipelineStage stage)
+{
+    ComPtr<ID3DBlob> errBlob;
+    ComPtr<ID3DBlob> blobOut;
+    if (FAILED(D3DCompilePROC(source, strlen(source), "Boo HLSL Source", nullptr, nullptr, "main",
+                              D3DShaderTypes[int(stage)], BOO_D3DCOMPILE_FLAG, 0, &blobOut, &errBlob)))
+    {
+        printf("%s\n", source);
+        Log.report(logvisor::Fatal, "error compiling shader: %s", errBlob->GetBufferPointer());
+        return {};
+    }
+    std::vector<uint8_t> ret(blobOut->GetBufferSize());
+    memcpy(ret.data(), blobOut->GetBufferPointer(), ret.size());
+    return ret;
 }
 
 }

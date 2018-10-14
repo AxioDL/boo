@@ -904,7 +904,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         if (!ret)
             return {};
 
-        SystemString name = SystemString(APP->getFriendlyName()) + _S(" MIDI-In");
+        SystemString name = SystemString(APP->getFriendlyName()) + _SYS_STR(" MIDI-In");
         auto port = virtualMIDICreatePortEx2PROC(name.c_str(), LPVM_MIDI_DATA_CB(VirtualMIDIReceiveProc),
                                                  DWORD_PTR(static_cast<IMIDIReceiver*>(ret.get())), 512,
                                                  TE_VM_FLAGS_PARSE_RX | TE_VM_FLAGS_INSTANTIATE_RX_ONLY);
@@ -927,7 +927,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         if (!ret)
             return {};
 
-        SystemString name = SystemString(APP->getFriendlyName()) + _S(" MIDI-Out");
+        SystemString name = SystemString(APP->getFriendlyName()) + _SYS_STR(" MIDI-Out");
         auto port = virtualMIDICreatePortEx2PROC(name.c_str(), nullptr, 0, 512,
                                                  TE_VM_FLAGS_PARSE_TX | TE_VM_FLAGS_INSTANTIATE_TX_ONLY);
         if (!port)
@@ -949,7 +949,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine
         if (!ret)
             return {};
 
-        SystemString name = SystemString(APP->getFriendlyName()) + _S(" MIDI-In/Out");
+        SystemString name = SystemString(APP->getFriendlyName()) + _SYS_STR(" MIDI-In/Out");
         auto port = virtualMIDICreatePortEx2PROC(name.c_str(), LPVM_MIDI_DATA_CB(VirtualMIDIReceiveProc),
                                                  DWORD_PTR(static_cast<IMIDIReceiver*>(ret.get())), 512,
                                                  TE_VM_FLAGS_SUPPORTED);

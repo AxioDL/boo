@@ -267,6 +267,7 @@ if(NOT NX)
   function(glslang_set_link_args TARGET)
   endfunction(glslang_set_link_args)
 
+  set(ENABLE_SPVREMAPPER On)
   add_definitions("-DENABLE_OPT=0")
   add_subdirectory(glslang/glslang)
   add_subdirectory(glslang/OGLCompilersDLL)

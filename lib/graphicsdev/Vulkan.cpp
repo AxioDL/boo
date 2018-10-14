@@ -413,7 +413,7 @@ bool VulkanContext::initVulkan(std::string_view appName, PFN_vkGetInstanceProcAd
 
 #ifndef NDEBUG
     m_layerNames.push_back("VK_LAYER_LUNARG_standard_validation");
-    m_layerNames.push_back("VK_LAYER_RENDERDOC_Capture");
+    //m_layerNames.push_back("VK_LAYER_RENDERDOC_Capture");
     //m_layerNames.push_back("VK_LAYER_LUNARG_api_dump");
     //m_layerNames.push_back("VK_LAYER_LUNARG_core_validation");
     //m_layerNames.push_back("VK_LAYER_LUNARG_object_tracker");

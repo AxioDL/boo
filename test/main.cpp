@@ -417,8 +417,6 @@ struct TestApplicationCallback : IApplicationCallback
 #if _WIN32
             if (plat == IGraphicsDataFactory::Platform::D3D11)
             {
-                D3DDataFactory::Context& d3dF = dynamic_cast<D3DDataFactory::Context&>(ctx);
-
                 static const char* VS =
                     "struct VertData {float3 in_pos : POSITION; float2 in_uv : UV;};\n"
                     "struct VertToFrag {float4 out_pos : SV_Position; float2 out_uv : UV;};\n"
@@ -440,10 +438,11 @@ struct TestApplicationCallback : IApplicationCallback
                     "    return float4(d.out_uv.xy, 0.0, 1.0);\n"
                     "}\n";
 
-                pipeline = d3dF.newShaderPipeline(VS, PS, nullptr, nullptr, nullptr, vfmt,
-                                                  BlendFactor::One, BlendFactor::Zero,
-                                                  Primitive::TriStrips, boo::ZTest::LEqual,
-                                                  true, true, false, CullMode::None);
+                auto vertexSiprv = D3D11DataFactory::CompileHLSL(VS, PipelineStage::Vertex);
+                auto vertexShader = ctx.newShaderStage(vertexSiprv, PipelineStage::Vertex);
+                auto fragmentSiprv = D3D11DataFactory::CompileHLSL(PS, PipelineStage::Fragment);
+                auto fragmentShader = ctx.newShaderStage(fragmentSiprv, PipelineStage::Fragment);
+                pipeline = ctx.newShaderPipeline(vertexShader, fragmentShader, descs, info);
             } else
 #elif BOO_HAS_METAL
             if (plat == IGraphicsDataFactory::Platform::Metal)
@@ -609,7 +608,7 @@ int WINAPIV main(Platform::Array<Platform::String^>^ params)
     logvisor::RegisterConsoleLogger();
     boo::TestApplicationCallback appCb;
     boo::ViewProvider^ viewProvider =
-        ref new boo::ViewProvider(appCb, _S("boo"), _S("boo"), _S("boo"), params, false);
+        ref new boo::ViewProvider(appCb, _SYS_STR("boo"), _SYS_STR("boo"), _SYS_STR("boo"), params, false);
     CoreApplication::Run(viewProvider);
     return 0;
 }

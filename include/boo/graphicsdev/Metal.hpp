@@ -22,7 +22,7 @@ public:
         ~Context();
     public:
         Platform platform() const { return Platform::Metal; }
-        const SystemChar* platformName() const { return _S("Metal"); }
+        const SystemChar* platformName() const { return _SYS_STR("Metal"); }
 
         ObjToken<IGraphicsBufferS> newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
         ObjToken<IGraphicsBufferD> newDynamicBuffer(BufferUse use, size_t stride, size_t count);
