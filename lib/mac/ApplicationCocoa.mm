@@ -3,7 +3,6 @@
 
 #include "boo/IApplication.hpp"
 #include "boo/graphicsdev/Metal.hpp"
-#include "boo/graphicsdev/GL.hpp"
 #include "CocoaCommon.hpp"
 #include "../Common.hpp"
 
@@ -32,8 +31,7 @@ namespace boo
 {
 static logvisor::Module Log("boo::ApplicationCocoa");
 
-std::shared_ptr<IWindow> _WindowCocoaNew(SystemStringView title, NSOpenGLContext* lastGLCtx,
-                                         MetalContext* metalCtx, GLContext* glCtx);
+std::shared_ptr<IWindow> _WindowCocoaNew(SystemStringView title, MetalContext* metalCtx);
 
 class ApplicationCocoa : public IApplication
 {
@@ -52,7 +50,9 @@ private:
     std::unordered_map<uintptr_t, std::weak_ptr<IWindow>> m_windows;
 
     MetalContext m_metalCtx;
+#if 0
     GLContext m_glCtx;
+#endif
 
     void _deletedWindow(IWindow* window)
     {
@@ -78,9 +78,11 @@ public:
         m_metalCtx.m_sampleCount = samples;
         m_metalCtx.m_anisotropy = anisotropy;
         m_metalCtx.m_pixelFormat = deepColor ? MTLPixelFormatRGBA16Float : MTLPixelFormatBGRA8Unorm;
+#if 0
         m_glCtx.m_sampleCount = samples;
         m_glCtx.m_anisotropy = anisotropy;
         m_glCtx.m_deepColor = deepColor;
+#endif
 
         [[NSApplication sharedApplication] setActivationPolicy:NSApplicationActivationPolicyRegular];
 
@@ -104,38 +106,13 @@ public:
                             action:nil keyEquivalent:@""] setSubmenu:appMenu];
         [[NSApplication sharedApplication] setMainMenu:rootMenu];
 
-        /* Determine which graphics API to use */
-#if BOO_HAS_METAL
-        bool useGL = false;
-        if (!gfxApi.compare("OpenGL"))
-            useGL = true;
-        for (const SystemString& arg : args)
-        {
-            if (!arg.compare("--gl"))
-            {
-                useGL = true;
-                break;
-            }
-            else if (!arg.compare("--metal"))
-            {
-                useGL = false;
-                break;
-            }
-        }
-        if (!useGL)
-            m_metalCtx.m_dev = MTLCreateSystemDefaultDevice();
-        if (m_metalCtx.m_dev)
-        {
-            m_metalCtx.m_q = [m_metalCtx.m_dev newCommandQueue];
-            while (![m_metalCtx.m_dev supportsTextureSampleCount:m_metalCtx.m_sampleCount])
-                m_metalCtx.m_sampleCount = flp2(m_metalCtx.m_sampleCount - 1);
-            Log.report(logvisor::Info, "using Metal renderer");
-        }
-        else
-            Log.report(logvisor::Info, "using OpenGL renderer");
-#else
-        Log.report(logvisor::Info, "using OpenGL renderer");
-#endif
+        m_metalCtx.m_dev = MTLCreateSystemDefaultDevice();
+        if (!m_metalCtx.m_dev)
+            Log.report(logvisor::Fatal, "Unable to create metal device");
+        m_metalCtx.m_q = [m_metalCtx.m_dev newCommandQueue];
+        while (![m_metalCtx.m_dev supportsTextureSampleCount:m_metalCtx.m_sampleCount])
+            m_metalCtx.m_sampleCount = flp2(m_metalCtx.m_sampleCount - 1);
+        Log.report(logvisor::Info, "using Metal renderer");
     }
 
     EPlatformType getPlatformType() const
@@ -214,19 +191,23 @@ public:
 
     std::shared_ptr<IWindow> newWindow(std::string_view title)
     {
-        auto newWindow = _WindowCocoaNew(title, m_lastGLCtx, &m_metalCtx, &m_glCtx);
+        auto newWindow = _WindowCocoaNew(title, &m_metalCtx);
         m_windows[newWindow->getPlatformHandle()] = newWindow;
         return newWindow;
     }
 
     /* Last GL context */
+#if 0
     NSOpenGLContext* m_lastGLCtx = nullptr;
+#endif
 };
 
+#if 0
 void _CocoaUpdateLastGLCtx(NSOpenGLContext* lastGLCtx)
 {
     static_cast<ApplicationCocoa*>(APP)->m_lastGLCtx = lastGLCtx;
 }
+#endif
 
 IApplication* APP = nullptr;
 int ApplicationRun(IApplication::EPlatformType platform,

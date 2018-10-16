@@ -67,19 +67,11 @@ static logvisor::Module Log("boo::Metal");
 struct MetalCommandQueue;
 class MetalDataFactoryImpl;
 
-struct MetalShareableShader : IShareableShader<MetalDataFactoryImpl, MetalShareableShader>
-{
-    id<MTLFunction> m_shader;
-    MetalShareableShader(MetalDataFactoryImpl& fac, uint64_t srcKey, uint64_t binKey, id<MTLFunction> s)
-    : IShareableShader(fac, srcKey, binKey), m_shader(s) {}
-};
-
 class MetalDataFactoryImpl : public MetalDataFactory, public GraphicsDataFactoryHead
 {
     friend struct MetalCommandQueue;
     friend class MetalDataFactory::Context;
     IGraphicsContext* m_parent;
-    std::unordered_map<uint64_t, std::unique_ptr<MetalShareableShader>> m_sharedShaders;
     struct MetalContext* m_ctx;
 
     bool m_hasTessellation = false;
@@ -88,7 +80,6 @@ class MetalDataFactoryImpl : public MetalDataFactory, public GraphicsDataFactory
     ObjToken<IShaderPipeline> m_gammaShader;
     ObjToken<ITextureD> m_gammaLUT;
     ObjToken<IGraphicsBufferS> m_gammaVBO;
-    ObjToken<IVertexFormat> m_gammaVFMT;
     ObjToken<IShaderDataBinding> m_gammaBinding;
     void SetupGammaResources()
     {
@@ -96,14 +87,20 @@ class MetalDataFactoryImpl : public MetalDataFactory, public GraphicsDataFactory
 
         commitTransaction([this](IGraphicsDataFactory::Context& ctx)
         {
+            auto vertexMetal = MetalDataFactory::CompileMetal(GammaVS, PipelineStage::Vertex);
+            auto vertexShader = ctx.newShaderStage(vertexMetal, PipelineStage::Vertex);
+            auto fragmentMetal = MetalDataFactory::CompileMetal(GammaFS, PipelineStage::Fragment);
+            auto fragmentShader = ctx.newShaderStage(fragmentMetal, PipelineStage::Fragment);
             const VertexElementDescriptor vfmt[] = {
-                {nullptr, nullptr, VertexSemantic::Position4},
-                {nullptr, nullptr, VertexSemantic::UV4}
+                {VertexSemantic::Position4},
+                {VertexSemantic::UV4}
             };
-            m_gammaVFMT = ctx.newVertexFormat(2, vfmt);
-            m_gammaShader = static_cast<Context&>(ctx).newShaderPipeline(GammaVS, GammaFS,
-                nullptr, nullptr, m_gammaVFMT, BlendFactor::One, BlendFactor::Zero,
-                Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None, true, false);
+            AdditionalPipelineInfo info =
+                {
+                    BlendFactor::One, BlendFactor::Zero,
+                    Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None
+                };
+            m_gammaShader = ctx.newShaderPipeline(vertexShader, fragmentShader, vfmt, info);
             m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
             setDisplayGamma(1.f);
             const struct Vert {
@@ -117,242 +114,22 @@ class MetalDataFactoryImpl : public MetalDataFactory, public GraphicsDataFactory
             };
             m_gammaVBO = ctx.newStaticBuffer(BufferUse::Vertex, verts, 32, 4);
             ObjToken<ITexture> texs[] = {{}, m_gammaLUT.get()};
-            m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVFMT, m_gammaVBO.get(), {}, {},
+            m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVBO.get(), {}, {},
                                                       0, nullptr, nullptr, 2, texs, nullptr, nullptr);
             return true;
         } BooTrace);
     }
 
 public:
-    std::unordered_map<uint64_t, uint64_t> m_sourceToBinary;
-    char m_libfile[MAXPATHLEN];
-    bool m_hasCompiler = false;
 
     MetalDataFactoryImpl(IGraphicsContext* parent, MetalContext* ctx)
-    : m_parent(parent), m_ctx(ctx)
-    {
-        snprintf(m_libfile, MAXPATHLEN, "%sboo_metal_shader.metallib", getenv("TMPDIR"));
-        for (auto& arg : APP->getArgs())
-            if (arg == "--metal-compile")
-            {
-                m_hasCompiler = CheckForMetalCompiler();
-                break;
-            }
-    }
+    : m_parent(parent), m_ctx(ctx) {}
     ~MetalDataFactoryImpl() = default;
 
     Platform platform() const { return Platform::Metal; }
     const char* platformName() const { return "Metal"; }
     void commitTransaction(const std::function<bool(IGraphicsDataFactory::Context& ctx)>& __BooTraceArgs);
     ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs);
-    void _unregisterShareableShader(uint64_t srcKey, uint64_t binKey) { m_sharedShaders.erase(srcKey); }
-
-    static bool CheckForMetalCompiler()
-    {
-        pid_t pid = fork();
-        if (!pid)
-        {
-            execlp("xcrun", "xcrun", "-sdk", "macosx", "metal", NULL);
-            /* xcrun returns 72 if metal command not found;
-             * emulate that if xcrun not found */
-            exit(72);
-        }
-
-        int status, ret;
-        while ((ret = waitpid(pid, &status, 0)) < 0 && errno == EINTR) {}
-        if (ret < 0)
-            return false;
-        return WEXITSTATUS(status) == 1;
-    }
-
-    uint64_t CompileLib(std::vector<uint8_t>& blobOut, const char* source, uint64_t srcKey)
-    {
-        if (!m_hasCompiler)
-        {
-            /* Cache the source if there's no compiler */
-            size_t sourceLen = strlen(source);
-
-            /* First byte unset to indicate source data */
-            blobOut.resize(sourceLen + 2);
-            memcpy(&blobOut[1], source, sourceLen);
-        }
-        else
-        {
-            /* Cache the binary otherwise */
-            int compilerOut[2];
-            int compilerIn[2];
-            pipe(compilerOut);
-            pipe(compilerIn);
-
-            /* Pipe source write to compiler */
-            pid_t compilerPid = fork();
-            if (!compilerPid)
-            {
-                dup2(compilerIn[0], STDIN_FILENO);
-                dup2(compilerOut[1], STDOUT_FILENO);
-
-                close(compilerOut[0]);
-                close(compilerOut[1]);
-                close(compilerIn[0]);
-                close(compilerIn[1]);
-
-                execlp("xcrun", "xcrun", "-sdk", "macosx", "metal", "-o", "/dev/stdout", "-Wno-unused-variable",
-                       "-Wno-unused-const-variable", "-Wno-unused-function", "-x", "metal", "-", NULL);
-                fprintf(stderr, "execlp fail %s\n", strerror(errno));
-                exit(1);
-            }
-            close(compilerIn[0]);
-            close(compilerOut[1]);
-
-            /* Pipe compiler to linker */
-            pid_t linkerPid = fork();
-            if (!linkerPid)
-            {
-                dup2(compilerOut[0], STDIN_FILENO);
-
-                close(compilerOut[0]);
-                close(compilerIn[1]);
-
-                /* metallib doesn't like outputting to a pipe, so temp file will have to do */
-                execlp("xcrun", "xcrun", "-sdk", "macosx", "metallib", "-", "-o", m_libfile, NULL);
-                fprintf(stderr, "execlp fail %s\n", strerror(errno));
-                exit(1);
-            }
-            close(compilerOut[0]);
-
-            /* Stream in source */
-            const char* inPtr = source;
-            size_t inRem = strlen(source);
-            while (inRem)
-            {
-                ssize_t writeRes = write(compilerIn[1], inPtr, inRem);
-                if (writeRes < 0)
-                {
-                    fprintf(stderr, "write fail %s\n", strerror(errno));
-                    break;
-                }
-                inPtr += writeRes;
-                inRem -= writeRes;
-            }
-            close(compilerIn[1]);
-
-            /* Wait for completion */
-            int compilerStat, linkerStat;
-            if (waitpid(compilerPid, &compilerStat, 0) < 0 || waitpid(linkerPid, &linkerStat, 0) < 0)
-            {
-                fprintf(stderr, "waitpid fail %s\n", strerror(errno));
-                return 0;
-            }
-
-            if (WEXITSTATUS(compilerStat) || WEXITSTATUS(linkerStat))
-                return 0;
-
-            /* Copy temp file into buffer with first byte set to indicate binary data */
-            FILE* fin = fopen(m_libfile, "rb");
-            fseek(fin, 0, SEEK_END);
-            long libLen = ftell(fin);
-            fseek(fin, 0, SEEK_SET);
-            blobOut.resize(libLen + 1);
-            blobOut[0] = 1;
-            fread(&blobOut[1], 1, libLen, fin);
-            fclose(fin);
-        }
-
-        XXH64_state_t hashState;
-        XXH64_reset(&hashState, 0);
-        XXH64_update(&hashState, blobOut.data(), blobOut.size());
-        uint64_t binKey = XXH64_digest(&hashState);
-        m_sourceToBinary[srcKey] = binKey;
-        return binKey;
-    }
-
-    uint64_t CompileLib(__strong id<MTLLibrary>& libOut, const char* source, uint64_t srcKey,
-                        MTLCompileOptions* compOpts, NSError * _Nullable *err)
-    {
-        libOut = [m_ctx->m_dev newLibraryWithSource:@(source)
-                                            options:compOpts
-                                              error:err];
-
-        if (srcKey)
-        {
-            XXH64_state_t hashState;
-            XXH64_reset(&hashState, 0);
-            uint8_t zero = 0;
-            XXH64_update(&hashState, &zero, 1);
-            XXH64_update(&hashState, source, strlen(source) + 1);
-            uint64_t binKey = XXH64_digest(&hashState);
-            m_sourceToBinary[srcKey] = binKey;
-            return binKey;
-        }
-        return 0;
-    }
-
-    MetalShareableShader::Token PrepareShaderStage(const char* source, std::vector<uint8_t>* blobOut, NSString* funcName)
-    {
-        MTLCompileOptions* compOpts = [MTLCompileOptions new];
-        compOpts.languageVersion = MTLLanguageVersion1_2;
-        NSError* err = nullptr;
-
-        XXH64_state_t hashState;
-        uint64_t srcHash = 0;
-        uint64_t binHash = 0;
-        XXH64_reset(&hashState, 0);
-        if (source)
-        {
-            XXH64_update(&hashState, source, strlen(source));
-            srcHash = XXH64_digest(&hashState);
-            auto binSearch = m_sourceToBinary.find(srcHash);
-            if (binSearch != m_sourceToBinary.cend())
-                binHash = binSearch->second;
-        }
-        else if (blobOut && !blobOut->empty())
-        {
-            XXH64_update(&hashState, blobOut->data(), blobOut->size());
-            binHash = XXH64_digest(&hashState);
-        }
-
-        if (blobOut && blobOut->empty())
-            binHash = CompileLib(*blobOut, source, srcHash);
-
-        MetalShareableShader::Token shader;
-        auto search = binHash ? m_sharedShaders.find(binHash) : m_sharedShaders.end();
-        if (search != m_sharedShaders.end())
-        {
-            return search->second->lock();
-        }
-        else
-        {
-            id<MTLLibrary> shaderLib;
-            if (blobOut && !blobOut->empty())
-            {
-                if ((*blobOut)[0] == 1)
-                {
-                    dispatch_data_t data = dispatch_data_create(blobOut->data() + 1, blobOut->size() - 1, nullptr, nullptr);
-                    shaderLib = [m_ctx->m_dev newLibraryWithData:data error:&err];
-                    if (!shaderLib)
-                        Log.report(logvisor::Fatal, "error loading library: %s", [[err localizedDescription] UTF8String]);
-                }
-                else
-                {
-                    CompileLib(shaderLib, (char*)blobOut->data() + 1, 0, compOpts, &err);
-                }
-            }
-            else
-                binHash = CompileLib(shaderLib, source, srcHash, compOpts, &err);
-
-            if (!shaderLib)
-            {
-                printf("%s\n", source);
-                Log.report(logvisor::Fatal, "error compiling shader: %s", [[err localizedDescription] UTF8String]);
-            }
-            id<MTLFunction> func = [shaderLib newFunctionWithName:funcName];
-
-            auto it =
-                m_sharedShaders.emplace(std::make_pair(binHash,
-                std::make_unique<MetalShareableShader>(*this, srcHash, binHash, func))).first;
-            return it->second->lock();
-        }
-    }
 
     void setDisplayGamma(float gamma)
     {
@@ -855,15 +632,14 @@ static const MTLVertexFormat SEMANTIC_TYPE_TABLE[] =
     MTLVertexFormatFloat4
 };
 
-struct MetalVertexFormat : GraphicsDataNode<IVertexFormat>
+struct MetalVertexFormat
 {
     size_t m_elementCount;
     MTLVertexDescriptor* m_vdesc;
     size_t m_stride = 0;
     size_t m_instStride = 0;
-    MetalVertexFormat(const ObjToken<BaseGraphicsData>& parent,
-                      size_t elementCount, const VertexElementDescriptor* elements)
-    : GraphicsDataNode<IVertexFormat>(parent), m_elementCount(elementCount)
+    MetalVertexFormat(size_t elementCount, const VertexElementDescriptor* elements)
+    : m_elementCount(elementCount)
     {
         for (size_t i=0 ; i<elementCount ; ++i)
         {
@@ -909,7 +685,7 @@ struct MetalVertexFormat : GraphicsDataNode<IVertexFormat>
         }
     }
 
-    MTLStageInputOutputDescriptor* makeTessellationComputeLayout()
+    MTLStageInputOutputDescriptor* makeTessellationComputeLayout() const
     {
         MTLStageInputOutputDescriptor* ret = [MTLStageInputOutputDescriptor stageInputOutputDescriptor];
 
@@ -930,7 +706,7 @@ struct MetalVertexFormat : GraphicsDataNode<IVertexFormat>
         return ret;
     }
 
-    MTLVertexDescriptor* makeTessellationVertexLayout()
+    MTLVertexDescriptor* makeTessellationVertexLayout() const
     {
         MTLVertexDescriptor* ret = [MTLVertexDescriptor vertexDescriptor];
 
@@ -982,6 +758,56 @@ static const MTLPrimitiveType PRIMITIVE_TABLE[] =
 
 #define COLOR_WRITE_MASK (MTLColorWriteMaskRed | MTLColorWriteMaskGreen | MTLColorWriteMaskBlue)
 
+class MetalShaderStage : public GraphicsDataNode<IShaderStage>
+{
+    friend class MetalDataFactory;
+    id<MTLFunction> m_shader;
+    MetalShaderStage(const boo::ObjToken<BaseGraphicsData>& parent, MetalContext* ctx,
+                     const uint8_t* data, size_t size, PipelineStage stage)
+    : GraphicsDataNode<IShaderStage>(parent)
+    {
+        NSError* err = nullptr;
+
+        id<MTLLibrary> shaderLib;
+        if (data[0] == 1)
+        {
+            dispatch_data_t d = dispatch_data_create(data + 1, size - 1, nullptr, nullptr);
+            shaderLib = [ctx->m_dev newLibraryWithData:d error:&err];
+        }
+        else
+        {
+            MTLCompileOptions* compOpts = [MTLCompileOptions new];
+            compOpts.languageVersion = MTLLanguageVersion1_2;
+            shaderLib = [ctx->m_dev newLibraryWithSource:@((const char*)(data + 1))
+                                                 options:compOpts
+                                                   error:&err];
+            if (!shaderLib)
+                printf("%s\n", data + 1);
+        }
+        if (!shaderLib)
+            Log.report(logvisor::Fatal, "error creating library: %s", [[err localizedDescription] UTF8String]);
+
+        NSString* funcName;
+        switch (stage)
+        {
+        case PipelineStage::Vertex:
+        default:
+            funcName = @"vmain"; break;
+        case PipelineStage::Fragment:
+            funcName = @"fmain"; break;
+        case PipelineStage::Geometry:
+            funcName = @"gmain"; break;
+        case PipelineStage::Control:
+            funcName = @"cmain"; break;
+        case PipelineStage::Evaluation:
+            funcName = @"emain"; break;
+        }
+        m_shader = [shaderLib newFunctionWithName:funcName];
+    }
+public:
+    id<MTLFunction> shader() const { return m_shader; }
+};
+
 class MetalShaderPipeline : public GraphicsDataNode<IShaderPipeline>
 {
 protected:
@@ -990,17 +816,13 @@ protected:
     friend struct MetalShaderDataBinding;
     MTLCullMode m_cullMode = MTLCullModeNone;
     MTLPrimitiveType m_drawPrim;
-    MetalShareableShader::Token m_vert;
-    MetalShareableShader::Token m_frag;
+    uint32_t m_patchSize;
 
-    MetalShaderPipeline(const ObjToken<BaseGraphicsData>& parent,
-                        MetalShareableShader::Token&& vert,
-                        MetalShareableShader::Token&& frag)
-    : GraphicsDataNode<IShaderPipeline>(parent),
-      m_vert(std::move(vert)), m_frag(std::move(frag))
-    {}
+    MetalShaderPipeline(const boo::ObjToken<BaseGraphicsData>& parent)
+    : GraphicsDataNode<IShaderPipeline>(parent) {}
 
-    virtual void setupExtraStages(MetalContext* ctx, MTLRenderPipelineDescriptor* desc, MetalVertexFormat& cVtxFmt) {}
+    virtual void setupExtraStages(MetalContext* ctx, MTLRenderPipelineDescriptor* desc,
+                                  ObjToken<IShaderStage> compute, const MetalVertexFormat& cVtxFmt) {}
 
     virtual void draw(MetalCommandQueue& q, size_t start, size_t count);
     virtual void drawIndexed(MetalCommandQueue& q, size_t start, size_t count);
@@ -1008,15 +830,17 @@ protected:
     virtual void drawInstancesIndexed(MetalCommandQueue& q, size_t start, size_t count, size_t instCount);
 
     void setup(MetalContext* ctx,
-               const ObjToken<IVertexFormat>& vtxFmt, NSUInteger targetSamples,
-               BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-               ZTest depthTest, bool depthWrite, bool colorWrite,
-               bool alphaWrite, bool overwriteAlpha, CullMode culling,
-               bool depthAttachment = true)
+               NSUInteger targetSamples,
+               ObjToken<IShaderStage> vertex,
+               ObjToken<IShaderStage> fragment,
+               ObjToken<IShaderStage> compute,
+               const VertexFormatInfo& vtxFmt,
+               const AdditionalPipelineInfo& info)
     {
-        m_drawPrim = PRIMITIVE_TABLE[int(prim)];
+        m_drawPrim = PRIMITIVE_TABLE[int(info.prim)];
+        m_patchSize = info.patchSize;
 
-        switch (culling)
+        switch (info.culling)
         {
         case CullMode::None:
         default:
@@ -1031,22 +855,22 @@ protected:
         }
 
         MTLRenderPipelineDescriptor* desc = [MTLRenderPipelineDescriptor new];
-        desc.vertexFunction = m_vert.get().m_shader;
-        desc.fragmentFunction = m_frag.get().m_shader;
-        MetalVertexFormat& cVtxFmt = *vtxFmt.cast<MetalVertexFormat>();
+        desc.vertexFunction = vertex.cast<MetalShaderStage>()->shader();
+        desc.fragmentFunction = fragment.cast<MetalShaderStage>()->shader();
+        MetalVertexFormat cVtxFmt(vtxFmt.elementCount, vtxFmt.elements);
         desc.vertexDescriptor = cVtxFmt.m_vdesc;
-        setupExtraStages(ctx, desc, cVtxFmt);
+        setupExtraStages(ctx, desc, compute, cVtxFmt);
         desc.sampleCount = targetSamples;
         desc.colorAttachments[0].pixelFormat = ctx->m_pixelFormat;
-        desc.colorAttachments[0].writeMask = (colorWrite ? COLOR_WRITE_MASK : 0) |
-                                             (alphaWrite ? MTLColorWriteMaskAlpha : 0);
-        desc.colorAttachments[0].blendingEnabled = dstFac != BlendFactor::Zero;
-        if (srcFac == BlendFactor::Subtract || dstFac == BlendFactor::Subtract)
+        desc.colorAttachments[0].writeMask = (info.colorWrite ? COLOR_WRITE_MASK : 0) |
+                                             (info.alphaWrite ? MTLColorWriteMaskAlpha : 0);
+        desc.colorAttachments[0].blendingEnabled = info.dstFac != BlendFactor::Zero;
+        if (info.srcFac == BlendFactor::Subtract || info.dstFac == BlendFactor::Subtract)
         {
             desc.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
             desc.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOne;
             desc.colorAttachments[0].rgbBlendOperation = MTLBlendOperationReverseSubtract;
-            if (overwriteAlpha)
+            if (info.overwriteAlpha)
             {
                 desc.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
                 desc.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorZero;
@@ -1061,22 +885,22 @@ protected:
         }
         else
         {
-            desc.colorAttachments[0].sourceRGBBlendFactor = BLEND_FACTOR_TABLE[int(srcFac)];
-            desc.colorAttachments[0].destinationRGBBlendFactor = BLEND_FACTOR_TABLE[int(dstFac)];
+            desc.colorAttachments[0].sourceRGBBlendFactor = BLEND_FACTOR_TABLE[int(info.srcFac)];
+            desc.colorAttachments[0].destinationRGBBlendFactor = BLEND_FACTOR_TABLE[int(info.dstFac)];
             desc.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
-            if (overwriteAlpha)
+            if (info.overwriteAlpha)
             {
                 desc.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
                 desc.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorZero;
             }
             else
             {
-                desc.colorAttachments[0].sourceAlphaBlendFactor = BLEND_FACTOR_TABLE[int(srcFac)];
-                desc.colorAttachments[0].destinationAlphaBlendFactor = BLEND_FACTOR_TABLE[int(dstFac)];
+                desc.colorAttachments[0].sourceAlphaBlendFactor = BLEND_FACTOR_TABLE[int(info.srcFac)];
+                desc.colorAttachments[0].destinationAlphaBlendFactor = BLEND_FACTOR_TABLE[int(info.dstFac)];
             }
             desc.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
         }
-        desc.depthAttachmentPixelFormat = depthAttachment ? MTLPixelFormatDepth32Float : MTLPixelFormatInvalid;
+        desc.depthAttachmentPixelFormat = info.depthAttachment ? MTLPixelFormatDepth32Float : MTLPixelFormatInvalid;
         desc.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
         NSError* err = nullptr;
         m_state = [ctx->m_dev newRenderPipelineStateWithDescriptor:desc error:&err];
@@ -1085,7 +909,7 @@ protected:
                        [[err localizedDescription] UTF8String]);
 
         MTLDepthStencilDescriptor* dsDesc = [MTLDepthStencilDescriptor new];
-        switch (depthTest)
+        switch (info.depthTest)
         {
         case ZTest::None:
         default:
@@ -1105,7 +929,7 @@ protected:
             break;
         }
 
-        dsDesc.depthWriteEnabled = depthWrite;
+        dsDesc.depthWriteEnabled = info.depthWrite;
         m_dsState = [ctx->m_dev newDepthStencilStateWithDescriptor:dsDesc];
     }
 
@@ -1129,20 +953,12 @@ class MetalTessellationShaderPipeline : public MetalShaderPipeline
     friend class MetalDataFactory;
     friend struct MetalCommandQueue;
     friend struct MetalShaderDataBinding;
-    MetalShareableShader::Token m_compute;
-    uint32_t m_patchSize;
 
-    MetalTessellationShaderPipeline(
-                        const ObjToken<BaseGraphicsData>& parent,
-                        MetalShareableShader::Token&& compute,
-                        MetalShareableShader::Token&& frag,
-                        MetalShareableShader::Token&& evaluation,
-                        uint32_t patchSize)
-    : MetalShaderPipeline(parent, std::move(evaluation), std::move(frag)),
-      m_compute(std::move(compute)), m_patchSize(patchSize)
-    {}
+    MetalTessellationShaderPipeline(const ObjToken<BaseGraphicsData>& parent)
+    : MetalShaderPipeline(parent) {}
 
-    void setupExtraStages(MetalContext* ctx, MTLRenderPipelineDescriptor* desc, MetalVertexFormat& cVtxFmt)
+    void setupExtraStages(MetalContext* ctx, MTLRenderPipelineDescriptor* desc,
+                          ObjToken<IShaderStage> compute, const MetalVertexFormat& cVtxFmt)
     {
         desc.maxTessellationFactor = 16;
         desc.tessellationFactorScaleEnabled = NO;
@@ -1154,7 +970,7 @@ class MetalTessellationShaderPipeline : public MetalShaderPipeline
         desc.vertexDescriptor = cVtxFmt.makeTessellationVertexLayout();
 
         MTLComputePipelineDescriptor* compDesc = [MTLComputePipelineDescriptor new];
-        compDesc.computeFunction = m_compute.get().m_shader;
+        compDesc.computeFunction = compute.cast<MetalShaderStage>()->shader();
         compDesc.stageInputDescriptor = cVtxFmt.makeTessellationComputeLayout();
 
         NSError* err = nullptr;
@@ -1980,77 +1796,39 @@ MetalDataFactory::Context::newRenderTexture(size_t width, size_t height, Texture
     }
 }
 
-ObjToken<IVertexFormat>
-MetalDataFactory::Context::newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
-                                           size_t baseVert, size_t baseInst)
+ObjToken<IShaderStage>
+MetalDataFactory::Context::newShaderStage(const uint8_t* data, size_t size, PipelineStage stage)
 {
     @autoreleasepool
     {
-        return {new struct MetalVertexFormat(m_data, elementCount, elements)};
+        MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
+        return {new MetalShaderStage(m_data, factory.m_ctx, data, size, stage)};
     }
 }
 
 ObjToken<IShaderPipeline>
-MetalDataFactory::Context::newShaderPipeline(const char* vertSource, const char* fragSource,
-                                             std::vector<uint8_t>* vertBlobOut,
-                                             std::vector<uint8_t>* fragBlobOut,
-                                             const ObjToken<IVertexFormat>& vtxFmt,
-                                             BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                                             ZTest depthTest, bool depthWrite, bool colorWrite,
-                                             bool alphaWrite, CullMode culling, bool overwriteAlpha,
-                                             bool depthAttachment)
+MetalDataFactory::Context::newShaderPipeline(ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment,
+                                             ObjToken<IShaderStage> geometry, ObjToken<IShaderStage> control,
+                                             ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
+                                             const AdditionalPipelineInfo& additionalInfo)
 {
     @autoreleasepool
     {
         MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
 
-        MetalShareableShader::Token vertShader = factory.PrepareShaderStage(vertSource, vertBlobOut, @"vmain");
-        MetalShareableShader::Token fragShader = factory.PrepareShaderStage(fragSource, fragBlobOut, @"fmain");
-
-        MetalShaderPipeline* ret = new MetalShaderPipeline(m_data, std::move(vertShader), std::move(fragShader));
-        ret->setup(factory.m_ctx, vtxFmt, depthAttachment ? factory.m_ctx->m_sampleCount : 1,
-                   srcFac, dstFac, prim, depthTest, depthWrite,
-                   colorWrite, alphaWrite, overwriteAlpha, culling, depthAttachment);
-        return {ret};
-    }
-}
-
-ObjToken<IShaderPipeline> MetalDataFactory::Context::newTessellationShaderPipeline(
-                                            const char* computeSource, const char* fragSource,
-                                            const char* evaluationSource,
-                                            std::vector<uint8_t>* computeBlobOut,
-                                            std::vector<uint8_t>* fragBlobOut,
-                                            std::vector<uint8_t>* evaluationBlobOut,
-                                            const ObjToken<IVertexFormat>& vtxFmt,
-                                            BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
-                                            ZTest depthTest, bool depthWrite, bool colorWrite,
-                                            bool alphaWrite, CullMode culling,
-                                            bool overwriteAlpha,
-                                            bool depthAttachment)
-{
-    @autoreleasepool
-    {
-        MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
-
-        if (!factory.m_hasTessellation)
-            Log.report(logvisor::Fatal, "Device does not support tessellation");
-
-        MetalShareableShader::Token computeShader = factory.PrepareShaderStage(computeSource, computeBlobOut, @"cmain");
-        MetalShareableShader::Token fragShader = factory.PrepareShaderStage(fragSource, fragBlobOut, @"fmain");
-        MetalShareableShader::Token evaluationShader = factory.PrepareShaderStage(evaluationSource, evaluationBlobOut, @"emain");
-
-        MetalTessellationShaderPipeline* ret = new MetalTessellationShaderPipeline(m_data,
-                   std::move(computeShader), std::move(fragShader), std::move(evaluationShader), patchSize);
-        ret->setup(factory.m_ctx, vtxFmt, depthAttachment ? factory.m_ctx->m_sampleCount : 1,
-                   srcFac, dstFac, Primitive::Patches, depthTest, depthWrite,
-                   colorWrite, alphaWrite, overwriteAlpha, culling, depthAttachment);
+        MetalShaderPipeline* ret;
+        if (evaluation)
+            ret = new MetalTessellationShaderPipeline(m_data);
+        else
+            ret = new MetalShaderPipeline(m_data);
+        ret->setup(factory.m_ctx, additionalInfo.depthAttachment ? factory.m_ctx->m_sampleCount : 1,
+                   vertex, fragment, evaluation, vtxFmt, additionalInfo);
         return {ret};
     }
 }
 
 ObjToken<IShaderDataBinding>
 MetalDataFactory::Context::newShaderDataBinding(const ObjToken<IShaderPipeline>& pipeline,
-                                                const ObjToken<IVertexFormat>& vtxFormat,
                                                 const ObjToken<IGraphicsBuffer>& vbo,
                                                 const ObjToken<IGraphicsBuffer>& instVbo,
                                                 const ObjToken<IGraphicsBuffer>& ibo,
@@ -2093,6 +1871,14 @@ std::unique_ptr<IGraphicsCommandQueue> _NewMetalCommandQueue(MetalContext* ctx, 
 std::unique_ptr<IGraphicsDataFactory> _NewMetalDataFactory(IGraphicsContext* parent, MetalContext* ctx)
 {
     return std::make_unique<MetalDataFactoryImpl>(parent, ctx);
+}
+
+std::vector<uint8_t> MetalDataFactory::CompileMetal(const char* source, PipelineStage stage)
+{
+    size_t strSz = strlen(source) + 1;
+    std::vector<uint8_t> ret(strSz + 1);
+    memcpy(ret.data() + 1, source, strSz);
+    return ret;
 }
 
 }

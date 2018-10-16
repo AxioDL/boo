@@ -3,6 +3,7 @@
 #include <memory>
 #include <functional>
 #include <cstdint>
+#include <vector>
 #include "boo/System.hpp"
 #include "boo/ThreadLocalPtr.hpp"
 #include "boo/BooObject.hpp"

@@ -1,5 +1,3 @@
-#include "boo/graphicsdev/GL.hpp"
-#include "boo/graphicsdev/glew.h"
 #include "boo/graphicsdev/Metal.hpp"
 #include "CocoaCommon.hpp"
 #import <AppKit/AppKit.h>
@@ -26,6 +24,7 @@ namespace boo {class WindowCocoa; class GraphicsContextCocoa;}
 - (void)setTouchBarProvider:(id)provider;
 @end
 
+#if 0
 /* AppKit applies OpenGL much differently than other platforms
  * the NSOpenGLView class composes together all necessary
  * OGL context members and provides the necessary event hooks
@@ -95,6 +94,7 @@ static const NSOpenGLPixelFormatAttribute* PF_TABLE[] =
     PF_RGBAF32_ATTRS,
     PF_RGBAF32_Z24_ATTRS
 };
+#endif
 
 @interface BooCocoaResponder : NSResponder <NSTextInputClient>
 {
@@ -155,10 +155,13 @@ public:
     }
     virtual BooCocoaResponder* responder() const=0;
 };
+#if 0
 class GraphicsContextCocoaGL;
+#endif
 class GraphicsContextCocoaMetal;
 }
 
+#if 0
 @interface GraphicsContextCocoaGLInternal : NSOpenGLView
 {
 @public
@@ -166,6 +169,7 @@ class GraphicsContextCocoaMetal;
 }
 - (id)initWithBooContext:(boo::GraphicsContextCocoaGL*)bctx;
 @end
+#endif
 
 @interface GraphicsContextCocoaMetalInternal : NSView
 {
@@ -181,11 +185,14 @@ class GraphicsContextCocoaMetal;
 namespace boo
 {
 static logvisor::Module Log("boo::WindowCocoa");
+#if 0
 std::unique_ptr<IGraphicsCommandQueue> _NewGLCommandQueue(IGraphicsContext* parent, GLContext* glCtx);
 std::unique_ptr<IGraphicsDataFactory> _NewGLDataFactory(IGraphicsContext* parent, GLContext* glCtx);
+#endif
 std::unique_ptr<IGraphicsCommandQueue> _NewMetalCommandQueue(MetalContext* ctx, IWindow* parentWindow,
                                                              IGraphicsContext* parent);
 std::unique_ptr<IGraphicsDataFactory> _NewMetalDataFactory(IGraphicsContext* parent, MetalContext* ctx);
+#if 0
 void _CocoaUpdateLastGLCtx(NSOpenGLContext* lastGLCtx);
 
 class GraphicsContextCocoaGL : public GraphicsContextCocoa
@@ -349,6 +356,7 @@ IGraphicsContext* _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI api,
 
     return new GraphicsContextCocoaGL(api, parentWindow, lastGLCtx, glCtx);
 }
+#endif
 
 #if BOO_HAS_METAL
 class GraphicsContextCocoaMetal : public GraphicsContextCocoa
@@ -1147,6 +1155,7 @@ static boo::ESpecialKey translateKeycode(short code)
 
 @end
 
+#if 0
 @implementation GraphicsContextCocoaGLInternal
 - (id)initWithBooContext:(boo::GraphicsContextCocoaGL*)bctx
 {
@@ -1203,6 +1212,7 @@ static boo::ESpecialKey translateKeycode(short code)
 }
 
 @end
+#endif
 
 #if BOO_HAS_METAL
 @implementation GraphicsContextCocoaMetalInternal
@@ -1299,23 +1309,16 @@ class WindowCocoa : public IWindow
 
 public:
 
-    void setup(std::string_view title, NSOpenGLContext* lastGLCtx, MetalContext* metalCtx, GLContext* glCtx)
+    void setup(std::string_view title, MetalContext* metalCtx)
     {
         dispatch_sync(dispatch_get_main_queue(),
         ^{
             std::shared_ptr<boo::WindowCocoa> windowPtr =
                 std::static_pointer_cast<boo::WindowCocoa>(shared_from_this());
             m_nsWindow = [[WindowCocoaInternal alloc] initWithBooWindow:windowPtr title:title];
-#if BOO_HAS_METAL
-            if (metalCtx->m_dev)
-                m_gfxCtx = static_cast<GraphicsContextCocoa*>(
-                    _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI::Metal,
-                                                  this, metalCtx));
-            else
-#endif
-                m_gfxCtx = static_cast<GraphicsContextCocoa*>(
-                    _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI::OpenGL3_3,
-                                               this, lastGLCtx, glCtx));
+            m_gfxCtx = static_cast<GraphicsContextCocoa*>(
+                _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI::Metal,
+                                              this, metalCtx));
             m_gfxCtx->initializeContext(nullptr);
         });
         m_gfxCtx->getMainContextDataFactory();
@@ -1587,11 +1590,10 @@ public:
 
 };
 
-std::shared_ptr<IWindow> _WindowCocoaNew(SystemStringView title, NSOpenGLContext* lastGLCtx,
-                                         MetalContext* metalCtx, GLContext* glCtx)
+std::shared_ptr<IWindow> _WindowCocoaNew(SystemStringView title, MetalContext* metalCtx)
 {
     auto ret = std::make_shared<WindowCocoa>();
-    ret->setup(title, lastGLCtx, metalCtx, glCtx);
+    ret->setup(title, metalCtx);
     return ret;
 }
 

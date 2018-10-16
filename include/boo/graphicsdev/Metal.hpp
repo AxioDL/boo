@@ -37,36 +37,15 @@ public:
         ObjToken<ITextureR> newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
                                              size_t colorBindCount, size_t depthBindCount);
 
-        bool bindingNeedsVertexFormat() const { return false; }
-        ObjToken<IVertexFormat> newVertexFormat(size_t elementCount, const VertexElementDescriptor* elements,
-                                                size_t baseVert = 0, size_t baseInst = 0);
+        ObjToken<IShaderStage> newShaderStage(const uint8_t* data, size_t size, PipelineStage stage);
 
-        ObjToken<IShaderPipeline> newShaderPipeline(const char* vertSource, const char* fragSource,
-                                                    std::vector<uint8_t>* vertBlobOut,
-                                                    std::vector<uint8_t>* fragBlobOut,
-                                                    const ObjToken<IVertexFormat>& vtxFmt,
-                                                    BlendFactor srcFac, BlendFactor dstFac, Primitive prim,
-                                                    ZTest depthTest, bool depthWrite, bool colorWrite,
-                                                    bool alphaWrite, CullMode culling,
-                                                    bool overwriteAlpha = true,
-                                                    bool depthAttachment = true);
-
-        ObjToken<IShaderPipeline> newTessellationShaderPipeline(
-                                                    const char* computeSource, const char* fragSource,
-                                                    const char* evaluationSource,
-                                                    std::vector<uint8_t>* computeBlobOut,
-                                                    std::vector<uint8_t>* fragBlobOut,
-                                                    std::vector<uint8_t>* evaluationBlobOut,
-                                                    const ObjToken<IVertexFormat>& vtxFmt,
-                                                    BlendFactor srcFac, BlendFactor dstFac, uint32_t patchSize,
-                                                    ZTest depthTest, bool depthWrite, bool colorWrite,
-                                                    bool alphaWrite, CullMode culling,
-                                                    bool overwriteAlpha = true,
-                                                    bool depthAttachment = true);
+        ObjToken<IShaderPipeline> newShaderPipeline(ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment,
+                                                    ObjToken<IShaderStage> geometry, ObjToken<IShaderStage> control,
+                                                    ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
+                                                    const AdditionalPipelineInfo& additionalInfo);
 
         ObjToken<IShaderDataBinding>
         newShaderDataBinding(const ObjToken<IShaderPipeline>& pipeline,
-                             const ObjToken<IVertexFormat>& vtxFormat,
                              const ObjToken<IGraphicsBuffer>& vbo,
                              const ObjToken<IGraphicsBuffer>& instVbo,
                              const ObjToken<IGraphicsBuffer>& ibo,
@@ -76,6 +55,8 @@ public:
                              const int* texBindIdxs, const bool* depthBind,
                              size_t baseVert = 0, size_t baseInst = 0);
     };
+
+    static std::vector<uint8_t> CompileMetal(const char* source, PipelineStage stage);
 };
 
 }

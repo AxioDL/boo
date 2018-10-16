@@ -39,7 +39,7 @@ if(TARGET nx_compiler)
   list(APPEND _BOO_SYS_DEFINES -DHECL_NOUVEAU_NX=1)
 endif()
 
-if(NOT GEKKO AND NOT CAFE AND NOT WINDOWS_STORE AND NOT NX)
+if(NOT GEKKO AND NOT CAFE AND NOT WINDOWS_STORE AND NOT NX AND NOT APPLE)
 list(APPEND PLAT_SRCS
     lib/graphicsdev/GL.cpp
     lib/graphicsdev/glew.c)
@@ -137,7 +137,6 @@ elseif(APPLE)
 
   find_library(APPKIT_LIBRARY AppKit)
   find_library(IOKIT_LIBRARY IOKit)
-  find_library(OPENGL_LIBRARY OpenGL)
   unset(BOO_HAS_METAL CACHE)
   if (NOT CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET VERSION_GREATER 10.11)
     set(BOO_HAS_METAL ON CACHE BOOL "Metal is available in this OS X version" FORCE)
@@ -151,10 +150,11 @@ elseif(APPLE)
   find_library(AUDIOTOOLBOX_LIBRARY AudioToolbox)
   find_library(COREAUDIO_LIBRARY CoreAudio)
   find_library(COREMIDI_LIBRARY CoreMIDI)
-  list(APPEND _BOO_SYS_LIBS ${APPKIT_LIBRARY} ${IOKIT_LIBRARY} ${OPENGL_LIBRARY} ${METAL_LIBRARY}
+  list(APPEND _BOO_SYS_LIBS ${APPKIT_LIBRARY} ${IOKIT_LIBRARY} ${METAL_LIBRARY}
                             ${QUARTZCORE_LIBRARY} ${COREVIDEO_LIBRARY} ${AUDIOTOOLBOX_LIBRARY}
                             ${COREAUDIO_LIBRARY} ${COREMIDI_LIBRARY})
 
+  add_library(glew lib/graphicsdev/glew.c)
 elseif(NX)
   list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_NX=1)
   list(APPEND PLAT_SRCS
