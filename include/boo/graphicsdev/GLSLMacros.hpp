@@ -8,10 +8,8 @@
 "#define gl_VertexID gl_VertexIndex\n" \
 "#extension GL_ARB_separate_shader_objects: enable\n" \
 "#define SBINDING(idx) layout(location=idx)\n" \
-"#define FLIPFROMGL(vec) vec4((vec).x, -(vec).y, (vec).z, (vec).w)\n" \
 "#else\n" \
 "#define SBINDING(idx)\n" \
-"#define FLIPFROMGL(vec) (vec)\n" \
 "#endif\n" \
 "#extension GL_ARB_shading_language_420pack: enable\n" \
 "#ifdef GL_ARB_shading_language_420pack\n" \
