@@ -839,7 +839,11 @@ protected:
     CullMode m_culling;
     uint32_t m_patchSize = 0;
     mutable GLint m_uniLocs[BOO_GLSL_MAX_UNIFORM_COUNT];
-    GLShaderPipeline(const ObjToken<BaseGraphicsData>& parent, const AdditionalPipelineInfo& info)
+    GLShaderPipeline(const ObjToken<BaseGraphicsData>& parent,
+                     ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment,
+                     ObjToken<IShaderStage> geometry, ObjToken<IShaderStage> control,
+                     ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
+                     const AdditionalPipelineInfo& info)
     : GraphicsDataNode<IShaderPipeline>(parent)
     {
         std::fill(std::begin(m_uniLocs), std::end(m_uniLocs), -1);
@@ -865,6 +869,19 @@ protected:
         m_culling = info.culling;
         m_drawPrim = PRIMITIVE_TABLE[int(info.prim)];
         m_patchSize = info.patchSize;
+
+        m_vertex = vertex;
+        m_fragment = fragment;
+        m_geometry = geometry;
+        m_control = control;
+        m_evaluation = evaluation;
+
+        if (control && evaluation)
+            m_drawPrim = GL_PATCHES;
+
+        m_elements.reserve(vtxFmt.elementCount);
+        for (size_t i=0 ; i<vtxFmt.elementCount ; ++i)
+            m_elements.push_back(vtxFmt.elements[i]);
     }
 public:
     ~GLShaderPipeline() { if (m_prog) glDeleteProgram(m_prog); }
@@ -1037,20 +1054,8 @@ GLDataFactory::Context::newShaderPipeline(ObjToken<IShaderStage> vertex, ObjToke
                        int(factory.m_maxPatchSize), int(additionalInfo.patchSize));
     }
 
-    ObjToken<IShaderPipeline> retval(new GLShaderPipeline(m_data, additionalInfo));
-    GLShaderPipeline& shader = *retval.cast<GLShaderPipeline>();
-
-    shader.m_vertex = vertex;
-    shader.m_fragment = fragment;
-    shader.m_geometry = geometry;
-    shader.m_control = control;
-    shader.m_evaluation = evaluation;
-
-    shader.m_elements.reserve(vtxFmt.elementCount);
-    for (size_t i=0 ; i<vtxFmt.elementCount ; ++i)
-        shader.m_elements.push_back(vtxFmt.elements[i]);
-
-    return retval;
+    return {new GLShaderPipeline(m_data, vertex, fragment, geometry, control,
+                                 evaluation, vtxFmt, additionalInfo)};
 }
 
 struct GLShaderDataBinding : GraphicsDataNode<IShaderDataBinding>

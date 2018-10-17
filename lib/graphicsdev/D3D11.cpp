@@ -588,6 +588,9 @@ class D3D11ShaderPipeline : public GraphicsDataNode<IShaderPipeline>
         if (auto* s = evaluation.cast<D3D11ShaderStage>())
             s->shader(m_dShader);
 
+        if (control && evaluation)
+            m_topology = D3D11_PRIMITIVE_TOPOLOGY_1_CONTROL_POINT_PATCHLIST + info.patchSize - 1;
+
         D3D11_CULL_MODE cullMode;
         switch (info.culling)
         {

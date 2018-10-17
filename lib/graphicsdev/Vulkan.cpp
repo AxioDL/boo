@@ -2230,7 +2230,10 @@ protected:
       m_colorWrite(info.colorWrite), m_alphaWrite(info.alphaWrite),
       m_overwriteAlpha(info.overwriteAlpha), m_culling(info.culling),
       m_patchSize(info.patchSize)
-    {}
+    {
+        if (control && evaluation)
+            m_prim = Primitive::Patches;
+    }
 public:
     ~VulkanShaderPipeline()
     {
