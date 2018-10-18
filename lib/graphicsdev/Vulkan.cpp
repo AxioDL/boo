@@ -2049,6 +2049,23 @@ public:
         m_height = height;
         Setup(ctx);
     }
+
+    void initializeBindLayouts(VulkanContext* ctx)
+    {
+        for (size_t i=0 ; i<m_colorBindCount ; ++i)
+        {
+            SetImageLayout(ctx->m_loadCmdBuf, m_colorBindTex[i].m_image, VK_IMAGE_ASPECT_COLOR_BIT,
+                           VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, 1);
+            m_colorBindLayout[i] = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        }
+
+        for (size_t i=0 ; i<m_depthBindCount ; ++i)
+        {
+            SetImageLayout(ctx->m_loadCmdBuf, m_depthBindTex[i].m_image, VK_IMAGE_ASPECT_DEPTH_BIT,
+                           VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, 1);
+            m_depthBindLayout[i] = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        }
+    }
 };
 
 static const size_t SEMANTIC_SIZE_TABLE[] =
@@ -3768,6 +3785,11 @@ void VulkanDataFactoryImpl::commitTransaction
             for (ITextureD& tex : *data->m_DTexs)
                 static_cast<VulkanTextureD&>(tex).placeForGPU(m_ctx, poolBuf.m_buffer, mappedData);
     }
+
+    /* initialize bind texture layout */
+    if (data->m_RTexs)
+        for (ITextureR& tex : *data->m_RTexs)
+            static_cast<VulkanTextureR&>(tex).initializeBindLayouts(m_ctx);
 
     /* Execute static uploads */
     ThrowIfFailed(vk::EndCommandBuffer(m_ctx->m_loadCmdBuf));
