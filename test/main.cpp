@@ -447,8 +447,6 @@ struct TestApplicationCallback : IApplicationCallback
 #elif BOO_HAS_METAL
             if (plat == IGraphicsDataFactory::Platform::Metal)
             {
-                MetalDataFactory::Context& metalF = dynamic_cast<MetalDataFactory::Context&>(ctx);
-
                 static const char* VS =
                 "#include <metal_stdlib>\n"
                 "using namespace metal;\n"
@@ -473,9 +471,11 @@ struct TestApplicationCallback : IApplicationCallback
                 "    return tex.sample(samp, d.out_uv);\n"
                 "}\n";
 
-                pipeline = metalF.newShaderPipeline(VS, FS, nullptr, nullptr, vfmt,
-                                                    BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips,
-                                                    boo::ZTest::LEqual, true, true, true, boo::CullMode::None);
+                auto vertexMetal = MetalDataFactory::CompileMetal(VS, PipelineStage::Vertex);
+                auto vertexShader = ctx.newShaderStage(vertexMetal, PipelineStage::Vertex);
+                auto fragmentMetal = MetalDataFactory::CompileMetal(FS, PipelineStage::Fragment);
+                auto fragmentShader = ctx.newShaderStage(fragmentMetal, PipelineStage::Fragment);
+                pipeline = ctx.newShaderPipeline(vertexShader, fragmentShader, descs, info);
             } else
 #endif
             {}

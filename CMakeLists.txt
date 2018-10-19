@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR) # because of c++17
 project(boo)
+cmake_policy(SET CMP0074 NEW)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,6 +22,9 @@ if (IPP_FOUND)
   include_directories(${IPP_INCLUDE_DIRS})
   list(APPEND _BOO_SYS_INCLUDES ${IPP_INCLUDE_DIRS})
   list(APPEND _BOO_SYS_LIBS ${IPP_LIBRARIES})
+  message(STATUS "Building with IPP support")
+else()
+  message(WARNING "IPP not found; skipping support")
 endif ()
 
 set(WITH_LSR_BINDINGS OFF)
