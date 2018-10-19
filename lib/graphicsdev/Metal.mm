@@ -1818,11 +1818,17 @@ MetalDataFactory::Context::newShaderPipeline(ObjToken<IShaderStage> vertex, ObjT
 
         MetalShaderPipeline* ret;
         if (evaluation)
+        {
             ret = new MetalTessellationShaderPipeline(m_data);
+            ret->setup(factory.m_ctx, additionalInfo.depthAttachment ? factory.m_ctx->m_sampleCount : 1,
+                       evaluation, fragment, control, vtxFmt, additionalInfo);
+        }
         else
+        {
             ret = new MetalShaderPipeline(m_data);
-        ret->setup(factory.m_ctx, additionalInfo.depthAttachment ? factory.m_ctx->m_sampleCount : 1,
-                   vertex, fragment, evaluation, vtxFmt, additionalInfo);
+            ret->setup(factory.m_ctx, additionalInfo.depthAttachment ? factory.m_ctx->m_sampleCount : 1,
+                       vertex, fragment, {}, vtxFmt, additionalInfo);
+        }
         return {ret};
     }
 }
