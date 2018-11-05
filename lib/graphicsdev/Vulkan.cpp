@@ -1276,15 +1276,15 @@ public:
 
     VkDeviceSize sizeForGPU(VulkanContext* ctx, VkDeviceSize offset)
     {
+        m_bufferInfo.offset = offset;
+        offset += m_sz;
+
         if (m_use == BufferUse::Uniform)
         {
             size_t minOffset = std::max(VkDeviceSize(256),
                 ctx->m_gpuProps.limits.minUniformBufferOffsetAlignment);
             offset = (offset + minOffset - 1) & ~(minOffset - 1);
         }
-
-        m_bufferInfo.offset = offset;
-        offset += m_sz;
 
         return offset;
     }
@@ -1329,15 +1329,15 @@ public:
     {
         for (int i=0 ; i<2 ; ++i)
         {
+            m_bufferInfo[i].offset = offset;
+            offset += m_cpuSz;
+
             if (m_use == BufferUse::Uniform)
             {
                 size_t minOffset = std::max(VkDeviceSize(256),
                     ctx->m_gpuProps.limits.minUniformBufferOffsetAlignment);
                 offset = (offset + minOffset - 1) & ~(minOffset - 1);
             }
-
-            m_bufferInfo[i].offset = offset;
-            offset += m_cpuSz;
         }
 
         return offset;
@@ -3060,14 +3060,14 @@ struct VulkanCommandQueue : IGraphicsCommandQueue
         vk::CmdDrawIndexed(m_cmdBufs[m_fillBuf], count, 1, start, 0, 0);
     }
 
-    void drawInstances(size_t start, size_t count, size_t instCount)
+    void drawInstances(size_t start, size_t count, size_t instCount, size_t startInst)
     {
-        vk::CmdDraw(m_cmdBufs[m_fillBuf], count, instCount, start, 0);
+        vk::CmdDraw(m_cmdBufs[m_fillBuf], count, instCount, start, startInst);
     }
 
-    void drawInstancesIndexed(size_t start, size_t count, size_t instCount)
+    void drawInstancesIndexed(size_t start, size_t count, size_t instCount, size_t startInst)
     {
-        vk::CmdDrawIndexed(m_cmdBufs[m_fillBuf], count, instCount, start, 0, 0);
+        vk::CmdDrawIndexed(m_cmdBufs[m_fillBuf], count, instCount, start, 0, startInst);
     }
 
     boo::ObjToken<ITextureR> m_resolveDispSource;

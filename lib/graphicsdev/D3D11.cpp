@@ -1171,14 +1171,14 @@ struct D3D11CommandQueue : IGraphicsCommandQueue
         m_deferredCtx->DrawIndexed(count, start, 0);
     }
 
-    void drawInstances(size_t start, size_t count, size_t instCount)
+    void drawInstances(size_t start, size_t count, size_t instCount, size_t startInst)
     {
-        m_deferredCtx->DrawInstanced(count, instCount, start, 0);
+        m_deferredCtx->DrawInstanced(count, instCount, start, startInst);
     }
 
-    void drawInstancesIndexed(size_t start, size_t count, size_t instCount)
+    void drawInstancesIndexed(size_t start, size_t count, size_t instCount, size_t startInst)
     {
-        m_deferredCtx->DrawIndexedInstanced(count, instCount, start, 0, 0);
+        m_deferredCtx->DrawIndexedInstanced(count, instCount, start, 0, startInst);
     }
 
     void _resolveBindTexture(ID3D11DeviceContext1* ctx, const D3D11TextureR* tex, const SWindowRect& rect,

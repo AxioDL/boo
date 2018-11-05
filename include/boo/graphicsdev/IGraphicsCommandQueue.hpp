@@ -28,8 +28,8 @@ struct IGraphicsCommandQueue
 
     virtual void draw(size_t start, size_t count)=0;
     virtual void drawIndexed(size_t start, size_t count)=0;
-    virtual void drawInstances(size_t start, size_t count, size_t instCount)=0;
-    virtual void drawInstancesIndexed(size_t start, size_t count, size_t instCount)=0;
+    virtual void drawInstances(size_t start, size_t count, size_t instCount, size_t startInst=0)=0;
+    virtual void drawInstancesIndexed(size_t start, size_t count, size_t instCount, size_t startInst=0)=0;
 
     virtual void resolveBindTexture(const ObjToken<ITextureR>& texture, const SWindowRect& rect,
                                     bool tlOrigin, int bindIdx, bool color, bool depth, bool clearDepth=false)=0;

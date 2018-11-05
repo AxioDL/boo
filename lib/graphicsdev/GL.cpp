@@ -1298,6 +1298,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
                 size_t start;
                 size_t count;
                 size_t instCount;
+                size_t startInst;
             };
         };
         ObjToken<IShaderDataBinding> binding;
@@ -1432,7 +1433,7 @@ struct GLCommandQueue : IGraphicsCommandQueue
     static void RenderingWorker(GLCommandQueue* self)
     {
 #if _WIN32
-        std::string thrName = WCSTMBS(APP->getFriendlyName().data()) + " GL Rendering Thread";
+        std::string thrName = WCSTMBS(APP->getFriendlyName().data()) + " Render";
 #else
         std::string thrName = std::string(APP->getFriendlyName()) + " Render";
 #endif
@@ -1555,11 +1556,18 @@ struct GLCommandQueue : IGraphicsCommandQueue
                                    reinterpret_cast<void*>(cmd.start * 4));
                     break;
                 case Command::Op::DrawInstances:
-                    glDrawArraysInstanced(currentPrim, cmd.start, cmd.count, cmd.instCount);
+                    if (cmd.startInst)
+                        glDrawArraysInstancedBaseInstance(currentPrim, cmd.start, cmd.count, cmd.instCount, cmd.startInst);
+                    else
+                        glDrawArraysInstanced(currentPrim, cmd.start, cmd.count, cmd.instCount);
                     break;
                 case Command::Op::DrawInstancesIndexed:
-                    glDrawElementsInstanced(currentPrim, cmd.count, GL_UNSIGNED_INT,
-                                            reinterpret_cast<void*>(cmd.start * 4), cmd.instCount);
+                    if (cmd.startInst)
+                        glDrawElementsInstancedBaseInstance(currentPrim, cmd.count, GL_UNSIGNED_INT,
+                                                            reinterpret_cast<void*>(cmd.start * 4), cmd.instCount, cmd.startInst);
+                    else
+                        glDrawElementsInstanced(currentPrim, cmd.count, GL_UNSIGNED_INT,
+                                                reinterpret_cast<void*>(cmd.start * 4), cmd.instCount);
                     break;
                 case Command::Op::ResolveBindTexture:
                 {
@@ -1777,22 +1785,24 @@ struct GLCommandQueue : IGraphicsCommandQueue
         cmds.back().count = count;
     }
 
-    void drawInstances(size_t start, size_t count, size_t instCount)
+    void drawInstances(size_t start, size_t count, size_t instCount, size_t startInst)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::Op::DrawInstances);
         cmds.back().start = start;
         cmds.back().count = count;
         cmds.back().instCount = instCount;
+        cmds.back().startInst = startInst;
     }
 
-    void drawInstancesIndexed(size_t start, size_t count, size_t instCount)
+    void drawInstancesIndexed(size_t start, size_t count, size_t instCount, size_t startInst)
     {
         std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
         cmds.emplace_back(Command::Op::DrawInstancesIndexed);
         cmds.back().start = start;
         cmds.back().count = count;
         cmds.back().instCount = instCount;
+        cmds.back().startInst = startInst;
     }
 
     void resolveBindTexture(const ObjToken<ITextureR>& texture, const SWindowRect& rect, bool tlOrigin,
