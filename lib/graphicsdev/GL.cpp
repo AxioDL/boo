@@ -295,6 +295,8 @@ static void SetClampMode(GLenum target, TextureClampMode clampMode)
         glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         break;
     }
+    default:
+         break;
     }
 }
 
@@ -302,6 +304,7 @@ class GLTextureS : public GraphicsDataNode<ITextureS>
 {
     friend class GLDataFactory;
     GLuint m_tex;
+    TextureClampMode m_clampMode = TextureClampMode::Invalid;
     GLTextureS(const ObjToken<BaseGraphicsData>& parent, size_t width, size_t height, size_t mips,
                TextureFormat fmt, TextureClampMode clampMode, GLint aniso, const void* data, size_t sz)
     : GraphicsDataNode<ITextureS>(parent)
@@ -383,6 +386,9 @@ public:
 
     void setClampMode(TextureClampMode mode)
     {
+        if (m_clampMode == mode)
+            return;
+        m_clampMode = mode;
         glBindTexture(GL_TEXTURE_2D, m_tex);
         SetClampMode(GL_TEXTURE_2D, mode);
     }
@@ -398,6 +404,7 @@ class GLTextureSA : public GraphicsDataNode<ITextureSA>
 {
     friend class GLDataFactory;
     GLuint m_tex;
+    TextureClampMode m_clampMode = TextureClampMode::Invalid;
     GLTextureSA(const ObjToken<BaseGraphicsData>& parent, size_t width, size_t height, size_t layers, size_t mips,
                 TextureFormat fmt, TextureClampMode clampMode, GLint aniso, const void* data, size_t sz)
     : GraphicsDataNode<ITextureSA>(parent)
@@ -458,6 +465,9 @@ public:
 
     void setClampMode(TextureClampMode mode)
     {
+        if (m_clampMode == mode)
+            return;
+        m_clampMode = mode;
         glBindTexture(GL_TEXTURE_2D_ARRAY, m_tex);
         SetClampMode(GL_TEXTURE_2D_ARRAY, mode);
     }
@@ -480,6 +490,7 @@ class GLTextureD : public GraphicsDataNode<ITextureD>
     size_t m_width = 0;
     size_t m_height = 0;
     int m_validMask = 0;
+    TextureClampMode m_clampMode = TextureClampMode::Invalid;
     GLTextureD(const ObjToken<BaseGraphicsData>& parent, size_t width, size_t height,
                TextureFormat fmt, TextureClampMode clampMode)
     : GraphicsDataNode<ITextureD>(parent), m_width(width), m_height(height)
@@ -554,6 +565,9 @@ public:
 
     void setClampMode(TextureClampMode mode)
     {
+        if (m_clampMode == mode)
+            return;
+        m_clampMode = mode;
         for (int i=0 ; i<3 ; ++i)
         {
             glBindTexture(GL_TEXTURE_2D, m_texs[i]);

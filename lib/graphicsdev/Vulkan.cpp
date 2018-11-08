@@ -1476,11 +1476,18 @@ public:
         m_cpuBuf.destroy(m_ctx);
     }
 
-    void setClampMode(TextureClampMode mode)
+    void _setClampMode(TextureClampMode mode)
     {
-        m_clampMode = mode;
         MakeSampler(m_ctx, m_sampler, mode, m_mips);
         m_descInfo.sampler = m_sampler;
+    }
+
+    void setClampMode(TextureClampMode mode)
+    {
+        if (m_clampMode == mode)
+            return;
+        m_clampMode = mode;
+        _setClampMode(mode);
     }
 
     void deleteUploadObjects()
@@ -1506,7 +1513,7 @@ public:
         texCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         m_gpuTex.create(m_ctx, &texCreateInfo);
 
-        setClampMode(m_clampMode);
+        _setClampMode(m_clampMode);
         m_descInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         /* create image view */
@@ -1585,7 +1592,7 @@ class VulkanTextureSA : public GraphicsDataNode<ITextureSA>
     TextureFormat m_fmt;
     size_t m_sz;
     size_t m_width, m_height, m_layers, m_mips;
-    TextureClampMode m_clampMode;
+    TextureClampMode m_clampMode = TextureClampMode::Invalid;
     VkFormat m_vkFmt;
     int m_pixelPitchNum = 1;
     int m_pixelPitchDenom = 1;
@@ -1639,11 +1646,18 @@ public:
         m_cpuBuf.destroy(m_ctx);
     }
 
-    void setClampMode(TextureClampMode mode)
+    void _setClampMode(TextureClampMode mode)
     {
-        m_clampMode = mode;
         MakeSampler(m_ctx, m_sampler, mode, m_mips);
         m_descInfo.sampler = m_sampler;
+    }
+
+    void setClampMode(TextureClampMode mode)
+    {
+        if (m_clampMode == mode)
+            return;
+        m_clampMode = mode;
+        _setClampMode(mode);
     }
 
     void deleteUploadObjects()
@@ -1669,7 +1683,7 @@ public:
         texCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         m_gpuTex.create(m_ctx, &texCreateInfo);
 
-        setClampMode(m_clampMode);
+        _setClampMode(m_clampMode);
         m_descInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         /* create image view */
@@ -1791,6 +1805,7 @@ public:
     VkDescriptorImageInfo m_descInfo[2];
     ~VulkanTextureD();
 
+    void _setClampMode(TextureClampMode mode);
     void setClampMode(TextureClampMode mode);
     void load(const void* data, size_t sz);
     void* map(size_t sz);
@@ -1833,7 +1848,7 @@ public:
         texCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         texCreateInfo.flags = 0;
 
-        setClampMode(m_clampMode);
+        _setClampMode(m_clampMode);
         for (int i=0 ; i<2 ; ++i)
         {
             /* create gpu image */
@@ -3550,12 +3565,18 @@ void VulkanTextureD::update(int b)
         m_validSlots |= slot;
     }
 }
-void VulkanTextureD::setClampMode(TextureClampMode mode)
+void VulkanTextureD::_setClampMode(TextureClampMode mode)
 {
-    m_clampMode = mode;
     MakeSampler(m_q->m_ctx, m_sampler, mode, 1);
     for (int i=0 ; i<2 ; ++i)
         m_descInfo[i].sampler = m_sampler;
+}
+void VulkanTextureD::setClampMode(TextureClampMode mode)
+{
+    if (m_clampMode == mode)
+        return;
+    m_clampMode = mode;
+    _setClampMode(mode);
 }
 void VulkanTextureD::load(const void* data, size_t sz)
 {

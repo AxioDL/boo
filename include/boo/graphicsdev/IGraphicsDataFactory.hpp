@@ -73,6 +73,7 @@ enum class TextureFormat
 /** Supported texture clamp modes */
 enum class TextureClampMode
 {
+    Invalid = -1,
     Repeat,
     ClampToWhite,
     ClampToBlack,
