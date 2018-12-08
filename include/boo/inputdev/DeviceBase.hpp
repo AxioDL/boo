@@ -13,80 +13,73 @@
 #include <hidsdi.h>
 #endif
 
-namespace boo
-{
+namespace boo {
 class DeviceToken;
 class IHIDDevice;
 
-enum class HIDReportType
-{
-    Input,
-    Output,
-    Feature
-};
+enum class HIDReportType { Input, Output, Feature };
 
-class DeviceBase : public std::enable_shared_from_this<DeviceBase>
-{
-    friend class DeviceToken;
-    friend struct DeviceSignature;
-    friend class HIDDeviceIOKit;
+class DeviceBase : public std::enable_shared_from_this<DeviceBase> {
+  friend class DeviceToken;
+  friend struct DeviceSignature;
+  friend class HIDDeviceIOKit;
 
-    uint64_t m_typeHash;
-    class DeviceToken* m_token;
-    std::shared_ptr<IHIDDevice> m_hidDev;
-    void _deviceDisconnected();
+  uint64_t m_typeHash;
+  class DeviceToken* m_token;
+  std::shared_ptr<IHIDDevice> m_hidDev;
+  void _deviceDisconnected();
 
 public:
-    DeviceBase(uint64_t typeHash, DeviceToken* token);
-    virtual ~DeviceBase() = default;
+  DeviceBase(uint64_t typeHash, DeviceToken* token);
+  virtual ~DeviceBase() = default;
 
-    uint64_t getTypeHash() const { return m_typeHash; }
+  uint64_t getTypeHash() const { return m_typeHash; }
 
-    void closeDevice();
-    
-    /* Callbacks */
-    virtual void deviceDisconnected()=0;
-    virtual void deviceError(const char* error, ...);
-    virtual void initialCycle() {}
-    virtual void transferCycle() {}
-    virtual void finalCycle() {}
+  void closeDevice();
 
-    /* Low-Level API */
-    bool sendUSBInterruptTransfer(const uint8_t* data, size_t length);
-    size_t receiveUSBInterruptTransfer(uint8_t* data, size_t length);
+  /* Callbacks */
+  virtual void deviceDisconnected() = 0;
+  virtual void deviceError(const char* error, ...);
+  virtual void initialCycle() {}
+  virtual void transferCycle() {}
+  virtual void finalCycle() {}
 
-    inline unsigned getVendorId();
-    inline unsigned getProductId();
-    inline std::string_view getVendorName();
-    inline std::string_view getProductName();
+  /* Low-Level API */
+  bool sendUSBInterruptTransfer(const uint8_t* data, size_t length);
+  size_t receiveUSBInterruptTransfer(uint8_t* data, size_t length);
 
-    /* High-Level API */
+  inline unsigned getVendorId();
+  inline unsigned getProductId();
+  inline std::string_view getVendorName();
+  inline std::string_view getProductName();
+
+  /* High-Level API */
 #if _WIN32
 #if !WINDOWS_STORE
-    const PHIDP_PREPARSED_DATA getReportDescriptor();
+  const PHIDP_PREPARSED_DATA getReportDescriptor();
 #endif
 #else
-    std::vector<uint8_t> getReportDescriptor();
+  std::vector<uint8_t> getReportDescriptor();
 #endif
-    bool sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message=0);
-    size_t receiveHIDReport(uint8_t* data, size_t length, HIDReportType tp, uint32_t message=0); // Prefer callback version
-    virtual void receivedHIDReport(const uint8_t* /*data*/, size_t /*length*/, HIDReportType /*tp*/, uint32_t /*message*/) {}
+  bool sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message = 0);
+  size_t receiveHIDReport(uint8_t* data, size_t length, HIDReportType tp,
+                          uint32_t message = 0); // Prefer callback version
+  virtual void receivedHIDReport(const uint8_t* /*data*/, size_t /*length*/, HIDReportType /*tp*/,
+                                 uint32_t /*message*/) {}
 };
 
 template <class CB>
-class TDeviceBase : public DeviceBase
-{
+class TDeviceBase : public DeviceBase {
 protected:
-    std::mutex m_callbackLock;
-    CB* m_callback = nullptr;
+  std::mutex m_callbackLock;
+  CB* m_callback = nullptr;
+
 public:
-    TDeviceBase(uint64_t typeHash, DeviceToken* token) : DeviceBase(typeHash, token) {}
-    void setCallback(CB* cb)
-    {
-        std::lock_guard<std::mutex> lk(m_callbackLock);
-        m_callback = cb;
-    }
+  TDeviceBase(uint64_t typeHash, DeviceToken* token) : DeviceBase(typeHash, token) {}
+  void setCallback(CB* cb) {
+    std::lock_guard<std::mutex> lk(m_callbackLock);
+    m_callback = cb;
+  }
 };
 
-}
-
+} // namespace boo

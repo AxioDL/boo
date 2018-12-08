@@ -10,4 +10,3 @@
 #include "graphicsdev/IGraphicsCommandQueue.hpp"
 #include "graphicsdev/IGraphicsDataFactory.hpp"
 #include "DeferredWindowEvents.hpp"
-

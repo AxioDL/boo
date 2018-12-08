@@ -12,32 +12,28 @@
 #include <unordered_map>
 #include <mutex>
 
-namespace boo
-{
+namespace boo {
 class IWindow;
-struct MetalContext
-{
-    id<MTLDevice> m_dev = nullptr;
-    id<MTLCommandQueue> m_q = nullptr;
-    struct Window
-    {
-        CAMetalLayer* m_metalLayer = nullptr;
-        std::mutex m_resizeLock;
-        bool m_needsResize;
-        CGSize m_size;
-    };
-    std::unordered_map<IWindow*, Window> m_windows;
-    uint32_t m_sampleCount = 1;
-    uint32_t m_anisotropy = 1;
-    MTLPixelFormat m_pixelFormat = MTLPixelFormatBGRA8Unorm;
+struct MetalContext {
+  id<MTLDevice> m_dev = nullptr;
+  id<MTLCommandQueue> m_q = nullptr;
+  struct Window {
+    CAMetalLayer* m_metalLayer = nullptr;
+    std::mutex m_resizeLock;
+    bool m_needsResize;
+    CGSize m_size;
+  };
+  std::unordered_map<IWindow*, Window> m_windows;
+  uint32_t m_sampleCount = 1;
+  uint32_t m_anisotropy = 1;
+  MTLPixelFormat m_pixelFormat = MTLPixelFormatBGRA8Unorm;
 };
-}
+} // namespace boo
 
 #else
-namespace boo
-{
-    struct MetalContext {};
-}
+namespace boo {
+struct MetalContext {};
+} // namespace boo
 #endif
 
 #endif // __APPLE__
