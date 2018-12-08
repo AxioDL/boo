@@ -1431,8 +1431,8 @@ public:
                     unsigned char* data;
                     Atom type;
 
-                    Atom t1 = S_ATOMS->m_clipboard;
-                    Atom t2 = S_ATOMS->m_clipdata;
+                    //Atom t1 = S_ATOMS->m_clipboard;
+                    //Atom t2 = S_ATOMS->m_clipdata;
 
                     if (XGetWindowProperty(m_xDisp, m_windowId, S_ATOMS->m_clipdata, 0, 32, False, AnyPropertyType,
                                            &type, &format, &nitems, &rem, &data))

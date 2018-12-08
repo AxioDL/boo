@@ -43,7 +43,10 @@ public:
       m_pname(pname),
       m_args(args),
       m_singleInstance(singleInstance)
-    {}
+    {
+        (void)m_callback;
+        (void)m_singleInstance;
+    }
     
     EPlatformType getPlatformType() const
     {

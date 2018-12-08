@@ -494,7 +494,7 @@ HIDParser::ParseItem(HIDReports& reportsOut,
         uint8_t bDataSize = GetByteValue(it, end, status);
         if (status == ParserStatus::Error)
             return ParserStatus::Error;
-        uint8_t bLongItemTag = GetByteValue(it, end, status);
+        /*uint8_t bLongItemTag =*/ GetByteValue(it, end, status);
         if (status == ParserStatus::Error)
             return ParserStatus::Error;
         status = AdvanceIt(it, end, bDataSize);

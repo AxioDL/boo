@@ -171,8 +171,6 @@ class HIDDeviceUdev final : public IHIDDevice
         udev_device_unref(udevDev);
     }
 
-    int m_reportDescSz;
-
     static void _threadProcHID(std::shared_ptr<HIDDeviceUdev> device)
     {
         char errStr[256];

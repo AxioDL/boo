@@ -106,7 +106,7 @@ class HIDListenerUdev final : public IHIDListener
             int reportDescSize;
             if (ioctl(fd, HIDIOCGRDESCSIZE, &reportDescSize) == -1)
             {
-                const char* err = strerror(errno);
+                //const char* err = strerror(errno);
                 close(fd);
                 return;
             }
@@ -116,7 +116,7 @@ class HIDListenerUdev final : public IHIDListener
             reportDesc.size = reportDescSize;
             if (ioctl(fd, HIDIOCGRDESC, &reportDesc) == -1)
             {
-                const char* err = strerror(errno);
+                //const char* err = strerror(errno);
                 close(fd);
                 return;
             }
