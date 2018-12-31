@@ -15,10 +15,33 @@ if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/vr-coefs.h)
 endif ()
 
 
+# Minimalist boo configuration:
+add_definitions (${PROJECT_C_FLAGS} -DSOXR_LIB -DSOXR_SILENT=1)
+include (CheckFunctionExists)
+include (CheckIncludeFiles)
 
-add_definitions (${PROJECT_C_FLAGS} -DSOXR_LIB)
+set(WITH_LSR_BINDINGS OFF)
+set(WITH_SINGLE_PRECISION ON)
+set(WITH_DOUBLE_PRECISION OFF)
+set(WITH_SIMD ON)
+set(HAVE_SINGLE_PRECISION "1")
+set(HAVE_DOUBLE_PRECISION "0")
+set(HAVE_AVFFT "0")
+set(HAVE_SIMD "1")
+check_function_exists (lrint HAVE_LRINT)
+if(NOT HAVE_LRINT)
+  set(HAVE_LRINT "0")
+endif()
+check_include_files (fenv.h HAVE_FENV_H)
+if(NOT HAVE_FENV_H)
+  set(HAVE_FENV_H "0")
+endif()
+set(WORDS_BIGENDIAN "0")
 
-
+configure_file (
+        ${CMAKE_CURRENT_SOURCE_DIR}/../soxr-config.h.in
+        ${CMAKE_CURRENT_BINARY_DIR}/soxr-config.h)
+include_directories (${CMAKE_CURRENT_BINARY_DIR})
 
 # Libsoxr configuration:
 
@@ -99,12 +122,12 @@ endif ()
 
 # Installation (from build from source):
 
-install (TARGETS soxr ${LSR}
-  FRAMEWORK DESTINATION ${FRAMEWORK_INSTALL_DIR}
-  LIBRARY DESTINATION ${LIB_INSTALL_DIR}
-  RUNTIME DESTINATION ${BIN_INSTALL_DIR}
-  ARCHIVE DESTINATION ${LIB_INSTALL_DIR}
-  PUBLIC_HEADER DESTINATION ${INCLUDE_INSTALL_DIR})
+#install (TARGETS soxr ${LSR}
+#  FRAMEWORK DESTINATION ${FRAMEWORK_INSTALL_DIR}
+#  LIBRARY DESTINATION ${LIB_INSTALL_DIR}
+#  RUNTIME DESTINATION ${BIN_INSTALL_DIR}
+#  ARCHIVE DESTINATION ${LIB_INSTALL_DIR}
+#  PUBLIC_HEADER DESTINATION ${INCLUDE_INSTALL_DIR})
 
 
 

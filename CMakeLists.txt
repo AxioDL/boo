@@ -27,12 +27,7 @@ else()
   message(WARNING "IPP not found; skipping support")
 endif ()
 
-set(WITH_LSR_BINDINGS OFF)
-set(BUILD_TESTS OFF)
-set(BUILD_SHARED_LIBS OFF)
-set(SOXR_SILENT ON CACHE BOOL "" FORCE)
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/soxr/cmake/Modules")
-add_subdirectory(soxr)
+add_subdirectory(soxr/src)
 
 set(BOO_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE PATH "boo include path" FORCE)
 
