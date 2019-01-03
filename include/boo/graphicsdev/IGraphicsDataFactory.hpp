@@ -130,7 +130,7 @@ struct VertexFormatInfo {
   template <typename T>
   VertexFormatInfo(const T& tp) : elementCount(std::extent_v<T>), elements(tp) {}
 
-  VertexFormatInfo(const std::initializer_list<VertexElementDescriptor>& l)
+  VertexFormatInfo(std::initializer_list<VertexElementDescriptor> l)
   : elementCount(l.size()), elements(l.begin()) {}
 };
 
