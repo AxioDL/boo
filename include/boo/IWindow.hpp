@@ -64,14 +64,22 @@ struct STouchCoord {
 };
 
 struct SScrollDelta {
-  double delta[2];
-  bool isFine;                /* Use system-scale fine-scroll (for scrollable-trackpads) */
+  double delta[2] = {};
+  bool isFine = false;        /* Use system-scale fine-scroll (for scrollable-trackpads) */
   bool isAccelerated = false; /* System performs acceleration computation */
 
-  SScrollDelta operator+(const SScrollDelta& other) {
+  SScrollDelta operator+(const SScrollDelta& other) const {
     SScrollDelta ret;
     ret.delta[0] = delta[0] + other.delta[0];
     ret.delta[1] = delta[1] + other.delta[1];
+    ret.isFine = isFine || other.isFine;
+    ret.isAccelerated = isAccelerated || other.isAccelerated;
+    return ret;
+  }
+  SScrollDelta operator-(const SScrollDelta& other) const {
+    SScrollDelta ret;
+    ret.delta[0] = delta[0] - other.delta[0];
+    ret.delta[1] = delta[1] - other.delta[1];
     ret.isFine = isFine || other.isFine;
     ret.isAccelerated = isAccelerated || other.isAccelerated;
     return ret;
@@ -87,6 +95,7 @@ struct SScrollDelta {
     delta[0] = 0.0;
     delta[1] = 0.0;
   }
+  bool isZero() const { return delta[0] == 0.0 && delta[1] == 0.0; }
 };
 
 enum class ESpecialKey {
