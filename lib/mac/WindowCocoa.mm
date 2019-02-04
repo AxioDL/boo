@@ -12,15 +12,21 @@
 #error ARC Required
 #endif
 
-namespace boo {class WindowCocoa; class GraphicsContextCocoa;}
-@interface WindowCocoaInternal : NSWindow <NSWindowDelegate>
-{
-    std::shared_ptr<boo::WindowCocoa> booWindow;
-    id touchBarProvider;
+namespace boo {
+class WindowCocoa;
+
+class GraphicsContextCocoa;
+}
+@interface WindowCocoaInternal : NSWindow <NSWindowDelegate> {
+  std::shared_ptr<boo::WindowCocoa> booWindow;
+  id touchBarProvider;
 }
 - (id)initWithBooWindow:(std::shared_ptr<boo::WindowCocoa>&)bw title:(std::string_view)title;
+
 - (void)setFrameDefault;
+
 - (NSRect)genFrameDefault;
+
 - (void)setTouchBarProvider:(id)provider;
 @end
 
@@ -96,68 +102,65 @@ static const NSOpenGLPixelFormatAttribute* PF_TABLE[] =
 };
 #endif
 
-@interface BooCocoaResponder : NSResponder <NSTextInputClient>
-{
+@interface BooCocoaResponder : NSResponder <NSTextInputClient> {
 @public
-    NSUInteger lastModifiers;
-    boo::GraphicsContextCocoa* booContext;
-    NSView* parentView;
-    NSTextInputContext* textContext;
+  NSUInteger lastModifiers;
+  boo::GraphicsContextCocoa* booContext;
+  NSView* parentView;
+  NSTextInputContext* textContext;
 }
 - (id)initWithBooContext:(boo::GraphicsContextCocoa*)bctx View:(NSView*)view;
 @end
 
-namespace boo
-{
+namespace boo {
 
-class GraphicsContextCocoa : public IGraphicsContext
-{
+class GraphicsContextCocoa : public IGraphicsContext {
 protected:
-    EGraphicsAPI m_api;
-    EPixelFormat m_pf;
-    IWindow* m_parentWindow;
-    CVDisplayLinkRef m_dispLink = nullptr;
+  EGraphicsAPI m_api;
+  EPixelFormat m_pf;
+  IWindow* m_parentWindow;
+  CVDisplayLinkRef m_dispLink = nullptr;
 
-    GraphicsContextCocoa(EGraphicsAPI api, EPixelFormat pf, IWindow* parentWindow)
+  GraphicsContextCocoa(EGraphicsAPI api, EPixelFormat pf, IWindow* parentWindow)
     : m_api(api), m_pf(pf), m_parentWindow(parentWindow) {}
 
-    std::mutex m_dlmt;
-    std::condition_variable m_dlcv;
+  std::mutex m_dlmt;
+  std::condition_variable m_dlcv;
 
-    static CVReturn DLCallback(CVDisplayLinkRef displayLink,
-                               const CVTimeStamp * inNow,
-                               const CVTimeStamp * inOutputTime,
-                               CVOptionFlags flagsIn,
-                               CVOptionFlags * flagsOut,
-                               GraphicsContextCocoa* ctx)
-    {
-        std::unique_lock<std::mutex> lk(ctx->m_dlmt);
-        ctx->m_dlcv.notify_one();
-        return kCVReturnSuccess;
-    }
+  static CVReturn DLCallback(CVDisplayLinkRef displayLink,
+                             const CVTimeStamp* inNow,
+                             const CVTimeStamp* inOutputTime,
+                             CVOptionFlags flagsIn,
+                             CVOptionFlags* flagsOut,
+                             GraphicsContextCocoa* ctx) {
+    std::unique_lock<std::mutex> lk(ctx->m_dlmt);
+    ctx->m_dlcv.notify_one();
+    return kCVReturnSuccess;
+  }
 
 public:
-    ~GraphicsContextCocoa()
-    {
-        if (m_dispLink)
-        {
-            CVDisplayLinkStop(m_dispLink);
-            CVDisplayLinkRelease(m_dispLink);
-        }
+  ~GraphicsContextCocoa() {
+    if (m_dispLink) {
+      CVDisplayLinkStop(m_dispLink);
+      CVDisplayLinkRelease(m_dispLink);
     }
+  }
 
-    std::recursive_mutex m_callbackMutex;
-    IWindowCallback* m_callback = nullptr;
-    void waitForRetrace()
-    {
-        std::unique_lock<std::mutex> lk(m_dlmt);
-        m_dlcv.wait(lk);
-    }
-    virtual BooCocoaResponder* responder() const=0;
+  std::recursive_mutex m_callbackMutex;
+  IWindowCallback* m_callback = nullptr;
+
+  void waitForRetrace() {
+    std::unique_lock<std::mutex> lk(m_dlmt);
+    m_dlcv.wait(lk);
+  }
+
+  virtual BooCocoaResponder* responder() const = 0;
 };
+
 #if 0
 class GraphicsContextCocoaGL;
 #endif
+
 class GraphicsContextCocoaMetal;
 }
 
@@ -171,27 +174,29 @@ class GraphicsContextCocoaMetal;
 @end
 #endif
 
-@interface GraphicsContextCocoaMetalInternal : NSView
-{
+@interface GraphicsContextCocoaMetalInternal : NSView {
 @public
-    BooCocoaResponder* resp;
-    boo::MetalContext* m_ctx;
-    boo::IWindow* m_window;
+  BooCocoaResponder* resp;
+  boo::MetalContext* m_ctx;
+  boo::IWindow* m_window;
 }
 - (id)initWithBooContext:(boo::GraphicsContextCocoaMetal*)bctx;
+
 - (void)reshapeHandler;
 @end
 
-namespace boo
-{
+namespace boo {
 static logvisor::Module Log("boo::WindowCocoa");
 #if 0
 std::unique_ptr<IGraphicsCommandQueue> _NewGLCommandQueue(IGraphicsContext* parent, GLContext* glCtx);
 std::unique_ptr<IGraphicsDataFactory> _NewGLDataFactory(IGraphicsContext* parent, GLContext* glCtx);
 #endif
+
 std::unique_ptr<IGraphicsCommandQueue> _NewMetalCommandQueue(MetalContext* ctx, IWindow* parentWindow,
                                                              IGraphicsContext* parent);
+
 std::unique_ptr<IGraphicsDataFactory> _NewMetalDataFactory(IGraphicsContext* parent, MetalContext* ctx);
+
 #if 0
 void _CocoaUpdateLastGLCtx(NSOpenGLContext* lastGLCtx);
 
@@ -359,211 +364,183 @@ IGraphicsContext* _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI api,
 #endif
 
 #if BOO_HAS_METAL
-class GraphicsContextCocoaMetal : public GraphicsContextCocoa
-{
-    GraphicsContextCocoaMetalInternal* m_nsContext = nullptr;
 
-    std::unique_ptr<IGraphicsDataFactory> m_dataFactory;
-    std::unique_ptr<IGraphicsCommandQueue> m_commandQueue;
+class GraphicsContextCocoaMetal : public GraphicsContextCocoa {
+  GraphicsContextCocoaMetalInternal* m_nsContext = nullptr;
+
+  std::unique_ptr<IGraphicsDataFactory> m_dataFactory;
+  std::unique_ptr<IGraphicsCommandQueue> m_commandQueue;
 
 public:
-    IWindow* m_parentWindow;
-    MetalContext* m_metalCtx;
+  IWindow* m_parentWindow;
+  MetalContext* m_metalCtx;
 
-    GraphicsContextCocoaMetal(EGraphicsAPI api, IWindow* parentWindow, MetalContext* metalCtx)
+  GraphicsContextCocoaMetal(EGraphicsAPI api, IWindow* parentWindow, MetalContext* metalCtx)
     : GraphicsContextCocoa(api,
-      (metalCtx->m_pixelFormat == MTLPixelFormatRGBA16Float) ?
-      EPixelFormat::RGBA16 : EPixelFormat::RGBA8, parentWindow),
-      m_parentWindow(parentWindow), m_metalCtx(metalCtx)
-    {
-        m_dataFactory = _NewMetalDataFactory(this, metalCtx);
-    }
+                           (metalCtx->m_pixelFormat == MTLPixelFormatRGBA16Float) ?
+                           EPixelFormat::RGBA16 : EPixelFormat::RGBA8, parentWindow),
+      m_parentWindow(parentWindow), m_metalCtx(metalCtx) {
+    m_dataFactory = _NewMetalDataFactory(this, metalCtx);
+  }
 
-    ~GraphicsContextCocoaMetal()
-    {
-        m_commandQueue->stopRenderer();
-        m_metalCtx->m_windows.erase(m_parentWindow);
-    }
+  ~GraphicsContextCocoaMetal() {
+    m_commandQueue->stopRenderer();
+    m_metalCtx->m_windows.erase(m_parentWindow);
+  }
 
-    void _setCallback(IWindowCallback* cb)
-    {
-        std::lock_guard<std::recursive_mutex> lk(m_callbackMutex);
-        m_callback = cb;
-    }
+  void _setCallback(IWindowCallback* cb) {
+    std::lock_guard<std::recursive_mutex> lk(m_callbackMutex);
+    m_callback = cb;
+  }
 
-    EGraphicsAPI getAPI() const
-    {
-        return m_api;
-    }
+  EGraphicsAPI getAPI() const {
+    return m_api;
+  }
 
-    EPixelFormat getPixelFormat() const
-    {
-        return m_pf;
-    }
+  EPixelFormat getPixelFormat() const {
+    return m_pf;
+  }
 
-    void setPixelFormat(EPixelFormat pf)
-    {
-        if (pf > EPixelFormat::RGBAF32_Z24)
-            return;
-        m_pf = pf;
-    }
+  void setPixelFormat(EPixelFormat pf) {
+    if (pf > EPixelFormat::RGBAF32_Z24)
+      return;
+    m_pf = pf;
+  }
 
-    bool initializeContext(void*)
-    {
-        MetalContext::Window& w = m_metalCtx->m_windows[m_parentWindow];
-        m_nsContext = [[GraphicsContextCocoaMetalInternal alloc] initWithBooContext:this];
-        if (!m_nsContext)
-            Log.report(logvisor::Fatal, "unable to make new NSView for Metal");
-        w.m_metalLayer = (CAMetalLayer*)m_nsContext.layer;
-        [(__bridge NSWindow*)(void*)m_parentWindow->getPlatformHandle() setContentView:m_nsContext];
-        CVDisplayLinkCreateWithActiveCGDisplays(&m_dispLink);
-        CVDisplayLinkSetOutputCallback(m_dispLink, (CVDisplayLinkOutputCallback)DLCallback, this);
-        CVDisplayLinkStart(m_dispLink);
-        m_commandQueue = _NewMetalCommandQueue(m_metalCtx, m_parentWindow, this);
-        m_commandQueue->startRenderer();
-        return true;
-    }
+  bool initializeContext(void*) {
+    MetalContext::Window& w = m_metalCtx->m_windows[m_parentWindow];
+    m_nsContext = [[GraphicsContextCocoaMetalInternal alloc] initWithBooContext:this];
+    if (!m_nsContext)
+      Log.report(logvisor::Fatal, "unable to make new NSView for Metal");
+    w.m_metalLayer = (CAMetalLayer*) m_nsContext.layer;
+    [(__bridge NSWindow*) (void*) m_parentWindow->getPlatformHandle() setContentView:m_nsContext];
+    CVDisplayLinkCreateWithActiveCGDisplays(&m_dispLink);
+    CVDisplayLinkSetOutputCallback(m_dispLink, (CVDisplayLinkOutputCallback) DLCallback, this);
+    CVDisplayLinkStart(m_dispLink);
+    m_commandQueue = _NewMetalCommandQueue(m_metalCtx, m_parentWindow, this);
+    m_commandQueue->startRenderer();
+    return true;
+  }
 
-    void makeCurrent()
-    {
-    }
+  void makeCurrent() {
+  }
 
-    void postInit()
-    {
-    }
+  void postInit() {
+  }
 
-    IGraphicsCommandQueue* getCommandQueue()
-    {
-        return m_commandQueue.get();
-    }
+  IGraphicsCommandQueue* getCommandQueue() {
+    return m_commandQueue.get();
+  }
 
-    IGraphicsDataFactory* getDataFactory()
-    {
-        return m_dataFactory.get();
-    }
+  IGraphicsDataFactory* getDataFactory() {
+    return m_dataFactory.get();
+  }
 
-    IGraphicsDataFactory* getMainContextDataFactory()
-    {
-        return m_dataFactory.get();
-    }
+  IGraphicsDataFactory* getMainContextDataFactory() {
+    return m_dataFactory.get();
+  }
 
-    IGraphicsDataFactory* getLoadContextDataFactory()
-    {
-        return m_dataFactory.get();
-    }
+  IGraphicsDataFactory* getLoadContextDataFactory() {
+    return m_dataFactory.get();
+  }
 
-    void present()
-    {
-    }
+  void present() {
+  }
 
-    BooCocoaResponder* responder() const
-    {
-        if (!m_nsContext)
-            return nullptr;
-        return m_nsContext->resp;
-    }
+  BooCocoaResponder* responder() const {
+    if (!m_nsContext)
+      return nullptr;
+    return m_nsContext->resp;
+  }
 
 };
 
 IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI api,
                                                 IWindow* parentWindow,
-                                                MetalContext* metalCtx)
-{
-    if (api != IGraphicsContext::EGraphicsAPI::Metal)
-        return nullptr;
-    return new GraphicsContextCocoaMetal(api, parentWindow, metalCtx);
+                                                MetalContext* metalCtx) {
+  if (api != IGraphicsContext::EGraphicsAPI::Metal)
+    return nullptr;
+  return new GraphicsContextCocoaMetal(api, parentWindow, metalCtx);
 }
+
 #endif
 
 }
 
 @implementation BooCocoaResponder
-- (id)initWithBooContext:(boo::GraphicsContextCocoa*)bctx View:(NSView*)view
-{
-    lastModifiers = 0;
-    booContext = bctx;
-    parentView = view;
-    textContext = [[NSTextInputContext alloc] initWithClient:self];
-    return self;
+- (id)initWithBooContext:(boo::GraphicsContextCocoa*)bctx View:(NSView*)view {
+  lastModifiers = 0;
+  booContext = bctx;
+  parentView = view;
+  textContext = [[NSTextInputContext alloc] initWithClient:self];
+  return self;
 }
 
-- (BOOL)hasMarkedText
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (booContext->m_callback)
-    {
-        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
-        if (textCb)
-            return textCb->hasMarkedText();
-    }
-    return false;
+- (BOOL)hasMarkedText {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (booContext->m_callback) {
+    boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+    if (textCb)
+      return textCb->hasMarkedText();
+  }
+  return false;
 }
 
-- (NSRange)markedRange
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (booContext->m_callback)
-    {
-        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
-        if (textCb)
-        {
-            std::pair<int,int> rng = textCb->markedRange();
-            return NSMakeRange(rng.first < 0 ? NSNotFound : rng.first, rng.second);
-        }
+- (NSRange)markedRange {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (booContext->m_callback) {
+    boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+    if (textCb) {
+      std::pair<int, int> rng = textCb->markedRange();
+      return NSMakeRange(rng.first < 0 ? NSNotFound : rng.first, rng.second);
     }
-    return NSMakeRange(NSNotFound, 0);
+  }
+  return NSMakeRange(NSNotFound, 0);
 }
 
-- (NSRange)selectedRange
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (booContext->m_callback)
-    {
-        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
-        if (textCb)
-        {
-            std::pair<int,int> rng = textCb->selectedRange();
-            return NSMakeRange(rng.first < 0 ? NSNotFound : rng.first, rng.second);
-        }
+- (NSRange)selectedRange {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (booContext->m_callback) {
+    boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+    if (textCb) {
+      std::pair<int, int> rng = textCb->selectedRange();
+      return NSMakeRange(rng.first < 0 ? NSNotFound : rng.first, rng.second);
     }
-    return NSMakeRange(NSNotFound, 0);
+  }
+  return NSMakeRange(NSNotFound, 0);
 }
 
-- (void)setMarkedText:(id)aString selectedRange:(NSRange)selectedRange replacementRange:(NSRange)replacementRange
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (booContext->m_callback)
-    {
-        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
-        if (textCb)
-        {
-            NSString* plainStr = aString;
-            if ([aString isKindOfClass:[NSAttributedString class]])
-                plainStr = ((NSAttributedString*)aString).string;
-            textCb->setMarkedText([plainStr UTF8String],
-                                  std::make_pair(selectedRange.location, selectedRange.length),
-                                  std::make_pair(replacementRange.location==NSNotFound ? -1 : replacementRange.location,
-                                                 replacementRange.length));
-        }
+- (void)setMarkedText:(id)aString selectedRange:(NSRange)selectedRange replacementRange:(NSRange)replacementRange {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (booContext->m_callback) {
+    boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+    if (textCb) {
+      NSString* plainStr = aString;
+      if ([aString isKindOfClass:[NSAttributedString class]])
+        plainStr = ((NSAttributedString*) aString).string;
+      textCb->setMarkedText([plainStr UTF8String],
+                            std::make_pair(selectedRange.location, selectedRange.length),
+                            std::make_pair(replacementRange.location == NSNotFound ? -1 : replacementRange.location,
+                                           replacementRange.length));
     }
+  }
 }
 
-- (void)unmarkText
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (booContext->m_callback)
-    {
-        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
-        if (textCb)
-            textCb->unmarkText();
-    }
+- (void)unmarkText {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (booContext->m_callback) {
+    boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+    if (textCb)
+      textCb->unmarkText();
+  }
 }
 
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101100
-- (NSArray<NSString*>*)validAttributesForMarkedText
-{
-    return @[];
+
+- (NSArray<NSString*>*)validAttributesForMarkedText {
+  return @[];
 }
+
 #else
 - (NSArray*)validAttributesForMarkedText
 {
@@ -571,586 +548,542 @@ IGraphicsContext* _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI a
 }
 #endif
 
-- (NSAttributedString*)attributedSubstringForProposedRange:(NSRange)aRange actualRange:(NSRangePointer)actualRange
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (booContext->m_callback)
-    {
-        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
-        if (textCb)
-        {
-            std::pair<int,int> actualRng;
-            std::string str = textCb->substringForRange(std::make_pair(aRange.location, aRange.length), actualRng);
-            if (str.empty())
-                return nil;
-            actualRange->location = actualRng.first;
-            actualRange->length = actualRng.second;
-            NSString* nsStr = [NSString stringWithUTF8String:str.c_str()];
-            NSAttributedString* ret = [[NSAttributedString alloc] initWithString:nsStr];
-            return ret;
-        }
+- (NSAttributedString*)attributedSubstringForProposedRange:(NSRange)aRange actualRange:(NSRangePointer)actualRange {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (booContext->m_callback) {
+    boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+    if (textCb) {
+      std::pair<int, int> actualRng;
+      std::string str = textCb->substringForRange(std::make_pair(aRange.location, aRange.length), actualRng);
+      if (str.empty())
+        return nil;
+      actualRange->location = actualRng.first;
+      actualRange->length = actualRng.second;
+      NSString* nsStr = [NSString stringWithUTF8String:str.c_str()];
+      NSAttributedString* ret = [[NSAttributedString alloc] initWithString:nsStr];
+      return ret;
     }
-    return nil;
+  }
+  return nil;
 }
 
-- (void)insertText:(id)aString replacementRange:(NSRange)replacementRange
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (booContext->m_callback)
-    {
-        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
-        if (textCb)
-        {
-            NSString* plainStr = aString;
-            if ([aString isKindOfClass:[NSAttributedString class]])
-                plainStr = ((NSAttributedString*)aString).string;
-            textCb->insertText([plainStr UTF8String],
-                               std::make_pair(replacementRange.location == NSNotFound ? -1 : replacementRange.location,
-                                              replacementRange.length));
-        }
+- (void)insertText:(id)aString replacementRange:(NSRange)replacementRange {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (booContext->m_callback) {
+    boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+    if (textCb) {
+      NSString* plainStr = aString;
+      if ([aString isKindOfClass:[NSAttributedString class]])
+        plainStr = ((NSAttributedString*) aString).string;
+      textCb->insertText([plainStr UTF8String],
+                         std::make_pair(replacementRange.location == NSNotFound ? -1 : replacementRange.location,
+                                        replacementRange.length));
     }
+  }
 }
 
-- (NSUInteger)characterIndexForPoint:(NSPoint)aPoint
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (booContext->m_callback)
-    {
-        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
-        if (textCb)
-        {
-            NSPoint backingPoint = [parentView convertPointToBacking:aPoint];
-            boo::SWindowCoord coord = {{int(backingPoint.x), int(backingPoint.y)}, {int(aPoint.x), int(aPoint.y)}};
-            int idx = textCb->characterIndexAtPoint(coord);
-            if (idx < 0)
-                return NSNotFound;
-            return idx;
-        }
+- (NSUInteger)characterIndexForPoint:(NSPoint)aPoint {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (booContext->m_callback) {
+    boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+    if (textCb) {
+      NSPoint backingPoint = [parentView convertPointToBacking:aPoint];
+      boo::SWindowCoord coord = {{int(backingPoint.x), int(backingPoint.y)},
+                                 {int(aPoint.x),       int(aPoint.y)}};
+      int idx = textCb->characterIndexAtPoint(coord);
+      if (idx < 0)
+        return NSNotFound;
+      return idx;
     }
-    return NSNotFound;
+  }
+  return NSNotFound;
 }
 
-- (NSRect)firstRectForCharacterRange:(NSRange)aRange actualRange:(NSRangePointer)actualRange
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (booContext->m_callback)
-    {
-        boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
-        if (textCb)
-        {
-            std::pair<int,int> actualRng;
-            boo::SWindowRect rect =
-            textCb->rectForCharacterRange(std::make_pair(aRange.location, aRange.length), actualRng);
-            actualRange->location = actualRng.first;
-            actualRange->length = actualRng.second;
-            return [[parentView window] convertRectToScreen:
-             [parentView convertRectFromBacking:NSMakeRect(rect.location[0], rect.location[1],
-                                                           rect.size[0], rect.size[1])]];
-        }
+- (NSRect)firstRectForCharacterRange:(NSRange)aRange actualRange:(NSRangePointer)actualRange {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (booContext->m_callback) {
+    boo::ITextInputCallback* textCb = booContext->m_callback->getTextInputCallback();
+    if (textCb) {
+      std::pair<int, int> actualRng;
+      boo::SWindowRect rect =
+        textCb->rectForCharacterRange(std::make_pair(aRange.location, aRange.length), actualRng);
+      actualRange->location = actualRng.first;
+      actualRange->length = actualRng.second;
+      return [[parentView window] convertRectToScreen:
+        [parentView convertRectFromBacking:NSMakeRect(rect.location[0], rect.location[1],
+                                                      rect.size[0], rect.size[1])]];
     }
-    return NSMakeRect(0, 0, 0, 0);
+  }
+  return NSMakeRect(0, 0, 0, 0);
 }
 
-- (void)doCommandBySelector:(SEL)aSelector
-{
+- (void)doCommandBySelector:(SEL)aSelector {
 }
 
-static inline boo::EModifierKey getMod(NSUInteger flags)
-{
-    boo::EModifierKey ret = boo::EModifierKey::None;
-    if (flags & NSEventModifierFlagControl)
-        ret |= boo::EModifierKey::Ctrl;
-    if (flags & NSEventModifierFlagOption)
-        ret |= boo::EModifierKey::Alt;
-    if (flags & NSEventModifierFlagShift)
-        ret |= boo::EModifierKey::Shift;
-    if (flags & NSEventModifierFlagCommand)
-        ret |= boo::EModifierKey::Command;
-    return ret;
+static inline boo::EModifierKey getMod(NSUInteger flags) {
+  boo::EModifierKey ret = boo::EModifierKey::None;
+  if (flags & NSEventModifierFlagControl)
+    ret |= boo::EModifierKey::Ctrl;
+  if (flags & NSEventModifierFlagOption)
+    ret |= boo::EModifierKey::Alt;
+  if (flags & NSEventModifierFlagShift)
+    ret |= boo::EModifierKey::Shift;
+  if (flags & NSEventModifierFlagCommand)
+    ret |= boo::EModifierKey::Command;
+  return ret;
 }
 
-static inline boo::EMouseButton getButton(NSEvent* event)
-{
-    NSInteger buttonNumber = event.buttonNumber;
-    if (buttonNumber == 3)
-        return boo::EMouseButton::Middle;
-    else if (buttonNumber == 4)
-        return boo::EMouseButton::Aux1;
-    else if (buttonNumber == 5)
-        return boo::EMouseButton::Aux2;
-    return boo::EMouseButton::None;
+static inline boo::EMouseButton getButton(NSEvent* event) {
+  NSInteger buttonNumber = event.buttonNumber;
+  if (buttonNumber == 3)
+    return boo::EMouseButton::Middle;
+  else if (buttonNumber == 4)
+    return boo::EMouseButton::Aux1;
+  else if (buttonNumber == 5)
+    return boo::EMouseButton::Aux2;
+  return boo::EMouseButton::None;
 }
 
-- (void)mouseDown:(NSEvent*)theEvent
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (!booContext->m_callback)
-        return;
-    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
-    float pixelFactor = [[parentView window] backingScaleFactor];
-    NSRect frame = [parentView frame];
-    boo::SWindowCoord coord =
+- (void)mouseDown:(NSEvent*)theEvent {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (!booContext->m_callback)
+    return;
+  NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+  float pixelFactor = [[parentView window] backingScaleFactor];
+  NSRect frame = [parentView frame];
+  boo::SWindowCoord coord =
     {
-        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
-        {int(liw.x), int(liw.y)},
-        {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
+      {int(liw.x * pixelFactor),        int(liw.y * pixelFactor)},
+      {int(liw.x),                      int(liw.y)},
+      {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
     };
-    booContext->m_callback->mouseDown(coord, boo::EMouseButton::Primary,
-                                      getMod([theEvent modifierFlags]));
-    [textContext handleEvent:theEvent];
-}
-
-- (void)mouseUp:(NSEvent*)theEvent
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (!booContext->m_callback)
-        return;
-    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
-    float pixelFactor = [[parentView window] backingScaleFactor];
-    NSRect frame = [parentView frame];
-    boo::SWindowCoord coord =
-    {
-        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
-        {int(liw.x), int(liw.y)},
-        {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
-    };
-    booContext->m_callback->mouseUp(coord, boo::EMouseButton::Primary,
+  booContext->m_callback->mouseDown(coord, boo::EMouseButton::Primary,
                                     getMod([theEvent modifierFlags]));
-    [textContext handleEvent:theEvent];
+  [textContext handleEvent:theEvent];
 }
 
-- (void)rightMouseDown:(NSEvent*)theEvent
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (!booContext->m_callback)
-        return;
-    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
-    float pixelFactor = [[parentView window] backingScaleFactor];
-    NSRect frame = [parentView frame];
-    boo::SWindowCoord coord =
+- (void)mouseUp:(NSEvent*)theEvent {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (!booContext->m_callback)
+    return;
+  NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+  float pixelFactor = [[parentView window] backingScaleFactor];
+  NSRect frame = [parentView frame];
+  boo::SWindowCoord coord =
     {
-        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
-        {int(liw.x), int(liw.y)},
-        {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
+      {int(liw.x * pixelFactor),        int(liw.y * pixelFactor)},
+      {int(liw.x),                      int(liw.y)},
+      {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
     };
-    booContext->m_callback->mouseDown(coord, boo::EMouseButton::Secondary,
-                                      getMod([theEvent modifierFlags]));
-    [textContext handleEvent:theEvent];
+  booContext->m_callback->mouseUp(coord, boo::EMouseButton::Primary,
+                                  getMod([theEvent modifierFlags]));
+  [textContext handleEvent:theEvent];
 }
 
-- (void)rightMouseUp:(NSEvent*)theEvent
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (!booContext->m_callback)
-        return;
-    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
-    float pixelFactor = [[parentView window] backingScaleFactor];
-    NSRect frame = [parentView frame];
-    boo::SWindowCoord coord =
+- (void)rightMouseDown:(NSEvent*)theEvent {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (!booContext->m_callback)
+    return;
+  NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+  float pixelFactor = [[parentView window] backingScaleFactor];
+  NSRect frame = [parentView frame];
+  boo::SWindowCoord coord =
     {
-        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
-        {int(liw.x), int(liw.y)},
-        {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
+      {int(liw.x * pixelFactor),        int(liw.y * pixelFactor)},
+      {int(liw.x),                      int(liw.y)},
+      {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
     };
-    booContext->m_callback->mouseUp(coord, boo::EMouseButton::Secondary,
+  booContext->m_callback->mouseDown(coord, boo::EMouseButton::Secondary,
                                     getMod([theEvent modifierFlags]));
-    [textContext handleEvent:theEvent];
+  [textContext handleEvent:theEvent];
 }
 
-- (void)otherMouseDown:(NSEvent*)theEvent
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (!booContext->m_callback)
-        return;
-    boo::EMouseButton button = getButton(theEvent);
-    if (button == boo::EMouseButton::None)
-        return;
-    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+- (void)rightMouseUp:(NSEvent*)theEvent {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (!booContext->m_callback)
+    return;
+  NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+  float pixelFactor = [[parentView window] backingScaleFactor];
+  NSRect frame = [parentView frame];
+  boo::SWindowCoord coord =
+    {
+      {int(liw.x * pixelFactor),        int(liw.y * pixelFactor)},
+      {int(liw.x),                      int(liw.y)},
+      {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
+    };
+  booContext->m_callback->mouseUp(coord, boo::EMouseButton::Secondary,
+                                  getMod([theEvent modifierFlags]));
+  [textContext handleEvent:theEvent];
+}
+
+- (void)otherMouseDown:(NSEvent*)theEvent {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (!booContext->m_callback)
+    return;
+  boo::EMouseButton button = getButton(theEvent);
+  if (button == boo::EMouseButton::None)
+    return;
+  NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+  float pixelFactor = [[parentView window] backingScaleFactor];
+  NSRect frame = [parentView frame];
+  boo::SWindowCoord coord =
+    {
+      {int(liw.x * pixelFactor),        int(liw.y * pixelFactor)},
+      {int(liw.x),                      int(liw.y)},
+      {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
+    };
+  booContext->m_callback->mouseDown(coord, button, getMod([theEvent modifierFlags]));
+  [textContext handleEvent:theEvent];
+}
+
+- (void)otherMouseUp:(NSEvent*)theEvent {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (!booContext->m_callback)
+    return;
+  boo::EMouseButton button = getButton(theEvent);
+  if (button == boo::EMouseButton::None)
+    return;
+  NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+  float pixelFactor = [[parentView window] backingScaleFactor];
+  NSRect frame = [parentView frame];
+  boo::SWindowCoord coord =
+    {
+      {int(liw.x * pixelFactor),        int(liw.y * pixelFactor)},
+      {int(liw.x),                      int(liw.y)},
+      {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
+    };
+  booContext->m_callback->mouseUp(coord, button, getMod([theEvent modifierFlags]));
+  [textContext handleEvent:theEvent];
+}
+
+- (void)mouseMoved:(NSEvent*)theEvent {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (!booContext->m_callback)
+    return;
+  NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+  if (theEvent.window == [parentView window] && NSPointInRect(liw, parentView.frame)) {
     float pixelFactor = [[parentView window] backingScaleFactor];
     NSRect frame = [parentView frame];
     boo::SWindowCoord coord =
-    {
-        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
-        {int(liw.x), int(liw.y)},
+      {
+        {int(liw.x * pixelFactor),        int(liw.y * pixelFactor)},
+        {int(liw.x),                      int(liw.y)},
         {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
+      };
+    booContext->m_callback->mouseMove(coord);
+  }
+  [textContext handleEvent:theEvent];
+}
+
+- (void)mouseDragged:(NSEvent*)theEvent {
+  [self mouseMoved:theEvent];
+}
+
+- (void)rightMouseDragged:(NSEvent*)theEvent {
+  [self mouseMoved:theEvent];
+}
+
+- (void)otherMouseDragged:(NSEvent*)theEvent {
+  [self mouseMoved:theEvent];
+}
+
+- (void)mouseEntered:(NSEvent*)theEvent {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (!booContext->m_callback)
+    return;
+  NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+  float pixelFactor = [[parentView window] backingScaleFactor];
+  NSRect frame = [parentView frame];
+  boo::SWindowCoord coord =
+    {
+      {int(liw.x * pixelFactor),        int(liw.y * pixelFactor)},
+      {int(liw.x),                      int(liw.y)},
+      {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
     };
-    booContext->m_callback->mouseDown(coord, button, getMod([theEvent modifierFlags]));
-    [textContext handleEvent:theEvent];
+  booContext->m_callback->mouseEnter(coord);
 }
 
-- (void)otherMouseUp:(NSEvent*)theEvent
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (!booContext->m_callback)
-        return;
-    boo::EMouseButton button = getButton(theEvent);
-    if (button == boo::EMouseButton::None)
-        return;
-    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
-    float pixelFactor = [[parentView window] backingScaleFactor];
-    NSRect frame = [parentView frame];
-    boo::SWindowCoord coord =
+- (void)mouseExited:(NSEvent*)theEvent {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (!booContext->m_callback)
+    return;
+  NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+  float pixelFactor = [[parentView window] backingScaleFactor];
+  NSRect frame = [parentView frame];
+  boo::SWindowCoord coord =
     {
-        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
-        {int(liw.x), int(liw.y)},
-        {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
+      {int(liw.x * pixelFactor),        int(liw.y * pixelFactor)},
+      {int(liw.x),                      int(liw.y)},
+      {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
     };
-    booContext->m_callback->mouseUp(coord, button, getMod([theEvent modifierFlags]));
-    [textContext handleEvent:theEvent];
+  booContext->m_callback->mouseLeave(coord);
 }
 
-- (void)mouseMoved:(NSEvent*)theEvent
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (!booContext->m_callback)
-        return;
-    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
-    if (theEvent.window == [parentView window] && NSPointInRect(liw, parentView.frame))
+- (void)scrollWheel:(NSEvent*)theEvent {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (!booContext->m_callback)
+    return;
+  NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
+  float pixelFactor = [[parentView window] backingScaleFactor];
+  NSRect frame = [parentView frame];
+  boo::SWindowCoord coord =
     {
-        float pixelFactor = [[parentView window] backingScaleFactor];
-        NSRect frame = [parentView frame];
-        boo::SWindowCoord coord =
-        {
-            {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
-            {int(liw.x), int(liw.y)},
-            {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
-        };
-        booContext->m_callback->mouseMove(coord);
-    }
-    [textContext handleEvent:theEvent];
-}
-
-- (void)mouseDragged:(NSEvent*)theEvent
-{
-    [self mouseMoved:theEvent];
-}
-
-- (void)rightMouseDragged:(NSEvent*)theEvent
-{
-    [self mouseMoved:theEvent];
-}
-
-- (void)otherMouseDragged:(NSEvent*)theEvent
-{
-    [self mouseMoved:theEvent];
-}
-
-- (void)mouseEntered:(NSEvent*)theEvent
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (!booContext->m_callback)
-        return;
-    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
-    float pixelFactor = [[parentView window] backingScaleFactor];
-    NSRect frame = [parentView frame];
-    boo::SWindowCoord coord =
-    {
-        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
-        {int(liw.x), int(liw.y)},
-        {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
+      {int(liw.x * pixelFactor),        int(liw.y * pixelFactor)},
+      {int(liw.x),                      int(liw.y)},
+      {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
     };
-    booContext->m_callback->mouseEnter(coord);
-}
-
-- (void)mouseExited:(NSEvent*)theEvent
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (!booContext->m_callback)
-        return;
-    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
-    float pixelFactor = [[parentView window] backingScaleFactor];
-    NSRect frame = [parentView frame];
-    boo::SWindowCoord coord =
+  boo::SScrollDelta scroll =
     {
-        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
-        {int(liw.x), int(liw.y)},
-        {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
+      {(float) [theEvent scrollingDeltaX], (float) [theEvent scrollingDeltaY]},
+      (bool) [theEvent hasPreciseScrollingDeltas], true
     };
-    booContext->m_callback->mouseLeave(coord);
+  booContext->m_callback->scroll(coord, scroll);
+  [textContext handleEvent:theEvent];
 }
 
-- (void)scrollWheel:(NSEvent*)theEvent
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (!booContext->m_callback)
-        return;
-    NSPoint liw = [parentView convertPoint:[theEvent locationInWindow] fromView:nil];
-    float pixelFactor = [[parentView window] backingScaleFactor];
-    NSRect frame = [parentView frame];
-    boo::SWindowCoord coord =
-    {
-        {int(liw.x * pixelFactor), int(liw.y * pixelFactor)},
-        {int(liw.x), int(liw.y)},
-        {float(liw.x / frame.size.width), float(liw.y / frame.size.height)}
-    };
-    boo::SScrollDelta scroll =
-    {
-        {(float)[theEvent scrollingDeltaX], (float)[theEvent scrollingDeltaY]},
-        (bool)[theEvent hasPreciseScrollingDeltas], true
-    };
-    booContext->m_callback->scroll(coord, scroll);
-    [textContext handleEvent:theEvent];
+- (void)touchesBeganWithEvent:(NSEvent*)event {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (!booContext->m_callback)
+    return;
+  for (NSTouch* touch in [event touchesMatchingPhase:NSTouchPhaseBegan inView:nil]) {
+    NSPoint pos = touch.normalizedPosition;
+    boo::STouchCoord coord =
+      {
+        {(float) pos.x, (float) pos.y}
+      };
+    booContext->m_callback->touchDown(coord, (uintptr_t) touch.identity);
+  }
 }
 
-- (void)touchesBeganWithEvent:(NSEvent*)event
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (!booContext->m_callback)
-        return;
-    for (NSTouch* touch in [event touchesMatchingPhase:NSTouchPhaseBegan inView:nil])
-    {
-        NSPoint pos = touch.normalizedPosition;
-        boo::STouchCoord coord =
-        {
-            {(float)pos.x, (float)pos.y}
-        };
-        booContext->m_callback->touchDown(coord, (uintptr_t)touch.identity);
-    }
+- (void)touchesEndedWithEvent:(NSEvent*)event {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (!booContext->m_callback)
+    return;
+  for (NSTouch* touch in [event touchesMatchingPhase:NSTouchPhaseEnded inView:nil]) {
+    NSPoint pos = touch.normalizedPosition;
+    boo::STouchCoord coord =
+      {
+        {(float) pos.x, (float) pos.y}
+      };
+    booContext->m_callback->touchUp(coord, (uintptr_t) touch.identity);
+  }
 }
 
-- (void)touchesEndedWithEvent:(NSEvent*)event
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (!booContext->m_callback)
-        return;
-    for (NSTouch* touch in [event touchesMatchingPhase:NSTouchPhaseEnded inView:nil])
-    {
-        NSPoint pos = touch.normalizedPosition;
-        boo::STouchCoord coord =
-        {
-            {(float)pos.x, (float)pos.y}
-        };
-        booContext->m_callback->touchUp(coord, (uintptr_t)touch.identity);
-    }
+- (void)touchesMovedWithEvent:(NSEvent*)event {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (!booContext->m_callback)
+    return;
+  for (NSTouch* touch in [event touchesMatchingPhase:NSTouchPhaseMoved inView:nil]) {
+    NSPoint pos = touch.normalizedPosition;
+    boo::STouchCoord coord =
+      {
+        {(float) pos.x, (float) pos.y}
+      };
+    booContext->m_callback->touchMove(coord, (uintptr_t) touch.identity);
+  }
 }
 
-- (void)touchesMovedWithEvent:(NSEvent*)event
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (!booContext->m_callback)
-        return;
-    for (NSTouch* touch in [event touchesMatchingPhase:NSTouchPhaseMoved inView:nil])
-    {
-        NSPoint pos = touch.normalizedPosition;
-        boo::STouchCoord coord =
-        {
-            {(float)pos.x, (float)pos.y}
-        };
-        booContext->m_callback->touchMove(coord, (uintptr_t)touch.identity);
-    }
-}
-
-- (void)touchesCancelledWithEvent:(NSEvent*)event
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (!booContext->m_callback)
-        return;
-    for (NSTouch* touch in [event touchesMatchingPhase:NSTouchPhaseCancelled inView:nil])
-    {
-        NSPoint pos = touch.normalizedPosition;
-        boo::STouchCoord coord =
-        {
-            {(float)pos.x, (float)pos.y}
-        };
-        booContext->m_callback->touchUp(coord, (uintptr_t)touch.identity);
-    }
+- (void)touchesCancelledWithEvent:(NSEvent*)event {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (!booContext->m_callback)
+    return;
+  for (NSTouch* touch in [event touchesMatchingPhase:NSTouchPhaseCancelled inView:nil]) {
+    NSPoint pos = touch.normalizedPosition;
+    boo::STouchCoord coord =
+      {
+        {(float) pos.x, (float) pos.y}
+      };
+    booContext->m_callback->touchUp(coord, (uintptr_t) touch.identity);
+  }
 }
 
 /* keycodes for keys that are independent of keyboard layout*/
-enum
-{
-    kVK_Return                    = 0x24,
-    kVK_Tab                       = 0x30,
-    kVK_Space                     = 0x31,
-    kVK_Delete                    = 0x33,
-    kVK_Escape                    = 0x35,
-    kVK_Command                   = 0x37,
-    kVK_Shift                     = 0x38,
-    kVK_CapsLock                  = 0x39,
-    kVK_Option                    = 0x3A,
-    kVK_Control                   = 0x3B,
-    kVK_RightShift                = 0x3C,
-    kVK_RightOption               = 0x3D,
-    kVK_RightControl              = 0x3E,
-    kVK_Function                  = 0x3F,
-    kVK_F17                       = 0x40,
-    kVK_VolumeUp                  = 0x48,
-    kVK_VolumeDown                = 0x49,
-    kVK_Mute                      = 0x4A,
-    kVK_F18                       = 0x4F,
-    kVK_F19                       = 0x50,
-    kVK_F20                       = 0x5A,
-    kVK_F5                        = 0x60,
-    kVK_F6                        = 0x61,
-    kVK_F7                        = 0x62,
-    kVK_F3                        = 0x63,
-    kVK_F8                        = 0x64,
-    kVK_F9                        = 0x65,
-    kVK_F11                       = 0x67,
-    kVK_F13                       = 0x69,
-    kVK_F16                       = 0x6A,
-    kVK_F14                       = 0x6B,
-    kVK_F10                       = 0x6D,
-    kVK_F12                       = 0x6F,
-    kVK_F15                       = 0x71,
-    kVK_Help                      = 0x72,
-    kVK_Home                      = 0x73,
-    kVK_PageUp                    = 0x74,
-    kVK_ForwardDelete             = 0x75,
-    kVK_F4                        = 0x76,
-    kVK_End                       = 0x77,
-    kVK_F2                        = 0x78,
-    kVK_PageDown                  = 0x79,
-    kVK_F1                        = 0x7A,
-    kVK_LeftArrow                 = 0x7B,
-    kVK_RightArrow                = 0x7C,
-    kVK_DownArrow                 = 0x7D,
-    kVK_UpArrow                   = 0x7E
+enum {
+  kVK_Return = 0x24,
+  kVK_Tab = 0x30,
+  kVK_Space = 0x31,
+  kVK_Delete = 0x33,
+  kVK_Escape = 0x35,
+  kVK_Command = 0x37,
+  kVK_Shift = 0x38,
+  kVK_CapsLock = 0x39,
+  kVK_Option = 0x3A,
+  kVK_Control = 0x3B,
+  kVK_RightShift = 0x3C,
+  kVK_RightOption = 0x3D,
+  kVK_RightControl = 0x3E,
+  kVK_Function = 0x3F,
+  kVK_F17 = 0x40,
+  kVK_VolumeUp = 0x48,
+  kVK_VolumeDown = 0x49,
+  kVK_Mute = 0x4A,
+  kVK_F18 = 0x4F,
+  kVK_F19 = 0x50,
+  kVK_F20 = 0x5A,
+  kVK_F5 = 0x60,
+  kVK_F6 = 0x61,
+  kVK_F7 = 0x62,
+  kVK_F3 = 0x63,
+  kVK_F8 = 0x64,
+  kVK_F9 = 0x65,
+  kVK_F11 = 0x67,
+  kVK_F13 = 0x69,
+  kVK_F16 = 0x6A,
+  kVK_F14 = 0x6B,
+  kVK_F10 = 0x6D,
+  kVK_F12 = 0x6F,
+  kVK_F15 = 0x71,
+  kVK_Help = 0x72,
+  kVK_Home = 0x73,
+  kVK_PageUp = 0x74,
+  kVK_ForwardDelete = 0x75,
+  kVK_F4 = 0x76,
+  kVK_End = 0x77,
+  kVK_F2 = 0x78,
+  kVK_PageDown = 0x79,
+  kVK_F1 = 0x7A,
+  kVK_LeftArrow = 0x7B,
+  kVK_RightArrow = 0x7C,
+  kVK_DownArrow = 0x7D,
+  kVK_UpArrow = 0x7E
 };
-static boo::ESpecialKey translateKeycode(short code)
-{
-    switch (code)
-    {
-        case kVK_F1:
-            return boo::ESpecialKey::F1;
-        case kVK_F2:
-            return boo::ESpecialKey::F2;
-        case kVK_F3:
-            return boo::ESpecialKey::F3;
-        case kVK_F4:
-            return boo::ESpecialKey::F4;
-        case kVK_F5:
-            return boo::ESpecialKey::F5;
-        case kVK_F6:
-            return boo::ESpecialKey::F6;
-        case kVK_F7:
-            return boo::ESpecialKey::F7;
-        case kVK_F8:
-            return boo::ESpecialKey::F8;
-        case kVK_F9:
-            return boo::ESpecialKey::F9;
-        case kVK_F10:
-            return boo::ESpecialKey::F10;
-        case kVK_F11:
-            return boo::ESpecialKey::F11;
-        case kVK_F12:
-            return boo::ESpecialKey::F12;
-        case kVK_Escape:
-            return boo::ESpecialKey::Esc;
-        case kVK_Return:
-            return boo::ESpecialKey::Enter;
-        case kVK_Delete:
-            return boo::ESpecialKey::Backspace;
-        case kVK_ForwardDelete:
-            return boo::ESpecialKey::Delete;
-        case kVK_Home:
-            return boo::ESpecialKey::Home;
-        case kVK_End:
-            return boo::ESpecialKey::End;
-        case kVK_PageUp:
-            return boo::ESpecialKey::PgUp;
-        case kVK_PageDown:
-            return boo::ESpecialKey::PgDown;
-        case kVK_LeftArrow:
-            return boo::ESpecialKey::Left;
-        case kVK_RightArrow:
-            return boo::ESpecialKey::Right;
-        case kVK_UpArrow:
-            return boo::ESpecialKey::Up;
-        case kVK_DownArrow:
-            return boo::ESpecialKey::Down;
-        default:
-            return boo::ESpecialKey::None;
-    }
+
+static boo::ESpecialKey translateKeycode(short code) {
+  switch (code) {
+  case kVK_F1:
+    return boo::ESpecialKey::F1;
+  case kVK_F2:
+    return boo::ESpecialKey::F2;
+  case kVK_F3:
+    return boo::ESpecialKey::F3;
+  case kVK_F4:
+    return boo::ESpecialKey::F4;
+  case kVK_F5:
+    return boo::ESpecialKey::F5;
+  case kVK_F6:
+    return boo::ESpecialKey::F6;
+  case kVK_F7:
+    return boo::ESpecialKey::F7;
+  case kVK_F8:
+    return boo::ESpecialKey::F8;
+  case kVK_F9:
+    return boo::ESpecialKey::F9;
+  case kVK_F10:
+    return boo::ESpecialKey::F10;
+  case kVK_F11:
+    return boo::ESpecialKey::F11;
+  case kVK_F12:
+    return boo::ESpecialKey::F12;
+  case kVK_Escape:
+    return boo::ESpecialKey::Esc;
+  case kVK_Return:
+    return boo::ESpecialKey::Enter;
+  case kVK_Delete:
+    return boo::ESpecialKey::Backspace;
+  case kVK_ForwardDelete:
+    return boo::ESpecialKey::Delete;
+  case kVK_Home:
+    return boo::ESpecialKey::Home;
+  case kVK_End:
+    return boo::ESpecialKey::End;
+  case kVK_PageUp:
+    return boo::ESpecialKey::PgUp;
+  case kVK_PageDown:
+    return boo::ESpecialKey::PgDown;
+  case kVK_LeftArrow:
+    return boo::ESpecialKey::Left;
+  case kVK_RightArrow:
+    return boo::ESpecialKey::Right;
+  case kVK_UpArrow:
+    return boo::ESpecialKey::Up;
+  case kVK_DownArrow:
+    return boo::ESpecialKey::Down;
+  default:
+    return boo::ESpecialKey::None;
+  }
 }
 
-- (void)keyDown:(NSEvent*)theEvent
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (!booContext->m_callback)
-        return;
-    boo::ESpecialKey special = translateKeycode(theEvent.keyCode);
-    boo::EModifierKey mods = getMod(theEvent.modifierFlags);
-    NSString* chars;
-    if ((mods & boo::EModifierKey::Ctrl) != boo::EModifierKey::None)
-        chars = theEvent.charactersIgnoringModifiers;
-    else
-        chars = theEvent.characters;
-    if (special != boo::ESpecialKey::None)
-        booContext->m_callback->specialKeyDown(special,
-                                               mods,
-                                               theEvent.isARepeat);
-    else if ([chars length])
-        booContext->m_callback->charKeyDown([chars characterAtIndex:0],
-                                            mods,
-                                            theEvent.isARepeat);
-    [textContext handleEvent:theEvent];
+- (void)keyDown:(NSEvent*)theEvent {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (!booContext->m_callback)
+    return;
+  boo::ESpecialKey special = translateKeycode(theEvent.keyCode);
+  boo::EModifierKey mods = getMod(theEvent.modifierFlags);
+  NSString* chars;
+  if ((mods & boo::EModifierKey::Ctrl) != boo::EModifierKey::None)
+    chars = theEvent.charactersIgnoringModifiers;
+  else
+    chars = theEvent.characters;
+  if (special != boo::ESpecialKey::None)
+    booContext->m_callback->specialKeyDown(special,
+                                           mods,
+                                           theEvent.isARepeat);
+  else if ([chars length])
+    booContext->m_callback->charKeyDown([chars characterAtIndex:0],
+                                        mods,
+                                        theEvent.isARepeat);
+  [textContext handleEvent:theEvent];
 }
 
-- (void)keyUp:(NSEvent*)theEvent
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (!booContext->m_callback)
-        return;
-    boo::ESpecialKey special = translateKeycode(theEvent.keyCode);
-    boo::EModifierKey mods = getMod(theEvent.modifierFlags);
-    NSString* chars;
-    if ((mods & boo::EModifierKey::Ctrl) != boo::EModifierKey::None)
-        chars = theEvent.charactersIgnoringModifiers;
-    else
-        chars = theEvent.characters;
-    if (special != boo::ESpecialKey::None)
-        booContext->m_callback->specialKeyUp(special,
-                                             mods);
-    else if ([chars length])
-        booContext->m_callback->charKeyUp([chars characterAtIndex:0],
-                                          mods);
-    //[textContext handleEvent:theEvent];
+- (void)keyUp:(NSEvent*)theEvent {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (!booContext->m_callback)
+    return;
+  boo::ESpecialKey special = translateKeycode(theEvent.keyCode);
+  boo::EModifierKey mods = getMod(theEvent.modifierFlags);
+  NSString* chars;
+  if ((mods & boo::EModifierKey::Ctrl) != boo::EModifierKey::None)
+    chars = theEvent.charactersIgnoringModifiers;
+  else
+    chars = theEvent.characters;
+  if (special != boo::ESpecialKey::None)
+    booContext->m_callback->specialKeyUp(special,
+                                         mods);
+  else if ([chars length])
+    booContext->m_callback->charKeyUp([chars characterAtIndex:0],
+                                      mods);
+  //[textContext handleEvent:theEvent];
 }
 
-- (void)flagsChanged:(NSEvent*)theEvent
-{
-    std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
-    if (!booContext->m_callback)
-        return;
-    NSUInteger modFlags = theEvent.modifierFlags;
-    if (modFlags != lastModifiers)
-    {
-        NSUInteger changedFlags = modFlags ^ lastModifiers;
+- (void)flagsChanged:(NSEvent*)theEvent {
+  std::lock_guard<std::recursive_mutex> lk(booContext->m_callbackMutex);
+  if (!booContext->m_callback)
+    return;
+  NSUInteger modFlags = theEvent.modifierFlags;
+  if (modFlags != lastModifiers) {
+    NSUInteger changedFlags = modFlags ^lastModifiers;
 
-        NSUInteger downFlags = changedFlags & modFlags;
-        if (downFlags & NSEventModifierFlagControl)
-            booContext->m_callback->modKeyDown(boo::EModifierKey::Ctrl, false);
-        if (downFlags & NSEventModifierFlagOption)
-            booContext->m_callback->modKeyDown(boo::EModifierKey::Alt, false);
-        if (downFlags & NSEventModifierFlagShift)
-            booContext->m_callback->modKeyDown(boo::EModifierKey::Shift, false);
-        if (downFlags & NSEventModifierFlagCommand)
-            booContext->m_callback->modKeyDown(boo::EModifierKey::Command, false);
+    NSUInteger downFlags = changedFlags & modFlags;
+    if (downFlags & NSEventModifierFlagControl)
+      booContext->m_callback->modKeyDown(boo::EModifierKey::Ctrl, false);
+    if (downFlags & NSEventModifierFlagOption)
+      booContext->m_callback->modKeyDown(boo::EModifierKey::Alt, false);
+    if (downFlags & NSEventModifierFlagShift)
+      booContext->m_callback->modKeyDown(boo::EModifierKey::Shift, false);
+    if (downFlags & NSEventModifierFlagCommand)
+      booContext->m_callback->modKeyDown(boo::EModifierKey::Command, false);
 
-        NSUInteger upFlags = changedFlags & ~modFlags;
-        if (upFlags & NSEventModifierFlagControl)
-            booContext->m_callback->modKeyUp(boo::EModifierKey::Ctrl);
-        if (upFlags & NSEventModifierFlagOption)
-            booContext->m_callback->modKeyUp(boo::EModifierKey::Alt);
-        if (upFlags & NSEventModifierFlagShift)
-            booContext->m_callback->modKeyUp(boo::EModifierKey::Shift);
-        if (upFlags & NSEventModifierFlagCommand)
-            booContext->m_callback->modKeyUp(boo::EModifierKey::Command);
+    NSUInteger upFlags = changedFlags & ~modFlags;
+    if (upFlags & NSEventModifierFlagControl)
+      booContext->m_callback->modKeyUp(boo::EModifierKey::Ctrl);
+    if (upFlags & NSEventModifierFlagOption)
+      booContext->m_callback->modKeyUp(boo::EModifierKey::Alt);
+    if (upFlags & NSEventModifierFlagShift)
+      booContext->m_callback->modKeyUp(boo::EModifierKey::Shift);
+    if (upFlags & NSEventModifierFlagCommand)
+      booContext->m_callback->modKeyUp(boo::EModifierKey::Command);
 
-        lastModifiers = modFlags;
-    }
-    [textContext handleEvent:theEvent];
+    lastModifiers = modFlags;
+  }
+  [textContext handleEvent:theEvent];
 }
 
-- (BOOL)acceptsTouchEvents
-{
-    return YES;
+- (BOOL)acceptsTouchEvents {
+  return YES;
 }
 
-- (BOOL)acceptsFirstResponder
-{
-    return YES;
+- (BOOL)acceptsFirstResponder {
+  return YES;
 }
 
 @end
@@ -1215,456 +1148,413 @@ static boo::ESpecialKey translateKeycode(short code)
 #endif
 
 #if BOO_HAS_METAL
+
 @implementation GraphicsContextCocoaMetalInternal
-- (id)initWithBooContext:(boo::GraphicsContextCocoaMetal*)bctx
-{
-    m_ctx = bctx->m_metalCtx;
-    m_window = bctx->m_parentWindow;
-    self = [self initWithFrame:NSMakeRect(0, 0, 100, 100)];
-    [self setWantsLayer:YES];
-    resp = [[BooCocoaResponder alloc] initWithBooContext:bctx View:self];
-    NSTrackingArea* trackingArea = [[NSTrackingArea alloc] initWithRect:NSZeroRect
-                                                                options:(NSTrackingMouseEnteredAndExited |
-                                                                         NSTrackingMouseMoved |
-                                                                         NSTrackingActiveAlways |
-                                                                         NSTrackingInVisibleRect)
-                                                                  owner:self
-                                                               userInfo:nil];
-    [self addTrackingArea:trackingArea];
-    return self;
+- (id)initWithBooContext:(boo::GraphicsContextCocoaMetal*)bctx {
+  m_ctx = bctx->m_metalCtx;
+  m_window = bctx->m_parentWindow;
+  self = [self initWithFrame:NSMakeRect(0, 0, 100, 100)];
+  [self setWantsLayer:YES];
+  resp = [[BooCocoaResponder alloc] initWithBooContext:bctx View:self];
+  NSTrackingArea* trackingArea = [[NSTrackingArea alloc] initWithRect:NSZeroRect
+                                                              options:(NSTrackingMouseEnteredAndExited |
+                                                                       NSTrackingMouseMoved |
+                                                                       NSTrackingActiveAlways |
+                                                                       NSTrackingInVisibleRect)
+                                                                owner:self
+                                                             userInfo:nil];
+  [self addTrackingArea:trackingArea];
+  return self;
 }
 
-- (CALayer*)makeBackingLayer
-{
-    CAMetalLayer* layer = [CAMetalLayer new];
-    layer.device = m_ctx->m_dev;
-    layer.pixelFormat = m_ctx->m_pixelFormat;
-    layer.framebufferOnly = NO;
-    return layer;
+- (CALayer*)makeBackingLayer {
+  CAMetalLayer* layer = [CAMetalLayer new];
+  layer.device = m_ctx->m_dev;
+  layer.pixelFormat = m_ctx->m_pixelFormat;
+  layer.framebufferOnly = NO;
+  return layer;
 }
 
-- (BOOL)acceptsTouchEvents
-{
-    return YES;
+- (BOOL)acceptsTouchEvents {
+  return YES;
 }
 
-- (BOOL)acceptsFirstResponder
-{
-    return YES;
+- (BOOL)acceptsFirstResponder {
+  return YES;
 }
 
-- (NSResponder*)nextResponder
-{
-    return resp;
+- (NSResponder*)nextResponder {
+  return resp;
 }
 
-- (void)reshapeHandler
-{
-    std::lock_guard<std::recursive_mutex> lk1(resp->booContext->m_callbackMutex);
-    NSRect frame = [self convertRectToBacking:self.frame];
-    boo::SWindowRect rect = {int(frame.origin.x), int(frame.origin.y),
-                             int(frame.size.width), int(frame.size.height)};
-    boo::MetalContext::Window& w = m_ctx->m_windows[m_window];
-    std::unique_lock<std::mutex> lk(w.m_resizeLock);
-    if (resp->booContext->m_callback)
-        resp->booContext->m_callback->resized(rect, false);
-    w.m_size = CGSizeMake(rect.size[0], rect.size[1]);
-    w.m_needsResize = YES;
+- (void)reshapeHandler {
+  std::lock_guard<std::recursive_mutex> lk1(resp->booContext->m_callbackMutex);
+  NSRect frame = [self convertRectToBacking:self.frame];
+  boo::SWindowRect rect = {int(frame.origin.x), int(frame.origin.y),
+                           int(frame.size.width), int(frame.size.height)};
+  boo::MetalContext::Window& w = m_ctx->m_windows[m_window];
+  std::unique_lock<std::mutex> lk(w.m_resizeLock);
+  if (resp->booContext->m_callback)
+    resp->booContext->m_callback->resized(rect, false);
+  w.m_size = CGSizeMake(rect.size[0], rect.size[1]);
+  w.m_needsResize = YES;
 }
 
-- (void)setFrameSize:(NSSize)newSize
-{
-    [super setFrameSize:newSize];
-    [self reshapeHandler];
+- (void)setFrameSize:(NSSize)newSize {
+  [super setFrameSize:newSize];
+  [self reshapeHandler];
 }
 
-- (void)setBoundsSize:(NSSize)newSize
-{
-    [super setBoundsSize:newSize];
-    [self reshapeHandler];
+- (void)setBoundsSize:(NSSize)newSize {
+  [super setBoundsSize:newSize];
+  [self reshapeHandler];
 }
 
-- (void)viewDidChangeBackingProperties
-{
-    [super viewDidChangeBackingProperties];
-    [self reshapeHandler];
+- (void)viewDidChangeBackingProperties {
+  [super viewDidChangeBackingProperties];
+  [self reshapeHandler];
 }
 
 @end
+
 #endif
 
-namespace boo
-{
+namespace boo {
 
 static NSString* ClipboardTypes[] =
-{
+  {
     0, NSPasteboardTypeString, NSPasteboardTypeString, NSPasteboardTypePNG
-};
+  };
 
-class WindowCocoa : public IWindow
-{
-    WindowCocoaInternal* m_nsWindow;
-    GraphicsContextCocoa* m_gfxCtx;
-    EMouseCursor m_cursor = EMouseCursor::None;
+class WindowCocoa : public IWindow {
+  WindowCocoaInternal* m_nsWindow;
+  GraphicsContextCocoa* m_gfxCtx;
+  EMouseCursor m_cursor = EMouseCursor::None;
 
 public:
 
-    void setup(std::string_view title, MetalContext* metalCtx)
-    {
-        dispatch_sync(dispatch_get_main_queue(),
-        ^{
-            std::shared_ptr<boo::WindowCocoa> windowPtr =
-                std::static_pointer_cast<boo::WindowCocoa>(shared_from_this());
-            m_nsWindow = [[WindowCocoaInternal alloc] initWithBooWindow:windowPtr title:title];
-            m_gfxCtx = static_cast<GraphicsContextCocoa*>(
-                _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI::Metal,
-                                              this, metalCtx));
-            m_gfxCtx->initializeContext(nullptr);
-        });
-        m_gfxCtx->getMainContextDataFactory();
+  void setup(std::string_view title, MetalContext* metalCtx) {
+    dispatch_sync(dispatch_get_main_queue(),
+                  ^{
+                    std::shared_ptr<boo::WindowCocoa> windowPtr =
+                      std::static_pointer_cast<boo::WindowCocoa>(shared_from_this());
+                    m_nsWindow = [[WindowCocoaInternal alloc] initWithBooWindow:windowPtr title:title];
+                    m_gfxCtx = static_cast<GraphicsContextCocoa*>(
+                      _GraphicsContextCocoaMetalNew(IGraphicsContext::EGraphicsAPI::Metal,
+                                                    this, metalCtx));
+                    m_gfxCtx->initializeContext(nullptr);
+                  });
+    m_gfxCtx->getMainContextDataFactory();
+  }
+
+  void _clearWindow() {
+    m_nsWindow = nullptr;
+  }
+
+  ~WindowCocoa() {
+    APP->_deletedWindow(this);
+  }
+
+  void setCallback(IWindowCallback* cb) {
+    m_gfxCtx->_setCallback(cb);
+  }
+
+  void closeWindow() {
+    dispatch_sync(dispatch_get_main_queue(),
+                  ^{
+                    [m_nsWindow close];
+                  });
+  }
+
+  void showWindow() {
+    dispatch_sync(dispatch_get_main_queue(),
+                  ^{
+                    [m_nsWindow makeKeyAndOrderFront:nil];
+                  });
+  }
+
+  void hideWindow() {
+    dispatch_sync(dispatch_get_main_queue(),
+                  ^{
+                    [m_nsWindow orderOut:nil];
+                  });
+  }
+
+  std::string getTitle() {
+    return [[m_nsWindow title] UTF8String];
+  }
+
+  void setTitle(std::string_view title) {
+    dispatch_sync(dispatch_get_main_queue(),
+                  ^{
+                    [m_nsWindow setTitle:[NSString stringWithUTF8String:title.data()]];
+                  });
+  }
+
+  void setCursor(EMouseCursor cursor) {
+    if (cursor == m_cursor)
+      return;
+    m_cursor = cursor;
+    dispatch_async(dispatch_get_main_queue(),
+                   ^{
+                     switch (cursor) {
+                     case EMouseCursor::Pointer:
+                       [[NSCursor arrowCursor] set];
+                       break;
+                     case EMouseCursor::HorizontalArrow:
+                       [[NSCursor resizeLeftRightCursor] set];
+                       break;
+                     case EMouseCursor::VerticalArrow:
+                       [[NSCursor resizeUpDownCursor] set];
+                       break;
+                     case EMouseCursor::IBeam:
+                       [[NSCursor IBeamCursor] set];
+                       break;
+                     case EMouseCursor::Crosshairs:
+                       [[NSCursor crosshairCursor] set];
+                       break;
+                     default:
+                       break;
+                     }
+                   });
+  }
+
+  void setWaitCursor(bool wait) {}
+
+  void setWindowFrameDefault() {
+    dispatch_sync(dispatch_get_main_queue(),
+                  ^{
+                    NSScreen* mainScreen = [NSScreen mainScreen];
+                    NSRect scrFrame = mainScreen.frame;
+                    float x_off = scrFrame.size.width / 3.0;
+                    float y_off = scrFrame.size.height / 3.0;
+                    [m_nsWindow setFrame:NSMakeRect(x_off, y_off, x_off * 2.0, y_off * 2.0) display:NO];
+                  });
+  }
+
+  void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const {
+    NSView* view = [m_nsWindow contentView];
+    NSRect wFrame = [view convertRectToBacking:view.frame];
+    xOut = wFrame.origin.x;
+    yOut = wFrame.origin.y;
+    wOut = wFrame.size.width;
+    hOut = wFrame.size.height;
+  }
+
+  void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const {
+    NSView* view = [m_nsWindow contentView];
+    NSRect wFrame = [view convertRectToBacking:view.frame];
+    xOut = wFrame.origin.x;
+    yOut = wFrame.origin.y;
+    wOut = wFrame.size.width;
+    hOut = wFrame.size.height;
+  }
+
+  void setWindowFrame(float x, float y, float w, float h) {
+    dispatch_sync(dispatch_get_main_queue(),
+                  ^{
+                    [m_nsWindow setContentSize:NSMakeSize(w, h)];
+                    [m_nsWindow setFrameOrigin:NSMakePoint(x, y)];
+                  });
+  }
+
+  void setWindowFrame(int x, int y, int w, int h) {
+    dispatch_sync(dispatch_get_main_queue(),
+                  ^{
+                    [m_nsWindow setContentSize:NSMakeSize(w, h)];
+                    [m_nsWindow setFrameOrigin:NSMakePoint(x, y)];
+                  });
+  }
+
+  float getVirtualPixelFactor() const {
+    return [m_nsWindow backingScaleFactor];
+  }
+
+  bool isFullscreen() const {
+    return ([m_nsWindow styleMask] & NSWindowStyleMaskFullScreen) == NSWindowStyleMaskFullScreen;
+  }
+
+  void setFullscreen(bool fs) {
+    if ((fs && !isFullscreen()) || (!fs && isFullscreen()))
+      dispatch_sync(dispatch_get_main_queue(),
+                    ^{
+                      [m_nsWindow toggleFullScreen:nil];
+                    });
+  }
+
+  void claimKeyboardFocus(const int coord[2]) {
+    BooCocoaResponder* resp = m_gfxCtx->responder();
+    if (resp) {
+      dispatch_async(dispatch_get_main_queue(),
+                     ^{
+                       if (coord)
+                         [resp->textContext activate];
+                       else
+                         [resp->textContext deactivate];
+                     });
     }
+  }
 
-    void _clearWindow()
-    {
-        m_nsWindow = nullptr;
-    }
+  bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz) {
+    NSPasteboard* pb = [NSPasteboard generalPasteboard];
+    [pb clearContents];
+    NSData* d = [NSData dataWithBytes:data length:sz];
+    [pb setData:d forType:ClipboardTypes[int(type)]];
+    return true;
+  }
 
-    ~WindowCocoa()
-    {
-        APP->_deletedWindow(this);
-    }
+  std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz) {
+    NSPasteboard* pb = [NSPasteboard generalPasteboard];
+    NSData* d = [pb dataForType:ClipboardTypes[int(type)]];
+    if (!d)
+      return std::unique_ptr<uint8_t[]>();
+    sz = [d length];
+    std::unique_ptr<uint8_t[]> ret(new uint8_t[sz]);
+    [d getBytes:ret.get() length:sz];
+    return ret;
+  }
 
-    void setCallback(IWindowCallback* cb)
-    {
-        m_gfxCtx->_setCallback(cb);
-    }
+  ETouchType getTouchType() const {
+    return ETouchType::Trackpad;
+  }
 
-    void closeWindow()
-    {
-        dispatch_sync(dispatch_get_main_queue(),
-        ^{
-            [m_nsWindow close];
-        });
-    }
-
-    void showWindow()
-    {
-        dispatch_sync(dispatch_get_main_queue(),
-        ^{
-            [m_nsWindow makeKeyAndOrderFront:nil];
-        });
-    }
-
-    void hideWindow()
-    {
-        dispatch_sync(dispatch_get_main_queue(),
-        ^{
-            [m_nsWindow orderOut:nil];
-        });
-    }
-
-    std::string getTitle()
-    {
-        return [[m_nsWindow title] UTF8String];
-    }
-
-    void setTitle(std::string_view title)
-    {
-        dispatch_sync(dispatch_get_main_queue(),
-        ^{
-            [m_nsWindow setTitle:[NSString stringWithUTF8String:title.data()]];
-        });
-    }
-
-    void setCursor(EMouseCursor cursor)
-    {
-        if (cursor == m_cursor)
-            return;
-        m_cursor = cursor;
-        dispatch_async(dispatch_get_main_queue(),
-        ^{
-            switch (cursor)
-            {
-            case EMouseCursor::Pointer:
-                [[NSCursor arrowCursor] set];
-                break;
-            case EMouseCursor::HorizontalArrow:
-                [[NSCursor resizeLeftRightCursor] set];
-                break;
-            case EMouseCursor::VerticalArrow:
-                [[NSCursor resizeUpDownCursor] set];
-                break;
-            case EMouseCursor::IBeam:
-                [[NSCursor IBeamCursor] set];
-                break;
-            case EMouseCursor::Crosshairs:
-                [[NSCursor crosshairCursor] set];
-                break;
-            default: break;
-            }
-        });
-    }
-
-    void setWaitCursor(bool wait) {}
-
-    void setWindowFrameDefault()
-    {
-        dispatch_sync(dispatch_get_main_queue(),
-        ^{
-            NSScreen* mainScreen = [NSScreen mainScreen];
-            NSRect scrFrame = mainScreen.frame;
-            float x_off = scrFrame.size.width / 3.0;
-            float y_off = scrFrame.size.height / 3.0;
-            [m_nsWindow setFrame:NSMakeRect(x_off, y_off, x_off * 2.0, y_off * 2.0) display:NO];
-        });
-    }
-
-    void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const
-    {
-        NSView* view = [m_nsWindow contentView];
-        NSRect wFrame = [view convertRectToBacking:view.frame];
-        xOut = wFrame.origin.x;
-        yOut = wFrame.origin.y;
-        wOut = wFrame.size.width;
-        hOut = wFrame.size.height;
-    }
-
-    void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const
-    {
-        NSView* view = [m_nsWindow contentView];
-        NSRect wFrame = [view convertRectToBacking:view.frame];
-        xOut = wFrame.origin.x;
-        yOut = wFrame.origin.y;
-        wOut = wFrame.size.width;
-        hOut = wFrame.size.height;
-    }
-
-    void setWindowFrame(float x, float y, float w, float h)
-    {
-        dispatch_sync(dispatch_get_main_queue(),
-        ^{
-            [m_nsWindow setContentSize:NSMakeSize(w, h)];
-            [m_nsWindow setFrameOrigin:NSMakePoint(x, y)];
-        });
-    }
-
-    void setWindowFrame(int x, int y, int w, int h)
-    {
-        dispatch_sync(dispatch_get_main_queue(),
-        ^{
-            [m_nsWindow setContentSize:NSMakeSize(w, h)];
-            [m_nsWindow setFrameOrigin:NSMakePoint(x, y)];
-        });
-    }
-
-    float getVirtualPixelFactor() const
-    {
-        return [m_nsWindow backingScaleFactor];
-    }
-
-    bool isFullscreen() const
-    {
-        return ([m_nsWindow styleMask] & NSWindowStyleMaskFullScreen) == NSWindowStyleMaskFullScreen;
-    }
-
-    void setFullscreen(bool fs)
-    {
-        if ((fs && !isFullscreen()) || (!fs && isFullscreen()))
-            dispatch_sync(dispatch_get_main_queue(),
-            ^{
-                [m_nsWindow toggleFullScreen:nil];
-            });
-    }
-
-    void claimKeyboardFocus(const int coord[2])
-    {
-        BooCocoaResponder* resp = m_gfxCtx->responder();
-        if (resp)
-        {
-            dispatch_async(dispatch_get_main_queue(),
-            ^{
-                if (coord)
-                    [resp->textContext activate];
-                else
-                    [resp->textContext deactivate];
-            });
-        }
-    }
-
-    bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz)
-    {
-        NSPasteboard* pb = [NSPasteboard generalPasteboard];
-        [pb clearContents];
-        NSData* d = [NSData dataWithBytes:data length:sz];
-        [pb setData:d forType:ClipboardTypes[int(type)]];
-        return true;
-    }
-
-    std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz)
-    {
-        NSPasteboard* pb = [NSPasteboard generalPasteboard];
-        NSData* d = [pb dataForType:ClipboardTypes[int(type)]];
-        if (!d)
-            return std::unique_ptr<uint8_t[]>();
-        sz = [d length];
-        std::unique_ptr<uint8_t[]> ret(new uint8_t[sz]);
-        [d getBytes:ret.get() length:sz];
-        return ret;
-    }
-
-    ETouchType getTouchType() const
-    {
-        return ETouchType::Trackpad;
-    }
-
-    void setStyle(EWindowStyle style)
-    {
+  void setStyle(EWindowStyle style) {
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
-        if ((style & EWindowStyle::Titlebar) != EWindowStyle::None)
-            m_nsWindow.titleVisibility = NSWindowTitleVisible;
-        else
-            m_nsWindow.titleVisibility = NSWindowTitleHidden;
+    if ((style & EWindowStyle::Titlebar) != EWindowStyle::None)
+      m_nsWindow.titleVisibility = NSWindowTitleVisible;
+    else
+      m_nsWindow.titleVisibility = NSWindowTitleHidden;
 #endif
 
-        if ((style & EWindowStyle::Close) != EWindowStyle::None)
-            m_nsWindow.styleMask |= NSWindowStyleMaskClosable;
-        else
-            m_nsWindow.styleMask &= ~NSWindowStyleMaskClosable;
+    if ((style & EWindowStyle::Close) != EWindowStyle::None)
+      m_nsWindow.styleMask |= NSWindowStyleMaskClosable;
+    else
+      m_nsWindow.styleMask &= ~NSWindowStyleMaskClosable;
 
-        if ((style & EWindowStyle::Resize) != EWindowStyle::None)
-            m_nsWindow.styleMask |= NSWindowStyleMaskResizable;
-        else
-            m_nsWindow.styleMask &= ~NSWindowStyleMaskResizable;
-    }
+    if ((style & EWindowStyle::Resize) != EWindowStyle::None)
+      m_nsWindow.styleMask |= NSWindowStyleMaskResizable;
+    else
+      m_nsWindow.styleMask &= ~NSWindowStyleMaskResizable;
+  }
 
-    EWindowStyle getStyle() const
-    {
-        EWindowStyle retval = EWindowStyle::None;
+  EWindowStyle getStyle() const {
+    EWindowStyle retval = EWindowStyle::None;
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
-        retval |= m_nsWindow.titleVisibility == NSWindowTitleVisible ? EWindowStyle::Titlebar : EWindowStyle::None;
+    retval |= m_nsWindow.titleVisibility == NSWindowTitleVisible ? EWindowStyle::Titlebar : EWindowStyle::None;
 #else
-        retval |= EWindowStyle::Titlebar;
+    retval |= EWindowStyle::Titlebar;
 #endif
-        retval |= (m_nsWindow.styleMask & NSWindowStyleMaskClosable) ? EWindowStyle::Close : EWindowStyle::None;
-        retval |= (m_nsWindow.styleMask & NSWindowStyleMaskResizable) ? EWindowStyle::Resize: EWindowStyle::None;
-        return retval;
-    }
+    retval |= (m_nsWindow.styleMask & NSWindowStyleMaskClosable) ? EWindowStyle::Close : EWindowStyle::None;
+    retval |= (m_nsWindow.styleMask & NSWindowStyleMaskResizable) ? EWindowStyle::Resize : EWindowStyle::None;
+    return retval;
+  }
 
-    void setTouchBarProvider(void* provider)
-    {
-        dispatch_sync(dispatch_get_main_queue(),
-        ^{
-            [m_nsWindow setTouchBarProvider:(__bridge_transfer id)provider];
-        });
-    }
+  void setTouchBarProvider(void* provider) {
+    dispatch_sync(dispatch_get_main_queue(),
+                  ^{
+                    [m_nsWindow setTouchBarProvider:(__bridge_transfer id) provider];
+                  });
+  }
 
-    void waitForRetrace()
-    {
-        static_cast<GraphicsContextCocoa*>(m_gfxCtx)->waitForRetrace();
-    }
+  void waitForRetrace() {
+    static_cast<GraphicsContextCocoa*>(m_gfxCtx)->waitForRetrace();
+  }
 
-    uintptr_t getPlatformHandle() const
-    {
-        return (uintptr_t)m_nsWindow;
-    }
+  uintptr_t getPlatformHandle() const {
+    return (uintptr_t) m_nsWindow;
+  }
 
-    IGraphicsCommandQueue* getCommandQueue()
-    {
-        return m_gfxCtx->getCommandQueue();
-    }
+  IGraphicsCommandQueue* getCommandQueue() {
+    return m_gfxCtx->getCommandQueue();
+  }
 
-    IGraphicsDataFactory* getDataFactory()
-    {
-        return m_gfxCtx->getDataFactory();
-    }
+  IGraphicsDataFactory* getDataFactory() {
+    return m_gfxCtx->getDataFactory();
+  }
 
-    IGraphicsDataFactory* getMainContextDataFactory()
-    {
-        return m_gfxCtx->getMainContextDataFactory();
-    }
+  IGraphicsDataFactory* getMainContextDataFactory() {
+    return m_gfxCtx->getMainContextDataFactory();
+  }
 
-    IGraphicsDataFactory* getLoadContextDataFactory()
-    {
-        return m_gfxCtx->getLoadContextDataFactory();
-    }
+  IGraphicsDataFactory* getLoadContextDataFactory() {
+    return m_gfxCtx->getLoadContextDataFactory();
+  }
 
 };
 
-std::shared_ptr<IWindow> _WindowCocoaNew(SystemStringView title, MetalContext* metalCtx)
-{
-    auto ret = std::make_shared<WindowCocoa>();
-    ret->setup(title, metalCtx);
-    return ret;
+std::shared_ptr<IWindow> _WindowCocoaNew(SystemStringView title, MetalContext* metalCtx) {
+  auto ret = std::make_shared<WindowCocoa>();
+  ret->setup(title, metalCtx);
+  return ret;
 }
 
 }
 
 @implementation WindowCocoaInternal
-- (id)initWithBooWindow:(std::shared_ptr<boo::WindowCocoa>&)bw title:(std::string_view)title
-{
-    self = [self initWithContentRect:[self genFrameDefault]
-                           styleMask:NSWindowStyleMaskTitled|
-                                     NSWindowStyleMaskClosable|
-                                     NSWindowStyleMaskMiniaturizable|
-                                     NSWindowStyleMaskResizable
-                             backing:NSBackingStoreBuffered
-                               defer:YES];
-    self.delegate = self;
-    self.releasedWhenClosed = NO;
-    self.title = [NSString stringWithUTF8String:title.data()];
+- (id)initWithBooWindow:(std::shared_ptr<boo::WindowCocoa>&)bw title:(std::string_view)title {
+  self = [self initWithContentRect:[self genFrameDefault]
+                         styleMask:NSWindowStyleMaskTitled |
+                                   NSWindowStyleMaskClosable |
+                                   NSWindowStyleMaskMiniaturizable |
+                                   NSWindowStyleMaskResizable
+                           backing:NSBackingStoreBuffered
+                             defer:YES];
+  self.delegate = self;
+  self.releasedWhenClosed = NO;
+  self.title = [NSString stringWithUTF8String:title.data()];
 
-    NSString* titleImgPath = [[NSBundle mainBundle] pathForResource:@"mainicon" ofType:@"icns"];
-    NSImage* titleImg = [[NSImage alloc] initByReferencingFile:titleImgPath];
-    [self setRepresentedURL:[NSURL URLWithString:@""]];
-    NSButton* iconButton = [self standardWindowButton:NSWindowDocumentIconButton];
-    [iconButton setImage:titleImg];
+  NSString* titleImgPath = [[NSBundle mainBundle] pathForResource:@"mainicon" ofType:@"icns"];
+  NSImage* titleImg = [[NSImage alloc] initByReferencingFile:titleImgPath];
+  [self setRepresentedURL:[NSURL URLWithString:@""]];
+  NSButton* iconButton = [self standardWindowButton:NSWindowDocumentIconButton];
+  [iconButton setImage:titleImg];
 
-    booWindow = bw;
-    return self;
+  booWindow = bw;
+  return self;
 }
-- (BOOL)window:(NSWindow*)window shouldPopUpDocumentPathMenu:(NSMenu*)menu
-{
-    return NO;
+
+- (BOOL)window:(NSWindow*)window shouldPopUpDocumentPathMenu:(NSMenu*)menu {
+  return NO;
 }
-- (void)setFrameDefault
-{
-    [self setFrame:[self genFrameDefault] display:NO];
+
+- (void)setFrameDefault {
+  [self setFrame:[self genFrameDefault] display:NO];
 }
-- (NSRect)genFrameDefault
-{
-    NSScreen* mainScreen = [NSScreen mainScreen];
-    NSRect scrFrame = mainScreen.frame;
-    float width = scrFrame.size.width * 2.0 / 3.0;
-    float height = scrFrame.size.height * 2.0 / 3.0;
-    return NSMakeRect((scrFrame.size.width - width) / 2.0,
-                      (scrFrame.size.height - height) / 2.0,
-                      width, height);
+
+- (NSRect)genFrameDefault {
+  NSScreen* mainScreen = [NSScreen mainScreen];
+  NSRect scrFrame = mainScreen.frame;
+  float width = scrFrame.size.width * 2.0 / 3.0;
+  float height = scrFrame.size.height * 2.0 / 3.0;
+  return NSMakeRect((scrFrame.size.width - width) / 2.0,
+                    (scrFrame.size.height - height) / 2.0,
+                    width, height);
 }
-- (void)setTouchBarProvider:(id<NSTouchBarProvider>)provider
-{
-    touchBarProvider = provider;
-    self.touchBar = nil;
+
+- (void)setTouchBarProvider:(id <NSTouchBarProvider>)provider {
+  touchBarProvider = provider;
+  self.touchBar = nil;
 }
-- (NSTouchBar*)makeTouchBar
-{
-    return [touchBarProvider makeTouchBar];
+
+- (NSTouchBar*)makeTouchBar {
+  return [touchBarProvider makeTouchBar];
 }
-- (void)close
-{
-    [super close];
-    booWindow->_clearWindow();
+
+- (void)close {
+  [super close];
+  booWindow->_clearWindow();
 }
-- (BOOL)acceptsFirstResponder
-{
-    return YES;
+
+- (BOOL)acceptsFirstResponder {
+  return YES;
 }
-- (BOOL)acceptsMouseMovedEvents
-{
-    return YES;
+
+- (BOOL)acceptsMouseMovedEvents {
+  return YES;
 }
-- (NSWindowCollectionBehavior)collectionBehavior
-{
-    return NSWindowCollectionBehaviorFullScreenPrimary;
+
+- (NSWindowCollectionBehavior)collectionBehavior {
+  return NSWindowCollectionBehaviorFullScreenPrimary;
 }
 @end
 
