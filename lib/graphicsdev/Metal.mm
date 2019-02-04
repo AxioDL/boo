@@ -1189,13 +1189,17 @@ struct MetalCommandQueue : IGraphicsCommandQueue {
 
   MetalShaderDataBinding* m_boundData = nullptr;
 
+  void _setShaderDataBinding(MetalShaderDataBinding* cbind) {
+    cbind->bind(m_enc, m_fillBuf);
+    m_boundData = cbind;
+    [m_enc setFragmentSamplerStates:m_samplers withRange:NSMakeRange(0, 5)];
+    [m_enc setVertexSamplerStates:m_samplers withRange:NSMakeRange(0, 5)];
+  }
+
   void setShaderDataBinding(const ObjToken<IShaderDataBinding>& binding) {
     @autoreleasepool {
       MetalShaderDataBinding* cbind = binding.cast<MetalShaderDataBinding>();
-      cbind->bind(m_enc, m_fillBuf);
-      m_boundData = cbind;
-      [m_enc setFragmentSamplerStates:m_samplers withRange:NSMakeRange(0, 5)];
-      [m_enc setVertexSamplerStates:m_samplers withRange:NSMakeRange(0, 5)];
+      _setShaderDataBinding(cbind);
     }
   }
 
@@ -1347,6 +1351,8 @@ struct MetalCommandQueue : IGraphicsCommandQueue {
       m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:clearDepth ? tex->m_clearDepthPassDesc : tex->m_passDesc];
       [m_enc setFrontFacingWinding:MTLWindingCounterClockwise];
 
+      if (m_boundData)
+        _setShaderDataBinding(m_boundData);
       if (m_boundVp.width || m_boundVp.height)
         [m_enc setViewport:m_boundVp];
       if (m_boundScissor.width || m_boundScissor.height)
