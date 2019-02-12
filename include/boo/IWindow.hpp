@@ -251,6 +251,7 @@ public:
   virtual void setCursor(EMouseCursor cursor) = 0;
   virtual void setWaitCursor(bool wait) = 0;
 
+  virtual double getWindowRefreshRate() const = 0;
   virtual void setWindowFrameDefault() = 0;
   virtual void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const = 0;
   virtual void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const = 0;
@@ -273,7 +274,7 @@ public:
   virtual bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz) = 0;
   virtual std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz) = 0;
 
-  virtual void waitForRetrace() = 0;
+  virtual int waitForRetrace() = 0;
 
   virtual uintptr_t getPlatformHandle() const = 0;
   virtual bool _incomingEvent(void* event) {

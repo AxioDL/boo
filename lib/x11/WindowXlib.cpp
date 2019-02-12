@@ -11,6 +11,7 @@
 #endif
 
 #include <limits.h>
+#include <unistd.h>
 #include <cstdlib>
 #include <cstdio>
 #include <cstdint>
@@ -57,8 +58,6 @@
 
 typedef GLXContext (*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
 static glXCreateContextAttribsARBProc glXCreateContextAttribsARB = 0;
-typedef int (*glXWaitVideoSyncSGIProc)(int divisor, int remainder, unsigned int* count);
-static glXWaitVideoSyncSGIProc glXWaitVideoSyncSGI = 0;
 static bool s_glxError;
 static int ctxErrorHandler(Display* dpy, XErrorEvent* ev) {
   s_glxError = true;
@@ -262,11 +261,6 @@ struct GraphicsContextXlib : IGraphicsContext {
   GLContext* m_glCtx;
   Display* m_xDisp;
 
-  std::mutex m_initmt;
-  std::condition_variable m_initcv;
-  std::mutex m_vsyncmt;
-  std::condition_variable m_vsynccv;
-
   GraphicsContextXlib(EGraphicsAPI api, EPixelFormat pf, IWindow* parentWindow, Display* disp, GLContext* glCtx)
   : m_api(api), m_pf(pf), m_parentWindow(parentWindow), m_glCtx(glCtx), m_xDisp(disp) {}
   virtual void destroy() = 0;
@@ -286,9 +280,6 @@ struct GraphicsContextXlibGLX : GraphicsContextXlib {
   std::unique_ptr<IGraphicsCommandQueue> m_commandQueue;
   GLXContext m_mainCtx = 0;
   GLXContext m_loadCtx = 0;
-
-  std::thread m_vsyncThread;
-  bool m_vsyncRunning;
 
 public:
   IWindowCallback* m_callback;
@@ -371,10 +362,6 @@ public:
       glXDestroyContext(m_xDisp, m_loadCtx);
       m_loadCtx = nullptr;
     }
-    if (m_vsyncRunning) {
-      m_vsyncRunning = false;
-      m_vsyncThread.join();
-    }
   }
 
   ~GraphicsContextXlibGLX() { destroy(); }
@@ -400,11 +387,6 @@ public:
       if (!glXCreateContextAttribsARB)
         Log.report(logvisor::Fatal, "unable to resolve glXCreateContextAttribsARB");
     }
-    if (!glXWaitVideoSyncSGI) {
-      glXWaitVideoSyncSGI = (glXWaitVideoSyncSGIProc)glXGetProcAddressARB((const GLubyte*)"glXWaitVideoSyncSGI");
-      if (!glXWaitVideoSyncSGI)
-        Log.report(logvisor::Fatal, "unable to resolve glXWaitVideoSyncSGI");
-    }
 
     s_glxError = false;
     XErrorHandler oldHandler = XSetErrorHandler(ctxErrorHandler);
@@ -426,50 +408,6 @@ public:
     if (glewInit() != GLEW_OK)
       Log.report(logvisor::Fatal, "glewInit failed");
     glXMakeCurrent(m_xDisp, 0, 0);
-
-    /* Spawn vsync thread */
-    m_vsyncRunning = true;
-    std::unique_lock<std::mutex> outerLk(m_initmt);
-    m_vsyncThread = std::thread([&]() {
-      Display* vsyncDisp;
-      GLXContext vsyncCtx;
-      {
-        std::unique_lock<std::mutex> innerLk(m_initmt);
-
-        vsyncDisp = XOpenDisplay(0);
-        if (!vsyncDisp)
-          Log.report(logvisor::Fatal, "unable to open new vsync display");
-        XLockDisplay(vsyncDisp);
-
-        static int attributeList[] = {GLX_RGBA, GLX_DOUBLEBUFFER, GLX_RED_SIZE, 1, GLX_GREEN_SIZE, 1, GLX_BLUE_SIZE, 1,
-                                      0};
-        XVisualInfo* vi = glXChooseVisual(vsyncDisp, DefaultScreen(vsyncDisp), attributeList);
-
-        vsyncCtx = glXCreateContext(vsyncDisp, vi, nullptr, True);
-        if (!vsyncCtx)
-          Log.report(logvisor::Fatal, "unable to make new vsync GLX context");
-
-        if (!glXMakeCurrent(vsyncDisp, DefaultRootWindow(vsyncDisp), vsyncCtx))
-          Log.report(logvisor::Fatal, "unable to make vsync context current");
-      }
-      m_initcv.notify_one();
-
-      while (m_vsyncRunning) {
-        {
-          unsigned int sync;
-          int err = glXWaitVideoSyncSGI(1, 0, &sync);
-          if (err)
-            Log.report(logvisor::Fatal, "wait err");
-        }
-        m_vsynccv.notify_one();
-      }
-
-      glXMakeCurrent(vsyncDisp, 0, nullptr);
-      glXDestroyContext(vsyncDisp, vsyncCtx);
-      XUnlockDisplay(vsyncDisp);
-      XCloseDisplay(vsyncDisp);
-    });
-    m_initcv.wait(outerLk);
 
     XUnlockDisplay(m_xDisp);
     m_commandQueue = _NewGLCommandQueue(this, m_glCtx);
@@ -546,9 +484,6 @@ struct GraphicsContextXlibVulkan : GraphicsContextXlib {
   std::unique_ptr<IGraphicsDataFactory> m_dataFactory;
   std::unique_ptr<IGraphicsCommandQueue> m_commandQueue;
 
-  std::thread m_vsyncThread;
-  std::atomic_bool m_vsyncRunning;
-
   static void ThrowIfFailed(VkResult res) {
     if (res != VK_SUCCESS)
       Log.report(logvisor::Fatal, "%d\n", res);
@@ -576,12 +511,6 @@ public:
       vk::DestroySurfaceKHR(m_ctx->m_instance, m_surface, nullptr);
       m_surface = VK_NULL_HANDLE;
     }
-
-    if (m_vsyncRunning.load()) {
-      m_vsyncRunning.store(false);
-      if (m_vsyncThread.joinable())
-        m_vsyncThread.join();
-    }
   }
 
   ~GraphicsContextXlibVulkan() { destroy(); }
@@ -606,12 +535,6 @@ public:
   }
 
   bool initializeContext(void* getVkProc) {
-    if (!glXWaitVideoSyncSGI) {
-      glXWaitVideoSyncSGI = (glXWaitVideoSyncSGIProc)glXGetProcAddressARB((const GLubyte*)"glXWaitVideoSyncSGI");
-      if (!glXWaitVideoSyncSGI)
-        Log.report(logvisor::Fatal, "unable to resolve glXWaitVideoSyncSGI");
-    }
-
     if (m_ctx->m_instance == VK_NULL_HANDLE)
       m_ctx->initVulkan(APP->getUniqueName(), PFN_vkGetInstanceProcAddr(getVkProc));
 
@@ -700,49 +623,6 @@ public:
 
     m_ctx->initSwapChain(*m_windowCtx, m_surface, m_format, m_colorspace);
 
-    /* Spawn vsync thread */
-    m_vsyncRunning.store(true);
-    std::unique_lock<std::mutex> outerLk(m_initmt);
-    m_vsyncThread = std::thread([&]() {
-      logvisor::RegisterThreadName("Boo VSync");
-      Display* vsyncDisp;
-      GLXContext vsyncCtx;
-      {
-        std::unique_lock<std::mutex> innerLk(m_initmt);
-
-        vsyncDisp = XOpenDisplay(0);
-        if (!vsyncDisp)
-          Log.report(logvisor::Fatal, "unable to open new vsync display");
-        XLockDisplay(vsyncDisp);
-
-        static int attributeList[] = {GLX_RGBA, GLX_DOUBLEBUFFER, GLX_RED_SIZE, 1, GLX_GREEN_SIZE, 1, GLX_BLUE_SIZE, 1,
-                                      0};
-        XVisualInfo* vi = glXChooseVisual(vsyncDisp, DefaultScreen(vsyncDisp), attributeList);
-
-        vsyncCtx = glXCreateContext(vsyncDisp, vi, nullptr, True);
-        if (!vsyncCtx)
-          Log.report(logvisor::Fatal, "unable to make new vsync GLX context");
-
-        if (!glXMakeCurrent(vsyncDisp, DefaultRootWindow(vsyncDisp), vsyncCtx))
-          Log.report(logvisor::Fatal, "unable to make vsync context current");
-      }
-      m_initcv.notify_one();
-
-      while (m_vsyncRunning.load()) {
-        unsigned int sync;
-        int err = glXWaitVideoSyncSGI(1, 0, &sync);
-        if (err)
-          Log.report(logvisor::Fatal, "wait err");
-        m_vsynccv.notify_one();
-      }
-
-      glXMakeCurrent(vsyncDisp, 0, nullptr);
-      glXDestroyContext(vsyncDisp, vsyncCtx);
-      XUnlockDisplay(vsyncDisp);
-      XCloseDisplay(vsyncDisp);
-    });
-    m_initcv.wait(outerLk);
-
     m_dataFactory = _NewVulkanDataFactory(this, m_ctx);
     m_commandQueue = _NewVulkanCommandQueue(m_ctx, m_ctx->m_windows[m_parentWindow].get(), this);
     m_commandQueue->startRenderer();
@@ -766,7 +646,7 @@ public:
 };
 #endif
 
-class WindowXlib : public IWindow {
+class WindowXlib final : public IWindow {
   Display* m_xDisp;
   IWindowCallback* m_callback;
   Colormap m_colormapId;
@@ -775,6 +655,9 @@ class WindowXlib : public IWindow {
   XIC m_xIC = nullptr;
   std::unique_ptr<GraphicsContextXlib> m_gfxCtx;
   uint32_t m_visualId;
+
+  struct timespec m_waitPeriod = {0, static_cast<long int>(1000000000.0/60.0)};
+  struct timespec m_lastWaitTime = {};
 
   /* Key state trackers (for auto-repeat detection) */
   std::unordered_set<unsigned long> m_charKeys;
@@ -930,6 +813,9 @@ public:
       setStyle(EWindowStyle::Default);
       setCursor(EMouseCursor::Pointer);
       setWindowFrameDefault();
+      double hz = getWindowRefreshRate();
+      uint64_t nanos = uint64_t(1000000000.0 / hz);
+      m_waitPeriod = {nanos / 1000000000, nanos % 1000000000};
       XFlush(m_xDisp);
 
       if (!m_gfxCtx->initializeContext(vulkanHandle)) {
@@ -1017,6 +903,37 @@ public:
       setCursor(m_cursor);
       m_cursorWait = false;
     }
+  }
+
+  static double calculateRefreshRate(const XRRModeInfo& mi) {
+    if (mi.hTotal && mi.vTotal)
+      return double(mi.dotClock) / (double(mi.hTotal) * double(mi.vTotal));
+    else
+      return 60.0;
+  }
+
+  double getWindowRefreshRate() const {
+    double ret = 60.0;
+    int nmonitors;
+    Screen* screen = DefaultScreenOfDisplay(m_xDisp);
+    XRRMonitorInfo* mInfo = XRRGetMonitors(m_xDisp, screen->root, true, &nmonitors);
+    if (nmonitors) {
+      XRRScreenResources* res = XRRGetScreenResourcesCurrent(m_xDisp, screen->root);
+      XRROutputInfo* oinfo = XRRGetOutputInfo(m_xDisp, res, *mInfo->outputs);
+      XRRCrtcInfo* ci = XRRGetCrtcInfo(m_xDisp, res, oinfo->crtc);
+      for (int i = 0; i < res->nmode; ++i) {
+        const XRRModeInfo& mode = res->modes[i];
+        if (mode.id == ci->mode) {
+          ret = calculateRefreshRate(mode);
+          break;
+        }
+      }
+      XRRFreeCrtcInfo(ci);
+      XRRFreeOutputInfo(oinfo);
+      XRRFreeScreenResources(res);
+    }
+    XRRFreeMonitors(mInfo);
+    return ret;
   }
 
   void setWindowFrameDefault() {
@@ -1279,9 +1196,77 @@ public:
     XSendEvent(m_xDisp, se->requestor, False, 0, &reply);
   }
 
-  void waitForRetrace() {
-    std::unique_lock<std::mutex> lk(m_gfxCtx->m_vsyncmt);
-    m_gfxCtx->m_vsynccv.wait(lk);
+#define NSEC_PER_SEC 1000000000
+
+  static void set_normalized_timespec(struct timespec& ts, time_t sec, int64_t nsec) {
+    while (nsec >= NSEC_PER_SEC) {
+      nsec -= NSEC_PER_SEC;
+      ++sec;
+    }
+    while (nsec < 0) {
+      nsec += NSEC_PER_SEC;
+      --sec;
+    }
+    ts.tv_sec = sec;
+    ts.tv_nsec = nsec;
+  }
+
+  static struct timespec timespec_add(const struct timespec& lhs, const struct timespec& rhs) {
+    struct timespec ts_delta;
+    set_normalized_timespec(ts_delta, lhs.tv_sec + rhs.tv_sec,
+                            lhs.tv_nsec + rhs.tv_nsec);
+    return ts_delta;
+  }
+
+  static struct timespec timespec_sub(const struct timespec& lhs, const struct timespec& rhs) {
+    struct timespec ts_delta;
+    set_normalized_timespec(ts_delta, lhs.tv_sec - rhs.tv_sec,
+                            lhs.tv_nsec - rhs.tv_nsec);
+    return ts_delta;
+  }
+
+  static inline long int timespec_compare(const struct timespec& lhs, const struct timespec& rhs)
+  {
+    if (lhs.tv_sec < rhs.tv_sec)
+      return -1;
+    if (lhs.tv_sec > rhs.tv_sec)
+      return 1;
+    return lhs.tv_nsec - rhs.tv_nsec;
+  }
+
+  int waitForRetrace() {
+    struct timespec tp;
+    clock_gettime(CLOCK_REALTIME, &tp);
+    if (!m_lastWaitTime.tv_sec) {
+      /* Initialize reference point */
+      sched_param prio = {75};
+      sched_setscheduler(0, SCHED_RR, &prio);
+      m_lastWaitTime = tp;
+      return 0;
+    }
+
+    m_lastWaitTime = timespec_add(m_lastWaitTime, m_waitPeriod);
+    long int comp = timespec_compare(m_lastWaitTime, tp);
+    if (comp == 0) {
+      /* Exactly at the due date */
+      return 1;
+    } else if (comp > 0) {
+      /* Not at due date yet, sleep here */
+      struct timespec wait_time = timespec_sub(m_lastWaitTime, tp);
+      nanosleep(&wait_time, nullptr);
+      do {
+        clock_gettime(CLOCK_REALTIME, &tp);
+      } while (timespec_compare(m_lastWaitTime, tp) > 0);
+      return 1;
+    } else {
+      /* Missed due date, assign next one and return passed cycle count */
+      int cycles = 0;
+      do {
+        m_lastWaitTime = timespec_add(m_lastWaitTime, m_waitPeriod);
+        ++cycles;
+      } while (timespec_compare(m_lastWaitTime, tp) < 0);
+      return cycles;
+    }
   }
 
   uintptr_t getPlatformHandle() const { return (uintptr_t)m_windowId; }

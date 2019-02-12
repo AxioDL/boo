@@ -914,6 +914,11 @@ public:
     }
   }
 
+  double getWindowRefreshRate() const {
+    /* TODO: Actually get refresh rate */
+    return 60.0;
+  }
+
   void setWindowFrameDefault() {
     MONITORINFO monInfo = {};
     monInfo.cbSize = sizeof(MONITORINFO);
@@ -1063,7 +1068,7 @@ public:
     return std::unique_ptr<uint8_t[]>();
   }
 
-  void waitForRetrace() { m_gfxCtx->m_output->WaitForVBlank(); }
+  int waitForRetrace() { m_gfxCtx->m_output->WaitForVBlank(); return 1; }
 
   uintptr_t getPlatformHandle() const { return uintptr_t(m_hwnd); }
 

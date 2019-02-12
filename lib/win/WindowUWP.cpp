@@ -322,6 +322,11 @@ public:
 
   void setWaitCursor(bool wait) {}
 
+  double getWindowRefreshRate() const {
+    /* TODO: Actually get refresh rate */
+    return 60.0;
+  }
+
   void setWindowFrameDefault() {}
 
   void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const {
@@ -359,10 +364,11 @@ public:
 
   std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz) { return std::unique_ptr<uint8_t[]>(); }
 
-  void waitForRetrace(IAudioVoiceEngine* engine) {
+  int waitForRetrace(IAudioVoiceEngine* engine) {
     if (engine)
       engine->pumpAndMixVoices();
     m_gfxCtx->m_output->WaitForVBlank();
+    return 1;
   }
 
   uintptr_t getPlatformHandle() const { return 0; }

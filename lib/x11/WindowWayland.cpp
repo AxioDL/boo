@@ -73,6 +73,8 @@ struct WindowWayland : IWindow {
 
   void setWaitCursor(bool wait) {}
 
+  double getWindowRefreshRate() const { return 60.0; }
+
   void setWindowFrameDefault() {}
 
   void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const {}
@@ -99,7 +101,7 @@ struct WindowWayland : IWindow {
 
   std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz) { return std::unique_ptr<uint8_t[]>(); }
 
-  void waitForRetrace() {}
+  int waitForRetrace() { return 1; }
 
   uintptr_t getPlatformHandle() const { return 0; }
 

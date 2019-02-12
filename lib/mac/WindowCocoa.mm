@@ -149,9 +149,10 @@ public:
   std::recursive_mutex m_callbackMutex;
   IWindowCallback* m_callback = nullptr;
 
-  void waitForRetrace() {
+  int waitForRetrace() {
     std::unique_lock<std::mutex> lk(m_dlmt);
     m_dlcv.wait(lk);
+    return 1;
   }
 
   virtual BooCocoaResponder* responder() const = 0;
@@ -1321,6 +1322,11 @@ public:
 
   void setWaitCursor(bool wait) {}
 
+  double getWindowRefreshRate() const {
+    /* TODO: Actually get refresh rate */
+    return 60.0;
+  }
+
   void setWindowFrameDefault() {
     dispatch_sync(dispatch_get_main_queue(),
                   ^{
@@ -1456,8 +1462,8 @@ public:
                   });
   }
 
-  void waitForRetrace() {
-    static_cast<GraphicsContextCocoa*>(m_gfxCtx)->waitForRetrace();
+  int waitForRetrace() {
+    return static_cast<GraphicsContextCocoa*>(m_gfxCtx)->waitForRetrace();
   }
 
   uintptr_t getPlatformHandle() const {
