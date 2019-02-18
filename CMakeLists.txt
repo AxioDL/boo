@@ -273,6 +273,10 @@ if(NOT NX)
   add_subdirectory(glslang/SPIRV)
   add_subdirectory(glslang/StandAlone)
 
+  if (NOT MSVC)
+    set_target_properties(glslang SPIRV PROPERTIES COMPILE_FLAGS -Wno-implicit-fallthrough)
+  endif()
+
   target_include_directories(glslang-default-resource-limits
       PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/glslang
   )
