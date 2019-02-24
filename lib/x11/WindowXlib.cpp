@@ -1253,10 +1253,7 @@ public:
     } else if (comp > 0) {
       /* Not at due date yet, sleep here */
       struct timespec wait_time = timespec_sub(m_lastWaitTime, tp);
-      nanosleep(&wait_time, nullptr);
-      do {
-        clock_gettime(CLOCK_REALTIME, &tp);
-      } while (timespec_compare(m_lastWaitTime, tp) > 0);
+      while (nanosleep(&wait_time, &wait_time)) {}
       return 1;
     } else {
       /* Missed due date, assign next one and return passed cycle count */
