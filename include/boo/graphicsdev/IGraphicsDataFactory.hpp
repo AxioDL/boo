@@ -194,7 +194,7 @@ struct AdditionalPipelineInfo {
   bool alphaWrite = false;
   CullMode culling = CullMode::Backface;
   uint32_t patchSize = 0;
-  bool overwriteAlpha = true;
+  bool overwriteAlpha = false;
   bool depthAttachment = true;
 };
 
