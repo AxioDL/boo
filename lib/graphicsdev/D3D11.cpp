@@ -141,6 +141,7 @@ class D3D11TextureS : public GraphicsDataNode<ITextureS> {
     DXGI_FORMAT pfmt = DXGI_FORMAT_UNKNOWN;
     int pxPitchNum = 1;
     int pxPitchDenom = 1;
+    int pxTilePitch = 0;
     bool compressed = false;
     switch (fmt) {
     case TextureFormat::RGBA8:
@@ -159,12 +160,14 @@ class D3D11TextureS : public GraphicsDataNode<ITextureS> {
       compressed = true;
       pxPitchNum = 1;
       pxPitchDenom = 2;
+      pxTilePitch = 2;
       break;
     case TextureFormat::DXT3:
       pfmt = DXGI_FORMAT_BC2_UNORM;
       compressed = true;
       pxPitchNum = 1;
       pxPitchDenom = 1;
+      pxTilePitch = 4;
       break;
     default:
       Log.report(logvisor::Fatal, "unsupported tex format");
@@ -179,7 +182,7 @@ class D3D11TextureS : public GraphicsDataNode<ITextureS> {
       upData[i].SysMemPitch = width * pxPitchNum / pxPitchDenom;
       upData[i].SysMemSlicePitch = upData[i].SysMemPitch * height;
       if (compressed)
-        upData[i].SysMemPitch = width * 2;
+        upData[i].SysMemPitch = width * pxTilePitch;
       dataIt += upData[i].SysMemSlicePitch;
       if (width > 1)
         width /= 2;
