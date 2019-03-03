@@ -1315,6 +1315,11 @@ class VulkanTextureS : public GraphicsDataNode<ITextureS> {
       m_pixelPitchNum = 1;
       m_pixelPitchDenom = 2;
       break;
+    case TextureFormat::DXT3:
+      pfmt = VK_FORMAT_BC2_UNORM_BLOCK;
+      m_pixelPitchNum = 1;
+      m_pixelPitchDenom = 1;
+      break;
     default:
       Log.report(logvisor::Fatal, "unsupported tex format");
     }

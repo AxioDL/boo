@@ -298,6 +298,12 @@ class GLTextureS : public GraphicsDataNode<ITextureS> {
     case TextureFormat::DXT1:
       intFormat = GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
       compressed = true;
+      pxPitch = 2;
+      break;
+    case TextureFormat::DXT3:
+      intFormat = GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
+      compressed = true;
+      pxPitch = 1;
       break;
     default:
       Log.report(logvisor::Fatal, "unsupported tex format");
@@ -305,7 +311,7 @@ class GLTextureS : public GraphicsDataNode<ITextureS> {
 
     if (compressed) {
       for (size_t i = 0; i < mips; ++i) {
-        size_t dataSz = width * height / 2;
+        size_t dataSz = width * height / pxPitch;
         glCompressedTexImage2D(GL_TEXTURE_2D, i, intFormat, width, height, 0, dataSz, dataIt);
         dataIt += dataSz;
         if (width > 1)

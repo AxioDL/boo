@@ -160,6 +160,12 @@ class D3D11TextureS : public GraphicsDataNode<ITextureS> {
       pxPitchNum = 1;
       pxPitchDenom = 2;
       break;
+    case TextureFormat::DXT3:
+      pfmt = DXGI_FORMAT_BC2_UNORM;
+      compressed = true;
+      pxPitchNum = 1;
+      pxPitchDenom = 1;
+      break;
     default:
       Log.report(logvisor::Fatal, "unsupported tex format");
     }

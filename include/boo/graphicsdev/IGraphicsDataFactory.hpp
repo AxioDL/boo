@@ -47,7 +47,7 @@ protected:
 enum class TextureType { Static, StaticArray, Dynamic, Render };
 
 /** Supported texture formats */
-enum class TextureFormat { RGBA8, I8, I16, DXT1, PVRTC4 };
+enum class TextureFormat { RGBA8, I8, I16, DXT1, DXT3, PVRTC4 };
 
 /** Supported texture clamp modes */
 enum class TextureClampMode { Invalid = -1, Repeat, ClampToWhite, ClampToBlack, ClampToEdge, ClampToEdgeNearest };

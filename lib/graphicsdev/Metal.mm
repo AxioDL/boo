@@ -256,6 +256,13 @@ class MetalTextureS : public GraphicsDataNode<ITextureS> {
       ppitchNum = 1;
       ppitchDenom = 2;
       bytesPerRow = width * 8 / 4; // Metal wants this in blocks, not bytes
+      break;
+    case TextureFormat::DXT3:
+      pfmt = MTLPixelFormatBC2_RGBA;
+      ppitchNum = 1;
+      ppitchDenom = 1;
+      bytesPerRow = width * 16 / 4; // Metal wants this in blocks, not bytes
+      break;
     default:
       break;
     }
