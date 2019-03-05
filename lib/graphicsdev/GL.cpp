@@ -57,6 +57,7 @@ static const char* GammaFS = "#version 330\n" BOO_GLSL_BINDING_HEAD
 namespace boo {
 static logvisor::Module Log("boo::GL");
 class GLDataFactoryImpl;
+struct GLCommandQueue;
 
 class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead {
   friend struct GLCommandQueue;
@@ -105,6 +106,12 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead {
                                                 nullptr, nullptr);
       return true;
     } BooTrace);
+  }
+  void DestroyGammaResources() {
+    m_gammaBinding.reset();
+    m_gammaVBO.reset();
+    m_gammaLUT.reset();
+    m_gammaShader.reset();
   }
 
 public:
@@ -938,46 +945,17 @@ struct GLShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
   std::vector<BoundTex> m_texs;
   size_t m_baseVert;
   size_t m_baseInst;
-  GLuint m_vao[3] = {};
+  std::array<GLuint, 3> m_vao = {};
+  GLCommandQueue* m_q;
 
   GLShaderDataBinding(const ObjToken<BaseGraphicsData>& d, const ObjToken<IShaderPipeline>& pipeline,
                       const ObjToken<IGraphicsBuffer>& vbo, const ObjToken<IGraphicsBuffer>& instVbo,
                       const ObjToken<IGraphicsBuffer>& ibo, size_t ubufCount, const ObjToken<IGraphicsBuffer>* ubufs,
                       const size_t* ubufOffs, const size_t* ubufSizes, size_t texCount, const ObjToken<ITexture>* texs,
-                      const int* bindTexIdx, const bool* depthBind, size_t baseVert, size_t baseInst)
-  : GraphicsDataNode<IShaderDataBinding>(d)
-  , m_pipeline(pipeline)
-  , m_vbo(vbo)
-  , m_instVbo(instVbo)
-  , m_ibo(ibo)
-  , m_baseVert(baseVert)
-  , m_baseInst(baseInst) {
-    if (ubufOffs && ubufSizes) {
-      m_ubufOffs.reserve(ubufCount);
-      for (size_t i = 0; i < ubufCount; ++i) {
-#ifndef NDEBUG
-        if (ubufOffs[i] % 256)
-          Log.report(logvisor::Fatal, "non-256-byte-aligned uniform-offset %d provided to newShaderDataBinding",
-                     int(i));
-#endif
-        m_ubufOffs.emplace_back(ubufOffs[i], (ubufSizes[i] + 255) & ~255);
-      }
-    }
-    m_ubufs.reserve(ubufCount);
-    for (size_t i = 0; i < ubufCount; ++i) {
-#ifndef NDEBUG
-      if (!ubufs[i])
-        Log.report(logvisor::Fatal, "null uniform-buffer %d provided to newShaderDataBinding", int(i));
-#endif
-      m_ubufs.push_back(ubufs[i]);
-    }
-    m_texs.reserve(texCount);
-    for (size_t i = 0; i < texCount; ++i) {
-      m_texs.push_back({texs[i], bindTexIdx ? bindTexIdx[i] : 0, depthBind ? depthBind[i] : false});
-    }
-  }
+                      const int* bindTexIdx, const bool* depthBind, size_t baseVert, size_t baseInst,
+                      GLCommandQueue* q);
 
-  ~GLShaderDataBinding() { glDeleteVertexArrays(3, m_vao); }
+  ~GLShaderDataBinding();
 
   void bind(int b) const {
     GLShaderPipeline& pipeline = *m_pipeline.cast<GLShaderPipeline>();
@@ -1071,6 +1049,7 @@ struct GLCommandQueue : IGraphicsCommandQueue {
   std::condition_variable m_cv;
   std::mutex m_initmt;
   std::condition_variable m_initcv;
+  std::recursive_mutex m_fmtMt;
   std::thread m_thr;
 
   struct Command {
@@ -1133,10 +1112,11 @@ struct GLCommandQueue : IGraphicsCommandQueue {
   std::vector<std::function<void(void)>> m_pendingPosts1;
   std::vector<std::function<void(void)>> m_pendingPosts2;
   std::vector<ObjToken<IShaderDataBinding>> m_pendingFmtAdds;
+  std::vector<std::array<GLuint, 3>> m_pendingFmtDels;
   std::vector<ObjToken<ITextureR>> m_pendingFboAdds;
 
   static void ConfigureVertexFormat(GLShaderDataBinding* fmt) {
-    glGenVertexArrays(3, fmt->m_vao);
+    glGenVertexArrays(3, fmt->m_vao.data());
 
     size_t stride = 0;
     size_t instStride = 0;
@@ -1271,11 +1251,20 @@ struct GLCommandQueue : IGraphicsCommandQueue {
           self->m_pendingResizes.clear();
         }
 
-        if (self->m_pendingFmtAdds.size()) {
-          for (ObjToken<IShaderDataBinding>& fmt : self->m_pendingFmtAdds)
-            if (fmt)
+        {
+          std::lock_guard<std::recursive_mutex> fmtLk(self->m_fmtMt);
+
+          if (self->m_pendingFmtAdds.size()) {
+            for (ObjToken<IShaderDataBinding>& fmt : self->m_pendingFmtAdds)
               ConfigureVertexFormat(fmt.cast<GLShaderDataBinding>());
-          self->m_pendingFmtAdds.clear();
+            self->m_pendingFmtAdds.clear();
+          }
+
+          if (self->m_pendingFmtDels.size()) {
+            for (const auto& v : self->m_pendingFmtDels)
+              glDeleteVertexArrays(3, v.data());
+            self->m_pendingFmtDels.clear();
+          }
         }
 
         if (self->m_pendingPosts2.size())
@@ -1423,6 +1412,13 @@ struct GLCommandQueue : IGraphicsCommandQueue {
         p();
       cmds.clear();
     }
+    dataFactory->DestroyGammaResources();
+    std::lock_guard<std::recursive_mutex> fmtLk(self->m_fmtMt);
+    if (self->m_pendingFmtDels.size()) {
+      for (const auto& v : self->m_pendingFmtDels)
+        glDeleteVertexArrays(3, v.data());
+      self->m_pendingFmtDels.clear();
+    }
   }
 
   GLCommandQueue(IGraphicsContext* parent, GLContext* glCtx) : m_parent(parent), m_glCtx(glCtx) {}
@@ -1559,8 +1555,13 @@ struct GLCommandQueue : IGraphicsCommandQueue {
   }
 
   void addVertexFormat(const ObjToken<IShaderDataBinding>& fmt) {
-    std::unique_lock<std::mutex> lk(m_mt);
+    std::unique_lock<std::recursive_mutex> lk(m_fmtMt);
     m_pendingFmtAdds.push_back(fmt);
+  }
+
+  void delVertexFormat(GLShaderDataBinding* fmt) {
+    std::unique_lock<std::recursive_mutex> lk(m_fmtMt);
+    m_pendingFmtDels.push_back(fmt->m_vao);
   }
 
   void addFBO(const ObjToken<ITextureR>& tex) {
@@ -1701,9 +1702,53 @@ ObjToken<IShaderDataBinding> GLDataFactory::Context::newShaderDataBinding(
   GLCommandQueue* q = static_cast<GLCommandQueue*>(factory.m_parent->getCommandQueue());
   ObjToken<GLShaderDataBinding> ret = {new GLShaderDataBinding(m_data, pipeline, vbo, instVbo, ibo, ubufCount, ubufs,
                                                                ubufOffs, ubufSizes, texCount, texs, texBindIdx,
-                                                               depthBind, baseVert, baseInst)};
-  q->addVertexFormat(ret.get());
+                                                               depthBind, baseVert, baseInst, q)};
   return ret.get();
+}
+
+GLShaderDataBinding::
+GLShaderDataBinding(const ObjToken<BaseGraphicsData>& d, const ObjToken<IShaderPipeline>& pipeline,
+                    const ObjToken<IGraphicsBuffer>& vbo, const ObjToken<IGraphicsBuffer>& instVbo,
+                    const ObjToken<IGraphicsBuffer>& ibo, size_t ubufCount, const ObjToken<IGraphicsBuffer>* ubufs,
+                    const size_t* ubufOffs, const size_t* ubufSizes, size_t texCount, const ObjToken<ITexture>* texs,
+                    const int* bindTexIdx, const bool* depthBind, size_t baseVert, size_t baseInst,
+                    GLCommandQueue* q)
+  : GraphicsDataNode<IShaderDataBinding>(d)
+  , m_pipeline(pipeline)
+  , m_vbo(vbo)
+  , m_instVbo(instVbo)
+  , m_ibo(ibo)
+  , m_baseVert(baseVert)
+  , m_baseInst(baseInst)
+  , m_q(q) {
+  if (ubufOffs && ubufSizes) {
+    m_ubufOffs.reserve(ubufCount);
+    for (size_t i = 0; i < ubufCount; ++i) {
+#ifndef NDEBUG
+      if (ubufOffs[i] % 256)
+        Log.report(logvisor::Fatal, "non-256-byte-aligned uniform-offset %d provided to newShaderDataBinding",
+                   int(i));
+#endif
+      m_ubufOffs.emplace_back(ubufOffs[i], (ubufSizes[i] + 255) & ~255);
+    }
+  }
+  m_ubufs.reserve(ubufCount);
+  for (size_t i = 0; i < ubufCount; ++i) {
+#ifndef NDEBUG
+    if (!ubufs[i])
+      Log.report(logvisor::Fatal, "null uniform-buffer %d provided to newShaderDataBinding", int(i));
+#endif
+    m_ubufs.push_back(ubufs[i]);
+  }
+  m_texs.reserve(texCount);
+  for (size_t i = 0; i < texCount; ++i) {
+    m_texs.push_back({texs[i], bindTexIdx ? bindTexIdx[i] : 0, depthBind ? depthBind[i] : false});
+  }
+  q->addVertexFormat(this);
+}
+
+GLShaderDataBinding::~GLShaderDataBinding() {
+  m_q->delVertexFormat(this);
 }
 
 std::unique_ptr<IGraphicsCommandQueue> _NewGLCommandQueue(IGraphicsContext* parent, GLContext* glCtx) {
