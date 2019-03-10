@@ -190,6 +190,8 @@ struct XlibAtoms {
   Atom m_wmProtocols = 0;
   Atom m_wmDeleteWindow = 0;
   Atom m_netSupported = 0;
+  Atom m_netwmName = 0;
+  Atom m_netwmPid = 0;
   Atom m_netwmIcon = 0;
   Atom m_netwmIconName = 0;
   Atom m_netwmState = 0;
@@ -206,6 +208,8 @@ struct XlibAtoms {
     m_wmProtocols = XInternAtom(disp, "WM_PROTOCOLS", True);
     m_wmDeleteWindow = XInternAtom(disp, "WM_DELETE_WINDOW", True);
     m_netSupported = XInternAtom(disp, "_NET_SUPPORTED", True);
+    m_netwmName = XInternAtom(disp, "_NET_WM_NAME", False);
+    m_netwmPid = XInternAtom(disp, "_NET_WM_PID", False);
     m_netwmIcon = XInternAtom(disp, "_NET_WM_ICON", False);
     m_netwmIconName = XInternAtom(disp, "_NET_WM_ICON_NAME", False);
     m_netwmState = XInternAtom(disp, "_NET_WM_STATE", False);
@@ -796,16 +800,27 @@ public:
       XSetWMProtocols(m_xDisp, m_windowId, &S_ATOMS->m_wmDeleteWindow, 1);
 
       /* Set the title of the window */
-      const unsigned char* c_title = (unsigned char*)title.data();
-      XChangeProperty(m_xDisp, m_windowId, XA_WM_NAME, XA_STRING, 8, PropModeReplace, c_title, title.length());
+      if (S_ATOMS->m_netwmName) {
+        XChangeProperty(m_xDisp, m_windowId, S_ATOMS->m_netwmName, S_ATOMS->m_utf8String, 8,
+                        PropModeReplace, (unsigned char*)title.data(), title.length());
+      }
+      XStoreName(m_xDisp, m_windowId, title.data());
 
       /* Set the title of the window icon */
-      XChangeProperty(m_xDisp, m_windowId, XA_WM_ICON_NAME, XA_STRING, 8, PropModeReplace, c_title, title.length());
+      XChangeProperty(m_xDisp, m_windowId, XA_WM_ICON_NAME, XA_STRING, 8, PropModeReplace,
+                      (unsigned char*)title.data(), title.length());
 
       /* Add window icon */
       if (MAINICON_NETWM_SZ && S_ATOMS->m_netwmIcon) {
         XChangeProperty(m_xDisp, m_windowId, S_ATOMS->m_netwmIcon, XA_CARDINAL, 32, PropModeReplace, MAINICON_NETWM,
                         MAINICON_NETWM_SZ / sizeof(unsigned long));
+      }
+
+      /* Set the pid of the window */
+      if (S_ATOMS->m_netwmPid) {
+        pid_t pid = getpid();
+        XChangeProperty(m_xDisp, m_windowId, S_ATOMS->m_netwmPid, XA_CARDINAL, 32,
+                        PropModeReplace, (unsigned char*)&pid, 1);
       }
 
       /* Initialize context */
@@ -878,9 +893,19 @@ public:
   }
 
   void setTitle(std::string_view title) {
-    const unsigned char* c_title = (unsigned char*)title.data();
     XLockDisplay(m_xDisp);
-    XChangeProperty(m_xDisp, m_windowId, XA_WM_NAME, XA_STRING, 8, PropModeReplace, c_title, title.length());
+
+    /* Set the title of the window */
+    if (S_ATOMS->m_netwmName) {
+      XChangeProperty(m_xDisp, m_windowId, S_ATOMS->m_netwmName, S_ATOMS->m_utf8String, 8,
+                      PropModeReplace, (unsigned char*)title.data(), title.length());
+    }
+    XStoreName(m_xDisp, m_windowId, title.data());
+
+    /* Set the title of the window icon */
+    XChangeProperty(m_xDisp, m_windowId, XA_WM_ICON_NAME, XA_STRING, 8, PropModeReplace,
+                    (unsigned char*)title.data(), title.length());
+
     XUnlockDisplay(m_xDisp);
   }
 
