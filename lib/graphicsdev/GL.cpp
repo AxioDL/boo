@@ -1123,7 +1123,7 @@ struct GLCommandQueue : IGraphicsCommandQueue {
     auto pipeline = fmt->m_pipeline.cast<GLShaderPipeline>();
     for (size_t i = 0; i < pipeline->m_elements.size(); ++i) {
       const VertexElementDescriptor& desc = pipeline->m_elements[i];
-      if ((desc.semantic & VertexSemantic::Instanced) != VertexSemantic::None)
+      if (True(desc.semantic & VertexSemantic::Instanced))
         instStride += SEMANTIC_SIZE_TABLE[int(desc.semantic & VertexSemantic::SemanticMask)];
       else
         stride += SEMANTIC_SIZE_TABLE[int(desc.semantic & VertexSemantic::SemanticMask)];
@@ -1137,7 +1137,7 @@ struct GLCommandQueue : IGraphicsCommandQueue {
       IGraphicsBuffer* lastEBO = nullptr;
       for (size_t i = 0; i < pipeline->m_elements.size(); ++i) {
         const VertexElementDescriptor& desc = pipeline->m_elements[i];
-        IGraphicsBuffer* vbo = (desc.semantic & VertexSemantic::Instanced) != VertexSemantic::None
+        IGraphicsBuffer* vbo = True(desc.semantic & VertexSemantic::Instanced)
                                    ? fmt->m_instVbo.get()
                                    : fmt->m_vbo.get();
         IGraphicsBuffer* ebo = fmt->m_ibo.get();
@@ -1157,7 +1157,7 @@ struct GLCommandQueue : IGraphicsCommandQueue {
         }
         glEnableVertexAttribArray(i);
         int maskedSem = int(desc.semantic & VertexSemantic::SemanticMask);
-        if ((desc.semantic & VertexSemantic::Instanced) != VertexSemantic::None) {
+        if (True(desc.semantic & VertexSemantic::Instanced)) {
           glVertexAttribPointer(i, SEMANTIC_COUNT_TABLE[maskedSem], SEMANTIC_TYPE_TABLE[maskedSem], GL_TRUE, instStride,
                                 (void*)instOffset);
           glVertexAttribDivisor(i, 1);

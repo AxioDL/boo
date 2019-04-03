@@ -1944,7 +1944,7 @@ struct VulkanVertexFormat {
       int semantic = int(elemin->semantic & boo::VertexSemantic::SemanticMask);
       attribute.location = i;
       attribute.format = SEMANTIC_TYPE_TABLE[semantic];
-      if ((elemin->semantic & boo::VertexSemantic::Instanced) != boo::VertexSemantic::None) {
+      if (True(elemin->semantic & boo::VertexSemantic::Instanced)) {
         attribute.binding = 1;
         attribute.offset = m_instStride;
         m_instStride += SEMANTIC_SIZE_TABLE[semantic];

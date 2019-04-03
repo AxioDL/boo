@@ -68,7 +68,7 @@ void DolphinSmashAdapter::transferCycle() {
     DolphinControllerState state;
     bool rumble = false;
     EDolphinControllerType type = parseState(&state, controller, rumble);
-    if (type != EDolphinControllerType::None && !(m_knownControllers & 1 << i)) {
+    if (True(type) && !(m_knownControllers & 1 << i)) {
       m_leftStickCal[0] = state.m_leftStick[0];
       m_leftStickCal[1] = state.m_leftStick[1];
       m_rightStickCal[0] = state.m_rightStick[0];
@@ -77,7 +77,7 @@ void DolphinSmashAdapter::transferCycle() {
       m_triggersCal[1] = state.m_analogTriggers[1];
       m_knownControllers |= 1 << i;
       m_callback->controllerConnected(i, type);
-    } else if (type == EDolphinControllerType::None && (m_knownControllers & 1 << i)) {
+    } else if (False(type) && (m_knownControllers & 1 << i)) {
       m_knownControllers &= ~(1 << i);
       m_callback->controllerDisconnected(i);
     }

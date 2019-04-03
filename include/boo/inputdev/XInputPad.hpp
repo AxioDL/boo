@@ -42,15 +42,15 @@ public:
       m_callback->controllerDisconnected();
   }
   void startRumble(EXInputMotor motors, uint16_t intensity) {
-    if ((motors & EXInputMotor::Left) != EXInputMotor::None)
+    if (True(motors & EXInputMotor::Left))
       m_rumbleRequest[0] = intensity;
-    if ((motors & EXInputMotor::Right) != EXInputMotor::None)
+    if (True(motors & EXInputMotor::Right))
       m_rumbleRequest[1] = intensity;
   }
   void stopRumble(EXInputMotor motors) {
-    if ((motors & EXInputMotor::Left) != EXInputMotor::None)
+    if (True(motors & EXInputMotor::Left))
       m_rumbleRequest[0] = 0;
-    if ((motors & EXInputMotor::Right) != EXInputMotor::None)
+    if (True(motors & EXInputMotor::Right))
       m_rumbleRequest[1] = 0;
   }
 };

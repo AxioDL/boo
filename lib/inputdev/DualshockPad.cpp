@@ -89,7 +89,7 @@ void DualshockPad::receivedHIDReport(const uint8_t* data, size_t length, HIDRepo
   }
 
   if (m_rumbleRequest != m_rumbleState) {
-    if ((m_rumbleRequest & EDualshockMotor::Left) != EDualshockMotor::None) {
+    if (True(m_rumbleRequest & EDualshockMotor::Left)) {
       m_report.rumble.leftDuration = m_rumbleDuration[0];
       m_report.rumble.leftForce = m_rumbleIntensity[0];
     } else {
@@ -97,7 +97,7 @@ void DualshockPad::receivedHIDReport(const uint8_t* data, size_t length, HIDRepo
       m_report.rumble.leftForce = 0;
     }
 
-    if ((m_rumbleRequest & EDualshockMotor::Right) != EDualshockMotor::None) {
+    if (True(m_rumbleRequest & EDualshockMotor::Right)) {
       m_report.rumble.rightDuration = m_rumbleDuration[1];
       m_report.rumble.rightOn = m_rumbleIntensity[1] > 0;
     } else {

@@ -124,11 +124,11 @@ public:
 
   void startRumble(EDualshockMotor motor, uint8_t duration = 254, uint8_t intensity = 255) {
     m_rumbleRequest |= motor;
-    if ((EDualshockMotor(motor) & EDualshockMotor::Left) != EDualshockMotor::None) {
+    if (True(EDualshockMotor(motor) & EDualshockMotor::Left)) {
       m_rumbleDuration[0] = duration;
       m_rumbleIntensity[0] = intensity;
     }
-    if ((EDualshockMotor(motor) & EDualshockMotor::Right) != EDualshockMotor::None) {
+    if (True(EDualshockMotor(motor) & EDualshockMotor::Right)) {
       m_rumbleDuration[1] = duration;
       m_rumbleIntensity[1] = intensity;
     }

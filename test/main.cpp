@@ -180,7 +180,7 @@ struct CTestWindowCallback : IWindowCallback {
   void charKeyDown(unsigned long charCode, EModifierKey mods, bool isRepeat) {}
   void charKeyUp(unsigned long charCode, EModifierKey mods) {}
   void specialKeyDown(ESpecialKey key, EModifierKey mods, bool isRepeat) {
-    if (key == ESpecialKey::Enter && (mods & EModifierKey::Alt) != EModifierKey::None)
+    if (key == ESpecialKey::Enter && True(mods & EModifierKey::Alt))
       m_fullscreenToggleRequested = true;
   }
   void specialKeyUp(ESpecialKey key, EModifierKey mods) {}

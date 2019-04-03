@@ -55,6 +55,8 @@
 #define MWM_FUNC_CLOSE (1L << 5)
 
 #undef None
+#undef False
+#undef True
 
 typedef GLXContext (*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
 static glXCreateContextAttribsARBProc glXCreateContextAttribsARB = 0;
@@ -205,23 +207,23 @@ struct XlibAtoms {
   Atom m_utf8String = 0;
   Atom m_imagePng = 0;
   XlibAtoms(Display* disp) {
-    m_wmProtocols = XInternAtom(disp, "WM_PROTOCOLS", True);
-    m_wmDeleteWindow = XInternAtom(disp, "WM_DELETE_WINDOW", True);
-    m_netSupported = XInternAtom(disp, "_NET_SUPPORTED", True);
-    m_netwmName = XInternAtom(disp, "_NET_WM_NAME", False);
-    m_netwmPid = XInternAtom(disp, "_NET_WM_PID", False);
-    m_netwmIcon = XInternAtom(disp, "_NET_WM_ICON", False);
-    m_netwmIconName = XInternAtom(disp, "_NET_WM_ICON_NAME", False);
-    m_netwmState = XInternAtom(disp, "_NET_WM_STATE", False);
-    m_netwmStateFullscreen = XInternAtom(disp, "_NET_WM_STATE_FULLSCREEN", False);
-    m_netwmStateAdd = XInternAtom(disp, "_NET_WM_STATE_ADD", False);
-    m_netwmStateRemove = XInternAtom(disp, "_NET_WM_STATE_REMOVE", False);
-    m_motifWmHints = XInternAtom(disp, "_MOTIF_WM_HINTS", True);
-    m_targets = XInternAtom(disp, "TARGETS", False);
-    m_clipboard = XInternAtom(disp, "CLIPBOARD", False);
-    m_clipdata = XInternAtom(disp, "CLIPDATA", False);
-    m_utf8String = XInternAtom(disp, "UTF8_STRING", False);
-    m_imagePng = XInternAtom(disp, "image/png", False);
+    m_wmProtocols = XInternAtom(disp, "WM_PROTOCOLS", true);
+    m_wmDeleteWindow = XInternAtom(disp, "WM_DELETE_WINDOW", true);
+    m_netSupported = XInternAtom(disp, "_NET_SUPPORTED", true);
+    m_netwmName = XInternAtom(disp, "_NET_WM_NAME", false);
+    m_netwmPid = XInternAtom(disp, "_NET_WM_PID", false);
+    m_netwmIcon = XInternAtom(disp, "_NET_WM_ICON", false);
+    m_netwmIconName = XInternAtom(disp, "_NET_WM_ICON_NAME", false);
+    m_netwmState = XInternAtom(disp, "_NET_WM_STATE", false);
+    m_netwmStateFullscreen = XInternAtom(disp, "_NET_WM_STATE_FULLSCREEN", false);
+    m_netwmStateAdd = XInternAtom(disp, "_NET_WM_STATE_ADD", false);
+    m_netwmStateRemove = XInternAtom(disp, "_NET_WM_STATE_REMOVE", false);
+    m_motifWmHints = XInternAtom(disp, "_MOTIF_WM_HINTS", true);
+    m_targets = XInternAtom(disp, "TARGETS", false);
+    m_clipboard = XInternAtom(disp, "CLIPBOARD", false);
+    m_clipdata = XInternAtom(disp, "CLIPDATA", false);
+    m_utf8String = XInternAtom(disp, "UTF8_STRING", false);
+    m_imagePng = XInternAtom(disp, "image/png", false);
   }
 };
 static XlibAtoms* S_ATOMS = NULL;
@@ -395,7 +397,7 @@ public:
     s_glxError = false;
     XErrorHandler oldHandler = XSetErrorHandler(ctxErrorHandler);
     for (m_attribIdx = 0; m_attribIdx < std::extent<decltype(ContextAttribList)>::value; ++m_attribIdx) {
-      m_glxCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_lastCtx, True, ContextAttribList[m_attribIdx]);
+      m_glxCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_lastCtx, true, ContextAttribList[m_attribIdx]);
       if (m_glxCtx)
         break;
     }
@@ -444,7 +446,7 @@ public:
     if (!m_mainCtx) {
       s_glxError = false;
       XErrorHandler oldHandler = XSetErrorHandler(ctxErrorHandler);
-      m_mainCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribList[m_attribIdx]);
+      m_mainCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, true, ContextAttribList[m_attribIdx]);
       XSetErrorHandler(oldHandler);
       if (!m_mainCtx)
         Log.report(logvisor::Fatal, "unable to make main GLX context");
@@ -460,7 +462,7 @@ public:
     if (!m_loadCtx) {
       s_glxError = false;
       XErrorHandler oldHandler = XSetErrorHandler(ctxErrorHandler);
-      m_loadCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, True, ContextAttribList[m_attribIdx]);
+      m_loadCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, true, ContextAttribList[m_attribIdx]);
       XSetErrorHandler(oldHandler);
       if (!m_loadCtx)
         Log.report(logvisor::Fatal, "unable to make load GLX context");
@@ -881,7 +883,7 @@ public:
     unsigned long bytes;
     unsigned char* string = nullptr;
     XLockDisplay(m_xDisp);
-    int ret = XGetWindowProperty(m_xDisp, m_windowId, XA_WM_NAME, 0, ~0l, False, XA_STRING, &actualType, &actualFormat,
+    int ret = XGetWindowProperty(m_xDisp, m_windowId, XA_WM_NAME, 0, ~0l, false, XA_STRING, &actualType, &actualFormat,
                                  &nitems, &bytes, &string);
     XUnlockDisplay(m_xDisp);
     if (ret == Success) {
@@ -1023,7 +1025,7 @@ public:
     Atom* vals = nullptr;
     bool fullscreen = false;
     XLockDisplay(m_xDisp);
-    int ret = XGetWindowProperty(m_xDisp, m_windowId, S_ATOMS->m_netwmState, 0, ~0l, False, XA_ATOM, &actualType,
+    int ret = XGetWindowProperty(m_xDisp, m_windowId, S_ATOMS->m_netwmState, 0, ~0l, false, XA_ATOM, &actualType,
                                  &actualFormat, &nitems, &bytes, (unsigned char**)&vals);
     XUnlockDisplay(m_xDisp);
     if (ret == Success) {
@@ -1051,16 +1053,16 @@ public:
 
     if (S_ATOMS->m_motifWmHints) {
       wmHints.flags = MWM_HINTS_DECORATIONS | MWM_HINTS_FUNCTIONS;
-      if ((style & EWindowStyle::Titlebar) != EWindowStyle::None) {
+      if (True(style & EWindowStyle::Titlebar)) {
         wmHints.decorations |= MWM_DECOR_BORDER | MWM_DECOR_TITLE | MWM_DECOR_MINIMIZE | MWM_DECOR_MENU;
         wmHints.functions |= MWM_FUNC_MOVE | MWM_FUNC_MINIMIZE;
       }
-      if ((style & EWindowStyle::Resize) != EWindowStyle::None) {
+      if (True(style & EWindowStyle::Resize)) {
         wmHints.decorations |= MWM_DECOR_MAXIMIZE | MWM_DECOR_RESIZEH;
         wmHints.functions |= MWM_FUNC_RESIZE | MWM_FUNC_MAXIMIZE;
       }
 
-      if ((style & EWindowStyle::Close) != EWindowStyle::None)
+      if (True(style & EWindowStyle::Close))
         wmHints.functions |= MWM_FUNC_CLOSE;
 
       XLockDisplay(m_xDisp);
@@ -1081,7 +1083,7 @@ public:
     XEvent fsEvent = {0};
     fsEvent.xclient.type = ClientMessage;
     fsEvent.xclient.serial = 0;
-    fsEvent.xclient.send_event = True;
+    fsEvent.xclient.send_event = true;
     fsEvent.xclient.window = m_windowId;
     fsEvent.xclient.message_type = S_ATOMS->m_netwmState;
     fsEvent.xclient.format = 32;
@@ -1089,7 +1091,7 @@ public:
     fsEvent.xclient.data.l[1] = S_ATOMS->m_netwmStateFullscreen;
     fsEvent.xclient.data.l[2] = 0;
     XLockDisplay(m_xDisp);
-    XSendEvent(m_xDisp, DefaultRootWindow(m_xDisp), False, StructureNotifyMask | SubstructureRedirectMask,
+    XSendEvent(m_xDisp, DefaultRootWindow(m_xDisp), false, StructureNotifyMask | SubstructureRedirectMask,
                (XEvent*)&fsEvent);
     XUnlockDisplay(m_xDisp);
 
@@ -1163,7 +1165,7 @@ public:
           // Atom t1 = S_ATOMS->m_clipboard;
           // Atom t2 = S_ATOMS->m_clipdata;
 
-          if (XGetWindowProperty(m_xDisp, m_windowId, S_ATOMS->m_clipdata, 0, 32, False, AnyPropertyType, &type,
+          if (XGetWindowProperty(m_xDisp, m_windowId, S_ATOMS->m_clipdata, 0, 32, false, AnyPropertyType, &type,
                                  &format, &nitems, &rem, &data)) {
             Log.report(logvisor::Fatal, "Clipboard allocation failed");
             XUnlockDisplay(m_xDisp);
@@ -1218,7 +1220,7 @@ public:
       } else
         reply.xselection.property = 0;
     }
-    XSendEvent(m_xDisp, se->requestor, False, 0, &reply);
+    XSendEvent(m_xDisp, se->requestor, false, 0, &reply);
   }
 
 #define NSEC_PER_SEC 1000000000
@@ -1472,7 +1474,7 @@ public:
         char charCode = translateKeysym(&event->xkey, specialKey, modifierKey);
         EModifierKey modifierMask = translateModifiers(state);
         if (charCode) {
-          if (inputCb && (modifierMask & (EModifierKey::Ctrl | EModifierKey::Command)) == EModifierKey::None)
+          if (inputCb && False(modifierMask & (EModifierKey::Ctrl | EModifierKey::Command)))
             inputCb->insertText(std::string(1, charCode));
 
           bool isRepeat = m_charKeys.find(charCode) != m_charKeys.cend();
@@ -1484,7 +1486,7 @@ public:
           m_callback->specialKeyDown(specialKey, modifierMask, isRepeat);
           if (!isRepeat)
             m_specialKeys.insert((unsigned long)specialKey);
-        } else if (modifierKey != EModifierKey::None) {
+        } else if (True(modifierKey)) {
           bool isRepeat = m_modKeys.find((unsigned long)modifierKey) != m_modKeys.cend();
           m_callback->modKeyDown(modifierKey, isRepeat);
           if (!isRepeat)
@@ -1507,7 +1509,7 @@ public:
         } else if (specialKey != ESpecialKey::None) {
           m_specialKeys.erase((unsigned long)specialKey);
           m_callback->specialKeyUp(specialKey, modifierMask);
-        } else if (modifierKey != EModifierKey::None) {
+        } else if (True(modifierKey)) {
           m_modKeys.erase((unsigned long)modifierKey);
           m_callback->modKeyUp(modifierKey);
         }
