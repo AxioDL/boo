@@ -4,6 +4,7 @@
 #include "boo/graphicsdev/GL.hpp"
 #include "boo/audiodev/IAudioVoiceEngine.hpp"
 #include "boo/graphicsdev/glew.h"
+#include "../Common.hpp"
 
 #if BOO_HAS_VULKAN
 #include "boo/graphicsdev/Vulkan.hpp"
@@ -715,6 +716,7 @@ public:
   WindowXlib(std::string_view title, Display* display, void* xcbConn, int defaultScreen, XIM xIM,
              XIMStyle bestInputStyle, XFontSet fontset, GLXContext lastCtx, void* vulkanHandle, GLContext* glCtx)
   : m_xDisp(display), m_callback(nullptr), m_bestStyle(bestInputStyle) {
+    BOO_MSAN_NO_INTERCEPT
     if (!S_ATOMS)
       S_ATOMS = new XlibAtoms(display);
 
@@ -753,6 +755,7 @@ public:
       int x, y, w, h;
       int nmonitors = 0;
       XRRMonitorInfo* mInfo = XRRGetMonitors(m_xDisp, screen->root, true, &nmonitors);
+      BOO_MSAN_UNPOISON(mInfo, sizeof(XRRMonitorInfo) * nmonitors);
       if (nmonitors) {
         genFrameDefault(mInfo, x, y, w, h);
         m_pixelFactor = mInfo->width / (float)mInfo->mwidth / REF_DPMM;
@@ -940,16 +943,19 @@ public:
   }
 
   double getWindowRefreshRate() const {
+    BOO_MSAN_NO_INTERCEPT
     double ret = 60.0;
     int nmonitors;
     Screen* screen = DefaultScreenOfDisplay(m_xDisp);
     XRRMonitorInfo* mInfo = XRRGetMonitors(m_xDisp, screen->root, true, &nmonitors);
+    BOO_MSAN_UNPOISON(mInfo, sizeof(XRRMonitorInfo) * nmonitors);
     if (nmonitors) {
       XRRScreenResources* res = XRRGetScreenResourcesCurrent(m_xDisp, screen->root);
       XRROutputInfo* oinfo = XRRGetOutputInfo(m_xDisp, res, *mInfo->outputs);
       XRRCrtcInfo* ci = XRRGetCrtcInfo(m_xDisp, res, oinfo->crtc);
       for (int i = 0; i < res->nmode; ++i) {
         const XRRModeInfo& mode = res->modes[i];
+        BOO_MSAN_UNPOISON(&mode, sizeof(XRRModeInfo));
         if (mode.id == ci->mode) {
           ret = calculateRefreshRate(mode);
           break;
@@ -964,9 +970,11 @@ public:
   }
 
   void setWindowFrameDefault() {
+    BOO_MSAN_NO_INTERCEPT
     int x, y, w, h, nmonitors;
     Screen* screen = DefaultScreenOfDisplay(m_xDisp);
     XRRMonitorInfo* mInfo = XRRGetMonitors(m_xDisp, screen->root, true, &nmonitors);
+    BOO_MSAN_UNPOISON(mInfo, sizeof(XRRMonitorInfo) * nmonitors);
     if (nmonitors)
       genFrameDefault(mInfo, x, y, w, h);
     else
@@ -979,7 +987,8 @@ public:
   }
 
   void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const {
-    XWindowAttributes attrs;
+    BOO_MSAN_NO_INTERCEPT
+    XWindowAttributes attrs = {};
     XLockDisplay(m_xDisp);
     XGetWindowAttributes(m_xDisp, m_windowId, &attrs);
     XUnlockDisplay(m_xDisp);
@@ -990,7 +999,8 @@ public:
   }
 
   void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const {
-    XWindowAttributes attrs;
+    BOO_MSAN_NO_INTERCEPT
+    XWindowAttributes attrs = {};
     XLockDisplay(m_xDisp);
     XGetWindowAttributes(m_xDisp, m_windowId, &attrs);
     XUnlockDisplay(m_xDisp);
@@ -1001,6 +1011,7 @@ public:
   }
 
   void setWindowFrame(float x, float y, float w, float h) {
+    BOO_MSAN_NO_INTERCEPT
     XWindowChanges values = {(int)x, (int)y, (int)w, (int)h};
     XLockDisplay(m_xDisp);
     XConfigureWindow(m_xDisp, m_windowId, CWX | CWY | CWWidth | CWHeight, &values);
@@ -1008,6 +1019,7 @@ public:
   }
 
   void setWindowFrame(int x, int y, int w, int h) {
+    BOO_MSAN_NO_INTERCEPT
     XWindowChanges values = {x, y, w, h};
     XLockDisplay(m_xDisp);
     XConfigureWindow(m_xDisp, m_windowId, CWX | CWY | CWWidth | CWHeight, &values);
@@ -1262,7 +1274,8 @@ public:
   }
 
   int waitForRetrace() {
-    struct timespec tp;
+    BOO_MSAN_NO_INTERCEPT
+    struct timespec tp = {};
     clock_gettime(CLOCK_REALTIME, &tp);
     if (!m_lastWaitTime.tv_sec) {
       /* Initialize reference point */
@@ -1416,18 +1429,18 @@ public:
       return true;
     }
     case Expose: {
-      Window nw;
-      XWindowAttributes wxa;
-      int x, y;
+      Window nw = 0;
+      XWindowAttributes wxa = {};
+      int x = 0, y = 0;
       XTranslateCoordinates(m_xDisp, m_windowId, DefaultRootWindow(m_xDisp), event->xexpose.x, event->xexpose.y, &x, &y,
                             &nw);
       XGetWindowAttributes(m_xDisp, m_windowId, &wxa);
       m_wrect.location[0] = x - wxa.x;
       m_wrect.location[1] = y - wxa.y;
 #if 0
-            /* This breaks with GNOME, why? */
-            m_wrect.size[0] = event->xexpose.width;
-            m_wrect.size[1] = event->xexpose.height;
+      /* This breaks with GNOME, why? */
+      m_wrect.size[0] = event->xexpose.width;
+      m_wrect.size[1] = event->xexpose.height;
 #else
       m_wrect.size[0] = wxa.width;
       m_wrect.size[1] = wxa.height;
@@ -1441,9 +1454,9 @@ public:
       return false;
     }
     case ConfigureNotify: {
-      Window nw;
-      XWindowAttributes wxa;
-      int x, y;
+      Window nw = 0;
+      XWindowAttributes wxa = {};
+      int x = 0, y = 0;
       XTranslateCoordinates(m_xDisp, m_windowId, DefaultRootWindow(m_xDisp), event->xconfigure.x, event->xconfigure.y,
                             &x, &y, &nw);
       XGetWindowAttributes(m_xDisp, m_windowId, &wxa);

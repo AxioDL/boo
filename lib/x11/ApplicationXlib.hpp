@@ -4,6 +4,7 @@
 
 #include "boo/IApplication.hpp"
 #include "boo/graphicsdev/GL.hpp"
+#include "../Common.hpp"
 
 #include <X11/Xlib.h>
 #include <X11/XKBlib.h>
@@ -148,7 +149,9 @@ class ApplicationXlib final : public IApplication {
 
   /* DBus single-instance */
   bool m_singleInstance;
+#ifndef BOO_MSAN
   DBusConnection* m_dbus = nullptr;
+#endif
 
   /* All windows */
   std::unordered_map<Window, std::weak_ptr<IWindow>> m_windows;
@@ -239,6 +242,7 @@ public:
 #endif
       Log.report(logvisor::Info, "using OpenGL renderer");
 
+#ifndef BOO_MSAN
     /* DBus single instance registration */
     bool isFirst;
     m_dbus = RegisterDBus(uniqueName.data(), isFirst);
@@ -272,6 +276,7 @@ public:
         dbus_connection_flush(m_dbus);
       }
     }
+#endif
 
     if (!XInitThreads()) {
       Log.report(logvisor::Fatal, "X doesn't support multithreading");
@@ -353,7 +358,11 @@ public:
 
     /* Get file descriptors of xcb and dbus interfaces */
     m_x11Fd = ConnectionNumber(m_xDisp);
+#ifndef BOO_MSAN
     dbus_connection_get_unix_fd(m_dbus, &m_dbusFd);
+#else
+    m_dbusFd = 0;
+#endif
     m_maxFd = MAX(m_x11Fd, m_dbusFd);
 
     XFlush(m_xDisp);
@@ -433,7 +442,7 @@ public:
 
         XLockDisplay(m_xDisp);
         while (XPending(m_xDisp)) {
-          XEvent event;
+          XEvent event = {};
           XNextEvent(m_xDisp, &event);
           if (XFilterEvent(&event, None))
             continue;
@@ -455,6 +464,7 @@ public:
           break;
       }
 
+#ifndef BOO_MSAN
       if (FD_ISSET(m_dbusFd, &fds)) {
         DBusMessage* msg;
         dbus_connection_read_write(m_dbus, 0);
@@ -476,6 +486,7 @@ public:
           dbus_message_unref(msg);
         }
       }
+#endif
     }
 
     m_callback.appQuitting(this);

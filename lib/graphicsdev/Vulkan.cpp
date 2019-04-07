@@ -147,11 +147,6 @@ static inline void ThrowIfFailed(VkResult res) {
     Log.report(logvisor::Fatal, "%d\n", res);
 }
 
-static inline void ThrowIfFalse(bool res) {
-  if (!res)
-    Log.report(logvisor::Fatal, "operation failed\n", res);
-}
-
 static VKAPI_ATTR VkBool32 VKAPI_CALL dbgFunc(VkDebugReportFlagsEXT msgFlags, VkDebugReportObjectTypeEXT objType,
                                               uint64_t srcObject, size_t location, int32_t msgCode,
                                               const char* pLayerPrefix, const char* pMsg, void* pUserData) {
@@ -1297,7 +1292,7 @@ class VulkanTextureS : public GraphicsDataNode<ITextureS> {
   , m_height(height)
   , m_mips(mips)
   , m_clampMode(clampMode) {
-    VkFormat pfmt;
+    VkFormat pfmt = VK_FORMAT_UNDEFINED;
     switch (fmt) {
     case TextureFormat::RGBA8:
       pfmt = VK_FORMAT_R8G8B8A8_UNORM;
@@ -1466,7 +1461,7 @@ class VulkanTextureSA : public GraphicsDataNode<ITextureSA> {
   , m_layers(layers)
   , m_mips(mips)
   , m_clampMode(clampMode) {
-    VkFormat pfmt;
+    VkFormat pfmt = VK_FORMAT_UNDEFINED;
     switch (fmt) {
     case TextureFormat::RGBA8:
       pfmt = VK_FORMAT_R8G8B8A8_UNORM;
@@ -1619,7 +1614,7 @@ class VulkanTextureD : public GraphicsDataNode<ITextureD> {
   VulkanTextureD(const boo::ObjToken<BaseGraphicsData>& parent, VulkanCommandQueue* q, size_t width, size_t height,
                  TextureFormat fmt, TextureClampMode clampMode)
   : GraphicsDataNode<ITextureD>(parent), m_width(width), m_height(height), m_fmt(fmt), m_clampMode(clampMode), m_q(q) {
-    VkFormat pfmt;
+    VkFormat pfmt = VK_FORMAT_UNDEFINED;
     switch (fmt) {
     case TextureFormat::RGBA8:
       pfmt = VK_FORMAT_R8G8B8A8_UNORM;
@@ -1731,6 +1726,7 @@ public:
 class VulkanTextureR : public GraphicsDataNode<ITextureR> {
   friend class VulkanDataFactory;
   friend struct VulkanCommandQueue;
+  VulkanCommandQueue* m_q;
   size_t m_width = 0;
   size_t m_height = 0;
   VkSampleCountFlags m_samplesColor, m_samplesDepth;
@@ -1856,7 +1852,6 @@ class VulkanTextureR : public GraphicsDataNode<ITextureR> {
     m_passBeginInfo.pClearValues = nullptr;
   }
 
-  VulkanCommandQueue* m_q;
   VulkanTextureR(const boo::ObjToken<BaseGraphicsData>& parent, VulkanCommandQueue* q, size_t width, size_t height,
                  TextureClampMode clampMode, size_t colorBindCount, size_t depthBindCount);
 

@@ -74,4 +74,28 @@ static inline uint32_t flp2(uint32_t x) {
   return x - (x >> 1);
 }
 
+/* When instrumenting with MemorySanitizer, external libraries
+ * (particularly the OpenGL implementation) will report tons of false
+ * positives. The BOO_MSAN_NO_INTERCEPT macro declares a RAII object
+ * to temporarily suspend memory tracking so external calls can be made.
+ */
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+#define BOO_MSAN 1
+#include <sanitizer/msan_interface.h>
+struct InterceptorScope {
+  InterceptorScope() { __msan_scoped_disable_interceptor_checks(); }
+  ~InterceptorScope() { __msan_scoped_enable_interceptor_checks(); }
+};
+#define BOO_MSAN_NO_INTERCEPT InterceptorScope _no_intercept;
+#define BOO_MSAN_UNPOISON(data, length) __msan_unpoison(data, length)
+#endif
+#endif
+#ifndef BOO_MSAN_NO_INTERCEPT
+#define BOO_MSAN_NO_INTERCEPT
+#endif
+#ifndef BOO_MSAN_UNPOISON
+#define BOO_MSAN_UNPOISON(data, length)
+#endif
+
 } // namespace boo

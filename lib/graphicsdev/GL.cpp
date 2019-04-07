@@ -80,7 +80,7 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead {
 
     if (GLEW_ARB_tessellation_shader) {
       m_hasTessellation = true;
-      GLint maxPVerts;
+      GLint maxPVerts = 0;
       glGetIntegerv(GL_MAX_PATCH_VERTICES, &maxPVerts);
       m_maxPatchSize = uint32_t(maxPVerts);
     }
@@ -215,6 +215,7 @@ public:
 
 ObjToken<IGraphicsBufferS> GLDataFactory::Context::newStaticBuffer(BufferUse use, const void* data, size_t stride,
                                                                    size_t count) {
+  BOO_MSAN_NO_INTERCEPT
   return {new GLGraphicsBufferS(m_data, use, data, stride * count)};
 }
 
@@ -604,6 +605,7 @@ ObjToken<ITextureS> GLDataFactory::Context::newStaticTexture(size_t width, size_
                                                              TextureFormat fmt, TextureClampMode clampMode,
                                                              const void* data, size_t sz) {
   GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
+  BOO_MSAN_NO_INTERCEPT
   return {new GLTextureS(m_data, width, height, mips, fmt, clampMode, factory.m_glCtx->m_anisotropy, data, sz)};
 }
 
@@ -612,6 +614,7 @@ ObjToken<ITextureSA> GLDataFactory::Context::newStaticArrayTexture(size_t width,
                                                                    TextureClampMode clampMode, const void* data,
                                                                    size_t sz) {
   GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
+  BOO_MSAN_NO_INTERCEPT
   return {
       new GLTextureSA(m_data, width, height, layers, mips, fmt, clampMode, factory.m_glCtx->m_anisotropy, data, sz)};
 }
@@ -690,7 +693,7 @@ class GLShaderStage : public GraphicsDataNode<IShaderStage> {
 
     glShaderSource(m_shad, 1, &source, nullptr);
     glCompileShader(m_shad);
-    GLint status;
+    GLint status = GL_FALSE;
     glGetShaderiv(m_shad, GL_COMPILE_STATUS, &status);
     if (status != GL_TRUE) {
       GLint logLen;
@@ -816,7 +819,7 @@ public:
       if (m_evaluation)
         glDetachShader(m_prog, m_evaluation.cast<GLShaderStage>()->getShader());
 
-      GLint status;
+      GLint status = GL_FALSE;
       glGetProgramiv(m_prog, GL_LINK_STATUS, &status);
       if (status != GL_TRUE) {
         GLint logLen;
@@ -910,6 +913,7 @@ ObjToken<IShaderStage> GLDataFactory::Context::newShaderStage(const uint8_t* dat
       Log.report(logvisor::Fatal, "Device does not support tessellation shaders");
   }
 
+  BOO_MSAN_NO_INTERCEPT
   return {new GLShaderStage(m_data, (char*)data, stage)};
 }
 
@@ -927,6 +931,7 @@ ObjToken<IShaderPipeline> GLDataFactory::Context::newShaderPipeline(
                  int(additionalInfo.patchSize));
   }
 
+  BOO_MSAN_NO_INTERCEPT
   return {new GLShaderPipeline(m_data, vertex, fragment, geometry, control, evaluation, vtxFmt, additionalInfo)};
 }
 
@@ -1028,6 +1033,7 @@ void GLDataFactoryImpl::commitTransaction(const FactoryCommitFunc& trans __BooTr
 }
 
 ObjToken<IGraphicsBufferD> GLDataFactoryImpl::newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs) {
+  BOO_MSAN_NO_INTERCEPT
   ObjToken<BaseGraphicsPool> pool(new BaseGraphicsPool(*this __BooTraceArgsUse));
   return {new GLGraphicsBufferD<BaseGraphicsPool>(pool, use, stride * count)};
 }
@@ -1197,6 +1203,7 @@ struct GLCommandQueue : IGraphicsCommandQueue {
   }
 
   static void RenderingWorker(GLCommandQueue* self) {
+    BOO_MSAN_NO_INTERCEPT
 #if _WIN32
     std::string thrName = WCSTMBS(APP->getFriendlyName().data()) + " Render";
 #else
@@ -1212,12 +1219,12 @@ struct GLCommandQueue : IGraphicsCommandQueue {
       self->m_parent->postInit();
       glClearColor(0.f, 0.f, 0.f, 0.f);
       if (GLEW_EXT_texture_filter_anisotropic) {
-        GLint maxAniso;
+        GLint maxAniso = 0;
         glGetIntegerv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &maxAniso);
         self->m_glCtx->m_anisotropy = std::min(uint32_t(maxAniso), self->m_glCtx->m_anisotropy);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, maxAniso);
       }
-      GLint maxSamples;
+      GLint maxSamples = 0;
       glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
       self->m_glCtx->m_sampleCount =
           flp2(std::min(uint32_t(maxSamples), std::max(uint32_t(1), self->m_glCtx->m_sampleCount)) - 1);
@@ -1570,6 +1577,7 @@ struct GLCommandQueue : IGraphicsCommandQueue {
   }
 
   void execute() {
+    BOO_MSAN_NO_INTERCEPT
     std::unique_lock<std::mutex> lk(m_mt);
     m_completeBuf = m_fillBuf;
     for (int i = 0; i < 3; ++i) {
@@ -1613,11 +1621,13 @@ struct GLCommandQueue : IGraphicsCommandQueue {
 };
 
 ObjToken<IGraphicsBufferD> GLDataFactory::Context::newDynamicBuffer(BufferUse use, size_t stride, size_t count) {
+  BOO_MSAN_NO_INTERCEPT
   return {new GLGraphicsBufferD<BaseGraphicsData>(m_data, use, stride * count)};
 }
 
 ObjToken<ITextureD> GLDataFactory::Context::newDynamicTexture(size_t width, size_t height, TextureFormat fmt,
                                                               TextureClampMode clampMode) {
+  BOO_MSAN_NO_INTERCEPT
   return {new GLTextureD(m_data, width, height, fmt, clampMode)};
 }
 
@@ -1685,6 +1695,7 @@ ObjToken<ITextureR> GLDataFactory::Context::newRenderTexture(size_t width, size_
                                                              size_t colorBindingCount, size_t depthBindingCount) {
   GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
   GLCommandQueue* q = static_cast<GLCommandQueue*>(factory.m_parent->getCommandQueue());
+  BOO_MSAN_NO_INTERCEPT
   ObjToken<ITextureR> retval(new GLTextureR(m_data, q, width, height, factory.m_glCtx->m_sampleCount,
                                             factory.m_glCtx->m_deepColor ? GL_RGBA16 : GL_RGBA8, clampMode,
                                             colorBindingCount, depthBindingCount));
@@ -1700,6 +1711,7 @@ ObjToken<IShaderDataBinding> GLDataFactory::Context::newShaderDataBinding(
     const bool* depthBind, size_t baseVert, size_t baseInst) {
   GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
   GLCommandQueue* q = static_cast<GLCommandQueue*>(factory.m_parent->getCommandQueue());
+  BOO_MSAN_NO_INTERCEPT
   ObjToken<GLShaderDataBinding> ret = {new GLShaderDataBinding(m_data, pipeline, vbo, instVbo, ibo, ubufCount, ubufs,
                                                                ubufOffs, ubufSizes, texCount, texs, texBindIdx,
                                                                depthBind, baseVert, baseInst, q)};

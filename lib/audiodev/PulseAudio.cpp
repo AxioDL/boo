@@ -336,7 +336,7 @@ struct PulseAudioVoiceEngine : LinuxMidi {
       return;
     }
 
-    void* data;
+    void* data = nullptr;
     size_t periodSz = m_mixInfo.m_periodFrames * frameSz;
     size_t nbytes = writablePeriods * periodSz;
     if (pa_stream_begin_write(m_stream, &data, &nbytes)) {
