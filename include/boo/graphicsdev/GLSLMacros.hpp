@@ -1,7 +1,7 @@
 #pragma once
 
 #define BOO_GLSL_MAX_UNIFORM_COUNT 8
-#define BOO_GLSL_MAX_TEXTURE_COUNT 8
+#define BOO_GLSL_MAX_TEXTURE_COUNT 12
 
 #define BOO_GLSL_BINDING_HEAD                                                                                          \
   "#ifdef VULKAN\n"                                                                                                    \
@@ -29,6 +29,10 @@
   "#define TBINDING5 layout(binding=13)\n"                                                                             \
   "#define TBINDING6 layout(binding=14)\n"                                                                             \
   "#define TBINDING7 layout(binding=15)\n"                                                                             \
+  "#define TBINDING8 layout(binding=16)\n"                                                                             \
+  "#define TBINDING9 layout(binding=17)\n"                                                                             \
+  "#define TBINDING10 layout(binding=18)\n"                                                                            \
+  "#define TBINDING11 layout(binding=19)\n"                                                                            \
   "#else\n"                                                                                                            \
   "#define UBINDING0\n"                                                                                                \
   "#define UBINDING1\n"                                                                                                \
@@ -46,4 +50,8 @@
   "#define TBINDING5\n"                                                                                                \
   "#define TBINDING6\n"                                                                                                \
   "#define TBINDING7\n"                                                                                                \
+  "#define TBINDING8\n"                                                                                                \
+  "#define TBINDING9\n"                                                                                                \
+  "#define TBINDING10\n"                                                                                               \
+  "#define TBINDING11\n"                                                                                               \
   "#endif\n"
