@@ -386,6 +386,7 @@ class MetalTextureD : public GraphicsDataNode<ITextureD> {
       break;
     default:
       Log.report(logvisor::Fatal, "unsupported tex format");
+      return;
     }
 
     m_cpuSz = width * height * m_pxPitch;
