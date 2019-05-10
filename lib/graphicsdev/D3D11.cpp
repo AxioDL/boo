@@ -823,8 +823,8 @@ struct D3D11ShaderDataBinding : public GraphicsDataNode<IShaderDataBinding> {
     }
 
     if (m_texs.size()) {
-      ID3D11ShaderResourceView* srvs[8] = {};
-      for (int i = 0; i < 8 && i < m_texs.size(); ++i) {
+      ID3D11ShaderResourceView* srvs[12] = {};
+      for (int i = 0; i < 12 && i < m_texs.size(); ++i) {
         if (m_texs[i].tex) {
           switch (m_texs[i].tex->type()) {
           case TextureType::Dynamic: {
