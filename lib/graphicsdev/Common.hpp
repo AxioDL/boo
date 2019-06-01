@@ -41,7 +41,7 @@ struct BaseGraphicsData : ListNode<BaseGraphicsData, GraphicsDataFactoryHead*> {
 
   __BooTraceFields
 
-      GraphicsDataNode<IShaderStage, BaseGraphicsData>* m_Ss = nullptr;
+  GraphicsDataNode<IShaderStage, BaseGraphicsData>* m_Ss = nullptr;
   GraphicsDataNode<IShaderPipeline, BaseGraphicsData>* m_SPs = nullptr;
   GraphicsDataNode<IShaderDataBinding, BaseGraphicsData>* m_SBinds = nullptr;
   GraphicsDataNode<IGraphicsBufferS, BaseGraphicsData>* m_SBufs = nullptr;
@@ -50,6 +50,7 @@ struct BaseGraphicsData : ListNode<BaseGraphicsData, GraphicsDataFactoryHead*> {
   GraphicsDataNode<ITextureSA, BaseGraphicsData>* m_SATexs = nullptr;
   GraphicsDataNode<ITextureD, BaseGraphicsData>* m_DTexs = nullptr;
   GraphicsDataNode<ITextureR, BaseGraphicsData>* m_RTexs = nullptr;
+  GraphicsDataNode<ITextureCubeR, BaseGraphicsData>* m_CubeRTexs = nullptr;
   template <class T>
   GraphicsDataNode<T, BaseGraphicsData>*& getHead();
   template <class T>
@@ -101,6 +102,10 @@ template <>
 inline GraphicsDataNode<ITextureR, BaseGraphicsData>*& BaseGraphicsData::getHead<ITextureR>() {
   return m_RTexs;
 }
+template <>
+inline GraphicsDataNode<ITextureCubeR, BaseGraphicsData>*& BaseGraphicsData::getHead<ITextureCubeR>() {
+  return m_CubeRTexs;
+}
 
 /** Private generalized pool container class.
  *  Keeps head pointer to exactly one dynamic buffer while otherwise conforming to BaseGraphicsData
@@ -113,7 +118,7 @@ struct BaseGraphicsPool : ListNode<BaseGraphicsPool, GraphicsDataFactoryHead*> {
 
   __BooTraceFields
 
-      GraphicsDataNode<IGraphicsBufferD, BaseGraphicsPool>* m_DBufs = nullptr;
+  GraphicsDataNode<IGraphicsBufferD, BaseGraphicsPool>* m_DBufs = nullptr;
   template <class T>
   GraphicsDataNode<T, BaseGraphicsPool>*& getHead();
   template <class T>

@@ -85,6 +85,8 @@ class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead {
       m_maxPatchSize = uint32_t(maxPVerts);
     }
 
+    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+
     commitTransaction([this](IGraphicsDataFactory::Context& ctx) {
       auto vertex = ctx.newShaderStage((uint8_t*)GammaVS, 0, PipelineStage::Vertex);
       auto fragment = ctx.newShaderStage((uint8_t*)GammaFS, 0, PipelineStage::Fragment);
@@ -601,6 +603,62 @@ public:
   }
 };
 
+class GLTextureCubeR : public GraphicsDataNode<ITextureCubeR> {
+  friend class GLDataFactory;
+  friend struct GLCommandQueue;
+  struct GLCommandQueue* m_q;
+  GLuint m_texs[2] = {};
+  GLuint m_fbos[6] = {};
+  size_t m_width = 0;
+  size_t m_mipCount = 0;
+  GLenum m_colorFormat;
+  GLTextureCubeR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue* q, size_t width, size_t mips, GLenum colorFormat);
+
+public:
+  ~GLTextureCubeR() {
+    glDeleteTextures(2, m_texs);
+    glDeleteFramebuffers(6, m_fbos);
+  }
+
+  void setClampMode(TextureClampMode mode) {}
+
+  void bind(size_t idx) const {
+    glActiveTexture(GL_TEXTURE0 + idx);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, m_texs[0]);
+  }
+
+  void _allocateTextures() {
+    GLenum compType = m_colorFormat == GL_RGBA16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
+
+    glBindTexture(GL_TEXTURE_CUBE_MAP, m_texs[0]);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, m_mipCount - 1);
+    for (int f = 0; f < 6; ++f) {
+      size_t tmpWidth = m_width;
+      for (int m = 0; m < m_mipCount; ++m) {
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + f, m, m_colorFormat, tmpWidth, tmpWidth,
+                     0, GL_RGBA, compType, nullptr);
+        tmpWidth >>= 1;
+      }
+    }
+
+    glBindTexture(GL_TEXTURE_CUBE_MAP, m_texs[1]);
+    for (int f = 0; f < 6; ++f)
+      glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + f, 0, GL_DEPTH_COMPONENT32F, m_width, m_width, 0, GL_DEPTH_COMPONENT,
+                   GL_UNSIGNED_INT, nullptr);
+  }
+
+  void resize(size_t width, size_t mips) {
+    m_width = width;
+    m_mipCount = mips;
+    _allocateTextures();
+    for (int f = 0; f < 6; ++f) {
+      glBindFramebuffer(GL_FRAMEBUFFER, m_fbos[f]);
+      glDepthMask(GL_TRUE);
+      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
+  }
+};
+
 ObjToken<ITextureS> GLDataFactory::Context::newStaticTexture(size_t width, size_t height, size_t mips,
                                                              TextureFormat fmt, TextureClampMode clampMode,
                                                              const void* data, size_t sz) {
@@ -899,7 +957,8 @@ public:
     } else
       glDisable(GL_CULL_FACE);
 
-    glPatchParameteri(GL_PATCH_VERTICES, m_patchSize);
+    if (m_patchSize)
+      glPatchParameteri(GL_PATCH_VERTICES, m_patchSize);
 
     return m_prog;
   }
@@ -1008,6 +1067,9 @@ struct GLShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
         case TextureType::Render:
           tex.tex.cast<GLTextureR>()->bind(i, tex.idx, tex.depth);
           break;
+        case TextureType::CubeRender:
+          tex.tex.cast<GLTextureCubeR>()->bind(i);
+          break;
         default:
           break;
         }
@@ -1062,6 +1124,7 @@ struct GLCommandQueue : IGraphicsCommandQueue {
     enum class Op {
       SetShaderDataBinding,
       SetRenderTarget,
+      SetCubeRenderTarget,
       SetViewport,
       SetScissor,
       SetClearColor,
@@ -1071,6 +1134,7 @@ struct GLCommandQueue : IGraphicsCommandQueue {
       DrawInstances,
       DrawInstancesIndexed,
       ResolveBindTexture,
+      GenerateMips,
       Present
     } m_op;
     union {
@@ -1088,7 +1152,7 @@ struct GLCommandQueue : IGraphicsCommandQueue {
       };
     };
     ObjToken<IShaderDataBinding> binding;
-    ObjToken<ITextureR> target;
+    ObjToken<ITexture> target;
     ObjToken<ITextureR> source;
     ObjToken<ITextureR> resolveTex;
     int bindIdx;
@@ -1113,13 +1177,20 @@ struct GLCommandQueue : IGraphicsCommandQueue {
     size_t height;
   };
 
+  struct CubeRenderTextureResize {
+    ObjToken<ITextureCubeR> tex;
+    size_t width, mips;
+  };
+
   /* These members are locked for multithreaded access */
   std::vector<RenderTextureResize> m_pendingResizes;
+  std::vector<CubeRenderTextureResize> m_pendingCubeResizes;
   std::vector<std::function<void(void)>> m_pendingPosts1;
   std::vector<std::function<void(void)>> m_pendingPosts2;
   std::vector<ObjToken<IShaderDataBinding>> m_pendingFmtAdds;
   std::vector<std::array<GLuint, 3>> m_pendingFmtDels;
   std::vector<ObjToken<ITextureR>> m_pendingFboAdds;
+  std::vector<ObjToken<ITextureCubeR>> m_pendingCubeFboAdds;
 
   static void ConfigureVertexFormat(GLShaderDataBinding* fmt) {
     glGenVertexArrays(3, fmt->m_vao.data());
@@ -1202,6 +1273,15 @@ struct GLCommandQueue : IGraphicsCommandQueue {
     }
   }
 
+  static void ConfigureFBO(GLTextureCubeR* tex) {
+    glGenFramebuffers(6, tex->m_fbos);
+    for (int i = 0; i < 6; ++i) {
+      glBindFramebuffer(GL_FRAMEBUFFER, tex->m_fbos[i]);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, tex->m_texs[0], 0);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, tex->m_texs[1], 0);
+    }
+  }
+
   static void RenderingWorker(GLCommandQueue* self) {
     BOO_MSAN_NO_INTERCEPT
 #if _WIN32
@@ -1252,10 +1332,22 @@ struct GLCommandQueue : IGraphicsCommandQueue {
           self->m_pendingFboAdds.clear();
         }
 
+        if (self->m_pendingCubeFboAdds.size()) {
+          for (ObjToken<ITextureCubeR>& tex : self->m_pendingCubeFboAdds)
+            ConfigureFBO(tex.cast<GLTextureCubeR>());
+          self->m_pendingCubeFboAdds.clear();
+        }
+
         if (self->m_pendingResizes.size()) {
           for (const RenderTextureResize& resize : self->m_pendingResizes)
             resize.tex.cast<GLTextureR>()->resize(resize.width, resize.height);
           self->m_pendingResizes.clear();
+        }
+
+        if (self->m_pendingCubeResizes.size()) {
+          for (const CubeRenderTextureResize& resize : self->m_pendingCubeResizes)
+            resize.tex.cast<GLTextureCubeR>()->resize(resize.width, resize.mips);
+          self->m_pendingCubeResizes.clear();
         }
 
         {
@@ -1279,20 +1371,24 @@ struct GLCommandQueue : IGraphicsCommandQueue {
       }
       std::vector<Command>& cmds = self->m_cmdBufs[self->m_drawBuf];
       GLenum currentPrim = GL_TRIANGLES;
-      const GLShaderDataBinding* curBinding = nullptr;
       GLuint curFBO = 0;
       for (const Command& cmd : cmds) {
         switch (cmd.m_op) {
         case Command::Op::SetShaderDataBinding: {
           const GLShaderDataBinding* binding = cmd.binding.cast<GLShaderDataBinding>();
           binding->bind(self->m_drawBuf);
-          curBinding = binding;
           currentPrim = binding->m_pipeline.cast<GLShaderPipeline>()->m_drawPrim;
           break;
         }
         case Command::Op::SetRenderTarget: {
           const GLTextureR* tex = cmd.target.cast<GLTextureR>();
-          curFBO = (!tex) ? 0 : tex->m_fbo;
+          curFBO = tex ? tex->m_fbo : 0;
+          glBindFramebuffer(GL_FRAMEBUFFER, curFBO);
+          break;
+        }
+        case Command::Op::SetCubeRenderTarget: {
+          const GLTextureCubeR* tex = cmd.target.cast<GLTextureCubeR>();
+          curFBO = tex ? tex->m_fbos[cmd.bindIdx] : 0;
           glBindFramebuffer(GL_FRAMEBUFFER, curFBO);
           break;
         }
@@ -1380,6 +1476,13 @@ struct GLCommandQueue : IGraphicsCommandQueue {
           glBindFramebuffer(GL_FRAMEBUFFER, curFBO);
           break;
         }
+        case Command::Op::GenerateMips: {
+          if (const GLTextureCubeR* tex = cmd.target.cast<GLTextureCubeR>()) {
+            glBindTexture(GL_TEXTURE_CUBE_MAP, tex->m_texs[0]);
+            glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+          }
+          break;
+        }
         case Command::Op::Present: {
           if (const GLTextureR* tex = cmd.source.cast<GLTextureR>()) {
 #ifndef NDEBUG
@@ -1406,6 +1509,27 @@ struct GLCommandQueue : IGraphicsCommandQueue {
               glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
               glBlitFramebuffer(0, 0, tex->m_width, tex->m_height, 0, 0, tex->m_width, tex->m_height,
                                 GL_COLOR_BUFFER_BIT, GL_NEAREST);
+#if 1
+              /* First cubemap dump */
+              int offset = 0;
+              int voffset = 0;
+              for (BaseGraphicsData& data : *dataFactory->m_dataHead) {
+                if (GLTextureCubeR* cube = static_cast<GLTextureCubeR*>(data.getHead<ITextureCubeR>())) {
+                  for (int i = 0; i < 6; ++i) {
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER, cube->m_fbos[i]);
+                    glBlitFramebuffer(0, 0, cube->m_width, cube->m_width, offset, voffset,
+                                      cube->m_width + offset, cube->m_width + voffset,
+                                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+                    offset += cube->m_width;
+                    if (i == 2) {
+                      offset = 0;
+                      voffset += cube->m_width;
+                    }
+                  }
+                  break;
+                }
+              }
+#endif
             }
           }
           self->m_parent->present();
@@ -1458,7 +1582,14 @@ struct GLCommandQueue : IGraphicsCommandQueue {
   void setRenderTarget(const ObjToken<ITextureR>& target) {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
     cmds.emplace_back(Command::Op::SetRenderTarget);
-    cmds.back().target = target;
+    cmds.back().target = target.get();
+  }
+
+  void setRenderTarget(const ObjToken<ITextureCubeR>& target, int face) {
+    std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
+    cmds.emplace_back(Command::Op::SetCubeRenderTarget);
+    cmds.back().target = target.get();
+    cmds.back().bindIdx = face;
   }
 
   void setViewport(const SWindowRect& rect, float znear, float zfar) {
@@ -1479,6 +1610,18 @@ struct GLCommandQueue : IGraphicsCommandQueue {
     std::unique_lock<std::mutex> lk(m_mt);
     GLTextureR* texgl = tex.cast<GLTextureR>();
     m_pendingResizes.push_back({texgl, width, height});
+  }
+
+  void resizeRenderTexture(const ObjToken<ITextureCubeR>& tex, size_t width, size_t mips) {
+    std::unique_lock<std::mutex> lk(m_mt);
+    GLTextureCubeR* texgl = tex.cast<GLTextureCubeR>();
+    m_pendingCubeResizes.push_back({texgl, width, mips});
+  }
+
+  void generateMipmaps(const ObjToken<ITextureCubeR>& tex) {
+    std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
+    cmds.emplace_back(Command::Op::GenerateMips);
+    cmds.back().target = tex.get();
   }
 
   void schedulePostFrameHandler(std::function<void(void)>&& func) { m_pendingPosts1.push_back(std::move(func)); }
@@ -1574,6 +1717,11 @@ struct GLCommandQueue : IGraphicsCommandQueue {
   void addFBO(const ObjToken<ITextureR>& tex) {
     std::unique_lock<std::mutex> lk(m_mt);
     m_pendingFboAdds.push_back(tex);
+  }
+
+  void addFBO(const ObjToken<ITextureCubeR>& tex) {
+    std::unique_lock<std::mutex> lk(m_mt);
+    m_pendingCubeFboAdds.push_back(tex);
   }
 
   void execute() {
@@ -1700,6 +1848,32 @@ ObjToken<ITextureR> GLDataFactory::Context::newRenderTexture(size_t width, size_
                                             factory.m_glCtx->m_deepColor ? GL_RGBA16 : GL_RGBA8, clampMode,
                                             colorBindingCount, depthBindingCount));
   q->resizeRenderTexture(retval, width, height);
+  return retval;
+}
+
+GLTextureCubeR::GLTextureCubeR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue* q, size_t width, size_t mips, GLenum colorFormat)
+: GraphicsDataNode<ITextureCubeR>(parent)
+, m_q(q)
+, m_width(width)
+, m_mipCount(mips)
+, m_colorFormat(colorFormat) {
+  glGenTextures(2, m_texs);
+
+  _allocateTextures();
+
+  glBindTexture(GL_TEXTURE_CUBE_MAP, m_texs[0]);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+  m_q->addFBO(this);
+}
+
+ObjToken<ITextureCubeR> GLDataFactory::Context::newCubeRenderTexture(size_t width, size_t mips) {
+  GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
+  GLCommandQueue* q = static_cast<GLCommandQueue*>(factory.m_parent->getCommandQueue());
+  BOO_MSAN_NO_INTERCEPT
+  ObjToken<ITextureCubeR> retval(new GLTextureCubeR(m_data, q, width, mips,
+                                                    factory.m_glCtx->m_deepColor ? GL_RGBA16 : GL_RGBA8));
   return retval;
 }
 

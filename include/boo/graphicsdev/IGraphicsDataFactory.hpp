@@ -44,7 +44,7 @@ protected:
 };
 
 /** Texture access types */
-enum class TextureType { Static, StaticArray, Dynamic, Render };
+enum class TextureType { Static, StaticArray, Dynamic, Render, CubeRender };
 
 /** Supported texture formats */
 enum class TextureFormat { RGBA8, I8, I16, DXT1, DXT3, PVRTC4 };
@@ -90,6 +90,12 @@ protected:
 struct ITextureR : ITexture {
 protected:
   ITextureR() : ITexture(TextureType::Render) {}
+};
+
+/** Resource buffer for cube render-target textures */
+struct ITextureCubeR : ITexture {
+protected:
+  ITextureCubeR() : ITexture(TextureType::CubeRender) {}
 };
 
 /** Types of vertex attributes */
@@ -223,6 +229,7 @@ struct IGraphicsDataFactory {
                                                   TextureClampMode clampMode) = 0;
     virtual ObjToken<ITextureR> newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
                                                  size_t colorBindingCount, size_t depthBindingCount) = 0;
+    virtual ObjToken<ITextureCubeR> newCubeRenderTexture(size_t width, size_t mips) = 0;
 
     virtual ObjToken<IShaderStage> newShaderStage(const uint8_t* data, size_t size, PipelineStage stage) = 0;
 

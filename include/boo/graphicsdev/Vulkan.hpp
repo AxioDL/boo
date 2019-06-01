@@ -24,6 +24,10 @@ struct VulkanContext {
     std::vector<VkExtensionProperties> extensions;
   };
 
+#ifndef NDEBUG
+  PFN_vkDestroyDebugReportCallbackEXT m_destroyDebugReportCallback = nullptr;
+  VkDebugReportCallbackEXT m_debugReportCallback = VK_NULL_HANDLE;
+#endif
   std::vector<LayerProperties> m_instanceLayerProperties;
   std::vector<const char*> m_layerNames;
   std::vector<const char*> m_instanceExtensionNames;
@@ -43,6 +47,7 @@ struct VulkanContext {
   VkDescriptorSetLayout m_descSetLayout = VK_NULL_HANDLE;
   VkPipelineLayout m_pipelinelayout = VK_NULL_HANDLE;
   VkRenderPass m_pass = VK_NULL_HANDLE;
+  VkRenderPass m_passOneSample = VK_NULL_HANDLE;
   VkRenderPass m_passColorOnly = VK_NULL_HANDLE;
   VkCommandPool m_loadPool = VK_NULL_HANDLE;
   VkCommandBuffer m_loadCmdBuf = VK_NULL_HANDLE;
@@ -143,6 +148,7 @@ public:
                                                TextureClampMode clampMode);
     boo::ObjToken<ITextureR> newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
                                               size_t colorBindCount, size_t depthBindCount);
+    ObjToken<ITextureCubeR> newCubeRenderTexture(size_t width, size_t mips);
 
     ObjToken<IShaderStage> newShaderStage(const uint8_t* data, size_t size, PipelineStage stage);
 

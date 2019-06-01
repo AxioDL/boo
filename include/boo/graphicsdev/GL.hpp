@@ -39,6 +39,7 @@ public:
     ObjToken<ITextureD> newDynamicTexture(size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode);
     ObjToken<ITextureR> newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
                                          size_t colorBindingCount, size_t depthBindingCount);
+    ObjToken<ITextureCubeR> newCubeRenderTexture(size_t width, size_t mips);
 
     ObjToken<IShaderStage> newShaderStage(const uint8_t* data, size_t size, PipelineStage stage);
 

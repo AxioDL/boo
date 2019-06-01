@@ -15,10 +15,13 @@ struct IGraphicsCommandQueue {
 
   virtual void setShaderDataBinding(const ObjToken<IShaderDataBinding>& binding) = 0;
   virtual void setRenderTarget(const ObjToken<ITextureR>& target) = 0;
+  virtual void setRenderTarget(const ObjToken<ITextureCubeR>& target, int face) = 0;
   virtual void setViewport(const SWindowRect& rect, float znear = 0.f, float zfar = 1.f) = 0;
   virtual void setScissor(const SWindowRect& rect) = 0;
 
   virtual void resizeRenderTexture(const ObjToken<ITextureR>& tex, size_t width, size_t height) = 0;
+  virtual void resizeRenderTexture(const ObjToken<ITextureCubeR>& tex, size_t width, size_t mips) = 0;
+  virtual void generateMipmaps(const ObjToken<ITextureCubeR>& tex) = 0;
   virtual void schedulePostFrameHandler(std::function<void(void)>&& func) = 0;
 
   virtual void setClearColor(const float rgba[4]) = 0;
