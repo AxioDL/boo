@@ -59,6 +59,20 @@ static const char* GammaFS =
     "    return colorOut;\n"
     "}\n";
 
+static const char* FlipFS =
+    "struct VertToFrag\n"
+    "{\n"
+    "    float4 pos : SV_Position;\n"
+    "    float2 uv : UV;\n"
+    "};\n"
+    "\n"
+    "Texture2D tex : register(t0);\n"
+    "SamplerState samp : register(s3);\n"
+    "float4 main(in VertToFrag vtf) : SV_Target0\n"
+    "{\n"
+    "    return tex.Sample(samp, vtf.uv);\n"
+    "}\n";
+
 namespace boo {
 static logvisor::Module Log("boo::D3D11");
 class D3D11DataFactory;
@@ -406,6 +420,79 @@ public:
       height = 1;
     m_width = width;
     m_height = height;
+    Setup(ctx);
+  }
+};
+
+class D3D11TextureCubeR : public GraphicsDataNode<ITextureCubeR> {
+  friend class D3D11DataFactory::Context;
+  friend struct D3D11CommandQueue;
+
+  size_t m_width = 0;
+  size_t m_mipCount = 0;
+
+  void Setup(D3D11Context* ctx) {
+    CD3D11_TEXTURE2D_DESC colorDesc(ctx->m_fbFormat, m_width, m_width, 6, 1,
+                                    D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE,
+                                    D3D11_USAGE_DEFAULT, 0, 1, 0, D3D11_RESOURCE_MISC_TEXTURECUBE);
+    ThrowIfFailed(ctx->m_dev->CreateTexture2D(&colorDesc, nullptr, &m_colorTex));
+    CD3D11_TEXTURE2D_DESC depthDesc(DXGI_FORMAT_D32_FLOAT, m_width, m_width, 6, 1, D3D11_BIND_DEPTH_STENCIL,
+                                    D3D11_USAGE_DEFAULT, 0, 1, 0, D3D11_RESOURCE_MISC_TEXTURECUBE);
+    ThrowIfFailed(ctx->m_dev->CreateTexture2D(&depthDesc, nullptr, &m_depthTex));
+
+    D3D11_RTV_DIMENSION rtvDim = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
+    D3D11_DSV_DIMENSION dsvDim = D3D11_DSV_DIMENSION_TEXTURE2DARRAY;
+
+    for (int i = 0; i < 6; ++i) {
+      CD3D11_RENDER_TARGET_VIEW_DESC rtvDesc(m_colorTex.Get(), rtvDim, ctx->m_fbFormat, 0, i);
+      ThrowIfFailed(ctx->m_dev->CreateRenderTargetView(m_colorTex.Get(), &rtvDesc, &m_rtv[i]));
+      CD3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc(m_depthTex.Get(), dsvDim, DXGI_FORMAT_D32_FLOAT, 0, i);
+      ThrowIfFailed(ctx->m_dev->CreateDepthStencilView(m_depthTex.Get(), &dsvDesc, &m_dsv[i]));
+      CD3D11_SHADER_RESOURCE_VIEW_DESC srvDesc(D3D11_SRV_DIMENSION_TEXTURE2DARRAY,
+                                               ctx->m_fbFormat, 0, 1, i, 1);
+      ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_colorTex.Get(), &srvDesc, &m_srv[i]));
+    }
+
+    CD3D11_TEXTURE2D_DESC colorBindDesc(ctx->m_fbFormat, m_width, m_width, 6, m_mipCount,
+                                        D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE,
+                                        D3D11_USAGE_DEFAULT, 0, 1, 0,
+                                        D3D11_RESOURCE_MISC_TEXTURECUBE | D3D11_RESOURCE_MISC_GENERATE_MIPS);
+    ThrowIfFailed(ctx->m_dev->CreateTexture2D(&colorBindDesc, nullptr, &m_colorBindTex));
+    for (int i = 0; i < 6; ++i) {
+      CD3D11_RENDER_TARGET_VIEW_DESC rtvDesc(m_colorBindTex.Get(), rtvDim, ctx->m_fbFormat, 0, i);
+      ThrowIfFailed(ctx->m_dev->CreateRenderTargetView(m_colorBindTex.Get(), &rtvDesc, &m_colorBindRtv[i]));
+    }
+    CD3D11_SHADER_RESOURCE_VIEW_DESC colorSrvDesc(m_colorBindTex.Get(), D3D11_SRV_DIMENSION_TEXTURECUBE,
+                                                  ctx->m_fbFormat, 0, m_mipCount);
+    ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_colorBindTex.Get(), &colorSrvDesc, &m_colorSrv));
+  }
+
+  D3D11TextureCubeR(const boo::ObjToken<BaseGraphicsData>& parent, D3D11Context* ctx, size_t width, size_t mips)
+  : GraphicsDataNode<ITextureCubeR>(parent)
+  , m_width(width)
+  , m_mipCount(mips) {
+    Setup(ctx);
+  }
+
+public:
+  ComPtr<ID3D11Texture2D> m_colorTex;
+  ComPtr<ID3D11RenderTargetView> m_rtv[6];
+  ComPtr<ID3D11ShaderResourceView> m_srv[6];
+
+  ComPtr<ID3D11Texture2D> m_depthTex;
+  ComPtr<ID3D11DepthStencilView> m_dsv[6];
+
+  ComPtr<ID3D11Texture2D> m_colorBindTex;
+  ComPtr<ID3D11RenderTargetView> m_colorBindRtv[6];
+  ComPtr<ID3D11ShaderResourceView> m_colorSrv;
+
+  ~D3D11TextureCubeR() = default;
+
+  void resize(D3D11Context* ctx, size_t width, size_t mips) {
+    if (width < 1)
+      width = 1;
+    m_width = width;
+    m_mipCount = mips;
     Setup(ctx);
   }
 };
@@ -847,6 +934,11 @@ struct D3D11ShaderDataBinding : public GraphicsDataNode<IShaderDataBinding> {
             srvs[i] = m_texs[i].depth ? ctex->m_depthSrv[m_texs[i].idx].Get() : ctex->m_colorSrv[m_texs[i].idx].Get();
             break;
           }
+          case TextureType::CubeRender: {
+            D3D11TextureCubeR* ctex = m_texs[i].tex.cast<D3D11TextureCubeR>();
+            srvs[i] = ctex->m_colorSrv.Get();
+            break;
+          }
           }
         }
       }
@@ -924,18 +1016,39 @@ struct D3D11CommandQueue : IGraphicsCommandQueue {
     m_deferredCtx->DSSetSamplers(0, 5, samp);
   }
 
-  boo::ObjToken<ITextureR> m_boundTarget;
+  boo::ObjToken<ITexture> m_boundTarget;
   void setRenderTarget(const boo::ObjToken<ITextureR>& target) {
     D3D11TextureR* ctarget = target.cast<D3D11TextureR>();
     ID3D11RenderTargetView* view[] = {ctarget->m_rtv.Get()};
     m_deferredCtx->OMSetRenderTargets(1, view, ctarget->m_dsv.Get());
-    m_boundTarget = target;
+    m_boundTarget = target.get();
+  }
+
+  int m_boundFace = 0;
+  void setRenderTarget(const ObjToken<ITextureCubeR>& target, int face) {
+    D3D11TextureCubeR* ctarget = target.cast<D3D11TextureCubeR>();
+    ID3D11RenderTargetView* view[] = {ctarget->m_rtv[face].Get()};
+    m_deferredCtx->OMSetRenderTargets(1, view, ctarget->m_dsv[face].Get());
+    m_boundTarget = target.get();
+    m_boundFace = face;
   }
 
   void setViewport(const SWindowRect& rect, float znear, float zfar) {
     if (m_boundTarget) {
-      D3D11TextureR* ctarget = m_boundTarget.cast<D3D11TextureR>();
-      int boundHeight = ctarget->m_height;
+      int boundHeight = 0;
+      switch (m_boundTarget->type()) {
+      case TextureType::Render: {
+        D3D11TextureR* ctarget = m_boundTarget.cast<D3D11TextureR>();
+        boundHeight = ctarget->m_height;
+        break;
+      }
+      case TextureType::CubeRender: {
+        D3D11TextureCubeR* ctarget = m_boundTarget.cast<D3D11TextureCubeR>();
+        boundHeight = ctarget->m_width;
+        break;
+      }
+      default: break;
+      }
       D3D11_VIEWPORT vp = {FLOAT(rect.location[0]),
                            FLOAT(boundHeight - rect.location[1] - rect.size[1]),
                            FLOAT(rect.size[0]),
@@ -949,7 +1062,20 @@ struct D3D11CommandQueue : IGraphicsCommandQueue {
   void setScissor(const SWindowRect& rect) {
     if (m_boundTarget) {
       D3D11TextureR* ctarget = m_boundTarget.cast<D3D11TextureR>();
-      int boundHeight = ctarget->m_height;
+      int boundHeight = 0;
+      switch (m_boundTarget->type()) {
+      case TextureType::Render: {
+        D3D11TextureR* ctarget = m_boundTarget.cast<D3D11TextureR>();
+        boundHeight = ctarget->m_height;
+        break;
+      }
+      case TextureType::CubeRender: {
+        D3D11TextureCubeR* ctarget = m_boundTarget.cast<D3D11TextureCubeR>();
+        boundHeight = ctarget->m_width;
+        break;
+      }
+      default: break;
+      }
       D3D11_RECT d3drect = {LONG(rect.location[0]), LONG(boundHeight - rect.location[1] - rect.size[1]),
                             LONG(rect.location[0] + rect.size[0]), LONG(boundHeight - rect.location[1])};
       m_deferredCtx->RSSetScissorRects(1, &d3drect);
@@ -962,6 +1088,15 @@ struct D3D11CommandQueue : IGraphicsCommandQueue {
     std::unique_lock<std::mutex> lk(m_mt);
     m_texResizes[ctex] = std::make_pair(width, height);
   }
+
+  std::unordered_map<D3D11TextureCubeR*, std::pair<size_t, size_t>> m_cubeTexResizes;
+  void resizeRenderTexture(const boo::ObjToken<ITextureCubeR>& tex, size_t width, size_t mips) {
+    D3D11TextureCubeR* ctex = tex.cast<D3D11TextureCubeR>();
+    std::unique_lock<std::mutex> lk(m_mt);
+    m_cubeTexResizes[ctex] = std::make_pair(width, mips);
+  }
+
+  void generateMipmaps(const ObjToken<ITextureCubeR>& tex);
 
   void schedulePostFrameHandler(std::function<void(void)>&& func) { func(); }
 
@@ -976,11 +1111,25 @@ struct D3D11CommandQueue : IGraphicsCommandQueue {
   void clearTarget(bool render = true, bool depth = true) {
     if (!m_boundTarget)
       return;
-    D3D11TextureR* ctarget = m_boundTarget.cast<D3D11TextureR>();
-    if (render)
-      m_deferredCtx->ClearRenderTargetView(ctarget->m_rtv.Get(), m_clearColor);
-    if (depth)
-      m_deferredCtx->ClearDepthStencilView(ctarget->m_dsv.Get(), D3D11_CLEAR_DEPTH, 0.0f, 0);
+    switch (m_boundTarget->type()) {
+    case TextureType::Render: {
+      D3D11TextureR* ctarget = m_boundTarget.cast<D3D11TextureR>();
+      if (render)
+        m_deferredCtx->ClearRenderTargetView(ctarget->m_rtv.Get(), m_clearColor);
+      if (depth)
+        m_deferredCtx->ClearDepthStencilView(ctarget->m_dsv.Get(), D3D11_CLEAR_DEPTH, 0.0f, 0);
+      break;
+    }
+    case TextureType::CubeRender: {
+      D3D11TextureCubeR* ctarget = m_boundTarget.cast<D3D11TextureCubeR>();
+      if (render)
+        m_deferredCtx->ClearRenderTargetView(ctarget->m_rtv[m_boundFace].Get(), m_clearColor);
+      if (depth)
+        m_deferredCtx->ClearDepthStencilView(ctarget->m_dsv[m_boundFace].Get(), D3D11_CLEAR_DEPTH, 0.0f, 0);
+      break;
+    }
+    default: break;
+    }
   }
 
   void draw(size_t start, size_t count) { m_deferredCtx->Draw(count, start); }
@@ -1108,6 +1257,8 @@ class D3D11DataFactoryImpl : public D3D11DataFactory, public GraphicsDataFactory
   ObjToken<ITextureD> m_gammaLUT;
   ObjToken<IGraphicsBufferS> m_gammaVBO;
   ObjToken<IShaderDataBinding> m_gammaBinding;
+  ObjToken<IGraphicsBufferS> m_flipVBO;
+  ObjToken<IShaderPipeline> m_flipShader;
   void SetupGammaResources() {
     commitTransaction([this](IGraphicsDataFactory::Context& ctx) {
       auto vertexHlsl = D3D11DataFactory::CompileHLSL(GammaVS, PipelineStage::Vertex);
@@ -1131,6 +1282,17 @@ class D3D11DataFactoryImpl : public D3D11DataFactory, public GraphicsDataFactory
       ObjToken<ITexture> texs[] = {{}, m_gammaLUT.get()};
       m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVBO.get(), {}, {}, 0, nullptr, nullptr, 2, texs,
                                                 nullptr, nullptr);
+
+      Vert flipverts[4] = {{{-1.f, 1.f, 0.f, 1.f}, {0.f, 1.f, 0.f, 0.f}},
+                           {{1.f, 1.f, 0.f, 1.f}, {1.f, 1.f, 0.f, 0.f}},
+                           {{-1.f, -1.f, 0.f, 1.f}, {0.f, 0.f, 0.f, 0.f}},
+                           {{1.f, -1.f, 0.f, 1.f}, {1.f, 0.f, 0.f, 0.f}}};
+      m_flipVBO = ctx.newStaticBuffer(BufferUse::Vertex, flipverts, 32, 4);
+
+      fragmentHlsl = D3D11DataFactory::CompileHLSL(FlipFS, PipelineStage::Fragment);
+      fragmentShader = ctx.newShaderStage(fragmentHlsl, PipelineStage::Fragment);
+      m_flipShader = ctx.newShaderPipeline(vertexShader, fragmentShader, vfmt, info);
+
       return true;
     } BooTrace);
   }
@@ -1168,6 +1330,38 @@ public:
     return true;
   }
 };
+
+void D3D11CommandQueue::generateMipmaps(const ObjToken<ITextureCubeR>& tex) {
+  D3D11TextureCubeR* ctex = tex.cast<D3D11TextureCubeR>();
+  D3D11DataFactoryImpl* dataFactory = static_cast<D3D11DataFactoryImpl*>(m_parent->getDataFactory());
+  D3D11ShaderPipeline* shader = dataFactory->m_flipShader.cast<D3D11ShaderPipeline>();
+  shader->bind(m_deferredCtx.Get());
+  ID3D11Buffer* buffers[] = {dataFactory->m_flipVBO.cast<D3D11GraphicsBufferS>()->m_buf.Get()};
+  UINT strides[] = {32};
+  UINT offsets[] = {0};
+  m_deferredCtx->IASetVertexBuffers(0, 1, buffers, strides, offsets);
+
+  D3D11_VIEWPORT vp = {0.f,
+                       0.f,
+                       FLOAT(ctex->m_width),
+                       FLOAT(ctex->m_width),
+                       0.f,
+                       1.f};
+  m_deferredCtx->RSSetViewports(1, &vp);
+
+  D3D11_RECT d3drect = {0, 0, LONG(ctex->m_width), LONG(ctex->m_width)};
+  m_deferredCtx->RSSetScissorRects(1, &d3drect);
+
+  for (int i = 0; i < 6; ++i) {
+    ID3D11ShaderResourceView* resViews[] = {ctex->m_srv[i].Get()};
+    m_deferredCtx->PSSetShaderResources(0, 1, resViews);
+    ID3D11RenderTargetView* views[] = {ctex->m_colorBindRtv[i].Get()};
+    m_deferredCtx->OMSetRenderTargets(1, views, nullptr);
+    m_deferredCtx->Draw(4, 0);
+  }
+
+  m_deferredCtx->GenerateMips(ctex->m_colorSrv.Get());
+}
 
 D3D11DataFactory::Context::Context(D3D11DataFactory& parent __BooTraceArgs)
 : m_parent(parent), m_data(new BaseGraphicsData(static_cast<D3D11DataFactoryImpl&>(parent) __BooTraceArgsUse)) {}
@@ -1217,6 +1411,11 @@ boo::ObjToken<ITextureR> D3D11DataFactory::Context::newRenderTexture(size_t widt
                             depthBindCount)};
 }
 
+ObjToken<ITextureCubeR> D3D11DataFactory::Context::newCubeRenderTexture(size_t width, size_t mips) {
+  D3D11DataFactoryImpl& factory = static_cast<D3D11DataFactoryImpl&>(m_parent);
+  return {new D3D11TextureCubeR(m_data, factory.m_ctx, width, mips)};
+}
+
 boo::ObjToken<IShaderStage> D3D11DataFactory::Context::newShaderStage(const uint8_t* data, size_t size,
                                                                       PipelineStage stage) {
   D3D11DataFactoryImpl& factory = static_cast<D3D11DataFactoryImpl&>(m_parent);
@@ -1259,10 +1458,23 @@ void D3D11CommandQueue::RenderingWorker(D3D11CommandQueue* self) {
 
       self->ProcessDynamicLoads(self->m_ctx->m_devCtx.Get());
 
+      bool doReset = false;
+
       if (self->m_texResizes.size()) {
         for (const auto& resize : self->m_texResizes)
           resize.first->resize(self->m_ctx, resize.second.first, resize.second.second);
         self->m_texResizes.clear();
+        doReset = true;
+      }
+
+      if (self->m_cubeTexResizes.size()) {
+        for (const auto& resize : self->m_cubeTexResizes)
+          resize.first->resize(self->m_ctx, resize.second.first, resize.second.second);
+        self->m_cubeTexResizes.clear();
+        doReset = true;
+      }
+
+      if (doReset) {
         CmdList.reset();
         continue;
       }

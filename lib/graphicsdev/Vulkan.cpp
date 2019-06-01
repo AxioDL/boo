@@ -3970,10 +3970,13 @@ void VulkanCommandQueue::execute() {
   vk::ResetFences(m_ctx->m_dev, 1, &m_drawCompleteFence);
 
   /* Perform texture and swap-chain resizes */
-  if (m_ctx->_resizeSwapChains() || m_texResizes.size()) {
+  if (m_ctx->_resizeSwapChains() || m_texResizes.size() || m_cubeTexResizes.size()) {
     for (const auto& resize : m_texResizes)
       resize.first->resize(m_ctx, resize.second.first, resize.second.second);
     m_texResizes.clear();
+    for (const auto& resize : m_cubeTexResizes)
+      resize.first->resize(m_ctx, resize.second.first, resize.second.second);
+    m_cubeTexResizes.clear();
     resetCommandBuffer();
     _rollbackImageLayouts();
     m_dynamicNeedsReset = true;

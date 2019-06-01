@@ -25,7 +25,7 @@ public:
   class Context final : public IGraphicsDataFactory::Context {
     friend class D3D11DataFactoryImpl;
     D3D11DataFactory& m_parent;
-    boo::ObjToken<BaseGraphicsData> m_data;
+    ObjToken<BaseGraphicsData> m_data;
     Context(D3D11DataFactory& parent __BooTraceArgs);
     ~Context();
 
@@ -33,18 +33,19 @@ public:
     Platform platform() const { return Platform::D3D11; }
     const SystemChar* platformName() const { return _SYS_STR("D3D11"); }
 
-    boo::ObjToken<IGraphicsBufferS> newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
-    boo::ObjToken<IGraphicsBufferD> newDynamicBuffer(BufferUse use, size_t stride, size_t count);
+    ObjToken<IGraphicsBufferS> newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
+    ObjToken<IGraphicsBufferD> newDynamicBuffer(BufferUse use, size_t stride, size_t count);
 
-    boo::ObjToken<ITextureS> newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                              TextureClampMode clampMode, const void* data, size_t sz);
-    boo::ObjToken<ITextureSA> newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
-                                                    TextureFormat fmt, TextureClampMode clampMode, const void* data,
-                                                    size_t sz);
-    boo::ObjToken<ITextureD> newDynamicTexture(size_t width, size_t height, TextureFormat fmt,
-                                               TextureClampMode clampMode);
-    boo::ObjToken<ITextureR> newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
-                                              size_t colorBindCount, size_t depthBindCount);
+    ObjToken<ITextureS> newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
+                                         TextureClampMode clampMode, const void* data, size_t sz);
+    ObjToken<ITextureSA> newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
+                                               TextureFormat fmt, TextureClampMode clampMode, const void* data,
+                                               size_t sz);
+    ObjToken<ITextureD> newDynamicTexture(size_t width, size_t height, TextureFormat fmt,
+                                          TextureClampMode clampMode);
+    ObjToken<ITextureR> newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
+                                         size_t colorBindCount, size_t depthBindCount);
+    ObjToken<ITextureCubeR> newCubeRenderTexture(size_t width, size_t mips);
 
     ObjToken<IShaderStage> newShaderStage(const uint8_t* data, size_t size, PipelineStage stage);
 
@@ -53,11 +54,11 @@ public:
                                                 ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
                                                 const AdditionalPipelineInfo& additionalInfo);
 
-    boo::ObjToken<IShaderDataBinding> newShaderDataBinding(
-        const boo::ObjToken<IShaderPipeline>& pipeline, const boo::ObjToken<IGraphicsBuffer>& vbo,
-        const boo::ObjToken<IGraphicsBuffer>& instVbo, const boo::ObjToken<IGraphicsBuffer>& ibo, size_t ubufCount,
-        const boo::ObjToken<IGraphicsBuffer>* ubufs, const PipelineStage* ubufStages, const size_t* ubufOffs,
-        const size_t* ubufSizes, size_t texCount, const boo::ObjToken<ITexture>* texs, const int* bindIdxs,
+    ObjToken<IShaderDataBinding> newShaderDataBinding(
+        const ObjToken<IShaderPipeline>& pipeline, const ObjToken<IGraphicsBuffer>& vbo,
+        const ObjToken<IGraphicsBuffer>& instVbo, const ObjToken<IGraphicsBuffer>& ibo, size_t ubufCount,
+        const ObjToken<IGraphicsBuffer>* ubufs, const PipelineStage* ubufStages, const size_t* ubufOffs,
+        const size_t* ubufSizes, size_t texCount, const ObjToken<ITexture>* texs, const int* bindIdxs,
         const bool* bindDepth, size_t baseVert = 0, size_t baseInst = 0);
   };
 
