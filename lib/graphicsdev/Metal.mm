@@ -63,6 +63,37 @@ static const char* GammaFS =
   "    return colorOut;\n"
   "}\n";
 
+static const char* CubeFlipFS =
+  "#include <metal_stdlib>\n"
+  "using namespace metal;\n"
+  "struct VertToFrag\n"
+  "{\n"
+  "    float4 pos [[ position ]];\n"
+  "    float2 uv;\n"
+  "};\n"
+  "\n"
+  "struct Output {\n"
+  "    float4 color0 [[ color(0) ]];\n"
+  "    float4 color1 [[ color(1) ]];\n"
+  "    float4 color2 [[ color(2) ]];\n"
+  "    float4 color3 [[ color(3) ]];\n"
+  "    float4 color4 [[ color(4) ]];\n"
+  "    float4 color5 [[ color(5) ]];\n"
+  "};\n"
+  "fragment Output fmain(VertToFrag vtf [[ stage_in ]],\n"
+  "                      sampler clampSamp [[ sampler(3) ]],\n"
+  "                      texture2d_array<float> tex [[ texture(0) ]])\n"
+  "{\n"
+  "    Output out;\n"
+  "    out.color0 = tex.sample(clampSamp, vtf.uv, 0);\n"
+  "    out.color1 = tex.sample(clampSamp, vtf.uv, 1);\n"
+  "    out.color2 = tex.sample(clampSamp, vtf.uv, 2);\n"
+  "    out.color3 = tex.sample(clampSamp, vtf.uv, 3);\n"
+  "    out.color4 = tex.sample(clampSamp, vtf.uv, 4);\n"
+  "    out.color5 = tex.sample(clampSamp, vtf.uv, 5);\n"
+  "    return out;\n"
+  "}\n";
+
 namespace boo {
 static logvisor::Module Log("boo::Metal");
 struct MetalCommandQueue;
@@ -84,43 +115,10 @@ class MetalDataFactoryImpl : public MetalDataFactory, public GraphicsDataFactory
   ObjToken<ITextureD> m_gammaLUT;
   ObjToken<IGraphicsBufferS> m_gammaVBO;
   ObjToken<IShaderDataBinding> m_gammaBinding;
-
-  void SetupGammaResources() {
-    m_hasTessellation = [m_ctx->m_dev supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily1_v2];
-
-    commitTransaction([this](IGraphicsDataFactory::Context& ctx) {
-      auto vertexMetal = MetalDataFactory::CompileMetal(GammaVS, PipelineStage::Vertex);
-      auto vertexShader = ctx.newShaderStage(vertexMetal, PipelineStage::Vertex);
-      auto fragmentMetal = MetalDataFactory::CompileMetal(GammaFS, PipelineStage::Fragment);
-      auto fragmentShader = ctx.newShaderStage(fragmentMetal, PipelineStage::Fragment);
-      const VertexElementDescriptor vfmt[] = {
-        {VertexSemantic::Position4},
-        {VertexSemantic::UV4}
-      };
-      AdditionalPipelineInfo info =
-        {
-          BlendFactor::One, BlendFactor::Zero,
-          Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None
-        };
-      m_gammaShader = ctx.newShaderPipeline(vertexShader, fragmentShader, vfmt, info);
-      m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
-      setDisplayGamma(1.f);
-      const struct Vert {
-        float pos[4];
-        float uv[4];
-      } verts[4] = {
-        {{-1.f, 1.f,  0.f, 1.f}, {0.f, 0.f, 0.f, 0.f}},
-        {{1.f,  1.f,  0.f, 1.f}, {1.f, 0.f, 0.f, 0.f}},
-        {{-1.f, -1.f, 0.f, 1.f}, {0.f, 1.f, 0.f, 0.f}},
-        {{1.f,  -1.f, 0.f, 1.f}, {1.f, 1.f, 0.f, 0.f}}
-      };
-      m_gammaVBO = ctx.newStaticBuffer(BufferUse::Vertex, verts, 32, 4);
-      ObjToken<ITexture> texs[] = {{}, m_gammaLUT.get()};
-      m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVBO.get(), {}, {},
-                                                0, nullptr, nullptr, 2, texs, nullptr, nullptr);
-      return true;
-    }BooTrace);
-  }
+  ObjToken<IGraphicsBufferS> m_cubeFlipVBO;
+  id<MTLRenderPipelineState> m_cubeFlipShader;
+  
+  void SetupGammaResources();
 
 public:
 
@@ -601,6 +599,140 @@ public:
   }
 };
 
+class MetalTextureCubeR : public GraphicsDataNode<ITextureCubeR> {
+  friend class MetalDataFactory;
+
+  friend struct MetalCommandQueue;
+  size_t m_width = 0;
+  size_t m_numMips = 0;
+
+  void Setup(MetalContext* ctx) {
+    @autoreleasepool {
+      MTLTextureDescriptor* desc =
+          [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:ctx->m_pixelFormat
+                                                             width:m_width height:m_width
+                                                         mipmapped:NO];
+      desc.storageMode = MTLStorageModePrivate;
+      desc.textureType = MTLTextureType2DArray;
+      desc.sampleCount = 1;
+      desc.arrayLength = 6;
+      desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+      m_colorTex = [ctx->m_dev newTextureWithDescriptor:desc];
+
+      desc.pixelFormat = MTLPixelFormatDepth32Float;
+      desc.usage = MTLTextureUsageRenderTarget;
+      m_depthTex = [ctx->m_dev newTextureWithDescriptor:desc];
+
+      desc.textureType = MTLTextureTypeCube;
+      desc.sampleCount = 1;
+      desc.arrayLength = 1;
+      desc.mipmapLevelCount = m_numMips;
+      desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+      desc.pixelFormat = ctx->m_pixelFormat;
+      m_colorBindTex = [ctx->m_dev newTextureWithDescriptor:desc];
+
+      for (NSUInteger i = 0; i < 6; ++i) {
+        m_passDesc[i] = [MTLRenderPassDescriptor renderPassDescriptor];
+
+        m_passDesc[i].colorAttachments[0].texture = m_colorTex;
+        m_passDesc[i].colorAttachments[0].slice = i;
+        m_passDesc[i].colorAttachments[0].loadAction = MTLLoadActionLoad;
+        m_passDesc[i].colorAttachments[0].storeAction = MTLStoreActionStore;
+
+        m_passDesc[i].depthAttachment.texture = m_depthTex;
+        m_passDesc[i].depthAttachment.slice = i;
+        m_passDesc[i].depthAttachment.loadAction = MTLLoadActionLoad;
+        m_passDesc[i].depthAttachment.storeAction = MTLStoreActionStore;
+        m_passDesc[i].depthAttachment.clearDepth = 0.f;
+      }
+
+      for (NSUInteger i = 0; i < 6; ++i) {
+        m_clearDepthPassDesc[i] = [MTLRenderPassDescriptor renderPassDescriptor];
+
+        m_clearDepthPassDesc[i].colorAttachments[0].texture = m_colorTex;
+        m_clearDepthPassDesc[i].colorAttachments[0].slice = i;
+        m_clearDepthPassDesc[i].colorAttachments[0].loadAction = MTLLoadActionLoad;
+        m_clearDepthPassDesc[i].colorAttachments[0].storeAction = MTLStoreActionStore;
+
+        m_clearDepthPassDesc[i].depthAttachment.texture = m_depthTex;
+        m_clearDepthPassDesc[i].depthAttachment.slice = i;
+        m_clearDepthPassDesc[i].depthAttachment.loadAction = MTLLoadActionClear;
+        m_clearDepthPassDesc[i].depthAttachment.storeAction = MTLStoreActionStore;
+        m_clearDepthPassDesc[i].depthAttachment.clearDepth = 0.f;
+      }
+
+      for (NSUInteger i = 0; i < 6; ++i) {
+        m_clearColorPassDesc[i] = [MTLRenderPassDescriptor renderPassDescriptor];
+
+        m_clearColorPassDesc[i].colorAttachments[0].texture = m_colorTex;
+        m_clearColorPassDesc[i].colorAttachments[0].slice = i;
+        m_clearColorPassDesc[i].colorAttachments[0].loadAction = MTLLoadActionClear;
+        m_clearColorPassDesc[i].colorAttachments[0].storeAction = MTLStoreActionStore;
+        m_clearColorPassDesc[i].colorAttachments[0].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0);
+
+        m_clearColorPassDesc[i].depthAttachment.texture = m_depthTex;
+        m_clearColorPassDesc[i].depthAttachment.slice = i;
+        m_clearColorPassDesc[i].depthAttachment.loadAction = MTLLoadActionLoad;
+        m_clearColorPassDesc[i].depthAttachment.storeAction = MTLStoreActionStore;
+        m_clearColorPassDesc[i].depthAttachment.clearDepth = 0.f;
+      }
+
+      for (NSUInteger i = 0; i < 6; ++i) {
+        m_clearBothPassDesc[i] = [MTLRenderPassDescriptor renderPassDescriptor];
+
+        m_clearBothPassDesc[i].colorAttachments[0].texture = m_colorTex;
+        m_clearBothPassDesc[i].colorAttachments[0].slice = i;
+        m_clearBothPassDesc[i].colorAttachments[0].loadAction = MTLLoadActionClear;
+        m_clearBothPassDesc[i].colorAttachments[0].storeAction = MTLStoreActionStore;
+        m_clearBothPassDesc[i].colorAttachments[0].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0);
+
+        m_clearBothPassDesc[i].depthAttachment.texture = m_depthTex;
+        m_clearBothPassDesc[i].depthAttachment.slice = i;
+        m_clearBothPassDesc[i].depthAttachment.loadAction = MTLLoadActionClear;
+        m_clearBothPassDesc[i].depthAttachment.storeAction = MTLStoreActionStore;
+        m_clearBothPassDesc[i].depthAttachment.clearDepth = 0.f;
+      }
+      
+      {
+        m_blitColor = [MTLRenderPassDescriptor renderPassDescriptor];
+        
+        for (NSUInteger i = 0; i < 6; ++i) {
+          m_blitColor.colorAttachments[i].texture = m_colorBindTex;
+          m_blitColor.colorAttachments[i].slice = i;
+          m_blitColor.colorAttachments[i].loadAction = MTLLoadActionDontCare;
+          m_blitColor.colorAttachments[i].storeAction = MTLStoreActionStore;
+          m_blitColor.colorAttachments[i].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0);
+        }
+      }
+    }
+  }
+
+  MetalTextureCubeR(const ObjToken<BaseGraphicsData>& parent, MetalContext* ctx, size_t width, size_t mips)
+      : GraphicsDataNode<ITextureCubeR>(parent), m_width(width), m_numMips(mips) {
+    Setup(ctx);
+  }
+
+public:
+  id <MTLTexture> m_colorTex;
+  id <MTLTexture> m_depthTex;
+  id <MTLTexture> m_colorBindTex;
+  MTLRenderPassDescriptor* m_passDesc[6];
+  MTLRenderPassDescriptor* m_clearDepthPassDesc[6];
+  MTLRenderPassDescriptor* m_clearColorPassDesc[6];
+  MTLRenderPassDescriptor* m_clearBothPassDesc[6];
+  MTLRenderPassDescriptor* m_blitColor;
+
+  ~MetalTextureCubeR() = default;
+
+  void resize(MetalContext* ctx, size_t width, size_t mips) {
+    if (width < 1)
+      width = 1;
+    m_width = width;
+    m_numMips = mips;
+    Setup(ctx);
+  }
+};
+
 static const size_t SEMANTIC_SIZE_TABLE[] =
   {
     0,
@@ -1008,6 +1140,10 @@ static id <MTLTexture> GetTextureGPUResource(const ObjToken<ITexture>& tex, int 
     const MetalTextureR* ctex = tex.cast<MetalTextureR>();
     return depth ? ctex->m_depthBindTex[bindIdx] : ctex->m_colorBindTex[bindIdx];
   }
+  case TextureType::CubeRender: {
+    const MetalTextureCubeR* ctex = tex.cast<MetalTextureCubeR>();
+    return ctex->m_colorBindTex;
+  }
   default:
     break;
   }
@@ -1211,7 +1347,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue {
     }
   }
 
-  ObjToken<ITextureR> m_boundTarget;
+  ObjToken<ITexture> m_boundTarget;
 
   void _setRenderTarget(const ObjToken<ITextureR>& target, bool clearColor, bool clearDepth) {
     @autoreleasepool {
@@ -1232,12 +1368,41 @@ struct MetalCommandQueue : IGraphicsCommandQueue {
         if (m_boundScissor.width || m_boundScissor.height)
           [m_enc setScissorRect:m_boundScissor];
       } else
-        m_boundTarget = target;
+        m_boundTarget = target.get();
     }
   }
 
   void setRenderTarget(const ObjToken<ITextureR>& target) {
     _setRenderTarget(target, false, false);
+  }
+
+  int m_boundFace = 0;
+  void _setRenderTarget(const ObjToken<ITextureCubeR>& target, int face, bool clearColor, bool clearDepth) {
+    @autoreleasepool {
+      MetalTextureCubeR* ctarget = target.cast<MetalTextureCubeR>();
+      [m_enc endEncoding];
+      if (clearColor && clearDepth)
+        m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:ctarget->m_clearBothPassDesc[face]];
+      else if (clearColor)
+        m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:ctarget->m_clearColorPassDesc[face]];
+      else if (clearDepth)
+        m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:ctarget->m_clearDepthPassDesc[face]];
+      else
+        m_enc = [m_cmdBuf renderCommandEncoderWithDescriptor:ctarget->m_passDesc[face]];
+      [m_enc setFrontFacingWinding:MTLWindingCounterClockwise];
+      if (ctarget == m_boundTarget.get()) {
+        if (m_boundVp.width || m_boundVp.height)
+          [m_enc setViewport:m_boundVp];
+        if (m_boundScissor.width || m_boundScissor.height)
+          [m_enc setScissorRect:m_boundScissor];
+      } else
+        m_boundTarget = target.get();
+      m_boundFace = face;
+    }
+  }
+
+  void setRenderTarget(const ObjToken<ITextureCubeR>& target, int face) {
+    _setRenderTarget(target, face, false, false);
   }
 
   MTLViewport m_boundVp = {};
@@ -1252,11 +1417,25 @@ struct MetalCommandQueue : IGraphicsCommandQueue {
 
   void setScissor(const SWindowRect& rect) {
     if (m_boundTarget) {
-      MetalTextureR* ctarget = m_boundTarget.cast<MetalTextureR>();
-      SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, ctarget->m_width, ctarget->m_height));
-      m_boundScissor = MTLScissorRect{NSUInteger(intersectRect.location[0]),
-                                      NSUInteger(ctarget->m_height - intersectRect.location[1] - intersectRect.size[1]),
-                                      NSUInteger(intersectRect.size[0]), NSUInteger(intersectRect.size[1])};
+      switch (m_boundTarget->type()) {
+      case TextureType::Render: {
+        MetalTextureR* ctarget = m_boundTarget.cast<MetalTextureR>();
+        SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, ctarget->m_width, ctarget->m_height));
+        m_boundScissor = MTLScissorRect{NSUInteger(intersectRect.location[0]),
+            NSUInteger(ctarget->m_height - intersectRect.location[1] - intersectRect.size[1]),
+            NSUInteger(intersectRect.size[0]), NSUInteger(intersectRect.size[1])};
+        break;
+      }
+      case TextureType::CubeRender: {
+        MetalTextureCubeR* ctarget = m_boundTarget.cast<MetalTextureCubeR>();
+        SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, ctarget->m_width, ctarget->m_width));
+        m_boundScissor = MTLScissorRect{NSUInteger(intersectRect.location[0]),
+            NSUInteger(ctarget->m_width - intersectRect.location[1] - intersectRect.size[1]),
+            NSUInteger(intersectRect.size[0]), NSUInteger(intersectRect.size[1])};
+        break;
+      }
+      default: break;
+      }
       [m_enc setScissorRect:m_boundScissor];
     }
   }
@@ -1266,6 +1445,38 @@ struct MetalCommandQueue : IGraphicsCommandQueue {
   void resizeRenderTexture(const ObjToken<ITextureR>& tex, size_t width, size_t height) {
     MetalTextureR* ctex = tex.cast<MetalTextureR>();
     m_texResizes[ctex] = std::make_pair(width, height);
+  }
+
+  std::unordered_map<MetalTextureCubeR*, std::pair<size_t, size_t>> m_texCubeResizes;
+
+  void resizeRenderTexture(const ObjToken<ITextureCubeR>& tex, size_t width, size_t mips) {
+    MetalTextureCubeR* ctex = tex.cast<MetalTextureCubeR>();
+    m_texCubeResizes[ctex] = std::make_pair(width, mips);
+  }
+
+  void generateMipmaps(const ObjToken<ITextureCubeR>& tex) {
+    @autoreleasepool {
+      [m_enc endEncoding];
+      m_enc = nil;
+      m_boundTarget.reset();
+      
+      MetalDataFactoryImpl* dataFactory = static_cast<MetalDataFactoryImpl*>(m_parent->getDataFactory());
+      MetalTextureCubeR* ctex = tex.cast<MetalTextureCubeR>();
+      id <MTLRenderCommandEncoder> enc = [m_cmdBuf renderCommandEncoderWithDescriptor:ctex->m_blitColor];
+      [enc setFragmentSamplerStates:m_samplers withRange:NSMakeRange(0, 5)];
+      [enc setRenderPipelineState:dataFactory->m_cubeFlipShader];
+      
+      id <MTLBuffer> buf = dataFactory->m_cubeFlipVBO.cast<MetalGraphicsBufferS>()->m_buf;
+      [enc setVertexBuffer:buf offset:0 atIndex:0];
+      [enc setFragmentTexture:ctex->m_colorTex atIndex:0];
+      
+      [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+      [enc endEncoding];
+
+      id <MTLBlitCommandEncoder> blitEnc = [m_cmdBuf blitCommandEncoder];
+      [blitEnc generateMipmapsForTexture:ctex->m_colorBindTex];
+      [blitEnc endEncoding];
+    }
   }
 
   void schedulePostFrameHandler(std::function<void(void)>&& func) {
@@ -1283,10 +1494,20 @@ struct MetalCommandQueue : IGraphicsCommandQueue {
     m_clearColor[3] = rgba[3];
   }
 
+  void _autoSetRenderTarget(bool render, bool depth) {
+    switch (m_boundTarget->type()) {
+    case TextureType::Render:
+      _setRenderTarget(m_boundTarget.cast<ITextureR>(), render, depth); break;
+    case TextureType::CubeRender:
+      _setRenderTarget(m_boundTarget.cast<ITextureCubeR>(), m_boundFace, render, depth); break;
+    default: break;
+    }
+  }
+
   void clearTarget(bool render = true, bool depth = true) {
     if (!m_boundTarget)
       return;
-    _setRenderTarget(m_boundTarget, render, depth);
+    _autoSetRenderTarget(render, depth);
   }
 
   void draw(size_t start, size_t count) {
@@ -1414,7 +1635,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue {
                    offset:patchStart * sizeof(MTLQuadTessellationFactorsHalf) atIndex:3];
     [computeEnc dispatchThreads:MTLSizeMake(patchCount, 1, 1) threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
     [computeEnc endEncoding];
-    _setRenderTarget(m_boundTarget, false, false);
+    _autoSetRenderTarget(false, false);
     m_boundData->bind(m_enc, m_fillBuf);
     [m_enc setFragmentSamplerStates:m_samplers withRange:NSMakeRange(0, 5)];
     [m_enc setVertexSamplerStates:m_samplers withRange:NSMakeRange(0, 5)];
@@ -1462,10 +1683,13 @@ struct MetalCommandQueue : IGraphicsCommandQueue {
       }
 
       /* Perform texture resizes */
-      if (m_texResizes.size()) {
+      if (m_texResizes.size() || m_texCubeResizes.size()) {
         for (const auto& resize : m_texResizes)
           resize.first->resize(m_ctx, resize.second.first, resize.second.second);
         m_texResizes.clear();
+        for (const auto& resize : m_texCubeResizes)
+          resize.first->resize(m_ctx, resize.second.first, resize.second.second);
+        m_texCubeResizes.clear();
         m_cmdBuf = [m_ctx->m_q commandBuffer];
         return;
       }
@@ -1704,6 +1928,14 @@ MetalDataFactory::Context::newRenderTexture(size_t width, size_t height, Texture
   }
 }
 
+ObjToken<ITextureCubeR>
+MetalDataFactory::Context::newCubeRenderTexture(size_t width, size_t mips) {
+  @autoreleasepool {
+    MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
+    return {new MetalTextureCubeR(m_data, factory.m_ctx, width, mips)};
+  }
+}
+
 ObjToken<IShaderStage>
 MetalDataFactory::Context::newShaderStage(const uint8_t* data, size_t size, PipelineStage stage) {
   @autoreleasepool {
@@ -1781,6 +2013,71 @@ std::vector<uint8_t> MetalDataFactory::CompileMetal(const char* source, Pipeline
   std::vector<uint8_t> ret(strSz + 1);
   memcpy(ret.data() + 1, source, strSz);
   return ret;
+}
+  
+void MetalDataFactoryImpl::SetupGammaResources() {
+  m_hasTessellation = [m_ctx->m_dev supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily1_v2];
+  
+  commitTransaction([this](IGraphicsDataFactory::Context& ctx) {
+    auto vertexMetal = MetalDataFactory::CompileMetal(GammaVS, PipelineStage::Vertex);
+    auto vertexShader = ctx.newShaderStage(vertexMetal, PipelineStage::Vertex);
+    auto fragmentMetal = MetalDataFactory::CompileMetal(GammaFS, PipelineStage::Fragment);
+    auto fragmentShader = ctx.newShaderStage(fragmentMetal, PipelineStage::Fragment);
+    const VertexElementDescriptor vfmt[] = {
+      {VertexSemantic::Position4},
+      {VertexSemantic::UV4}
+    };
+    VertexFormatInfo vfmtInfo(vfmt);
+    AdditionalPipelineInfo info =
+    {
+      BlendFactor::One, BlendFactor::Zero,
+      Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None
+    };
+    m_gammaShader = ctx.newShaderPipeline(vertexShader, fragmentShader, vfmtInfo, info);
+    m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
+    setDisplayGamma(1.f);
+    const struct Vert {
+      float pos[4];
+      float uv[4];
+    } verts[4] = {
+      {{-1.f, 1.f,  0.f, 1.f}, {0.f, 0.f, 0.f, 0.f}},
+      {{1.f,  1.f,  0.f, 1.f}, {1.f, 0.f, 0.f, 0.f}},
+      {{-1.f, -1.f, 0.f, 1.f}, {0.f, 1.f, 0.f, 0.f}},
+      {{1.f,  -1.f, 0.f, 1.f}, {1.f, 1.f, 0.f, 0.f}}
+    };
+    m_gammaVBO = ctx.newStaticBuffer(BufferUse::Vertex, verts, 32, 4);
+    ObjToken<ITexture> texs[] = {{}, m_gammaLUT.get()};
+    m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVBO.get(), {}, {},
+                                              0, nullptr, nullptr, 2, texs, nullptr, nullptr);
+    
+    Vert flipverts[4] = {{{-1.f, 1.f, 0.f, 1.f}, {0.f, 1.f, 0.f, 0.f}},
+      {{1.f, 1.f, 0.f, 1.f}, {1.f, 1.f, 0.f, 0.f}},
+      {{-1.f, -1.f, 0.f, 1.f}, {0.f, 0.f, 0.f, 0.f}},
+      {{1.f, -1.f, 0.f, 1.f}, {1.f, 0.f, 0.f, 0.f}}};
+    m_cubeFlipVBO = ctx.newStaticBuffer(BufferUse::Vertex, flipverts, 32, 4);
+    
+    {
+      fragmentMetal = MetalDataFactory::CompileMetal(CubeFlipFS, PipelineStage::Fragment);
+      fragmentShader = ctx.newShaderStage(fragmentMetal, PipelineStage::Fragment);
+      
+      MTLRenderPipelineDescriptor* desc = [MTLRenderPipelineDescriptor new];
+      desc.vertexFunction = vertexShader.cast<MetalShaderStage>()->shader();
+      desc.fragmentFunction = fragmentShader.cast<MetalShaderStage>()->shader();
+      MetalVertexFormat cVtxFmt(vfmtInfo.elementCount, vfmtInfo.elements);
+      desc.vertexDescriptor = cVtxFmt.m_vdesc;
+      desc.sampleCount = 1;
+      for (NSUInteger i = 0; i < 6; ++i)
+        desc.colorAttachments[i].pixelFormat = m_ctx->m_pixelFormat;
+      desc.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
+      NSError* err = nullptr;
+      m_cubeFlipShader = [m_ctx->m_dev newRenderPipelineStateWithDescriptor:desc error:&err];
+      if (err)
+        Log.report(logvisor::Fatal, "error making shader pipeline: %s",
+                   [[err localizedDescription] UTF8String]);
+    }
+    
+    return true;
+  } BooTrace);
 }
 
 }
