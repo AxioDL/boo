@@ -397,7 +397,7 @@ public:
 
     s_glxError = false;
     XErrorHandler oldHandler = XSetErrorHandler(ctxErrorHandler);
-    for (m_attribIdx = 0; m_attribIdx < std::extent<decltype(ContextAttribList)>::value; ++m_attribIdx) {
+    for (m_attribIdx = 0; m_attribIdx < int(std::extent_v<decltype(ContextAttribList)>); ++m_attribIdx) {
       m_glxCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_lastCtx, true, ContextAttribList[m_attribIdx]);
       if (m_glxCtx)
         break;
@@ -605,7 +605,7 @@ public:
      * supported format will be returned. */
     if (formatCount >= 1) {
       if (m_ctx->m_deepColor) {
-        for (int i = 0; i < formatCount; ++i) {
+        for (uint32_t i = 0; i < formatCount; ++i) {
           if (surfFormats[i].format == VK_FORMAT_R16G16B16A16_UNORM) {
             m_format = surfFormats[i].format;
             m_colorspace = surfFormats[i].colorSpace;
@@ -614,7 +614,7 @@ public:
         }
       }
       if (m_format == VK_FORMAT_UNDEFINED) {
-        for (int i = 0; i < formatCount; ++i) {
+        for (uint32_t i = 0; i < formatCount; ++i) {
           if (surfFormats[i].format == VK_FORMAT_B8G8R8A8_UNORM || surfFormats[i].format == VK_FORMAT_R8G8B8A8_UNORM) {
             m_format = surfFormats[i].format;
             m_colorspace = surfFormats[i].colorSpace;
@@ -1041,7 +1041,7 @@ public:
                                  &actualFormat, &nitems, &bytes, (unsigned char**)&vals);
     XUnlockDisplay(m_xDisp);
     if (ret == Success) {
-      for (int i = 0; i < nitems; ++i) {
+      for (unsigned long i = 0; i < nitems; ++i) {
         if (vals[i] == S_ATOMS->m_netwmStateFullscreen) {
           fullscreen = true;
           break;
@@ -1422,11 +1422,12 @@ public:
       return false;
     }
     case ClientMessage: {
-      if (event->xclient.data.l[0] == S_ATOMS->m_wmDeleteWindow && m_callback) {
+      if (Atom(event->xclient.data.l[0]) == S_ATOMS->m_wmDeleteWindow && m_callback) {
         m_callback->destroyed();
         m_callback = nullptr;
+        return true;
       }
-      return true;
+      return false;
     }
     case Expose: {
       Window nw = 0;

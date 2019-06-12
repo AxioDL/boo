@@ -26,7 +26,6 @@ static inline EDolphinControllerType parseType(unsigned char status) {
 }
 
 static inline EDolphinControllerType parseState(DolphinControllerState* stateOut, uint8_t* payload, bool& rumble) {
-  memset(stateOut, 0, sizeof(DolphinControllerState));
   unsigned char status = payload[0];
   EDolphinControllerType type = parseType(status);
 

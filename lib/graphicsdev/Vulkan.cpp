@@ -1444,7 +1444,7 @@ public:
     size_t height = m_height;
     size_t regionCount = std::min(size_t(16), m_mips);
     size_t offset = 0;
-    for (int i = 0; i < regionCount; ++i) {
+    for (size_t i = 0; i < regionCount; ++i) {
       size_t regionPitch = width * height * m_pixelPitchNum / m_pixelPitchDenom;
 
       copyRegions[i].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -1603,7 +1603,7 @@ public:
     size_t height = m_height;
     size_t regionCount = std::min(size_t(16), m_mips);
     size_t offset = 0;
-    for (int i = 0; i < regionCount; ++i) {
+    for (size_t i = 0; i < regionCount; ++i) {
       size_t regionPitch = width * height * m_layers * m_pixelPitchNum / m_pixelPitchDenom;
 
       copyRegions[i].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -1971,18 +1971,18 @@ public:
   void commitLayouts() {
     m_colorTex.commitLayout();
     m_depthTex.commitLayout();
-    for (int i = 0; i < m_colorBindCount; ++i)
+    for (size_t i = 0; i < m_colorBindCount; ++i)
       m_colorBindTex[i].commitLayout();
-    for (int i = 0; i < m_depthBindCount; ++i)
+    for (size_t i = 0; i < m_depthBindCount; ++i)
       m_depthBindTex[i].commitLayout();
   }
 
   void rollbackLayouts() {
     m_colorTex.rollbackLayout();
     m_depthTex.rollbackLayout();
-    for (int i = 0; i < m_colorBindCount; ++i)
+    for (size_t i = 0; i < m_colorBindCount; ++i)
       m_colorBindTex[i].rollbackLayout();
-    for (int i = 0; i < m_depthBindCount; ++i)
+    for (size_t i = 0; i < m_depthBindCount; ++i)
       m_depthBindTex[i].rollbackLayout();
   }
 };
@@ -3039,7 +3039,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue {
     }
 
     size_t tmpWidth = ctex->m_width;
-    for (int32_t i = 1; i < ctex->m_mipCount; i++) {
+    for (size_t i = 1; i < ctex->m_mipCount; i++) {
       VkImageBlit blit = {};
 
       blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;

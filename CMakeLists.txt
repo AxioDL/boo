@@ -19,7 +19,6 @@ set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
 find_package(IPP)
 if (IPP_FOUND)
   list(APPEND _BOO_SYS_DEFINES -DINTEL_IPP=1)
-  include_directories(${IPP_INCLUDE_DIRS})
   list(APPEND _BOO_SYS_INCLUDES ${IPP_INCLUDE_DIRS})
   list(APPEND _BOO_SYS_LIBS ${IPP_LIBRARIES})
   message(STATUS "Building with IPP support")
@@ -29,9 +28,7 @@ endif ()
 
 add_subdirectory(soxr/src)
 
-set(BOO_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE PATH "boo include path" FORCE)
-
-include_directories(include ${CMAKE_CURRENT_SOURCE_DIR} ${LOGVISOR_INCLUDE_DIR})
+set(_EXTRA_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_subdirectory(lib/graphicsdev/nx)
 if(TARGET nx_compiler)
@@ -49,8 +46,6 @@ list(APPEND PLAT_HDRS
      include/boo/graphicsdev/GL.hpp
      include/boo/graphicsdev/Vulkan.hpp
      include/boo/graphicsdev/VulkanDispatchTable.hpp)
-
-add_library(glew lib/graphicsdev/glew.c)
 endif()
 
 if(WINDOWS_STORE)
@@ -80,7 +75,7 @@ elseif(WIN32)
   if (NOT ${VULKAN_SDK_DIRS} STREQUAL "/registry")
     message(STATUS "Enabling Vulkan support")
     list(GET VULKAN_SDK_DIRS 0 VULKAN_SDK_DIR)
-    include_directories("${VULKAN_SDK_DIR}/Include")
+    list(APPEND _EXTRA_INCLUDES ${VULKAN_SDK_DIR}/Include)
     list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_VULKAN=1 -DVK_USE_PLATFORM_WIN32_KHR=1)
     list(APPEND _BOO_SYS_INCLUDES "${VULKAN_SDK_DIR}/Include")
     list(APPEND PLAT_SRCS lib/graphicsdev/Vulkan.cpp
@@ -92,7 +87,7 @@ elseif(WIN32)
   if (NO AND TE_VIRTUAL_MIDI_H)
     message(STATUS "Enabling teVirtualMIDI")
     get_filename_component(TE_VIRTUAL_MIDI_DIR ${TE_VIRTUAL_MIDI_H} DIRECTORY)
-    include_directories(${TE_VIRTUAL_MIDI_DIR})
+    list(APPEND _EXTRA_INCLUDES ${TE_VIRTUAL_MIDI_DIR})
     add_definitions("-DTE_VIRTUAL_MIDI=1")
   endif()
 
@@ -153,7 +148,6 @@ elseif(APPLE)
                             ${QUARTZCORE_LIBRARY} ${COREVIDEO_LIBRARY} ${AUDIOTOOLBOX_LIBRARY}
                             ${COREAUDIO_LIBRARY} ${COREMIDI_LIBRARY})
 
-  add_library(glew lib/graphicsdev/glew.c)
 elseif(NX)
   list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_NX=1)
   list(APPEND PLAT_SRCS
@@ -228,7 +222,7 @@ else(NOT GEKKO)
     message(FATAL_ERROR "Unix build of boo requires dbus")
   endif()
 
-  include_directories(${DBUS_INCLUDE_DIR} ${DBUS_ARCH_INCLUDE_DIR})
+  list(APPEND _EXTRA_INCLUDES ${DBUS_INCLUDE_DIR} ${DBUS_ARCH_INCLUDE_DIR})
   list(APPEND _BOO_SYS_LIBS X11 Xi Xrandr GL asound ${DBUS_LIBRARY} pthread)
 
   if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
@@ -274,7 +268,8 @@ if(NOT NX)
   add_subdirectory(glslang/StandAlone)
 
   if (NOT MSVC)
-    set_target_properties(glslang SPIRV PROPERTIES COMPILE_FLAGS -Wno-implicit-fallthrough)
+    target_compile_options(glslang PRIVATE -Wno-implicit-fallthrough -Wno-strict-aliasing)
+    target_compile_options(SPIRV PRIVATE -Wno-implicit-fallthrough -Wno-strict-aliasing)
   endif()
 
   target_include_directories(glslang-default-resource-limits
@@ -284,12 +279,7 @@ if(NOT NX)
   list(APPEND _BOO_SYS_LIBS glslang soxr xxhash OSDependent OGLCompiler SPIRV glslang-default-resource-limits)
 endif()
 
-set(BOO_SYS_LIBS ${_BOO_SYS_LIBS} CACHE PATH "boo system libraries" FORCE)
-set(BOO_SYS_DEFINES ${_BOO_SYS_DEFINES} CACHE STRING "boo system defines" FORCE)
-set(BOO_SYS_INCLUDES ${_BOO_SYS_INCLUDES} CACHE PATH "boo system includes" FORCE)
-
-add_definitions(${_BOO_SYS_DEFINES})
-include_directories(include glslang soxr/src)
+list(APPEND _EXTRA_INCLUDES glslang soxr/src)
 
 add_library(boo
             lib/inputdev/DeviceBase.cpp include/boo/inputdev/DeviceBase.hpp
@@ -343,6 +333,10 @@ add_library(boo
             InputDeviceClasses.cpp
             ${PLAT_SRCS}
             ${PLAT_HDRS})
+target_link_libraries(boo PUBLIC ${_BOO_SYS_LIBS} logvisor)
+target_compile_definitions(boo PUBLIC ${_BOO_SYS_DEFINES})
+target_include_directories(boo PUBLIC include ${_BOO_SYS_INCLUDES}
+                           PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${_EXTRA_INCLUDES})
 if(COMMAND add_sanitizers)
   add_sanitizers(boo)
 endif()

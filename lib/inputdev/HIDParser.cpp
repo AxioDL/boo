@@ -408,7 +408,7 @@ struct HIDReports {
   static void _AddItem(std::map<int32_t, std::vector<HIDMainItem>>& m, uint32_t flags, const HIDItemState& state) {
     std::vector<HIDMainItem>& report = m[state.m_reportID];
     report.reserve(report.size() + state.m_reportCount);
-    for (int i = 0; i < state.m_reportCount; ++i)
+    for (uint32_t i = 0; i < state.m_reportCount; ++i)
       report.emplace_back(flags, state, i);
   }
 

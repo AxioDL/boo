@@ -8,6 +8,7 @@
 
 #include <X11/Xlib.h>
 #include <X11/XKBlib.h>
+#include <X11/Xatom.h>
 #include <X11/extensions/XInput2.h>
 #include <GL/glx.h>
 #include <GL/glxext.h>
@@ -15,8 +16,6 @@
 
 #include <dbus/dbus.h>
 DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
-
-#include "logvisor/logvisor.hpp"
 
 #include <signal.h>
 #include <sys/param.h>
@@ -35,7 +34,6 @@ DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
 #endif
 
 namespace boo {
-static logvisor::Module Log("boo::ApplicationXlib");
 XlibCursors X_CURSORS;
 
 int XINPUT_OPCODE = 0;
@@ -140,6 +138,7 @@ static XIMStyle ChooseBetterStyle(XIMStyle style1, XIMStyle style2) {
 }
 
 class ApplicationXlib final : public IApplication {
+  friend class ScreenSaverInhibitor;
   IApplicationCallback& m_callback;
   const std::string m_uniqueName;
   const std::string m_friendlyName;
@@ -273,6 +272,7 @@ public:
         // add a rule for which messages we want to see
         DBusError err = {};
         dbus_bus_add_match(m_dbus, "type='signal',interface='boo.signal.FileHandling'", &err);
+        dbus_connection_add_filter(m_dbus, DBusHandleMessageFunction(DBusCallback), this, nullptr);
         dbus_connection_flush(m_dbus);
       }
     }
@@ -381,13 +381,38 @@ public:
       XFreeFontSet(m_xDisp, m_fontset);
     if (m_xIM)
       XCloseIM(m_xIM);
-    XCloseDisplay(m_xDisp);
+    if (m_xDisp)
+      XCloseDisplay(m_xDisp);
   }
 
   EPlatformType getPlatformType() const { return EPlatformType::Xlib; }
 
   /* Empty handler for SIGINT */
   static void _sigint(int) {}
+
+  static DBusHandlerResult DBusCallback(DBusConnection* connection,
+                                        DBusMessage* message,
+                                        ApplicationXlib* user_data) {
+    return user_data->HandleDBusMessage(message);
+  }
+
+  DBusHandlerResult HandleDBusMessage(DBusMessage* message) {
+    if (dbus_message_is_signal(message, "boo.signal.FileHandling", "Open")) {
+      /* read the parameters */
+      std::vector<std::string> paths;
+      DBusMessageIter iter;
+      dbus_message_iter_init(message, &iter);
+      while (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_INVALID) {
+        const char* argVal;
+        dbus_message_iter_get_basic(&iter, &argVal);
+        paths.push_back(argVal);
+        dbus_message_iter_next(&iter);
+      }
+      m_callback.appFilesOpen(this, paths);
+      return DBUS_HANDLER_RESULT_HANDLED;
+    }
+    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+  }
 
   int run() {
     if (!m_xDisp)
@@ -408,6 +433,9 @@ public:
     sigaddset(&waitmask, SIGINT);
     sigaddset(&waitmask, SIGUSR2);
     pthread_sigmask(SIG_BLOCK, &waitmask, &origmask);
+
+    /* Screen Saver inhibitor */
+    std::optional<ScreenSaverInhibitor> inhibitor;
 
     /* Spawn client thread */
     int clientReturn = INT_MIN;
@@ -449,13 +477,18 @@ public:
           bool windowEvent;
           Window evWindow = GetWindowOfEvent(&event, windowEvent);
           if (windowEvent) {
-            auto window = m_windows.find(evWindow);
-            if (window != m_windows.end())
-              if (std::shared_ptr<IWindow> w = window->second.lock())
-                if (w->_incomingEvent(&event) && m_windows.size() == 1) {
-                  needsQuit = true;
-                  break;
-                }
+            if (event.type == ClientMessage && event.xclient.data.l[0] == 'NWID') {
+              if (!inhibitor) /* First window created, use to inhibit screensaver */
+                inhibitor.emplace(m_dbus, evWindow);
+            } else {
+              auto window = m_windows.find(evWindow);
+              if (window != m_windows.end())
+                if (std::shared_ptr<IWindow> w = window->second.lock())
+                  if (w->_incomingEvent(&event) && m_windows.size() == 1) {
+                    needsQuit = true;
+                    break;
+                  }
+            }
           }
         }
         XUnlockDisplay(m_xDisp);
@@ -466,25 +499,8 @@ public:
 
 #ifndef BOO_MSAN
       if (FD_ISSET(m_dbusFd, &fds)) {
-        DBusMessage* msg;
         dbus_connection_read_write(m_dbus, 0);
-        while ((msg = dbus_connection_pop_message(m_dbus))) {
-          /* check if the message is a signal from the correct interface and with the correct name */
-          if (dbus_message_is_signal(msg, "boo.signal.FileHandling", "Open")) {
-            /* read the parameters */
-            std::vector<std::string> paths;
-            DBusMessageIter iter;
-            dbus_message_iter_init(msg, &iter);
-            while (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_INVALID) {
-              const char* argVal;
-              dbus_message_iter_get_basic(&iter, &argVal);
-              paths.push_back(argVal);
-              dbus_message_iter_next(&iter);
-            }
-            m_callback.appFilesOpen(this, paths);
-          }
-          dbus_message_unref(msg);
-        }
+        while (dbus_connection_dispatch(m_dbus) == DBUS_DISPATCH_DATA_REMAINS) {}
       }
 #endif
     }
@@ -513,7 +529,15 @@ public:
     std::shared_ptr<IWindow> newWindow = _WindowXlibNew(title, m_xDisp, nullptr, m_xDefaultScreen, m_xIM, m_bestStyle,
                                                         m_fontset, m_lastGlxCtx, nullptr, &m_glContext);
 #endif
-    m_windows[(Window)newWindow->getPlatformHandle()] = newWindow;
+    Window wid = (Window)newWindow->getPlatformHandle();
+    m_windows[wid] = newWindow;
+    XEvent reply = {};
+    reply.xclient.type = ClientMessage;
+    reply.xclient.window = wid;
+    reply.xclient.message_type = XA_INTEGER;
+    reply.xclient.format = 32;
+    reply.xclient.data.l[0] = 'NWID';
+    XSendEvent(m_xDisp, wid, false, 0, &reply);
     XUnlockDisplay(m_xDisp);
     return newWindow;
   }

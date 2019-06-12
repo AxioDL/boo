@@ -549,11 +549,11 @@ public:
   }
 
   void setClampMode(TextureClampMode mode) {
-    for (int i = 0; i < m_colorBindCount; ++i) {
+    for (size_t i = 0; i < m_colorBindCount; ++i) {
       glBindTexture(GL_TEXTURE_2D, m_bindTexs[0][i]);
       SetClampMode(GL_TEXTURE_2D, mode);
     }
-    for (int i = 0; i < m_depthBindCount; ++i) {
+    for (size_t i = 0; i < m_depthBindCount; ++i) {
       glBindTexture(GL_TEXTURE_2D, m_bindTexs[1][i]);
       SetClampMode(GL_TEXTURE_2D, mode);
     }
@@ -634,7 +634,7 @@ public:
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, m_mipCount - 1);
     for (int f = 0; f < 6; ++f) {
       size_t tmpWidth = m_width;
-      for (int m = 0; m < m_mipCount; ++m) {
+      for (size_t m = 0; m < m_mipCount; ++m) {
         glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + f, m, m_colorFormat, tmpWidth, tmpWidth,
                      0, GL_RGBA, compType, nullptr);
         tmpWidth >>= 1;
@@ -1258,14 +1258,14 @@ struct GLCommandQueue : IGraphicsCommandQueue {
     if (tex->m_samples > 1) {
       if (tex->m_colorBindCount) {
         glGenFramebuffers(tex->m_colorBindCount, tex->m_bindFBOs[0]);
-        for (int i = 0; i < tex->m_colorBindCount; ++i) {
+        for (size_t i = 0; i < tex->m_colorBindCount; ++i) {
           glBindFramebuffer(GL_FRAMEBUFFER, tex->m_bindFBOs[0][i]);
           glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex->m_bindTexs[0][i], 0);
         }
       }
       if (tex->m_depthBindCount) {
         glGenFramebuffers(tex->m_depthBindCount, tex->m_bindFBOs[1]);
-        for (int i = 0; i < tex->m_depthBindCount; ++i) {
+        for (size_t i = 0; i < tex->m_depthBindCount; ++i) {
           glBindFramebuffer(GL_FRAMEBUFFER, tex->m_bindFBOs[1][i]);
           glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex->m_bindTexs[1][i], 0);
         }
@@ -1820,14 +1820,14 @@ GLTextureR::GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue*
                  nullptr);
   }
 
-  for (int i = 0; i < colorBindingCount; ++i) {
+  for (size_t i = 0; i < colorBindingCount; ++i) {
     glBindTexture(GL_TEXTURE_2D, m_bindTexs[0][i]);
     glTexImage2D(GL_TEXTURE_2D, 0, colorFormat, width, height, 0, GL_RGBA, compType, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     SetClampMode(GL_TEXTURE_2D, clampMode);
   }
-  for (int i = 0; i < depthBindingCount; ++i) {
+  for (size_t i = 0; i < depthBindingCount; ++i) {
     glBindTexture(GL_TEXTURE_2D, m_bindTexs[1][i]);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT,
                  nullptr);
