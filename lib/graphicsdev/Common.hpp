@@ -213,11 +213,11 @@ class PipelineCompileQueue {
   };
 
   std::queue<Task> m_tasks;
-  size_t m_outstandingTasks = 0;
+  std::atomic_size_t m_outstandingTasks = 0;
   std::vector<std::thread> m_threads;
   std::mutex m_mt;
   std::condition_variable m_cv, m_backcv;
-  bool m_running = true;
+  std::atomic_bool m_running = true;
 
   void worker() {
     std::unique_lock<std::mutex> lk(m_mt);
