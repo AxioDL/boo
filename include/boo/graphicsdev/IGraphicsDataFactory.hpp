@@ -145,7 +145,9 @@ struct IShaderStage : IObj {};
 
 /** Opaque token for referencing a complete graphics pipeline state necessary
  *  to rasterize geometry (shaders and blending modes mainly) */
-struct IShaderPipeline : IObj {};
+struct IShaderPipeline : IObj {
+  virtual bool isReady() const = 0;
+};
 
 /** Opaque token serving as indirection table for shader resources
  *  and IShaderPipeline reference. Each renderable surface-material holds one
@@ -241,12 +243,14 @@ struct IGraphicsDataFactory {
                                                         ObjToken<IShaderStage> geometry, ObjToken<IShaderStage> control,
                                                         ObjToken<IShaderStage> evaluation,
                                                         const VertexFormatInfo& vtxFmt,
-                                                        const AdditionalPipelineInfo& additionalInfo) = 0;
+                                                        const AdditionalPipelineInfo& additionalInfo,
+                                                        bool asynchronous = true) = 0;
 
     ObjToken<IShaderPipeline> newShaderPipeline(ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment,
                                                 const VertexFormatInfo& vtxFmt,
-                                                const AdditionalPipelineInfo& additionalInfo) {
-      return newShaderPipeline(vertex, fragment, {}, {}, {}, vtxFmt, additionalInfo);
+                                                const AdditionalPipelineInfo& additionalInfo,
+                                                bool asynchronous = true) {
+      return newShaderPipeline(vertex, fragment, {}, {}, {}, vtxFmt, additionalInfo, asynchronous);
     }
 
     virtual ObjToken<IShaderDataBinding> newShaderDataBinding(
@@ -273,6 +277,7 @@ struct IGraphicsDataFactory {
   virtual ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs) = 0;
   virtual void setDisplayGamma(float gamma) = 0;
   virtual bool isTessellationSupported(uint32_t& maxPatchSizeOut) = 0;
+  virtual void waitUntilShadersReady() = 0;
 };
 
 using GraphicsDataFactoryContext = IGraphicsDataFactory::Context;

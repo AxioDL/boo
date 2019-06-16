@@ -134,6 +134,8 @@ public:
     maxPatchSizeOut = m_maxPatchSize;
     return m_hasTessellation;
   }
+
+  void waitUntilShadersReady() {}
 };
 
 static const GLenum USE_TABLE[] = {GL_INVALID_ENUM, GL_ARRAY_BUFFER, GL_ELEMENT_ARRAY_BUFFER, GL_UNIFORM_BUFFER};
@@ -962,6 +964,8 @@ public:
 
     return m_prog;
   }
+
+  bool isReady() const { return true; }
 };
 
 ObjToken<IShaderStage> GLDataFactory::Context::newShaderStage(const uint8_t* data, size_t size, PipelineStage stage) {
@@ -979,7 +983,7 @@ ObjToken<IShaderStage> GLDataFactory::Context::newShaderStage(const uint8_t* dat
 ObjToken<IShaderPipeline> GLDataFactory::Context::newShaderPipeline(
     ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment, ObjToken<IShaderStage> geometry,
     ObjToken<IShaderStage> control, ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
-    const AdditionalPipelineInfo& additionalInfo) {
+    const AdditionalPipelineInfo& additionalInfo, bool asynchronous) {
   GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
 
   if (control || evaluation) {

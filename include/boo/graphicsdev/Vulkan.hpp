@@ -155,7 +155,7 @@ public:
     ObjToken<IShaderPipeline> newShaderPipeline(ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment,
                                                 ObjToken<IShaderStage> geometry, ObjToken<IShaderStage> control,
                                                 ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
-                                                const AdditionalPipelineInfo& additionalInfo);
+                                                const AdditionalPipelineInfo& additionalInfo, bool asynchronous = true);
 
     boo::ObjToken<IShaderDataBinding> newShaderDataBinding(
         const boo::ObjToken<IShaderPipeline>& pipeline, const boo::ObjToken<IGraphicsBuffer>& vbo,

@@ -7,6 +7,10 @@
 #include <vector>
 #include <mutex>
 #include <cassert>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <queue>
 #include "boo/graphicsdev/IGraphicsDataFactory.hpp"
 #include "../Common.hpp"
 
@@ -195,5 +199,69 @@ struct GraphicsDataNode : ListNode<GraphicsDataNode<NodeCls, DataCls>, ObjToken<
 };
 
 void UpdateGammaLUT(ITextureD* tex, float gamma);
+
+/** Generic work-queue for asynchronously building shader pipelines on supported backends
+ */
+template <class ShaderPipelineType>
+class PipelineCompileQueue {
+  struct Task {
+    ObjToken<IShaderPipeline> m_pipeline;
+    explicit Task(ObjToken<IShaderPipeline> pipeline) : m_pipeline(pipeline) {}
+    void run() {
+      m_pipeline.cast<ShaderPipelineType>()->compile();
+    }
+  };
+
+  std::queue<Task> m_tasks;
+  size_t m_outstandingTasks = 0;
+  std::vector<std::thread> m_threads;
+  std::mutex m_mt;
+  std::condition_variable m_cv, m_backcv;
+  bool m_running = true;
+
+  void worker() {
+    std::unique_lock<std::mutex> lk(m_mt);
+    while (m_running) {
+      m_cv.wait(lk, [this]() { return !m_tasks.empty() || !m_running; });
+      if (!m_running)
+        break;
+      Task t = std::move(m_tasks.front());
+      m_tasks.pop();
+      lk.unlock();
+      t.run();
+      lk.lock();
+      --m_outstandingTasks;
+      m_backcv.notify_all();
+    }
+  }
+
+public:
+  void addPipeline(ObjToken<IShaderPipeline> pipeline) {
+    std::lock_guard<std::mutex> lk(m_mt);
+    m_tasks.emplace(pipeline);
+    ++m_outstandingTasks;
+    m_cv.notify_one();
+  }
+
+  void waitUntilReady() {
+    std::unique_lock<std::mutex> lk(m_mt);
+    m_backcv.wait(lk, [this]() { return m_outstandingTasks == 0 || !m_running; });
+  }
+
+  PipelineCompileQueue() {
+    unsigned int numThreads = std::thread::hardware_concurrency();
+    if (numThreads > 1)
+      --numThreads;
+    m_threads.reserve(numThreads);
+    for (unsigned int i = 0; i < numThreads; ++i)
+      m_threads.emplace_back(std::bind(&PipelineCompileQueue::worker, this));
+  }
+
+  ~PipelineCompileQueue() {
+    m_running = false;
+    m_cv.notify_all();
+    for (auto& t : m_threads) t.join();
+  }
+};
 
 } // namespace boo
