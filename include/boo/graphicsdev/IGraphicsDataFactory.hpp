@@ -137,7 +137,7 @@ struct VertexFormatInfo {
   VertexFormatInfo(const T& tp) : elementCount(std::extent_v<T>), elements(tp) {}
 
   VertexFormatInfo(std::initializer_list<VertexElementDescriptor> l)
-  : elementCount(l.size()), elements(l.begin()) {}
+  : elementCount(l.size()), elements(std::move(l.begin())) {}
 };
 
 /** Opaque token for referencing a shader stage usable in a graphics pipeline */
