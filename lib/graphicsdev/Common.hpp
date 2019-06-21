@@ -248,6 +248,10 @@ public:
     m_backcv.wait(lk, [this]() { return m_outstandingTasks == 0 || !m_running; });
   }
 
+  bool isReady() {
+    return m_outstandingTasks == 0 || !m_running;
+  }
+
   PipelineCompileQueue() {
     unsigned int numThreads = std::thread::hardware_concurrency();
     if (numThreads > 1)

@@ -147,6 +147,10 @@ public:
   void waitUntilShadersReady() {
     m_pipelineQueue.waitUntilReady();
   }
+
+  bool areShadersReady() {
+    return m_pipelineQueue.isReady();
+  }
 };
 
 static inline void ThrowIfFailed(VkResult res) {

@@ -136,6 +136,8 @@ public:
   }
 
   void waitUntilShadersReady() {}
+
+  bool areShadersReady() { return true; }
 };
 
 static const GLenum USE_TABLE[] = {GL_INVALID_ENUM, GL_ARRAY_BUFFER, GL_ELEMENT_ARRAY_BUFFER, GL_UNIFORM_BUFFER};

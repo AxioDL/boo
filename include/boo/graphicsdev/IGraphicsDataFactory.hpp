@@ -278,6 +278,7 @@ struct IGraphicsDataFactory {
   virtual void setDisplayGamma(float gamma) = 0;
   virtual bool isTessellationSupported(uint32_t& maxPatchSizeOut) = 0;
   virtual void waitUntilShadersReady() = 0;
+  virtual bool areShadersReady() = 0;
 };
 
 using GraphicsDataFactoryContext = IGraphicsDataFactory::Context;
