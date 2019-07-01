@@ -148,6 +148,9 @@ public:
     maxPatchSize = 32;
     return m_hasTessellation;
   }
+
+  void waitUntilShadersReady() {}
+  bool areShadersReady() const { return true; }
 };
 
 #define MTL_STATIC MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeManaged
@@ -1948,7 +1951,7 @@ ObjToken<IShaderPipeline>
 MetalDataFactory::Context::newShaderPipeline(ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment,
                                              ObjToken<IShaderStage> geometry, ObjToken<IShaderStage> control,
                                              ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
-                                             const AdditionalPipelineInfo& additionalInfo) {
+                                             const AdditionalPipelineInfo& additionalInfo, bool asynchronous) {
   @autoreleasepool {
     MetalDataFactoryImpl& factory = static_cast<MetalDataFactoryImpl&>(m_parent);
 

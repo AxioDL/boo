@@ -40,7 +40,7 @@ public:
     ObjToken<IShaderPipeline> newShaderPipeline(ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment,
                                                 ObjToken<IShaderStage> geometry, ObjToken<IShaderStage> control,
                                                 ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
-                                                const AdditionalPipelineInfo& additionalInfo);
+                                                const AdditionalPipelineInfo& additionalInfo, bool asynchronous = true);
 
     ObjToken<IShaderDataBinding> newShaderDataBinding(
         const ObjToken<IShaderPipeline>& pipeline, const ObjToken<IGraphicsBuffer>& vbo,

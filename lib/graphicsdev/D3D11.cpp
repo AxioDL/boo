@@ -433,8 +433,8 @@ class D3D11TextureCubeR : public GraphicsDataNode<ITextureCubeR> {
 
   void Setup(D3D11Context* ctx) {
     CD3D11_TEXTURE2D_DESC colorDesc(ctx->m_fbFormat, m_width, m_width, 6, 1,
-                                    D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE,
-                                    D3D11_USAGE_DEFAULT, 0, 1, 0, D3D11_RESOURCE_MISC_TEXTURECUBE);
+                                    D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, 1, 0,
+                                    D3D11_RESOURCE_MISC_TEXTURECUBE);
     ThrowIfFailed(ctx->m_dev->CreateTexture2D(&colorDesc, nullptr, &m_colorTex));
     CD3D11_TEXTURE2D_DESC depthDesc(DXGI_FORMAT_D32_FLOAT, m_width, m_width, 6, 1, D3D11_BIND_DEPTH_STENCIL,
                                     D3D11_USAGE_DEFAULT, 0, 1, 0, D3D11_RESOURCE_MISC_TEXTURECUBE);
@@ -448,15 +448,13 @@ class D3D11TextureCubeR : public GraphicsDataNode<ITextureCubeR> {
       ThrowIfFailed(ctx->m_dev->CreateRenderTargetView(m_colorTex.Get(), &rtvDesc, &m_rtv[i]));
       CD3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc(m_depthTex.Get(), dsvDim, DXGI_FORMAT_D32_FLOAT, 0, i);
       ThrowIfFailed(ctx->m_dev->CreateDepthStencilView(m_depthTex.Get(), &dsvDesc, &m_dsv[i]));
-      CD3D11_SHADER_RESOURCE_VIEW_DESC srvDesc(D3D11_SRV_DIMENSION_TEXTURE2DARRAY,
-                                               ctx->m_fbFormat, 0, 1, i, 1);
+      CD3D11_SHADER_RESOURCE_VIEW_DESC srvDesc(D3D11_SRV_DIMENSION_TEXTURE2DARRAY, ctx->m_fbFormat, 0, 1, i, 1);
       ThrowIfFailed(ctx->m_dev->CreateShaderResourceView(m_colorTex.Get(), &srvDesc, &m_srv[i]));
     }
 
     CD3D11_TEXTURE2D_DESC colorBindDesc(ctx->m_fbFormat, m_width, m_width, 6, m_mipCount,
-                                        D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE,
-                                        D3D11_USAGE_DEFAULT, 0, 1, 0,
-                                        D3D11_RESOURCE_MISC_TEXTURECUBE | D3D11_RESOURCE_MISC_GENERATE_MIPS);
+                                        D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0,
+                                        1, 0, D3D11_RESOURCE_MISC_TEXTURECUBE | D3D11_RESOURCE_MISC_GENERATE_MIPS);
     ThrowIfFailed(ctx->m_dev->CreateTexture2D(&colorBindDesc, nullptr, &m_colorBindTex));
     for (int i = 0; i < 6; ++i) {
       CD3D11_RENDER_TARGET_VIEW_DESC rtvDesc(m_colorBindTex.Get(), rtvDim, ctx->m_fbFormat, 0, i);
@@ -468,9 +466,7 @@ class D3D11TextureCubeR : public GraphicsDataNode<ITextureCubeR> {
   }
 
   D3D11TextureCubeR(const boo::ObjToken<BaseGraphicsData>& parent, D3D11Context* ctx, size_t width, size_t mips)
-  : GraphicsDataNode<ITextureCubeR>(parent)
-  , m_width(width)
-  , m_mipCount(mips) {
+  : GraphicsDataNode<ITextureCubeR>(parent), m_width(width), m_mipCount(mips) {
     Setup(ctx);
   }
 
@@ -734,6 +730,7 @@ public:
     ctx->IASetInputLayout(m_inLayout.Get());
     ctx->IASetPrimitiveTopology(m_topology);
   }
+  bool isReady() const { return true; }
 };
 
 struct D3D11ShaderDataBinding : public GraphicsDataNode<IShaderDataBinding> {
@@ -1047,7 +1044,8 @@ struct D3D11CommandQueue : IGraphicsCommandQueue {
         boundHeight = ctarget->m_width;
         break;
       }
-      default: break;
+      default:
+        break;
       }
       D3D11_VIEWPORT vp = {FLOAT(rect.location[0]),
                            FLOAT(boundHeight - rect.location[1] - rect.size[1]),
@@ -1074,7 +1072,8 @@ struct D3D11CommandQueue : IGraphicsCommandQueue {
         boundHeight = ctarget->m_width;
         break;
       }
-      default: break;
+      default:
+        break;
       }
       D3D11_RECT d3drect = {LONG(rect.location[0]), LONG(boundHeight - rect.location[1] - rect.size[1]),
                             LONG(rect.location[0] + rect.size[0]), LONG(boundHeight - rect.location[1])};
@@ -1128,7 +1127,8 @@ struct D3D11CommandQueue : IGraphicsCommandQueue {
         m_deferredCtx->ClearDepthStencilView(ctarget->m_dsv[m_boundFace].Get(), D3D11_CLEAR_DEPTH, 0.0f, 0);
       break;
     }
-    default: break;
+    default:
+      break;
     }
   }
 
@@ -1329,6 +1329,8 @@ public:
     maxPatchSizeOut = 32;
     return true;
   }
+  void waitUntilShadersReady() {}
+  bool areShadersReady() { return true; }
 };
 
 void D3D11CommandQueue::generateMipmaps(const ObjToken<ITextureCubeR>& tex) {
@@ -1341,12 +1343,7 @@ void D3D11CommandQueue::generateMipmaps(const ObjToken<ITextureCubeR>& tex) {
   UINT offsets[] = {0};
   m_deferredCtx->IASetVertexBuffers(0, 1, buffers, strides, offsets);
 
-  D3D11_VIEWPORT vp = {0.f,
-                       0.f,
-                       FLOAT(ctex->m_width),
-                       FLOAT(ctex->m_width),
-                       0.f,
-                       1.f};
+  D3D11_VIEWPORT vp = {0.f, 0.f, FLOAT(ctex->m_width), FLOAT(ctex->m_width), 0.f, 1.f};
   m_deferredCtx->RSSetViewports(1, &vp);
 
   D3D11_RECT d3drect = {0, 0, LONG(ctex->m_width), LONG(ctex->m_width)};
@@ -1422,10 +1419,11 @@ boo::ObjToken<IShaderStage> D3D11DataFactory::Context::newShaderStage(const uint
   return {new D3D11ShaderStage(m_data, factory.m_ctx, data, size, stage)};
 }
 
-boo::ObjToken<IShaderPipeline> D3D11DataFactory::Context::newShaderPipeline(
-    ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment, ObjToken<IShaderStage> geometry,
-    ObjToken<IShaderStage> control, ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
-    const AdditionalPipelineInfo& additionalInfo) {
+boo::ObjToken<IShaderPipeline>
+D3D11DataFactory::Context::newShaderPipeline(ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment,
+                                             ObjToken<IShaderStage> geometry, ObjToken<IShaderStage> control,
+                                             ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
+                                             const AdditionalPipelineInfo& additionalInfo, bool asynchronous) {
   D3D11DataFactoryImpl& factory = static_cast<D3D11DataFactoryImpl&>(m_parent);
   struct D3D11Context* ctx = factory.m_ctx;
   return {
