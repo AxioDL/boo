@@ -1066,6 +1066,8 @@ public:
     [enc setDepthStencilState:m_dsState];
     [enc setCullMode:m_cullMode];
   }
+
+  bool isReady() const { return true; }
 };
 
 class MetalTessellationShaderPipeline : public MetalShaderPipeline {
@@ -1113,6 +1115,7 @@ public:
 
   ~MetalTessellationShaderPipeline() = default;
 
+  bool isReady() const { return true; }
 };
 
 static id <MTLBuffer> GetBufferGPUResource(const ObjToken<IGraphicsBuffer>& buf, int idx) {
@@ -1780,7 +1783,6 @@ struct MetalCommandQueue : IGraphicsCommandQueue {
       m_cmdBuf = [m_ctx->m_q commandBuffer];
     }
   }
-  bool isReady() { return true; }
 };
 
 void MetalShaderPipeline::draw(MetalCommandQueue& q, size_t start, size_t count) {
