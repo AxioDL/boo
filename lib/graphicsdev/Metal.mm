@@ -150,7 +150,7 @@ public:
   }
 
   void waitUntilShadersReady() {}
-  bool areShadersReady() const { return true; }
+  bool areShadersReady() { return true; }
 };
 
 #define MTL_STATIC MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeManaged
@@ -1780,6 +1780,7 @@ struct MetalCommandQueue : IGraphicsCommandQueue {
       m_cmdBuf = [m_ctx->m_q commandBuffer];
     }
   }
+  bool isReady() { return true; }
 };
 
 void MetalShaderPipeline::draw(MetalCommandQueue& q, size_t start, size_t count) {
