@@ -403,7 +403,7 @@ bool VulkanContext::initVulkan(std::string_view appName, PFN_vkGetInstanceProcAd
   appInfo.applicationVersion = 1;
   appInfo.pEngineName = "Boo";
   appInfo.engineVersion = 1;
-  appInfo.apiVersion = VK_API_VERSION_1_0;
+  appInfo.apiVersion = VK_API_VERSION_1_1;
 
   VkInstanceCreateInfo instInfo = {};
   instInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
