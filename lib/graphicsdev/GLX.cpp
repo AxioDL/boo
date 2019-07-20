@@ -6,9 +6,9 @@ static logvisor::Module Log("boo::GLX");
 
 void GLXExtensionCheck() {
   if (!GLXEW_SGI_video_sync)
-    Log.report(logvisor::Fatal, "GLX_SGI_video_sync not available");
+    Log.report(logvisor::Fatal, fmt("GLX_SGI_video_sync not available"));
   if (!GLXEW_EXT_swap_control && !GLXEW_MESA_swap_control && !GLXEW_SGI_swap_control)
-    Log.report(logvisor::Fatal, "swap_control not available");
+    Log.report(logvisor::Fatal, fmt("swap_control not available"));
 }
 
 void GLXEnableVSync(Display* disp, GLXWindow drawable) {

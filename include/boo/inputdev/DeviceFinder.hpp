@@ -41,13 +41,13 @@ private:
 
   /* Friend methods for platform-listener to find/insert/remove
    * tokens with type-filtering */
-  inline bool _hasToken(const std::string& path) {
+  bool _hasToken(const std::string& path) {
     auto preCheck = m_tokens.find(path);
     if (preCheck != m_tokens.end())
       return true;
     return false;
   }
-  inline bool _insertToken(std::unique_ptr<DeviceToken>&& token) {
+  bool _insertToken(std::unique_ptr<DeviceToken>&& token) {
     if (DeviceSignature::DeviceMatchToken(*token, m_types)) {
       m_tokensLock.lock();
       TInsertedDeviceToken inseredTok = m_tokens.insert(std::make_pair(token->getDevicePath(), std::move(token)));
@@ -57,7 +57,7 @@ private:
     }
     return false;
   }
-  inline void _removeToken(const std::string& path) {
+  void _removeToken(const std::string& path) {
     auto preCheck = m_tokens.find(path);
     if (preCheck != m_tokens.end()) {
       DeviceToken& tok = *preCheck->second;
@@ -75,16 +75,16 @@ public:
     DeviceFinder& m_finder;
 
   public:
-    inline CDeviceTokensHandle(DeviceFinder& finder) : m_finder(finder) { m_finder.m_tokensLock.lock(); }
-    inline ~CDeviceTokensHandle() { m_finder.m_tokensLock.unlock(); }
-    inline TDeviceTokens::iterator begin() { return m_finder.m_tokens.begin(); }
-    inline TDeviceTokens::iterator end() { return m_finder.m_tokens.end(); }
+    CDeviceTokensHandle(DeviceFinder& finder) : m_finder(finder) { m_finder.m_tokensLock.lock(); }
+    ~CDeviceTokensHandle() { m_finder.m_tokensLock.unlock(); }
+    TDeviceTokens::iterator begin() { return m_finder.m_tokens.begin(); }
+    TDeviceTokens::iterator end() { return m_finder.m_tokens.end(); }
   };
 
   /* Application must specify its interested device-types */
   DeviceFinder(std::unordered_set<uint64_t> types) {
     if (skDevFinder) {
-      fprintf(stderr, "only one instance of CDeviceFinder may be constructed");
+      fmt::print(stderr, fmt("only one instance of CDeviceFinder may be constructed"));
       abort();
     }
     skDevFinder = this;
@@ -104,20 +104,20 @@ public:
   }
 
   /* Get interested device-type mask */
-  inline const DeviceSignature::TDeviceSignatureSet& getTypes() const { return m_types; }
+  const DeviceSignature::TDeviceSignatureSet& getTypes() const { return m_types; }
 
   /* Iterable set of tokens */
-  inline CDeviceTokensHandle getTokens() { return CDeviceTokensHandle(*this); }
+  CDeviceTokensHandle getTokens() { return CDeviceTokensHandle(*this); }
 
   /* Automatic device scanning */
-  inline bool startScanning() {
+  bool startScanning() {
     if (!m_listener)
       m_listener = IHIDListenerNew(*this);
     if (m_listener)
       return m_listener->startScanning();
     return false;
   }
-  inline bool stopScanning() {
+  bool stopScanning() {
     if (!m_listener)
       m_listener = IHIDListenerNew(*this);
     if (m_listener)
@@ -126,7 +126,7 @@ public:
   }
 
   /* Manual device scanning */
-  inline bool scanNow() {
+  bool scanNow() {
     if (!m_listener)
       m_listener = IHIDListenerNew(*this);
     if (m_listener)

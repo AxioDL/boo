@@ -103,11 +103,11 @@ public:
 
     m_metalCtx.m_dev = MTLCreateSystemDefaultDevice();
     if (!m_metalCtx.m_dev)
-      Log.report(logvisor::Fatal, "Unable to create metal device");
+      Log.report(logvisor::Fatal, fmt("Unable to create metal device"));
     m_metalCtx.m_q = [m_metalCtx.m_dev newCommandQueue];
     while (![m_metalCtx.m_dev supportsTextureSampleCount:m_metalCtx.m_sampleCount])
       m_metalCtx.m_sampleCount = flp2(m_metalCtx.m_sampleCount - 1);
-    Log.report(logvisor::Info, "using Metal renderer");
+    Log.report(logvisor::Info, fmt("using Metal renderer"));
   }
 
   EPlatformType getPlatformType() const {

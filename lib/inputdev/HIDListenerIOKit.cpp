@@ -84,14 +84,14 @@ class HIDListenerIOKit : public IHIDListener {
         err = IOCreatePlugInInterfaceForService(obj.get(), kIOUSBDeviceUserClientTypeID, kIOCFPlugInInterfaceID,
                                                 &devServ, &score);
         if (err != kIOReturnSuccess) {
-          fprintf(stderr, "unable to open IOKit plugin interface\n");
+          fmt::print(stderr, fmt("unable to open IOKit plugin interface\n"));
           continue;
         }
 
         IUnknownPointer<IOUSBDeviceInterface182> dev;
         err = devServ.As(&dev, kIOUSBDeviceInterfaceID182);
         if (err != kIOReturnSuccess) {
-          fprintf(stderr, "unable to open IOKit device interface\n");
+          fmt::print(stderr, fmt("unable to open IOKit device interface\n"));
           continue;
         }
 
@@ -147,14 +147,14 @@ class HIDListenerIOKit : public IHIDListener {
         err =
             IOCreatePlugInInterfaceForService(obj.get(), kIOHIDDeviceTypeID, kIOCFPlugInInterfaceID, &devServ, &score);
         if (err != kIOReturnSuccess) {
-          fprintf(stderr, "unable to open IOKit plugin interface\n");
+          fmt::print(stderr, fmt("unable to open IOKit plugin interface\n"));
           continue;
         }
 
         IUnknownPointer<IOHIDDeviceDeviceInterface> dev;
         err = devServ.As(&dev, kIOHIDDeviceDeviceInterfaceID);
         if (err != kIOReturnSuccess) {
-          fprintf(stderr, "unable to open IOKit device interface\n");
+          fmt::print(stderr, fmt("unable to open IOKit device interface\n"));
           continue;
         }
 

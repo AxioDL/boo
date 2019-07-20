@@ -95,7 +95,7 @@ template int32_t* AudioSubmix::_getMergeBuf<int32_t>(size_t frames);
 template float* AudioSubmix::_getMergeBuf<float>(size_t frames);
 
 template <typename T>
-static inline T ClampInt(float in) {
+constexpr T ClampInt(float in) {
   if (std::is_floating_point<T>()) {
     return in; // Allow subsequent mixing stages to work with over-saturated values
   } else {

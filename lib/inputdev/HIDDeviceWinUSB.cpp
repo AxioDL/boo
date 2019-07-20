@@ -62,7 +62,6 @@ class HIDDeviceWinUSB final : public IHIDDevice {
 
   static void _threadProcUSBLL(std::shared_ptr<HIDDeviceWinUSB> device) {
     unsigned i;
-    char errStr[256];
     std::unique_lock<std::mutex> lk(device->m_initMutex);
 
     /* POSIX.. who needs it?? -MS */
@@ -70,18 +69,16 @@ class HIDDeviceWinUSB final : public IHIDDevice {
         CreateFileA(device->m_devPath.data(), GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, NULL,
                     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, NULL);
     if (INVALID_HANDLE_VALUE == device->m_devHandle) {
-      _snprintf(errStr, 256, "Unable to open %s@%s: %d\n", device->m_token.getProductName().data(),
-                device->m_devPath.data(), GetLastError());
-      device->m_devImp->deviceError(errStr);
+      device->m_devImp->deviceError(fmt::format(fmt("Unable to open {}@{}: {}\n"),
+        device->m_token.getProductName(), device->m_devPath, GetLastError()).c_str());
       lk.unlock();
       device->m_initCond.notify_one();
       return;
     }
 
     if (!WinUsb_Initialize(device->m_devHandle, &device->m_usbHandle)) {
-      _snprintf(errStr, 256, "Unable to open %s@%s: %d\n", device->m_token.getProductName().data(),
-                device->m_devPath.data(), GetLastError());
-      device->m_devImp->deviceError(errStr);
+      device->m_devImp->deviceError(fmt::format(fmt("Unable to open {}@{}: {}\n"),
+        device->m_token.getProductName(), device->m_devPath, GetLastError()).c_str());
       lk.unlock();
       device->m_initCond.notify_one();
       CloseHandle(device->m_devHandle);
@@ -91,9 +88,8 @@ class HIDDeviceWinUSB final : public IHIDDevice {
     /* Enumerate device pipes */
     USB_INTERFACE_DESCRIPTOR ifDesc = {0};
     if (!WinUsb_QueryInterfaceSettings(device->m_usbHandle, 0, &ifDesc)) {
-      _snprintf(errStr, 256, "Unable to open %s@%s: %d\n", device->m_token.getProductName().data(),
-                device->m_devPath.data(), GetLastError());
-      device->m_devImp->deviceError(errStr);
+      device->m_devImp->deviceError(fmt::format(fmt("Unable to open {}@{}: {}\n"),
+        device->m_token.getProductName(), device->m_devPath, GetLastError()).c_str());
       lk.unlock();
       device->m_initCond.notify_one();
       CloseHandle(device->m_devHandle);
@@ -149,7 +145,6 @@ class HIDDeviceWinUSB final : public IHIDDevice {
   PHIDP_PREPARSED_DATA m_preparsedData = nullptr;
 
   static void _threadProcHID(std::shared_ptr<HIDDeviceWinUSB> device) {
-    char errStr[256];
     std::unique_lock<std::mutex> lk(device->m_initMutex);
 
     /* POSIX.. who needs it?? -MS */
@@ -158,18 +153,16 @@ class HIDDeviceWinUSB final : public IHIDDevice {
         CreateFileA(device->m_devPath.data(), GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, NULL,
                     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, NULL);
     if (INVALID_HANDLE_VALUE == device->m_hidHandle) {
-      _snprintf(errStr, 256, "Unable to open %s@%s: %d\n", device->m_token.getProductName().data(),
-                device->m_devPath.data(), GetLastError());
-      device->m_devImp->deviceError(errStr);
+      device->m_devImp->deviceError(fmt::format(fmt("Unable to open {}@{}: {}\n"),
+        device->m_token.getProductName(), device->m_devPath, GetLastError()).c_str());
       lk.unlock();
       device->m_initCond.notify_one();
       return;
     }
 
     if (!HidD_GetPreparsedData(device->m_hidHandle, &device->m_preparsedData)) {
-      _snprintf(errStr, 256, "Unable get preparsed data of %s@%s: %d\n", device->m_token.getProductName().data(),
-                device->m_devPath.data(), GetLastError());
-      device->m_devImp->deviceError(errStr);
+      device->m_devImp->deviceError(fmt::format(fmt("Unable get preparsed data of {}@{}: {}\n"),
+        device->m_token.getProductName(), device->m_devPath, GetLastError()).c_str());
       lk.unlock();
       device->m_initCond.notify_one();
       return;
@@ -237,14 +230,14 @@ class HIDDeviceWinUSB final : public IHIDDevice {
         }
 
         if (Error != ERROR_IO_PENDING) {
-          fprintf(stderr, "Write Failed %08X\n", int(Error));
+          fmt::print(stderr, fmt("Write Failed {:08X}\n"), int(Error));
           return false;
         }
       }
 
       if (!GetOverlappedResult(m_hidHandle, &Overlapped, &BytesWritten, TRUE)) {
         DWORD Error = GetLastError();
-        fprintf(stderr, "Write Failed %08X\n", int(Error));
+        fmt::print(stderr, fmt("Write Failed {:08X}\n"), int(Error));
         return false;
       }
     } else if (tp == HIDReportType::Feature) {
@@ -313,7 +306,7 @@ public:
         m_runningTransferLoop = false;
         return;
       } else if (Error != ERROR_IO_PENDING) {
-        fprintf(stderr, "Read Failed: %08X\n", int(Error));
+        fmt::print(stderr, fmt("Read Failed: {:08X}\n"), int(Error));
         return;
       } else if (!GetOverlappedResultEx(m_hidHandle, &m_overlapped, &BytesRead, 10, TRUE)) {
         return;

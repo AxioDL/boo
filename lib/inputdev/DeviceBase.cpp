@@ -21,11 +21,8 @@ void DeviceBase::closeDevice() {
     m_token->_deviceClose();
 }
 
-void DeviceBase::deviceError(const char* error, ...) {
-  va_list vl;
-  va_start(vl, error);
-  vfprintf(stderr, error, vl);
-  va_end(vl);
+void DeviceBase::vdeviceError(fmt::string_view error, fmt::format_args args) {
+  fmt::vprint(error, args);
 }
 
 bool DeviceBase::sendUSBInterruptTransfer(const uint8_t* data, size_t length) {

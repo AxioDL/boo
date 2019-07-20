@@ -39,7 +39,13 @@ public:
 
   /* Callbacks */
   virtual void deviceDisconnected() = 0;
-  virtual void deviceError(const char* error, ...);
+  virtual void vdeviceError(fmt::string_view error, fmt::format_args args);
+  template <typename S, typename... Args, typename Char = fmt::char_t<S>>
+  void deviceError(const S& format, Args&&... args) {
+    vdeviceError(fmt::to_string_view<Char>(format),
+      fmt::basic_format_args<fmt::buffer_context<Char>>(
+        fmt::internal::make_args_checked<Args...>(format, args...)));
+  }
   virtual void initialCycle() {}
   virtual void transferCycle() {}
   virtual void finalCycle() {}

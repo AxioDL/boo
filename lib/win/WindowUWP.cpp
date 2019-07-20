@@ -80,7 +80,7 @@ public:
       HRESULT hr =
           b3dCtx.m_ctx12.m_dxFactory->CreateSwapChainForCoreWindow(cmdQueue, cw, &scDesc, nullptr, &m_swapChain);
       if (FAILED(hr))
-        Log.report(logvisor::Fatal, "unable to create swap chain");
+        Log.report(logvisor::Fatal, fmt("unable to create swap chain"));
 
       m_swapChain.As<IDXGISwapChain3>(&w.m_swapChain);
       ComPtr<ID3D12Resource> fb;
@@ -91,13 +91,13 @@ public:
       w.height = resDesc.Height;
 
       if (FAILED(m_swapChain->GetContainingOutput(&m_output)))
-        Log.report(logvisor::Fatal, "unable to get DXGI output");
+        Log.report(logvisor::Fatal, fmt("unable to get DXGI output"));
     } else
 #endif
     {
       if (FAILED(b3dCtx.m_ctx11.m_dxFactory->CreateSwapChainForCoreWindow(b3dCtx.m_ctx11.m_dev.Get(), cw, &scDesc,
                                                                           nullptr, &m_swapChain)))
-        Log.report(logvisor::Fatal, "unable to create swap chain");
+        Log.report(logvisor::Fatal, fmt("unable to create swap chain"));
 
       auto insIt = b3dCtx.m_ctx11.m_windows.emplace(std::make_pair(parentWindow, D3D11Context::Window()));
       D3D11Context::Window& w = insIt.first->second;
@@ -113,7 +113,7 @@ public:
       m_commandQueue = _NewD3D11CommandQueue(&b3dCtx.m_ctx11, &insIt.first->second, this);
 
       if (FAILED(m_swapChain->GetContainingOutput(&m_output)))
-        Log.report(logvisor::Fatal, "unable to get DXGI output");
+        Log.report(logvisor::Fatal, fmt("unable to get DXGI output"));
     }
   }
 

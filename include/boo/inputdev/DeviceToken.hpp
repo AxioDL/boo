@@ -20,7 +20,7 @@ class DeviceToken {
   std::shared_ptr<DeviceBase> m_connectedDev;
 
   friend class DeviceFinder;
-  inline void _deviceClose() {
+  void _deviceClose() {
     if (m_connectedDev)
       m_connectedDev->_deviceDisconnected();
     m_connectedDev = NULL;
@@ -36,8 +36,7 @@ public:
   , m_productName(other.m_productName)
   , m_devPath(other.m_devPath)
   , m_connectedDev(other.m_connectedDev) {}
-  inline DeviceToken(DeviceType devType, unsigned vid, unsigned pid, const char* vname, const char* pname,
-                     const char* path)
+  DeviceToken(DeviceType devType, unsigned vid, unsigned pid, const char* vname, const char* pname, const char* path)
   : m_devType(devType), m_vendorId(vid), m_productId(pid), m_devPath(path), m_connectedDev(NULL) {
     if (vname)
       m_vendorName = vname;
@@ -45,21 +44,21 @@ public:
       m_productName = pname;
   }
 
-  inline DeviceType getDeviceType() const { return m_devType; }
-  inline unsigned getVendorId() const { return m_vendorId; }
-  inline unsigned getProductId() const { return m_productId; }
-  inline std::string_view getVendorName() const { return m_vendorName; }
-  inline std::string_view getProductName() const { return m_productName; }
-  inline std::string_view getDevicePath() const { return m_devPath; }
-  inline bool isDeviceOpen() const { return (m_connectedDev != NULL); }
-  inline std::shared_ptr<DeviceBase> openAndGetDevice() {
+  DeviceType getDeviceType() const { return m_devType; }
+  unsigned getVendorId() const { return m_vendorId; }
+  unsigned getProductId() const { return m_productId; }
+  std::string_view getVendorName() const { return m_vendorName; }
+  std::string_view getProductName() const { return m_productName; }
+  std::string_view getDevicePath() const { return m_devPath; }
+  bool isDeviceOpen() const { return (m_connectedDev != NULL); }
+  std::shared_ptr<DeviceBase> openAndGetDevice() {
     if (!m_connectedDev)
       m_connectedDev = DeviceSignature::DeviceNew(*this);
     return m_connectedDev;
   }
 
-  inline bool operator==(const DeviceToken& rhs) const { return m_devPath == rhs.m_devPath; }
-  inline bool operator<(const DeviceToken& rhs) const { return m_devPath < rhs.m_devPath; }
+  bool operator==(const DeviceToken& rhs) const { return m_devPath == rhs.m_devPath; }
+  bool operator<(const DeviceToken& rhs) const { return m_devPath < rhs.m_devPath; }
 };
 
 } // namespace boo

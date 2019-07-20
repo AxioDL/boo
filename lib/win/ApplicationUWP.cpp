@@ -71,7 +71,7 @@ public:
 #if _WIN32_WINNT_WIN10
     if (!no12) {
       if (!FindBestD3DCompile())
-        Log.report(logvisor::Fatal, "unable to find D3DCompile_[43-47].dll");
+        Log.report(logvisor::Fatal, fmt("unable to find D3DCompile_[43-47].dll"));
 
       D3D12SerializeRootSignaturePROC = D3D12SerializeRootSignature;
 
@@ -81,7 +81,7 @@ public:
       /* Obtain DXGI Factory */
       HRESULT hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory2), &m_3dCtx.m_ctx12.m_dxFactory);
       if (FAILED(hr))
-        Log.report(logvisor::Fatal, "unable to create DXGI factory");
+        Log.report(logvisor::Fatal, fmt("unable to create DXGI factory"));
 
       /* Adapter */
       ComPtr<IDXGIAdapter1> ppAdapter;
@@ -106,26 +106,26 @@ public:
         /* Establish loader objects */
         if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandAllocator(
                 D3D12_COMMAND_LIST_TYPE_DIRECT, __uuidof(ID3D12CommandAllocator), &m_3dCtx.m_ctx12.m_loadqalloc)))
-          Log.report(logvisor::Fatal, "unable to create loader allocator");
+          Log.report(logvisor::Fatal, fmt("unable to create loader allocator"));
 
         D3D12_COMMAND_QUEUE_DESC desc = {D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_QUEUE_PRIORITY_NORMAL,
                                          D3D12_COMMAND_QUEUE_FLAG_NONE};
         if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandQueue(&desc, __uuidof(ID3D12CommandQueue),
                                                              &m_3dCtx.m_ctx12.m_loadq)))
-          Log.report(logvisor::Fatal, "unable to create loader queue");
+          Log.report(logvisor::Fatal, fmt("unable to create loader queue"));
 
         if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence),
                                                       &m_3dCtx.m_ctx12.m_loadfence)))
-          Log.report(logvisor::Fatal, "unable to create loader fence");
+          Log.report(logvisor::Fatal, fmt("unable to create loader fence"));
 
         m_3dCtx.m_ctx12.m_loadfencehandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 
         if (FAILED(m_3dCtx.m_ctx12.m_dev->CreateCommandList(
                 0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_3dCtx.m_ctx12.m_loadqalloc.Get(), nullptr,
                 __uuidof(ID3D12GraphicsCommandList), &m_3dCtx.m_ctx12.m_loadlist)))
-          Log.report(logvisor::Fatal, "unable to create loader list");
+          Log.report(logvisor::Fatal, fmt("unable to create loader list"));
 
-        Log.report(logvisor::Info, "initialized D3D12 renderer");
+        Log.report(logvisor::Info, fmt("initialized D3D12 renderer"));
         return;
       } else {
         /* Some Win10 client HW doesn't support D3D12 (despite being supposedly HW-agnostic) */
@@ -136,7 +136,7 @@ public:
 #endif
     {
       if (!FindBestD3DCompile())
-        Log.report(logvisor::Fatal, "unable to find D3DCompile_[43-47].dll");
+        Log.report(logvisor::Fatal, fmt("unable to find D3DCompile_[43-47].dll"));
 
       /* Create device proc */
       PFN_D3D11_CREATE_DEVICE MyD3D11CreateDevice = D3D11CreateDevice;
@@ -147,7 +147,7 @@ public:
       ComPtr<ID3D11DeviceContext> tempCtx;
       if (FAILED(MyD3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_FLAGS, &level, 1,
                                      D3D11_SDK_VERSION, &tempDev, nullptr, &tempCtx)))
-        Log.report(logvisor::Fatal, "unable to create D3D11 device");
+        Log.report(logvisor::Fatal, fmt("unable to create D3D11 device"));
 
       ComPtr<IDXGIDevice2> device;
       if (FAILED(tempDev.As<ID3D11Device1>(&m_3dCtx.m_ctx11.m_dev)) || !m_3dCtx.m_ctx11.m_dev ||
@@ -173,11 +173,11 @@ public:
       sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
       m_3dCtx.m_ctx11.m_dev->CreateSamplerState(&sampDesc, &m_3dCtx.m_ctx11.m_ss[1]);
 
-      Log.report(logvisor::Info, "initialized D3D11 renderer");
+      Log.report(logvisor::Info, fmt("initialized D3D11 renderer"));
       return;
     }
 
-    Log.report(logvisor::Fatal, "system doesn't support D3D11 or D3D12");
+    Log.report(logvisor::Fatal, fmt("system doesn't support D3D11 or D3D12"));
   }
 
   EPlatformType getPlatformType() const { return EPlatformType::UWP; }

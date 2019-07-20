@@ -96,12 +96,12 @@ public:
 
     HMODULE dxgilib = LoadLibraryW(L"dxgi.dll");
     if (!dxgilib)
-      Log.report(logvisor::Fatal, "unable to load dxgi.dll");
+      Log.report(logvisor::Fatal, fmt("unable to load dxgi.dll"));
 
     typedef HRESULT(WINAPI * CreateDXGIFactory1PROC)(REFIID riid, _COM_Outptr_ void** ppFactory);
     CreateDXGIFactory1PROC MyCreateDXGIFactory1 = (CreateDXGIFactory1PROC)GetProcAddress(dxgilib, "CreateDXGIFactory1");
     if (!MyCreateDXGIFactory1)
-      Log.report(logvisor::Fatal, "unable to find CreateDXGIFactory1 in DXGI.dll\n");
+      Log.report(logvisor::Fatal, fmt("unable to find CreateDXGIFactory1 in DXGI.dll\n"));
 
     bool noD3d = false;
 #if BOO_HAS_VULKAN
@@ -149,13 +149,13 @@ public:
       d3d11lib = LoadLibraryW(L"D3D11.dll");
     if (d3d11lib) {
       if (!FindBestD3DCompile())
-        Log.report(logvisor::Fatal, "unable to find D3DCompile_[43-47].dll");
+        Log.report(logvisor::Fatal, fmt("unable to find D3DCompile_[43-47].dll"));
 
       /* Create device proc */
       PFN_D3D11_CREATE_DEVICE MyD3D11CreateDevice =
           (PFN_D3D11_CREATE_DEVICE)GetProcAddress(d3d11lib, "D3D11CreateDevice");
       if (!MyD3D11CreateDevice)
-        Log.report(logvisor::Fatal, "unable to find D3D11CreateDevice in D3D11.dll");
+        Log.report(logvisor::Fatal, fmt("unable to find D3D11CreateDevice in D3D11.dll"));
 
       /* Create device */
       D3D_FEATURE_LEVEL level = D3D_FEATURE_LEVEL_11_0;
@@ -163,7 +163,7 @@ public:
       ComPtr<ID3D11DeviceContext> tempCtx;
       if (FAILED(MyD3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_FLAGS, &level, 1,
                                      D3D11_SDK_VERSION, &tempDev, nullptr, &tempCtx)))
-        Log.report(logvisor::Fatal, "unable to create D3D11 device");
+        Log.report(logvisor::Fatal, fmt("unable to create D3D11 device"));
 
       ComPtr<IDXGIDevice2> device;
       if (FAILED(tempDev.As<ID3D11Device1>(&m_3dCtx.m_ctx11.m_dev)) || !m_3dCtx.m_ctx11.m_dev ||
@@ -214,7 +214,7 @@ public:
       sampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
       m_3dCtx.m_ctx11.m_dev->CreateSamplerState(&sampDesc, &m_3dCtx.m_ctx11.m_ss[4]);
 
-      Log.report(logvisor::Info, "initialized D3D11 renderer");
+      Log.report(logvisor::Info, fmt("initialized D3D11 renderer"));
       return;
     }
 
@@ -232,9 +232,9 @@ public:
                 /* Obtain DXGI Factory */
                 HRESULT hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory1), &m_3dCtx.m_vulkanDxFactory);
                 if (FAILED(hr))
-                  Log.report(logvisor::Fatal, "unable to create DXGI factory");
+                  Log.report(logvisor::Fatal, fmt("unable to create DXGI factory"));
 
-                Log.report(logvisor::Info, "initialized Vulkan renderer");
+                Log.report(logvisor::Info, fmt("initialized Vulkan renderer"));
                 return;
               }
             }
@@ -249,13 +249,13 @@ public:
       /* Obtain DXGI Factory */
       HRESULT hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory1), &m_3dCtx.m_ctxOgl.m_dxFactory);
       if (FAILED(hr))
-        Log.report(logvisor::Fatal, "unable to create DXGI factory");
+        Log.report(logvisor::Fatal, fmt("unable to create DXGI factory"));
 
-      Log.report(logvisor::Info, "initialized OpenGL renderer");
+      Log.report(logvisor::Info, fmt("initialized OpenGL renderer"));
       return;
     }
 
-    Log.report(logvisor::Fatal, "system doesn't support Vulkan, D3D11, or OpenGL");
+    Log.report(logvisor::Fatal, fmt("system doesn't support Vulkan, D3D11, or OpenGL"));
   }
 
   EPlatformType getPlatformType() const { return EPlatformType::Win32; }
@@ -429,7 +429,7 @@ public:
     if (GetCurrentThreadId() != g_mainThreadId) {
       std::unique_lock<std::mutex> lk(g_nwmt);
       if (!PostThreadMessageW(g_mainThreadId, WM_USER, WPARAM(&title), 0))
-        Log.report(logvisor::Fatal, "PostThreadMessage error");
+        Log.report(logvisor::Fatal, fmt("PostThreadMessage error"));
       g_nwcv.wait(lk);
       std::shared_ptr<IWindow> ret = std::move(m_mwret);
       m_mwret.reset();

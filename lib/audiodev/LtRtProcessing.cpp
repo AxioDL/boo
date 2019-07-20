@@ -31,7 +31,7 @@ inline T ClampFull(float in) {
 #endif
 
 #if USE_LPF
-static constexpr int FirTaps = 27;
+constexpr int FirTaps = 27;
 
 FIRFilter12k::FIRFilter12k(int windowFrames, double sampleRate) {
   Ipp64f* taps = ippsMalloc_64f(FirTaps);

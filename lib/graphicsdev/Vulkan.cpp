@@ -153,24 +153,24 @@ public:
   }
 };
 
-static inline void ThrowIfFailed(VkResult res) {
+static void ThrowIfFailed(VkResult res) {
   if (res != VK_SUCCESS)
-    Log.report(logvisor::Fatal, "%d\n", res);
+    Log.report(logvisor::Fatal, fmt("{}\n"), res);
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL dbgFunc(VkDebugReportFlagsEXT msgFlags, VkDebugReportObjectTypeEXT objType,
                                               uint64_t srcObject, size_t location, int32_t msgCode,
                                               const char* pLayerPrefix, const char* pMsg, void* pUserData) {
   if (msgFlags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
-    Log.report(logvisor::Error, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
+    Log.report(logvisor::Error, fmt("[{}] Code {} : {}"), pLayerPrefix, msgCode, pMsg);
   } else if (msgFlags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
-    Log.report(logvisor::Warning, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
+    Log.report(logvisor::Warning, fmt("[{}] Code {} : {}"), pLayerPrefix, msgCode, pMsg);
   } else if (msgFlags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT) {
-    Log.report(logvisor::Warning, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
+    Log.report(logvisor::Warning, fmt("[{}] Code {} : {}"), pLayerPrefix, msgCode, pMsg);
   } else if (msgFlags & VK_DEBUG_REPORT_INFORMATION_BIT_EXT) {
-    Log.report(logvisor::Info, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
+    Log.report(logvisor::Info, fmt("[{}] Code {} : {}"), pLayerPrefix, msgCode, pMsg);
   } else if (msgFlags & VK_DEBUG_REPORT_DEBUG_BIT_EXT) {
-    Log.report(logvisor::Info, "[%s] Code %d : %s", pLayerPrefix, msgCode, pMsg);
+    Log.report(logvisor::Info, fmt("[{}] Code {} : {}"), pLayerPrefix, msgCode, pMsg);
   }
 
   /*
@@ -305,7 +305,7 @@ static void demo_check_layers(const std::vector<VulkanContext::LayerProperties>&
       }
     }
     if (!found) {
-      Log.report(logvisor::Fatal, "Cannot find layer: %s", layerNames[i]);
+      Log.report(logvisor::Fatal, fmt("Cannot find layer: {}"), layerNames[i]);
     }
   }
 }
@@ -314,7 +314,7 @@ bool VulkanContext::initVulkan(std::string_view appName, PFN_vkGetInstanceProcAd
   vk::init_dispatch_table_top(getVkProc);
 
   if (!glslang::InitializeProcess()) {
-    Log.report(logvisor::Error, "unable to initialize glslang");
+    Log.report(logvisor::Error, fmt("unable to initialize glslang"));
     return false;
   }
 
@@ -418,8 +418,8 @@ bool VulkanContext::initVulkan(std::string_view appName, PFN_vkGetInstanceProcAd
   VkResult instRes = vk::CreateInstance(&instInfo, nullptr, &m_instance);
   if (instRes != VK_SUCCESS) {
     Log.report(logvisor::Error,
-               "The Vulkan runtime is installed, but there are no supported "
-               "hardware vendor interfaces present");
+               fmt("The Vulkan runtime is installed, but there are no supported "
+                   "hardware vendor interfaces present"));
     return false;
   }
 
@@ -427,12 +427,12 @@ bool VulkanContext::initVulkan(std::string_view appName, PFN_vkGetInstanceProcAd
   PFN_vkCreateDebugReportCallbackEXT createDebugReportCallback =
       (PFN_vkCreateDebugReportCallbackEXT)vk::GetInstanceProcAddr(m_instance, "vkCreateDebugReportCallbackEXT");
   if (!createDebugReportCallback)
-    Log.report(logvisor::Fatal, "GetInstanceProcAddr: Unable to find vkCreateDebugReportCallbackEXT function.");
+    Log.report(logvisor::Fatal, fmt("GetInstanceProcAddr: Unable to find vkCreateDebugReportCallbackEXT function."));
 
   m_destroyDebugReportCallback =
       (PFN_vkDestroyDebugReportCallbackEXT)vk::GetInstanceProcAddr(m_instance, "vkDestroyDebugReportCallbackEXT");
   if (!m_destroyDebugReportCallback)
-    Log.report(logvisor::Fatal, "GetInstanceProcAddr: Unable to find vkDestroyDebugReportCallbackEXT function.");
+    Log.report(logvisor::Fatal, fmt("GetInstanceProcAddr: Unable to find vkDestroyDebugReportCallbackEXT function."));
 
   VkDebugReportCallbackCreateInfoEXT debugCreateInfo = {};
   debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
@@ -477,7 +477,7 @@ bool VulkanContext::enumerateDevices() {
 
 void VulkanContext::initDevice() {
   if (m_graphicsQueueFamilyIndex == UINT32_MAX)
-    Log.report(logvisor::Fatal, "VulkanContext::m_graphicsQueueFamilyIndex hasn't been initialized");
+    Log.report(logvisor::Fatal, fmt("VulkanContext::m_graphicsQueueFamilyIndex hasn't been initialized"));
 
   /* create the device and queues */
   VkDeviceQueueCreateInfo queueInfo = {};
@@ -493,7 +493,7 @@ void VulkanContext::initDevice() {
   if (m_features.samplerAnisotropy)
     features.samplerAnisotropy = VK_TRUE;
   if (!m_features.textureCompressionBC)
-    Log.report(logvisor::Fatal, "Vulkan device does not support DXT-format textures");
+    Log.report(logvisor::Fatal, fmt("Vulkan device does not support DXT-format textures"));
   features.textureCompressionBC = VK_TRUE;
   VkShaderStageFlagBits tessellationDescriptorBit = VkShaderStageFlagBits(0);
   if (m_features.tessellationShader) {
@@ -501,7 +501,7 @@ void VulkanContext::initDevice() {
     features.tessellationShader = VK_TRUE;
   }
   if (!m_features.dualSrcBlend)
-    Log.report(logvisor::Fatal, "Vulkan device does not support dual-source blending");
+    Log.report(logvisor::Fatal, fmt("Vulkan device does not support dual-source blending"));
   features.dualSrcBlend = VK_TRUE;
 
   uint32_t extCount = 0;
@@ -635,10 +635,10 @@ void VulkanContext::initDevice() {
   ThrowIfFailed(vk::CreatePipelineLayout(m_dev, &pipelineLayout, nullptr, &m_pipelinelayout));
 
   std::string gpuName = m_gpuProps.deviceName;
-  Log.report(logvisor::Info, "Initialized %s", gpuName.c_str());
-  Log.report(logvisor::Info, "Vulkan version %d.%d.%d", m_gpuProps.apiVersion >> 22,
+  Log.report(logvisor::Info, fmt("Initialized {}"), gpuName);
+  Log.report(logvisor::Info, fmt("Vulkan version {}.{}.{}"), m_gpuProps.apiVersion >> 22,
              (m_gpuProps.apiVersion >> 12) & 0b1111111111, m_gpuProps.apiVersion & 0b111111111111);
-  Log.report(logvisor::Info, "Driver version %d.%d.%d", m_gpuProps.driverVersion >> 22,
+  Log.report(logvisor::Info, fmt("Driver version {}.{}.{}"), m_gpuProps.driverVersion >> 22,
              (m_gpuProps.driverVersion >> 12) & 0b1111111111, m_gpuProps.driverVersion & 0b111111111111);
 }
 
@@ -1368,7 +1368,7 @@ class VulkanTextureS : public GraphicsDataNode<ITextureS> {
       m_pixelPitchDenom = 1;
       break;
     default:
-      Log.report(logvisor::Fatal, "unsupported tex format");
+      Log.report(logvisor::Fatal, fmt("unsupported tex format"));
     }
     m_vkFmt = pfmt;
 
@@ -1527,7 +1527,7 @@ class VulkanTextureSA : public GraphicsDataNode<ITextureSA> {
       m_pixelPitchNum = 2;
       break;
     default:
-      Log.report(logvisor::Fatal, "unsupported tex format");
+      Log.report(logvisor::Fatal, fmt("unsupported tex format"));
     }
     m_vkFmt = pfmt;
 
@@ -1681,7 +1681,7 @@ class VulkanTextureD : public GraphicsDataNode<ITextureD> {
       m_cpuSz = width * height * 2;
       break;
     default:
-      Log.report(logvisor::Fatal, "unsupported tex format");
+      Log.report(logvisor::Fatal, fmt("unsupported tex format"));
     }
     m_vkFmt = pfmt;
     m_stagingBuf.reset(new uint8_t[m_cpuSz]);
@@ -2660,7 +2660,7 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
       for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
         if (ubufOffs[i] % 256)
-          Log.report(logvisor::Fatal, "non-256-byte-aligned uniform-offset %d provided to newShaderDataBinding",
+          Log.report(logvisor::Fatal, fmt("non-256-byte-aligned uniform-offset {} provided to newShaderDataBinding"),
                      int(i));
 #endif
         std::array<VkDescriptorBufferInfo, 2> fillArr;
@@ -2672,7 +2672,7 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
     for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
       if (!ubufs[i])
-        Log.report(logvisor::Fatal, "null uniform-buffer %d provided to newShaderDataBinding", int(i));
+        Log.report(logvisor::Fatal, fmt("null uniform-buffer {} provided to newShaderDataBinding"), int(i));
 #endif
       m_ubufs.push_back(ubufs[i]);
     }
@@ -2773,7 +2773,7 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
   void bind(VkCommandBuffer cmdBuf, int b, VkRenderPass rPass = 0) {
 #ifndef NDEBUG
     if (!m_committed)
-      Log.report(logvisor::Fatal, "attempted to use uncommitted VulkanShaderDataBinding");
+      Log.report(logvisor::Fatal, fmt("attempted to use uncommitted VulkanShaderDataBinding"));
 #endif
 
     /* Ensure resized texture bindings are re-bound */
@@ -3183,7 +3183,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue {
     VulkanTextureR* csource = m_resolveDispSource.cast<VulkanTextureR>();
 #ifndef NDEBUG
     if (!csource->m_colorBindCount)
-      Log.report(logvisor::Fatal, "texture provided to resolveDisplay() must have at least 1 color binding");
+      Log.report(logvisor::Fatal, fmt("texture provided to resolveDisplay() must have at least 1 color binding"));
 #endif
 
     ThrowIfFailed(
@@ -3478,9 +3478,9 @@ VulkanTextureR::VulkanTextureR(const boo::ObjToken<BaseGraphicsData>& parent, Vu
 , m_colorBindCount(colorBindCount)
 , m_depthBindCount(depthBindCount) {
   if (colorBindCount > MAX_BIND_TEXS)
-    Log.report(logvisor::Fatal, "too many color bindings for render texture");
+    Log.report(logvisor::Fatal, fmt("too many color bindings for render texture"));
   if (depthBindCount > MAX_BIND_TEXS)
-    Log.report(logvisor::Fatal, "too many depth bindings for render texture");
+    Log.report(logvisor::Fatal, fmt("too many depth bindings for render texture"));
 
   if (m_samplesColor == 0)
     m_samplesColor = 1;
@@ -3711,7 +3711,7 @@ ObjToken<IShaderStage> VulkanDataFactory::Context::newShaderStage(const uint8_t*
 
   if (stage == PipelineStage::Control || stage == PipelineStage::Evaluation) {
     if (!factory.m_ctx->m_features.tessellationShader)
-      Log.report(logvisor::Fatal, "Device does not support tessellation shaders");
+      Log.report(logvisor::Fatal, fmt("Device does not support tessellation shaders"));
   }
 
   return {new VulkanShaderStage(m_data, factory.m_ctx, data, size, stage)};
@@ -3725,9 +3725,9 @@ ObjToken<IShaderPipeline> VulkanDataFactory::Context::newShaderPipeline(
 
   if (control || evaluation) {
     if (!factory.m_ctx->m_features.tessellationShader)
-      Log.report(logvisor::Fatal, "Device does not support tessellation shaders");
+      Log.report(logvisor::Fatal, fmt("Device does not support tessellation shaders"));
     if (additionalInfo.patchSize > factory.m_ctx->m_gpuProps.limits.maxTessellationPatchSize)
-      Log.report(logvisor::Fatal, "Device supports %d patch vertices, %d requested",
+      Log.report(logvisor::Fatal, fmt("Device supports {} patch vertices, {} requested"),
                  int(factory.m_ctx->m_gpuProps.limits.maxTessellationPatchSize), int(additionalInfo.patchSize));
   }
 
@@ -4089,14 +4089,14 @@ std::vector<uint8_t> VulkanDataFactory::CompileGLSL(const char* source, Pipeline
   glslang::TShader shader(lang);
   shader.setStrings(&source, 1);
   if (!shader.parse(&glslang::DefaultTBuiltInResource, 110, false, messages)) {
-    printf("%s\n", source);
-    Log.report(logvisor::Fatal, "unable to compile shader\n%s", shader.getInfoLog());
+    fmt::print(fmt("{}\n"), source);
+    Log.report(logvisor::Fatal, fmt("unable to compile shader\n{}"), shader.getInfoLog());
   }
 
   glslang::TProgram prog;
   prog.addShader(&shader);
   if (!prog.link(messages)) {
-    Log.report(logvisor::Fatal, "unable to link shader program\n%s", prog.getInfoLog());
+    Log.report(logvisor::Fatal, fmt("unable to link shader program\n{}"), prog.getInfoLog());
   }
 
   std::vector<unsigned int> out;

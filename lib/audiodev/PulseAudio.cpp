@@ -68,7 +68,7 @@ struct PulseAudioVoiceEngine : LinuxMidi {
     pa_operation_unref(op);
 
     if (m_sampleSpec.format == PA_SAMPLE_INVALID) {
-      Log.report(logvisor::Error, "Unable to setup audio stream");
+      Log.report(logvisor::Error, fmt("Unable to setup audio stream"));
       goto err;
     }
 
@@ -79,7 +79,7 @@ struct PulseAudioVoiceEngine : LinuxMidi {
     m_mixInfo.m_bitsPerSample = 32;
     m_mixInfo.m_periodFrames = m_5msFrames;
     if (!(m_stream = pa_stream_new(m_ctx, "master", &m_sampleSpec, &m_chanMap))) {
-      Log.report(logvisor::Error, "Unable to pa_stream_new(): %s", pa_strerror(pa_context_errno(m_ctx)));
+      Log.report(logvisor::Error, fmt("Unable to pa_stream_new(): {}"), pa_strerror(pa_context_errno(m_ctx)));
       goto err;
     }
 
@@ -93,7 +93,7 @@ struct PulseAudioVoiceEngine : LinuxMidi {
     if (pa_stream_connect_playback(m_stream, m_sinkName.c_str(), &bufAttr,
                                    pa_stream_flags_t(PA_STREAM_START_UNMUTED | PA_STREAM_EARLY_REQUESTS), nullptr,
                                    nullptr)) {
-      Log.report(logvisor::Error, "Unable to pa_stream_connect_playback()");
+      Log.report(logvisor::Error, fmt("Unable to pa_stream_connect_playback()"));
       goto err;
     }
 
@@ -114,18 +114,16 @@ struct PulseAudioVoiceEngine : LinuxMidi {
 
   PulseAudioVoiceEngine() {
     if (!(m_mainloop = pa_mainloop_new())) {
-      Log.report(logvisor::Error, "Unable to pa_mainloop_new()");
+      Log.report(logvisor::Error, fmt("Unable to pa_mainloop_new()"));
       return;
     }
 
     pa_mainloop_api* mlApi = pa_mainloop_get_api(m_mainloop);
     pa_proplist* propList = pa_proplist_new();
     pa_proplist_sets(propList, PA_PROP_APPLICATION_ICON_NAME, APP->getUniqueName().data());
-    char pidStr[16];
-    snprintf(pidStr, 16, "%d", int(getpid()));
-    pa_proplist_sets(propList, PA_PROP_APPLICATION_PROCESS_ID, pidStr);
+    pa_proplist_sets(propList, PA_PROP_APPLICATION_PROCESS_ID, fmt::format(fmt("{}"), int(getpid())).c_str());
     if (!(m_ctx = pa_context_new_with_proplist(mlApi, APP->getFriendlyName().data(), propList))) {
-      Log.report(logvisor::Error, "Unable to pa_context_new_with_proplist()");
+      Log.report(logvisor::Error, fmt("Unable to pa_context_new_with_proplist()"));
       pa_mainloop_free(m_mainloop);
       m_mainloop = nullptr;
       return;
@@ -134,7 +132,7 @@ struct PulseAudioVoiceEngine : LinuxMidi {
     pa_operation* op;
 
     if (pa_context_connect(m_ctx, nullptr, PA_CONTEXT_NOFLAGS, nullptr)) {
-      Log.report(logvisor::Error, "Unable to pa_context_connect()");
+      Log.report(logvisor::Error, fmt("Unable to pa_context_connect()"));
       goto err;
     }
 
@@ -341,17 +339,16 @@ struct PulseAudioVoiceEngine : LinuxMidi {
     size_t nbytes = writablePeriods * periodSz;
     if (pa_stream_begin_write(m_stream, &data, &nbytes)) {
       pa_stream_state_t st = pa_stream_get_state(m_stream);
-      Log.report(logvisor::Error, "Unable to pa_stream_begin_write(): %s %d", pa_strerror(pa_context_errno(m_ctx)), st);
+      Log.report(logvisor::Error, fmt("Unable to pa_stream_begin_write(): {} {}"), pa_strerror(pa_context_errno(m_ctx)), st);
       _doIterate();
       return;
     }
 
     writablePeriods = nbytes / periodSz;
-    size_t periodSamples = m_mixInfo.m_periodFrames * m_mixInfo.m_channelMap.m_channelCount;
     _pumpAndMixVoices(m_mixInfo.m_periodFrames * writablePeriods, reinterpret_cast<float*>(data));
 
     if (pa_stream_write(m_stream, data, nbytes, nullptr, 0, PA_SEEK_RELATIVE))
-      Log.report(logvisor::Error, "Unable to pa_stream_write()");
+      Log.report(logvisor::Error, fmt("Unable to pa_stream_write()"));
 
     _doIterate();
   }

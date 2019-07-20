@@ -74,7 +74,7 @@ public:
   std::shared_ptr<IWindow> m_window;
   std::shared_ptr<IWindow> newWindow(std::string_view title) {
     if (m_window)
-      Log.report(logvisor::Fatal, "Only 1 window allowed on NX");
+      Log.report(logvisor::Fatal, fmt("Only 1 window allowed on NX"));
     m_window = _WindowNXNew(title, &m_nxCtx);
     return m_window;
   }

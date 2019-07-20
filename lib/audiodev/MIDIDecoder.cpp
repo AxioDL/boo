@@ -5,7 +5,7 @@
 
 namespace boo {
 
-static inline uint8_t clamp7(uint8_t val) { return std::max(0, std::min(127, int(val))); }
+constexpr uint8_t clamp7(uint8_t val) { return std::max(0, std::min(127, int(val))); }
 
 bool MIDIDecoder::_readContinuedValue(std::vector<uint8_t>::const_iterator& it,
                                       std::vector<uint8_t>::const_iterator end, uint32_t& valOut) {

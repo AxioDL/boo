@@ -13,7 +13,7 @@ DolphinSmashAdapter::DolphinSmashAdapter(DeviceToken* token)
 
 DolphinSmashAdapter::~DolphinSmashAdapter() {}
 
-static inline EDolphinControllerType parseType(unsigned char status) {
+constexpr EDolphinControllerType parseType(unsigned char status) {
   EDolphinControllerType type =
       EDolphinControllerType(status) & (EDolphinControllerType::Normal | EDolphinControllerType::Wavebird);
   switch (type) {
@@ -25,7 +25,7 @@ static inline EDolphinControllerType parseType(unsigned char status) {
   }
 }
 
-static inline EDolphinControllerType parseState(DolphinControllerState* stateOut, uint8_t* payload, bool& rumble) {
+static EDolphinControllerType parseState(DolphinControllerState* stateOut, uint8_t* payload, bool& rumble) {
   unsigned char status = payload[0];
   EDolphinControllerType type = parseType(status);
 

@@ -111,7 +111,7 @@ public:
   T** storage() const { return (T**)_storage; }
   LPVOID* operator&() {
     if (IUnknownVTbl** pointer = _storage) {
-      printf("%p RELEASE %d\n", pointer, (*pointer)->Release(pointer));
+      fmt::print(fmt("0x{:X} RELEASE {}\n"), pointer, (*pointer)->Release(pointer));
     }
     return (LPVOID*)&_storage;
   }

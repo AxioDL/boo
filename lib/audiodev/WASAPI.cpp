@@ -117,7 +117,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 #if !WINDOWS_STORE
     if (!m_device) {
       if (FAILED(m_enumerator->GetDevice(MBSTWCS(m_sinkName.c_str()).c_str(), &m_device))) {
-        Log.report(logvisor::Error, "unable to obtain audio device %s", m_sinkName.c_str());
+        Log.report(logvisor::Error, fmt("unable to obtain audio device %s"), m_sinkName.c_str());
         m_device.Reset();
         return;
       }
@@ -200,7 +200,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
       chMapOut.m_channels[7] = AudioChannel::SideRight;
       break;
     default:
-      Log.report(logvisor::Warning, "unknown channel layout %u; using stereo", pwfx->Format.nChannels);
+      Log.report(logvisor::Warning, fmt("unknown channel layout %u; using stereo"), pwfx->Format.nChannels);
       chMapOut.m_channelCount = 2;
       chMapOut.m_channels[0] = AudioChannel::FrontLeft;
       chMapOut.m_channels[1] = AudioChannel::FrontRight;
@@ -468,7 +468,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
   bool setCurrentAudioOutput(const char* name) {
     ComPtr<IMMDevice> newDevice;
     if (FAILED(m_enumerator->GetDevice(MBSTWCS(name).c_str(), &newDevice))) {
-      Log.report(logvisor::Error, "unable to obtain audio device %s", name);
+      Log.report(logvisor::Error, fmt("unable to obtain audio device %s"), name);
       return false;
     }
     m_device = newDevice;
@@ -514,34 +514,32 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     ret.reserve(numInDevices);
 
     for (UINT i = 0; i < numInDevices; ++i) {
-      char name[256];
-      snprintf(name, 256, "in%u", i);
+      std::string name = fmt::format(fmt("in{}"), i);
 
       MIDIINCAPS caps;
       if (FAILED(midiInGetDevCaps(i, &caps, sizeof(caps))))
         continue;
 
 #ifdef UNICODE
-      ret.push_back(std::make_pair(std::string(name), WCSTMBS(caps.szPname)));
+      ret.push_back(std::make_pair(std::move(name), WCSTMBS(caps.szPname)));
 #else
-      ret.push_back(std::make_pair(std::string(name), std::string(caps.szPname)));
+      ret.push_back(std::make_pair(std::move(name), std::string(caps.szPname)));
 #endif
     }
 
 #if 0
         for (UINT i=0 ; i<numOutDevices ; ++i)
         {
-            char name[256];
-            snprintf(name, 256, "out%u", i);
+            std::string name = fmt::format(fmt("out{}"), i);
 
             MIDIOUTCAPS caps;
             if (FAILED(midiOutGetDevCaps(i, &caps, sizeof(caps))))
                 continue;
 
 #ifdef UNICODE
-            ret.push_back(std::make_pair(std::string(name), WCSTMBS(caps.szPname)));
+            ret.push_back(std::make_pair(std::move(name), WCSTMBS(caps.szPname)));
 #else
-            ret.push_back(std::make_pair(std::string(name), std::string(caps.szPname)));
+            ret.push_back(std::make_pair(std::move(name), std::string(caps.szPname)));
 #endif
         }
 #endif
