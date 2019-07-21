@@ -209,6 +209,13 @@ extern PFN_vkCreateDebugReportCallbackEXT CreateDebugReportCallbackEXT;
 extern PFN_vkDestroyDebugReportCallbackEXT DestroyDebugReportCallbackEXT;
 extern PFN_vkDebugReportMessageEXT DebugReportMessageEXT;
 
+// VK_EXT_debug_marker
+extern PFN_vkDebugMarkerSetObjectTagEXT DebugMarkerSetObjectTagEXT;
+extern PFN_vkDebugMarkerSetObjectNameEXT DebugMarkerSetObjectNameEXT;
+extern PFN_vkCmdDebugMarkerBeginEXT CmdDebugMarkerBeginEXT;
+extern PFN_vkCmdDebugMarkerEndEXT CmdDebugMarkerEndEXT;
+extern PFN_vkCmdDebugMarkerInsertEXT CmdDebugMarkerInsertEXT;
+
 void init_dispatch_table_top(PFN_vkGetInstanceProcAddr get_instance_proc_addr);
 void init_dispatch_table_middle(VkInstance instance, bool include_bottom);
 void init_dispatch_table_bottom(VkInstance instance, VkDevice dev);

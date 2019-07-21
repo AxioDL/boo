@@ -12,6 +12,7 @@
 #include <condition_variable>
 #include <queue>
 #include "boo/graphicsdev/IGraphicsDataFactory.hpp"
+#include "boo/graphicsdev/IGraphicsCommandQueue.hpp"
 #include "../Common.hpp"
 
 namespace boo {
@@ -267,5 +268,28 @@ public:
     for (auto& t : m_threads) t.join();
   }
 };
+
+#ifdef BOO_GRAPHICS_DEBUG_GROUPS
+template <typename CommandQueue>
+class GraphicsDebugGroup {
+  /* Stack only */
+  void* operator new(size_t);
+  void operator delete(void*);
+  void* operator new[](size_t);
+  void operator delete[](void*);
+  CommandQueue* m_q;
+public:
+  explicit GraphicsDebugGroup(CommandQueue* q, const char* name,
+                              const std::array<float, 4>& color = {1.f, 1.f, 1.f, 1.f}) : m_q(q) {
+    m_q->pushDebugGroup(name, color);
+  }
+  ~GraphicsDebugGroup() {
+    m_q->popDebugGroup();
+  }
+};
+#define SCOPED_GRAPHICS_DEBUG_GROUP(...) GraphicsDebugGroup _GfxDbg_(__VA_ARGS__);
+#else
+#define SCOPED_GRAPHICS_DEBUG_GROUP(...)
+#endif
 
 } // namespace boo

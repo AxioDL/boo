@@ -3,6 +3,7 @@
 #include "IGraphicsDataFactory.hpp"
 #include "boo/IWindow.hpp"
 #include <functional>
+#include <array>
 
 namespace boo {
 
@@ -36,6 +37,11 @@ struct IGraphicsCommandQueue {
                                   int bindIdx, bool color, bool depth, bool clearDepth = false) = 0;
   virtual void resolveDisplay(const ObjToken<ITextureR>& source) = 0;
   virtual void execute() = 0;
+
+#ifdef BOO_GRAPHICS_DEBUG_GROUPS
+  virtual void pushDebugGroup(const char* name, const std::array<float, 4>& color = {1.f, 1.f, 1.f, 1.f}) = 0;
+  virtual void popDebugGroup() = 0;
+#endif
 
   virtual void startRenderer() = 0;
   virtual void stopRenderer() = 0;

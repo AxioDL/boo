@@ -107,14 +107,14 @@ struct Boo3DAppContext {
   }
 };
 
-static inline std::string WCSTMBS(const wchar_t* wstr) {
+inline std::string WCSTMBS(const wchar_t* wstr) {
   int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, nullptr, 0, nullptr, nullptr) - 1;
   std::string strTo(sizeNeeded, 0);
   WideCharToMultiByte(CP_UTF8, 0, wstr, -1, &strTo[0], sizeNeeded, nullptr, nullptr);
   return strTo;
 }
 
-static inline std::wstring MBSTWCS(const char* str) {
+inline std::wstring MBSTWCS(const char* str) {
   int sizeNeeded = MultiByteToWideChar(CP_UTF8, 0, str, -1, nullptr, 0) - 1;
   std::wstring strTo(sizeNeeded, 0);
   MultiByteToWideChar(CP_UTF8, 0, str, -1, &strTo[0], sizeNeeded);

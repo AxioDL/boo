@@ -183,6 +183,11 @@ PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR GetPhysicalDeviceWin32Present
 PFN_vkCreateDebugReportCallbackEXT CreateDebugReportCallbackEXT;
 PFN_vkDestroyDebugReportCallbackEXT DestroyDebugReportCallbackEXT;
 PFN_vkDebugReportMessageEXT DebugReportMessageEXT;
+PFN_vkDebugMarkerSetObjectTagEXT DebugMarkerSetObjectTagEXT;
+PFN_vkDebugMarkerSetObjectNameEXT DebugMarkerSetObjectNameEXT;
+PFN_vkCmdDebugMarkerBeginEXT CmdDebugMarkerBeginEXT;
+PFN_vkCmdDebugMarkerEndEXT CmdDebugMarkerEndEXT;
+PFN_vkCmdDebugMarkerInsertEXT CmdDebugMarkerInsertEXT;
 
 void init_dispatch_table_top(PFN_vkGetInstanceProcAddr get_instance_proc_addr) {
   GetInstanceProcAddr = get_instance_proc_addr;
@@ -636,6 +641,17 @@ void init_dispatch_table_bottom(VkInstance instance, VkDevice dev) {
   QueuePresentKHR = reinterpret_cast<PFN_vkQueuePresentKHR>(GetDeviceProcAddr(dev, "vkQueuePresentKHR"));
   CreateSharedSwapchainsKHR =
       reinterpret_cast<PFN_vkCreateSharedSwapchainsKHR>(GetDeviceProcAddr(dev, "vkCreateSharedSwapchainsKHR"));
+
+  DebugMarkerSetObjectTagEXT = reinterpret_cast<PFN_vkDebugMarkerSetObjectTagEXT>(
+      GetDeviceProcAddr(dev, "vkDebugMarkerSetObjectTagEXT"));
+  DebugMarkerSetObjectNameEXT = reinterpret_cast<PFN_vkDebugMarkerSetObjectNameEXT>(
+      GetDeviceProcAddr(dev, "vkDebugMarkerSetObjectNameEXT"));
+  CmdDebugMarkerBeginEXT = reinterpret_cast<PFN_vkCmdDebugMarkerBeginEXT>(
+      GetDeviceProcAddr(dev, "vkCmdDebugMarkerBeginEXT"));
+  CmdDebugMarkerEndEXT = reinterpret_cast<PFN_vkCmdDebugMarkerEndEXT>(
+      GetDeviceProcAddr(dev, "vkCmdDebugMarkerEndEXT"));
+  CmdDebugMarkerInsertEXT = reinterpret_cast<PFN_vkCmdDebugMarkerInsertEXT>(
+      GetDeviceProcAddr(dev, "vkCmdDebugMarkerInsertEXT"));
 }
 
 } // namespace vk

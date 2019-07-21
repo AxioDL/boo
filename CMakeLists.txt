@@ -15,6 +15,11 @@ endif()
 
 add_subdirectory(xxhash)
 
+option(BOO_GRAPHICS_DEBUG_GROUPS "Enable Debug Groups for labeling graphics passes within backend API." OFF)
+if (BOO_GRAPHICS_DEBUG_GROUPS)
+  list(APPEND _BOO_SYS_DEFINES -DBOO_GRAPHICS_DEBUG_GROUPS=1)
+endif()
+
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
 find_package(IPP)
 if (IPP_FOUND)

@@ -59,7 +59,7 @@ static logvisor::Module Log("boo::GL");
 class GLDataFactoryImpl;
 struct GLCommandQueue;
 
-class GLDataFactoryImpl : public GLDataFactory, public GraphicsDataFactoryHead {
+class GLDataFactoryImpl final : public GLDataFactory, public GraphicsDataFactoryHead {
   friend struct GLCommandQueue;
   friend class GLDataFactory::Context;
   IGraphicsContext* m_parent;
@@ -1113,7 +1113,7 @@ static const size_t SEMANTIC_SIZE_TABLE[] = {0, 12, 16, 12, 16, 16, 4, 8, 16, 16
 static const GLenum SEMANTIC_TYPE_TABLE[] = {GL_INVALID_ENUM,  GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FLOAT,
                                              GL_UNSIGNED_BYTE, GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FLOAT};
 
-struct GLCommandQueue : IGraphicsCommandQueue {
+struct GLCommandQueue final : IGraphicsCommandQueue {
   Platform platform() const { return IGraphicsDataFactory::Platform::OpenGL; }
   const SystemChar* platformName() const { return _SYS_STR("OpenGL"); }
   IGraphicsContext* m_parent = nullptr;
@@ -1141,7 +1141,11 @@ struct GLCommandQueue : IGraphicsCommandQueue {
       DrawInstancesIndexed,
       ResolveBindTexture,
       GenerateMips,
-      Present
+      Present,
+#ifdef BOO_GRAPHICS_DEBUG_GROUPS
+      PushDebugGroup,
+      PopDebugGroup,
+#endif
     } m_op;
     union {
       struct {
@@ -1157,6 +1161,9 @@ struct GLCommandQueue : IGraphicsCommandQueue {
         size_t startInst;
       };
     };
+#ifdef BOO_GRAPHICS_DEBUG_GROUPS
+    std::string name;
+#endif
     ObjToken<IShaderDataBinding> binding;
     ObjToken<ITexture> target;
     ObjToken<ITextureR> source;
@@ -1356,20 +1363,22 @@ struct GLCommandQueue : IGraphicsCommandQueue {
           self->m_pendingCubeResizes.clear();
         }
 
+        std::vector<ObjToken<IShaderDataBinding>> pendingFmtAdds;
+        std::vector<std::array<GLuint, 3>> pendingFmtDels;
         {
           std::lock_guard<std::recursive_mutex> fmtLk(self->m_fmtMt);
-
-          if (self->m_pendingFmtAdds.size()) {
-            for (ObjToken<IShaderDataBinding>& fmt : self->m_pendingFmtAdds)
-              ConfigureVertexFormat(fmt.cast<GLShaderDataBinding>());
-            self->m_pendingFmtAdds.clear();
-          }
-
-          if (self->m_pendingFmtDels.size()) {
-            for (const auto& v : self->m_pendingFmtDels)
-              glDeleteVertexArrays(3, v.data());
-            self->m_pendingFmtDels.clear();
-          }
+          pendingFmtAdds.swap(self->m_pendingFmtAdds);
+          pendingFmtDels.swap(self->m_pendingFmtDels);
+        }
+        if (pendingFmtAdds.size()) {
+          for (ObjToken<IShaderDataBinding>& fmt : pendingFmtAdds)
+            ConfigureVertexFormat(fmt.cast<GLShaderDataBinding>());
+          pendingFmtAdds.clear();
+        }
+        if (pendingFmtDels.size()) {
+          for (const auto& v : pendingFmtDels)
+            glDeleteVertexArrays(3, v.data());
+          pendingFmtDels.clear();
         }
 
         if (self->m_pendingPosts2.size())
@@ -1515,7 +1524,7 @@ struct GLCommandQueue : IGraphicsCommandQueue {
               glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
               glBlitFramebuffer(0, 0, tex->m_width, tex->m_height, 0, 0, tex->m_width, tex->m_height,
                                 GL_COLOR_BUFFER_BIT, GL_NEAREST);
-#if 1
+#if 0
               /* First cubemap dump */
               int offset = 0;
               int voffset = 0;
@@ -1541,6 +1550,16 @@ struct GLCommandQueue : IGraphicsCommandQueue {
           self->m_parent->present();
           break;
         }
+#ifdef BOO_GRAPHICS_DEBUG_GROUPS
+        case Command::Op::PushDebugGroup: {
+          glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 42, -1, cmd.name.c_str());
+          break;
+        }
+        case Command::Op::PopDebugGroup: {
+          glPopDebugGroup();
+          break;
+        }
+#endif
         default:
           break;
         }
@@ -1732,6 +1751,7 @@ struct GLCommandQueue : IGraphicsCommandQueue {
 
   void execute() {
     BOO_MSAN_NO_INTERCEPT
+    SCOPED_GRAPHICS_DEBUG_GROUP(this, "GLCommandQueue::execute", {1.f, 0.f, 0.f, 1.f});
     std::unique_lock<std::mutex> lk(m_mt);
     m_completeBuf = m_fillBuf;
     for (int i = 0; i < 3; ++i) {
@@ -1772,6 +1792,23 @@ struct GLCommandQueue : IGraphicsCommandQueue {
     m_cv.notify_one();
     m_cmdBufs[m_fillBuf].clear();
   }
+
+#ifdef BOO_GRAPHICS_DEBUG_GROUPS
+  void pushDebugGroup(const char* name, const std::array<float, 4>& color) {
+    if (GLEW_KHR_debug) {
+      std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
+      cmds.emplace_back(Command::Op::PushDebugGroup);
+      cmds.back().name = name;
+    }
+  }
+
+  void popDebugGroup() {
+    if (GLEW_KHR_debug) {
+      std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
+      cmds.emplace_back(Command::Op::PopDebugGroup);
+    }
+  }
+#endif
 };
 
 ObjToken<IGraphicsBufferD> GLDataFactory::Context::newDynamicBuffer(BufferUse use, size_t stride, size_t count) {

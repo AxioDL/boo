@@ -65,7 +65,7 @@ class VulkanDataFactoryImpl;
 struct VulkanCommandQueue;
 struct VulkanDescriptorPool;
 
-class VulkanDataFactoryImpl : public VulkanDataFactory, public GraphicsDataFactoryHead {
+class VulkanDataFactoryImpl final : public VulkanDataFactory, public GraphicsDataFactoryHead {
   friend struct VulkanCommandQueue;
   friend class VulkanDataFactory::Context;
   friend struct VulkanData;
@@ -375,9 +375,6 @@ bool VulkanContext::initVulkan(std::string_view appName, PFN_vkGetInstanceProcAd
   m_instanceExtensionNames.push_back(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
 #endif
 
-  /* need swapchain device extension */
-  m_deviceExtensionNames.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-
 #ifndef NDEBUG
   m_layerNames.push_back("VK_LAYER_LUNARG_standard_validation");
   // m_layerNames.push_back("VK_LAYER_RENDERDOC_Capture");
@@ -508,14 +505,33 @@ void VulkanContext::initDevice() {
   vk::EnumerateDeviceExtensionProperties(m_gpus[0], nullptr, &extCount, nullptr);
   std::vector<VkExtensionProperties> extensions(extCount);
   vk::EnumerateDeviceExtensionProperties(m_gpus[0], nullptr, &extCount, extensions.data());
+  bool hasSwapchain = false;
+  bool hasDebugMarker = false;
   bool hasGetMemReq2 = false;
   bool hasDedicatedAllocation = false;
   for (const VkExtensionProperties& ext : extensions) {
-    if (!hasGetMemReq2 && !strcmp(ext.extensionName, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME))
+    if (!hasSwapchain && !strcmp(ext.extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME))
+      hasSwapchain = true;
+    else if (!hasDebugMarker && !strcmp(ext.extensionName, VK_EXT_DEBUG_MARKER_EXTENSION_NAME))
+      hasDebugMarker = true;
+    else if (!hasGetMemReq2 && !strcmp(ext.extensionName, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME))
       hasGetMemReq2 = true;
     else if (!hasDedicatedAllocation && !strcmp(ext.extensionName, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME))
       hasDedicatedAllocation = true;
   }
+
+  if (!hasSwapchain)
+    Log.report(logvisor::Fatal, fmt("Vulkan device does not support swapchains"));
+
+  /* need swapchain device extension */
+  m_deviceExtensionNames.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+#ifdef BOO_GRAPHICS_DEBUG_GROUPS
+  if (hasDebugMarker) {
+    /* Enable debug marker extension if enabled in the build system */
+    m_deviceExtensionNames.push_back(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
+  }
+#endif
+
   VmaAllocatorCreateFlags allocFlags = VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT;
   if (hasGetMemReq2 && hasDedicatedAllocation) {
     m_deviceExtensionNames.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
@@ -2023,12 +2039,13 @@ class VulkanTextureCubeR : public GraphicsDataNode<ITextureCubeR> {
     texCreateInfo.extent.width = m_width;
     texCreateInfo.extent.height = m_width;
     texCreateInfo.extent.depth = 1;
-    texCreateInfo.mipLevels = 1;
+    texCreateInfo.mipLevels = m_mipCount;
     texCreateInfo.arrayLayers = 6;
     texCreateInfo.samples = VkSampleCountFlagBits(1);
     texCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     texCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    texCreateInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    texCreateInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                          VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     texCreateInfo.queueFamilyIndexCount = 0;
     texCreateInfo.pQueueFamilyIndices = nullptr;
     texCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -2042,12 +2059,6 @@ class VulkanTextureCubeR : public GraphicsDataNode<ITextureCubeR> {
     texCreateInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     m_depthTex.createFB(ctx, &texCreateInfo);
 
-    /* color bind target */
-    texCreateInfo.format = ctx->m_internalFormat;
-    texCreateInfo.mipLevels = m_mipCount;
-    texCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    m_colorBindTex.createFB(ctx, &texCreateInfo);
-
     m_colorBindDescInfo.sampler = m_sampler;
     m_colorBindDescInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
@@ -2055,7 +2066,7 @@ class VulkanTextureCubeR : public GraphicsDataNode<ITextureCubeR> {
     VkImageViewCreateInfo viewCreateInfo = {};
     viewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewCreateInfo.pNext = nullptr;
-    viewCreateInfo.image = m_colorBindTex.m_image;
+    viewCreateInfo.image = m_colorTex.m_image;
     viewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
     viewCreateInfo.format = ctx->m_internalFormat;
     viewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_R;
@@ -2121,11 +2132,11 @@ class VulkanTextureCubeR : public GraphicsDataNode<ITextureCubeR> {
 public:
   AllocatedImage m_colorTex;
   VkImageView m_colorView[6] = {};
+  VkImageLayout m_mipsLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
   AllocatedImage m_depthTex;
   VkImageView m_depthView[6] = {};
 
-  AllocatedImage m_colorBindTex;
   VkImageView m_colorBindView = VK_NULL_HANDLE;
   VkDescriptorImageInfo m_colorBindDescInfo = {};
 
@@ -2163,20 +2174,18 @@ public:
     toDepthAttachmentLayout(cmdBuf);
   }
 
-  void toColorBindShaderReadLayout(VkCommandBuffer cmdBuf) {
-    m_colorBindTex.toLayout(cmdBuf, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, m_mipCount, 6);
+  void toColorShaderReadLayout(VkCommandBuffer cmdBuf) {
+    m_colorTex.toLayout(cmdBuf, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, m_mipCount, 6);
   }
 
   void commitLayouts() {
     m_colorTex.commitLayout();
     m_depthTex.commitLayout();
-    m_colorBindTex.commitLayout();
   }
 
   void rollbackLayouts() {
     m_colorTex.rollbackLayout();
     m_depthTex.rollbackLayout();
-    m_colorBindTex.rollbackLayout();
   }
 };
 
@@ -2827,7 +2836,7 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
   }
 };
 
-struct VulkanCommandQueue : IGraphicsCommandQueue {
+struct VulkanCommandQueue final : IGraphicsCommandQueue {
   Platform platform() const { return IGraphicsDataFactory::Platform::Vulkan; }
   const SystemChar* platformName() const { return _SYS_STR("Vulkan"); }
   VulkanContext* m_ctx;
@@ -2964,10 +2973,12 @@ struct VulkanCommandQueue : IGraphicsCommandQueue {
     }
   }
 
+  static constexpr int CubeFaceRemap[] = {0, 1, 3, 2, 4, 5};
   int m_boundFace = 0;
   void setRenderTarget(const ObjToken<ITextureCubeR>& target, int face) {
     VulkanTextureCubeR* ctarget = target.cast<VulkanTextureCubeR>();
     VkCommandBuffer cmdBuf = m_cmdBufs[m_fillBuf];
+    face = CubeFaceRemap[face];
 
     if (m_boundTarget.get() != ctarget || m_boundFace != face) {
       if (m_boundTarget)
@@ -3030,6 +3041,7 @@ struct VulkanCommandQueue : IGraphicsCommandQueue {
   }
 
   void generateMipmaps(const ObjToken<ITextureCubeR>& tex) {
+    SCOPED_GRAPHICS_DEBUG_GROUP(this, "VulkanCommandQueue::generateMipmaps", {1.f, 0.f, 0.f, 1.f});
     VulkanTextureCubeR* ctex = tex.cast<VulkanTextureCubeR>();
     VkCommandBuffer cmdBuf = m_cmdBufs[m_fillBuf];
     if (m_boundTarget) {
@@ -3038,35 +3050,6 @@ struct VulkanCommandQueue : IGraphicsCommandQueue {
     }
 
     ctex->toColorTransferSrcLayout(cmdBuf);
-
-    {
-      /* First blit performs y-inversion (can't easily invert the cube sampler or geometry) */
-      VkImageBlit blit = {};
-
-      blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-      blit.srcSubresource.layerCount = 6;
-      blit.srcSubresource.mipLevel = 0;
-      blit.srcOffsets[1].x = int32_t(ctex->m_width);
-      blit.srcOffsets[1].y = int32_t(ctex->m_width);
-      blit.srcOffsets[1].z = 1;
-
-      blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-      blit.dstSubresource.layerCount = 6;
-      blit.dstSubresource.mipLevel = 0;
-
-      blit.dstOffsets[0].y = int32_t(ctex->m_width);
-      blit.dstOffsets[1].x = int32_t(ctex->m_width);
-      blit.dstOffsets[1].z = 1;
-
-      SetImageLayout(cmdBuf, ctex->m_colorBindTex.m_image, VK_IMAGE_ASPECT_COLOR_BIT,
-                     ctex->m_colorBindTex.m_layout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 6, 0);
-
-      vk::CmdBlitImage(cmdBuf, ctex->m_colorTex.m_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                       ctex->m_colorBindTex.m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
-
-      SetImageLayout(cmdBuf, ctex->m_colorBindTex.m_image, VK_IMAGE_ASPECT_COLOR_BIT,
-                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 6, 0);
-    }
 
     size_t tmpWidth = ctex->m_width;
     for (size_t i = 1; i < ctex->m_mipCount; i++) {
@@ -3088,18 +3071,18 @@ struct VulkanCommandQueue : IGraphicsCommandQueue {
       blit.dstOffsets[1].y = int32_t(tmpWidth);
       blit.dstOffsets[1].z = 1;
 
-      SetImageLayout(cmdBuf, ctex->m_colorBindTex.m_image, VK_IMAGE_ASPECT_COLOR_BIT,
-                     ctex->m_colorBindTex.m_layout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 6, i);
+      SetImageLayout(cmdBuf, ctex->m_colorTex.m_image, VK_IMAGE_ASPECT_COLOR_BIT,
+                     ctex->m_mipsLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 6, i);
 
-      vk::CmdBlitImage(cmdBuf, ctex->m_colorBindTex.m_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                       ctex->m_colorBindTex.m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+      vk::CmdBlitImage(cmdBuf, ctex->m_colorTex.m_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                       ctex->m_colorTex.m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
 
-      SetImageLayout(cmdBuf, ctex->m_colorBindTex.m_image, VK_IMAGE_ASPECT_COLOR_BIT,
+      SetImageLayout(cmdBuf, ctex->m_colorTex.m_image, VK_IMAGE_ASPECT_COLOR_BIT,
                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1, 6, i);
     }
 
-    ctex->m_colorBindTex.m_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    ctex->toColorBindShaderReadLayout(cmdBuf);
+    ctex->toColorShaderReadLayout(cmdBuf);
+    ctex->m_mipsLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
   }
 
   void schedulePostFrameHandler(std::function<void(void)>&& func) { func(); }
@@ -3426,6 +3409,26 @@ struct VulkanCommandQueue : IGraphicsCommandQueue {
   void _rollbackImageLayouts();
 
   void execute();
+
+#ifdef BOO_GRAPHICS_DEBUG_GROUPS
+  void pushDebugGroup(const char* name, const std::array<float, 4>& color) {
+    if (vk::CmdDebugMarkerBeginEXT) {
+      VkCommandBuffer cmdBuf = m_cmdBufs[m_fillBuf];
+      VkDebugMarkerMarkerInfoEXT markerInfo = {};
+      markerInfo.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_MARKER_INFO_EXT;
+      markerInfo.pMarkerName = name;
+      std::copy(color.begin(), color.end(), markerInfo.color);
+      vk::CmdDebugMarkerBeginEXT(cmdBuf, &markerInfo);
+    }
+  }
+
+  void popDebugGroup() {
+    if (vk::CmdDebugMarkerEndEXT) {
+      VkCommandBuffer cmdBuf = m_cmdBufs[m_fillBuf];
+      vk::CmdDebugMarkerEndEXT(cmdBuf);
+    }
+  }
+#endif
 };
 
 void VulkanTextureR::doDestroy() {
@@ -3518,7 +3521,6 @@ void VulkanTextureCubeR::doDestroy() {
     vk::DestroyImageView(m_q->m_ctx->m_dev, m_colorBindView, nullptr);
     m_colorBindView = VK_NULL_HANDLE;
   }
-  m_colorBindTex.destroy(m_q->m_ctx);
   if (m_colorView[0]) {
     for (int i = 0; i < 6; ++i)
       vk::DestroyImageView(m_q->m_ctx->m_dev, m_colorView[i], nullptr);
@@ -3551,7 +3553,6 @@ VulkanTextureCubeR::~VulkanTextureCubeR() {
   for (int i = 0; i < 6; ++i)
     vk::DestroyFramebuffer(m_q->m_ctx->m_dev, m_framebuffer[i], nullptr);
   vk::DestroyImageView(m_q->m_ctx->m_dev, m_colorBindView, nullptr);
-  m_colorBindTex.destroy(m_q->m_ctx);
   for (int i = 0; i < 6; ++i)
     vk::DestroyImageView(m_q->m_ctx->m_dev, m_colorView[i], nullptr);
   m_colorTex.destroy(m_q->m_ctx);
@@ -3944,6 +3945,8 @@ void VulkanCommandQueue::_rollbackImageLayouts() {
 void VulkanCommandQueue::execute() {
   if (!m_running)
     return;
+
+  SCOPED_GRAPHICS_DEBUG_GROUP(this, "VulkanCommandQueue::execute", {1.f, 0.f, 0.f, 1.f});
 
   /* Stage dynamic uploads */
   VulkanDataFactoryImpl* gfxF = static_cast<VulkanDataFactoryImpl*>(m_parent->getDataFactory());
