@@ -23,6 +23,11 @@ class IWindow;
 #error Unsupported Windows target
 #endif
 
+#include <d3d9.h>
+
+typedef int (WINAPI *pD3DPERF_BeginEvent)(D3DCOLOR col, LPCWSTR wszName);
+typedef int (WINAPI *pD3DPERF_EndEvent)();
+
 struct D3D12Context {
   ComPtr<IDXGIFactory2> m_dxFactory;
   ComPtr<ID3D12Device> m_dev;

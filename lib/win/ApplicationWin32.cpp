@@ -32,6 +32,8 @@ std::condition_variable g_nwcv;
 static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 pD3DCompile D3DCompilePROC = nullptr;
 pD3DCreateBlob D3DCreateBlobPROC = nullptr;
+pD3DPERF_BeginEvent D3DPERF_BeginEventPROC = nullptr;
+pD3DPERF_EndEvent D3DPERF_EndEventPROC = nullptr;
 
 static bool FindBestD3DCompile() {
   HMODULE d3dCompilelib = LoadLibraryW(L"D3DCompiler_47.dll");
@@ -51,6 +53,16 @@ static bool FindBestD3DCompile() {
     D3DCompilePROC = (pD3DCompile)GetProcAddress(d3dCompilelib, "D3DCompile");
     D3DCreateBlobPROC = (pD3DCreateBlob)GetProcAddress(d3dCompilelib, "D3DCreateBlob");
     return D3DCompilePROC != nullptr && D3DCreateBlobPROC != nullptr;
+  }
+  return false;
+}
+
+static bool FindD3DPERF() {
+  HMODULE d3d9lib = LoadLibraryW(L"d3d9.dll");
+  if (d3d9lib) {
+    D3DPERF_BeginEventPROC = (pD3DPERF_BeginEvent)GetProcAddress(d3d9lib, "D3DPERF_BeginEvent");
+    D3DPERF_EndEventPROC = (pD3DPERF_EndEvent)GetProcAddress(d3d9lib, "D3DPERF_EndEvent");
+    return D3DPERF_BeginEventPROC != nullptr && D3DPERF_EndEventPROC != nullptr;
   }
   return false;
 }
@@ -150,6 +162,8 @@ public:
     if (d3d11lib) {
       if (!FindBestD3DCompile())
         Log.report(logvisor::Fatal, fmt("unable to find D3DCompile_[43-47].dll"));
+      if (!FindD3DPERF())
+        Log.report(logvisor::Fatal, fmt("unable to find d3d9.dll"));
 
       /* Create device proc */
       PFN_D3D11_CREATE_DEVICE MyD3D11CreateDevice =

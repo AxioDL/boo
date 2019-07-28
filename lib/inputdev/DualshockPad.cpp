@@ -6,8 +6,8 @@
 #include <cstdio>
 #include <memory.h>
 
-#ifdef _WIN32
-constexpr uint16_t bswap16(uint16_t val) { return _byteswap_ushort(val); }
+#ifdef _MSC_VER
+inline uint16_t bswap16(uint16_t val) { return _byteswap_ushort(val); }
 #elif __GNUC__ && !defined(__FreeBSD__)
 constexpr uint16_t bswap16(uint16_t val) { return __builtin_bswap16(val); }
 #elif !defined(__FreeBSD__)

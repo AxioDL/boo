@@ -69,16 +69,16 @@ class HIDDeviceWinUSB final : public IHIDDevice {
         CreateFileA(device->m_devPath.data(), GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, NULL,
                     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, NULL);
     if (INVALID_HANDLE_VALUE == device->m_devHandle) {
-      device->m_devImp->deviceError(fmt::format(fmt("Unable to open {}@{}: {}\n"),
-        device->m_token.getProductName(), device->m_devPath, GetLastError()).c_str());
+      device->m_devImp->deviceError(fmt("Unable to open {}@{}: {}\n"),
+        device->m_token.getProductName(), device->m_devPath, GetLastError());
       lk.unlock();
       device->m_initCond.notify_one();
       return;
     }
 
     if (!WinUsb_Initialize(device->m_devHandle, &device->m_usbHandle)) {
-      device->m_devImp->deviceError(fmt::format(fmt("Unable to open {}@{}: {}\n"),
-        device->m_token.getProductName(), device->m_devPath, GetLastError()).c_str());
+      device->m_devImp->deviceError(fmt("Unable to open {}@{}: {}\n"),
+        device->m_token.getProductName(), device->m_devPath, GetLastError());
       lk.unlock();
       device->m_initCond.notify_one();
       CloseHandle(device->m_devHandle);
@@ -88,8 +88,8 @@ class HIDDeviceWinUSB final : public IHIDDevice {
     /* Enumerate device pipes */
     USB_INTERFACE_DESCRIPTOR ifDesc = {0};
     if (!WinUsb_QueryInterfaceSettings(device->m_usbHandle, 0, &ifDesc)) {
-      device->m_devImp->deviceError(fmt::format(fmt("Unable to open {}@{}: {}\n"),
-        device->m_token.getProductName(), device->m_devPath, GetLastError()).c_str());
+      device->m_devImp->deviceError(fmt("Unable to open {}@{}: {}\n"),
+        device->m_token.getProductName(), device->m_devPath, GetLastError());
       lk.unlock();
       device->m_initCond.notify_one();
       CloseHandle(device->m_devHandle);
@@ -153,16 +153,16 @@ class HIDDeviceWinUSB final : public IHIDDevice {
         CreateFileA(device->m_devPath.data(), GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, NULL,
                     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, NULL);
     if (INVALID_HANDLE_VALUE == device->m_hidHandle) {
-      device->m_devImp->deviceError(fmt::format(fmt("Unable to open {}@{}: {}\n"),
-        device->m_token.getProductName(), device->m_devPath, GetLastError()).c_str());
+      device->m_devImp->deviceError(fmt("Unable to open {}@{}: {}\n"),
+        device->m_token.getProductName(), device->m_devPath, GetLastError());
       lk.unlock();
       device->m_initCond.notify_one();
       return;
     }
 
     if (!HidD_GetPreparsedData(device->m_hidHandle, &device->m_preparsedData)) {
-      device->m_devImp->deviceError(fmt::format(fmt("Unable get preparsed data of {}@{}: {}\n"),
-        device->m_token.getProductName(), device->m_devPath, GetLastError()).c_str());
+      device->m_devImp->deviceError(fmt("Unable get preparsed data of {}@{}: {}\n"),
+        device->m_token.getProductName(), device->m_devPath, GetLastError());
       lk.unlock();
       device->m_initCond.notify_one();
       return;

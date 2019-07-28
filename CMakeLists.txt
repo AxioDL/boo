@@ -17,6 +17,7 @@ add_subdirectory(xxhash)
 
 option(BOO_GRAPHICS_DEBUG_GROUPS "Enable Debug Groups for labeling graphics passes within backend API." OFF)
 if (BOO_GRAPHICS_DEBUG_GROUPS)
+  message(STATUS "Enabling graphics debug groups")
   list(APPEND _BOO_SYS_DEFINES -DBOO_GRAPHICS_DEBUG_GROUPS=1)
 endif()
 
@@ -41,16 +42,19 @@ if(TARGET nx_compiler)
 endif()
 
 if(NOT GEKKO AND NOT CAFE AND NOT WINDOWS_STORE AND NOT NX AND NOT APPLE)
-list(APPEND PLAT_SRCS
-    lib/graphicsdev/GL.cpp
-    lib/graphicsdev/glew.c)
-list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_GL=1 -DGLEW_NO_GLU=1)
+  add_library(glew lib/graphicsdev/glew.c)
+  target_include_directories(glew PUBLIC include/boo/graphicsdev)
+  target_compile_definitions(glew PUBLIC -DGLEW_NO_GLU=1)
 
-list(APPEND PLAT_HDRS
-     include/boo/graphicsdev/GLSLMacros.hpp
-     include/boo/graphicsdev/GL.hpp
-     include/boo/graphicsdev/Vulkan.hpp
-     include/boo/graphicsdev/VulkanDispatchTable.hpp)
+  list(APPEND PLAT_SRCS lib/graphicsdev/GL.cpp)
+  list(APPEND _BOO_SYS_DEFINES -DBOO_HAS_GL=1)
+  list(APPEND _BOO_SYS_LIBS glew)
+
+  list(APPEND PLAT_HDRS
+       include/boo/graphicsdev/GLSLMacros.hpp
+       include/boo/graphicsdev/GL.hpp
+       include/boo/graphicsdev/Vulkan.hpp
+       include/boo/graphicsdev/VulkanDispatchTable.hpp)
 endif()
 
 if(WINDOWS_STORE)
@@ -173,7 +177,6 @@ else(NOT GEKKO)
        lib/x11/WindowWayland.cpp
        lib/graphicsdev/GL.cpp
        lib/graphicsdev/GLX.cpp
-       lib/graphicsdev/glew.c
        lib/audiodev/LinuxMidi.hpp)
 
   find_package(PkgConfig)

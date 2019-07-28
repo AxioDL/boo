@@ -117,14 +117,14 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 #if !WINDOWS_STORE
     if (!m_device) {
       if (FAILED(m_enumerator->GetDevice(MBSTWCS(m_sinkName.c_str()).c_str(), &m_device))) {
-        Log.report(logvisor::Error, fmt("unable to obtain audio device %s"), m_sinkName.c_str());
+        Log.report(logvisor::Error, fmt("unable to obtain audio device %s"), m_sinkName);
         m_device.Reset();
         return;
       }
     }
 
     if (FAILED(m_device->Activate(IID_IAudioClient, CLSCTX_ALL, nullptr, &m_audClient))) {
-      Log.report(logvisor::Error, L"unable to create audio client from device");
+      Log.report(logvisor::Error, fmt(L"unable to create audio client from device"));
       m_device.Reset();
       return;
     }
@@ -132,7 +132,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 
     WAVEFORMATEXTENSIBLE* pwfx;
     if (FAILED(m_audClient->GetMixFormat((WAVEFORMATEX**)&pwfx))) {
-      Log.report(logvisor::Error, L"unable to obtain audio mix format from device");
+      Log.report(logvisor::Error, fmt(L"unable to obtain audio mix format from device"));
 #if !WINDOWS_STORE
       m_device.Reset();
 #endif
@@ -210,7 +210,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     /* Initialize audio client */
     if (FAILED(m_audClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 450000, /* 45ms */
                                        0, (WAVEFORMATEX*)pwfx, nullptr))) {
-      Log.report(logvisor::Error, L"unable to initialize audio client");
+      Log.report(logvisor::Error, fmt(L"unable to initialize audio client"));
 #if !WINDOWS_STORE
       m_device.Reset();
 #endif
@@ -231,7 +231,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
         m_mixInfo.m_sampleFormat = SOXR_INT32_I;
         m_mixInfo.m_bitsPerSample = 32;
       } else {
-        Log.report(logvisor::Fatal, L"unsupported bits-per-sample %d", pwfx->Format.wBitsPerSample);
+        Log.report(logvisor::Fatal, fmt(L"unsupported bits-per-sample {}"), pwfx->Format.wBitsPerSample);
 #if !WINDOWS_STORE
         m_device.Reset();
 #endif
@@ -244,7 +244,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
         m_mixInfo.m_sampleFormat = SOXR_FLOAT32_I;
         m_mixInfo.m_bitsPerSample = 32;
       } else {
-        Log.report(logvisor::Error, L"unsupported floating-point bits-per-sample %d", pwfx->Format.wBitsPerSample);
+        Log.report(logvisor::Error, fmt(L"unsupported floating-point bits-per-sample {}"), pwfx->Format.wBitsPerSample);
 #if !WINDOWS_STORE
         m_device.Reset();
 #endif
@@ -256,7 +256,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 
     UINT32 bufferFrameCount;
     if (FAILED(m_audClient->GetBufferSize(&bufferFrameCount))) {
-      Log.report(logvisor::Error, L"unable to get audio buffer frame count");
+      Log.report(logvisor::Error, fmt(L"unable to get audio buffer frame count"));
 #if !WINDOWS_STORE
       m_device.Reset();
 #endif
@@ -265,7 +265,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     m_mixInfo.m_periodFrames = bufferFrameCount;
 
     if (FAILED(m_audClient->GetService(IID_IAudioRenderClient, &m_renderClient))) {
-      Log.report(logvisor::Error, L"unable to create audio render client");
+      Log.report(logvisor::Error, fmt(L"unable to create audio render client"));
 #if !WINDOWS_STORE
       m_device.Reset();
 #endif
@@ -342,18 +342,18 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     /* Enumerate default audio device */
     if (FAILED(
             CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL, IID_IMMDeviceEnumerator, &m_enumerator))) {
-      Log.report(logvisor::Error, L"unable to create MMDeviceEnumerator instance");
+      Log.report(logvisor::Error, fmt(L"unable to create MMDeviceEnumerator instance"));
       return;
     }
 
     if (FAILED(m_enumerator->RegisterEndpointNotificationCallback(&m_notificationClient))) {
-      Log.report(logvisor::Error, L"unable to register multimedia event callback");
+      Log.report(logvisor::Error, fmt(L"unable to register multimedia event callback"));
       m_device.Reset();
       return;
     }
 
     if (FAILED(m_enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &m_device))) {
-      Log.report(logvisor::Error, L"unable to obtain default audio device");
+      Log.report(logvisor::Error, fmt(L"unable to obtain default audio device"));
       m_device.Reset();
       return;
     }
@@ -381,7 +381,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     m_started = false;
 
     if (m_mixInfo.m_sampleFormat != oldFmt)
-      Log.report(logvisor::Fatal, L"audio device sample format changed, boo doesn't support this!!");
+      Log.report(logvisor::Fatal, fmt(L"audio device sample format changed, boo doesn't support this!!"));
 
     _resetSampleRate();
   }
@@ -398,7 +398,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     int attempt = 0;
     while (true) {
       if (attempt >= 10)
-        Log.report(logvisor::Fatal, L"unable to setup AudioRenderClient");
+        Log.report(logvisor::Fatal, fmt(L"unable to setup AudioRenderClient"));
 
       if (m_rebuild) {
         m_device.Reset();
@@ -468,7 +468,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
   bool setCurrentAudioOutput(const char* name) {
     ComPtr<IMMDevice> newDevice;
     if (FAILED(m_enumerator->GetDevice(MBSTWCS(name).c_str(), &newDevice))) {
-      Log.report(logvisor::Error, fmt("unable to obtain audio device %s"), name);
+      Log.report(logvisor::Error, fmt("unable to obtain audio device {}"), name);
       return false;
     }
     m_device = newDevice;
@@ -482,7 +482,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 
     ComPtr<IMMDeviceCollection> collection;
     if (FAILED(m_enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &collection))) {
-      Log.report(logvisor::Error, L"unable to enumerate audio outputs");
+      Log.report(logvisor::Error, fmt(L"unable to enumerate audio outputs"));
       return ret;
     }
 
