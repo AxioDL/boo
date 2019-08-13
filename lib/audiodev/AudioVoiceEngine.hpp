@@ -57,22 +57,24 @@ protected:
 
 public:
   BaseAudioVoiceEngine() : m_mainSubmix(std::make_unique<AudioSubmix>(*this, nullptr, -1, false)) {}
-  ~BaseAudioVoiceEngine();
-  ObjToken<IAudioVoice> allocateNewMonoVoice(double sampleRate, IAudioVoiceCallback* cb, bool dynamicPitch = false);
+  ~BaseAudioVoiceEngine() override;
+  ObjToken<IAudioVoice> allocateNewMonoVoice(double sampleRate, IAudioVoiceCallback* cb,
+                                             bool dynamicPitch = false) override;
 
-  ObjToken<IAudioVoice> allocateNewStereoVoice(double sampleRate, IAudioVoiceCallback* cb, bool dynamicPitch = false);
+  ObjToken<IAudioVoice> allocateNewStereoVoice(double sampleRate, IAudioVoiceCallback* cb,
+                                               bool dynamicPitch = false) override;
 
-  ObjToken<IAudioSubmix> allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb, int busId);
+  ObjToken<IAudioSubmix> allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb, int busId) override;
 
-  void setCallbackInterface(IAudioVoiceEngineCallback* cb);
+  void setCallbackInterface(IAudioVoiceEngineCallback* cb) override;
 
-  void setVolume(float vol);
-  bool enableLtRt(bool enable);
+  void setVolume(float vol) override;
+  bool enableLtRt(bool enable) override;
   const AudioVoiceEngineMixInfo& mixInfo() const;
   const AudioVoiceEngineMixInfo& clientMixInfo() const;
-  AudioChannelSet getAvailableSet() { return clientMixInfo().m_channels; }
-  void pumpAndMixVoices() {}
-  size_t get5MsFrames() const { return m_5msFrames; }
+  AudioChannelSet getAvailableSet() override { return clientMixInfo().m_channels; }
+  void pumpAndMixVoices() override {}
+  size_t get5MsFrames() const override { return m_5msFrames; }
 };
 
 template <>

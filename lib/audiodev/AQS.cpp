@@ -130,9 +130,9 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     return {AudioChannelSet::Unknown, 48000.0};
   }
 
-  std::string getCurrentAudioOutput() const { return CFStringGetCStringPtr(m_devName.get(), kCFStringEncodingUTF8); }
+  std::string getCurrentAudioOutput() const override { return CFStringGetCStringPtr(m_devName.get(), kCFStringEncodingUTF8); }
 
-  bool setCurrentAudioOutput(const char* name) {
+  bool setCurrentAudioOutput(const char* name) override {
     m_devName = CFPointer<CFStringRef>::adopt(CFStringCreateWithCString(nullptr, name, kCFStringEncodingUTF8));
     _rebuildAudioQueue();
     return true;
@@ -336,14 +336,14 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     MIDIIn(AQSAudioVoiceEngine* parent, bool virt, ReceiveFunctor&& receiver)
     : IMIDIIn(parent, virt, std::move(receiver)) {}
 
-    ~MIDIIn() {
+    ~MIDIIn() override {
       if (m_midi)
         MIDIEndpointDispose(m_midi);
       if (m_midiPort)
         MIDIPortDispose(m_midiPort);
     }
 
-    std::string description() const {
+    std::string description() const override {
       CFPointer<CFStringRef> namestr;
       const char* nameCstr;
       if (MIDIObjectGetStringProperty(m_midi, kMIDIPropertyName, &namestr))
@@ -362,14 +362,14 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
 
     MIDIOut(AQSAudioVoiceEngine* parent, bool virt) : IMIDIOut(parent, virt) {}
 
-    ~MIDIOut() {
+    ~MIDIOut() override {
       if (m_midi)
         MIDIEndpointDispose(m_midi);
       if (m_midiPort)
         MIDIPortDispose(m_midiPort);
     }
 
-    std::string description() const {
+    std::string description() const override {
       CFPointer<CFStringRef> namestr;
       const char* nameCstr;
       if (MIDIObjectGetStringProperty(m_midi, kMIDIPropertyName, &namestr))
@@ -381,7 +381,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
       return nameCstr;
     }
 
-    size_t send(const void* buf, size_t len) const {
+    size_t send(const void* buf, size_t len) const override {
       union {
         MIDIPacketList head;
         Byte storage[512];
@@ -408,7 +408,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     MIDIInOut(AQSAudioVoiceEngine* parent, bool virt, ReceiveFunctor&& receiver)
     : IMIDIInOut(parent, virt, std::move(receiver)) {}
 
-    ~MIDIInOut() {
+    ~MIDIInOut() override {
       if (m_midiIn)
         MIDIEndpointDispose(m_midiIn);
       if (m_midiPortIn)
@@ -419,7 +419,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
         MIDIPortDispose(m_midiPortOut);
     }
 
-    std::string description() const {
+    std::string description() const override {
       CFPointer<CFStringRef> namestr;
       const char* nameCstr;
       if (MIDIObjectGetStringProperty(m_midiIn, kMIDIPropertyName, &namestr))
@@ -431,7 +431,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
       return nameCstr;
     }
 
-    size_t send(const void* buf, size_t len) const {
+    size_t send(const void* buf, size_t len) const override {
       union {
         MIDIPacketList head;
         Byte storage[512];
@@ -452,7 +452,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
   unsigned m_midiInCounter = 0;
   unsigned m_midiOutCounter = 0;
 
-  std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver) {
+  std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver) override {
     if (!m_midiClient)
       return {};
 
@@ -477,7 +477,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     return ret;
   }
 
-  std::unique_ptr<IMIDIOut> newVirtualMIDIOut() {
+  std::unique_ptr<IMIDIOut> newVirtualMIDIOut() override {
     if (!m_midiClient)
       return {};
 
@@ -500,7 +500,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     return ret;
   }
 
-  std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver) {
+  std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver) override {
     if (!m_midiClient)
       return {};
 
@@ -537,7 +537,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     return ret;
   }
 
-  std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver) {
+  std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver) override {
     if (!m_midiClient)
       return {};
 
@@ -561,7 +561,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     return ret;
   }
 
-  std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name) {
+  std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name) override {
     if (!m_midiClient)
       return {};
 
@@ -584,7 +584,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     return ret;
   }
 
-  std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver) {
+  std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver) override {
     if (!m_midiClient)
       return {};
 
@@ -623,7 +623,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     return ret;
   }
 
-  bool useMIDILock() const { return true; }
+  bool useMIDILock() const override { return true; }
 
   static void SampleRateChanged(AQSAudioVoiceEngine* engine, AudioQueueRef inAQ, AudioQueuePropertyID inID) {
     engine->m_needsRebuild = true;
@@ -841,14 +841,14 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     MIDIClientCreate(CFSTR("Boo MIDI"), nullptr, nullptr, &m_midiClient);
   }
 
-  ~AQSAudioVoiceEngine() {
+  ~AQSAudioVoiceEngine() override {
     m_cbRunning = false;
     AudioQueueDispose(m_queue, true);
     if (m_midiClient)
       MIDIClientDispose(m_midiClient);
   }
 
-  void pumpAndMixVoices() {
+  void pumpAndMixVoices() override {
     while (CFRunLoopRunInMode(m_runLoopMode.get(), 0, true) == kCFRunLoopRunHandledSource) {}
     if (m_needsRebuild) {
       _rebuildAudioQueue();

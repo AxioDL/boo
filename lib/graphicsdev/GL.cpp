@@ -119,25 +119,25 @@ class GLDataFactoryImpl final : public GLDataFactory, public GraphicsDataFactory
 public:
   GLDataFactoryImpl(IGraphicsContext* parent, GLContext* glCtx) : m_parent(parent), m_glCtx(glCtx) {}
 
-  Platform platform() const { return Platform::OpenGL; }
-  const SystemChar* platformName() const { return _SYS_STR("OpenGL"); }
-  void commitTransaction(const FactoryCommitFunc& trans __BooTraceArgs);
-  ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs);
+  Platform platform() const override { return Platform::OpenGL; }
+  const SystemChar* platformName() const override { return _SYS_STR("OpenGL"); }
+  void commitTransaction(const FactoryCommitFunc& trans __BooTraceArgs) override;
+  ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs) override;
 
-  void setDisplayGamma(float gamma) {
+  void setDisplayGamma(float gamma) override {
     m_gamma = gamma;
     if (gamma != 1.f)
       UpdateGammaLUT(m_gammaLUT.get(), gamma);
   }
 
-  bool isTessellationSupported(uint32_t& maxPatchSizeOut) {
+  bool isTessellationSupported(uint32_t& maxPatchSizeOut) override {
     maxPatchSizeOut = m_maxPatchSize;
     return m_hasTessellation;
   }
 
-  void waitUntilShadersReady() {}
+  void waitUntilShadersReady() override {}
 
-  bool areShadersReady() { return true; }
+  bool areShadersReady() override { return true; }
 };
 
 static const GLenum USE_TABLE[] = {GL_INVALID_ENUM, GL_ARRAY_BUFFER, GL_ELEMENT_ARRAY_BUFFER, GL_UNIFORM_BUFFER};
@@ -156,7 +156,7 @@ class GLGraphicsBufferS : public GraphicsDataNode<IGraphicsBufferS> {
   }
 
 public:
-  ~GLGraphicsBufferS() { glDeleteBuffers(1, &m_buf); }
+  ~GLGraphicsBufferS() override { glDeleteBuffers(1, &m_buf); }
 
   void bindVertex() const { glBindBuffer(GL_ARRAY_BUFFER, m_buf); }
   void bindIndex() const { glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_buf); }
@@ -189,7 +189,7 @@ class GLGraphicsBufferD : public GraphicsDataNode<IGraphicsBufferD, DataCls> {
   }
 
 public:
-  ~GLGraphicsBufferD() { glDeleteBuffers(3, m_bufs); }
+  ~GLGraphicsBufferD() override { glDeleteBuffers(3, m_bufs); }
 
   void update(int b) {
     int slot = 1 << b;
@@ -200,17 +200,17 @@ public:
     }
   }
 
-  void load(const void* data, size_t sz) {
+  void load(const void* data, size_t sz) override {
     size_t bufSz = std::min(sz, m_cpuSz);
     memcpy(m_cpuBuf.get(), data, bufSz);
     m_validMask = 0;
   }
-  void* map(size_t sz) {
+  void* map(size_t sz) override {
     if (sz > m_cpuSz)
       return nullptr;
     return m_cpuBuf.get();
   }
-  void unmap() { m_validMask = 0; }
+  void unmap() override { m_validMask = 0; }
   void bindVertex(int b) { glBindBuffer(GL_ARRAY_BUFFER, m_bufs[b]); }
   void bindIndex(int b) { glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_bufs[b]); }
   void bindUniform(size_t idx, int b) { glBindBufferBase(GL_UNIFORM_BUFFER, idx, m_bufs[b]); }
@@ -347,9 +347,9 @@ class GLTextureS : public GraphicsDataNode<ITextureS> {
   }
 
 public:
-  ~GLTextureS() { glDeleteTextures(1, &m_tex); }
+  ~GLTextureS() override { glDeleteTextures(1, &m_tex); }
 
-  void setClampMode(TextureClampMode mode) {
+  void setClampMode(TextureClampMode mode) override {
     if (m_clampMode == mode)
       return;
     m_clampMode = mode;
@@ -419,9 +419,9 @@ class GLTextureSA : public GraphicsDataNode<ITextureSA> {
   }
 
 public:
-  ~GLTextureSA() { glDeleteTextures(1, &m_tex); }
+  ~GLTextureSA() override { glDeleteTextures(1, &m_tex); }
 
-  void setClampMode(TextureClampMode mode) {
+  void setClampMode(TextureClampMode mode) override {
     if (m_clampMode == mode)
       return;
     m_clampMode = mode;
@@ -484,7 +484,7 @@ class GLTextureD : public GraphicsDataNode<ITextureD> {
   }
 
 public:
-  ~GLTextureD() { glDeleteTextures(3, m_texs); }
+  ~GLTextureD() override { glDeleteTextures(3, m_texs); }
 
   void update(int b) {
     int slot = 1 << b;
@@ -496,19 +496,19 @@ public:
     }
   }
 
-  void load(const void* data, size_t sz) {
+  void load(const void* data, size_t sz) override {
     size_t bufSz = std::min(sz, m_cpuSz);
     memcpy(m_cpuBuf.get(), data, bufSz);
     m_validMask = 0;
   }
-  void* map(size_t sz) {
+  void* map(size_t sz) override {
     if (sz > m_cpuSz)
       return nullptr;
     return m_cpuBuf.get();
   }
-  void unmap() { m_validMask = 0; }
+  void unmap() override { m_validMask = 0; }
 
-  void setClampMode(TextureClampMode mode) {
+  void setClampMode(TextureClampMode mode) override {
     if (m_clampMode == mode)
       return;
     m_clampMode = mode;
@@ -544,7 +544,7 @@ class GLTextureR : public GraphicsDataNode<ITextureR> {
              GLenum colorFormat, TextureClampMode clampMode, size_t colorBindCount, size_t depthBindCount);
 
 public:
-  ~GLTextureR() {
+  ~GLTextureR() override {
     glDeleteTextures(2, m_texs);
     glDeleteTextures(MAX_BIND_TEXS * 2, m_bindTexs[0]);
     if (m_samples > 1)
@@ -552,7 +552,7 @@ public:
     glDeleteFramebuffers(1, &m_fbo);
   }
 
-  void setClampMode(TextureClampMode mode) {
+  void setClampMode(TextureClampMode mode) override {
     for (size_t i = 0; i < m_colorBindCount; ++i) {
       glBindTexture(GL_TEXTURE_2D, m_bindTexs[0][i]);
       SetClampMode(GL_TEXTURE_2D, mode);
@@ -619,12 +619,12 @@ class GLTextureCubeR : public GraphicsDataNode<ITextureCubeR> {
   GLTextureCubeR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue* q, size_t width, size_t mips, GLenum colorFormat);
 
 public:
-  ~GLTextureCubeR() {
+  ~GLTextureCubeR() override {
     glDeleteTextures(2, m_texs);
     glDeleteFramebuffers(6, m_fbos);
   }
 
-  void setClampMode(TextureClampMode mode) {}
+  void setClampMode(TextureClampMode mode) override {}
 
   void bind(size_t idx) const {
     glActiveTexture(GL_TEXTURE0 + idx);
@@ -768,7 +768,7 @@ class GLShaderStage : public GraphicsDataNode<IShaderStage> {
   }
 
 public:
-  ~GLShaderStage() {
+  ~GLShaderStage() override {
     if (m_shad)
       glDeleteShader(m_shad);
   }
@@ -844,7 +844,7 @@ protected:
   }
 
 public:
-  ~GLShaderPipeline() {
+  ~GLShaderPipeline() override {
     if (m_prog)
       glDeleteProgram(m_prog);
   }
@@ -967,7 +967,7 @@ public:
     return m_prog;
   }
 
-  bool isReady() const { return true; }
+  bool isReady() const override { return true; }
 };
 
 ObjToken<IShaderStage> GLDataFactory::Context::newShaderStage(const uint8_t* data, size_t size, PipelineStage stage) {
@@ -1025,7 +1025,7 @@ struct GLShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
                       const int* bindTexIdx, const bool* depthBind, size_t baseVert, size_t baseInst,
                       GLCommandQueue* q);
 
-  ~GLShaderDataBinding();
+  ~GLShaderDataBinding() override;
 
   void bind(int b) const {
     GLShaderPipeline& pipeline = *m_pipeline.cast<GLShaderPipeline>();
@@ -1114,8 +1114,8 @@ static const GLenum SEMANTIC_TYPE_TABLE[] = {GL_INVALID_ENUM,  GL_FLOAT, GL_FLOA
                                              GL_UNSIGNED_BYTE, GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FLOAT};
 
 struct GLCommandQueue final : IGraphicsCommandQueue {
-  Platform platform() const { return IGraphicsDataFactory::Platform::OpenGL; }
-  const SystemChar* platformName() const { return _SYS_STR("OpenGL"); }
+  Platform platform() const override { return IGraphicsDataFactory::Platform::OpenGL; }
+  const SystemChar* platformName() const override { return _SYS_STR("OpenGL"); }
   IGraphicsContext* m_parent = nullptr;
   GLContext* m_glCtx = nullptr;
 
@@ -1579,13 +1579,13 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
 
   GLCommandQueue(IGraphicsContext* parent, GLContext* glCtx) : m_parent(parent), m_glCtx(glCtx) {}
 
-  void startRenderer() {
+  void startRenderer() override {
     std::unique_lock<std::mutex> lk(m_initmt);
     m_thr = std::thread(RenderingWorker, this);
     m_initcv.wait(lk);
   }
 
-  void stopRenderer() {
+  void stopRenderer() override {
     if (m_running) {
       m_running = false;
       m_cv.notify_one();
@@ -1596,28 +1596,28 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
     }
   }
 
-  ~GLCommandQueue() { stopRenderer(); }
+  ~GLCommandQueue() override { stopRenderer(); }
 
-  void setShaderDataBinding(const ObjToken<IShaderDataBinding>& binding) {
+  void setShaderDataBinding(const ObjToken<IShaderDataBinding>& binding) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
     cmds.emplace_back(Command::Op::SetShaderDataBinding);
     cmds.back().binding = binding;
   }
 
-  void setRenderTarget(const ObjToken<ITextureR>& target) {
+  void setRenderTarget(const ObjToken<ITextureR>& target) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
     cmds.emplace_back(Command::Op::SetRenderTarget);
     cmds.back().target = target.get();
   }
 
-  void setRenderTarget(const ObjToken<ITextureCubeR>& target, int face) {
+  void setRenderTarget(const ObjToken<ITextureCubeR>& target, int face) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
     cmds.emplace_back(Command::Op::SetCubeRenderTarget);
     cmds.back().target = target.get();
     cmds.back().bindIdx = face;
   }
 
-  void setViewport(const SWindowRect& rect, float znear, float zfar) {
+  void setViewport(const SWindowRect& rect, float znear, float zfar) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
     cmds.emplace_back(Command::Op::SetViewport);
     cmds.back().viewport.rect = rect;
@@ -1625,33 +1625,33 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
     cmds.back().viewport.zfar = zfar;
   }
 
-  void setScissor(const SWindowRect& rect) {
+  void setScissor(const SWindowRect& rect) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
     cmds.emplace_back(Command::Op::SetScissor);
     cmds.back().viewport.rect = rect;
   }
 
-  void resizeRenderTexture(const ObjToken<ITextureR>& tex, size_t width, size_t height) {
+  void resizeRenderTexture(const ObjToken<ITextureR>& tex, size_t width, size_t height) override {
     std::unique_lock<std::mutex> lk(m_mt);
     GLTextureR* texgl = tex.cast<GLTextureR>();
     m_pendingResizes.push_back({texgl, width, height});
   }
 
-  void resizeRenderTexture(const ObjToken<ITextureCubeR>& tex, size_t width, size_t mips) {
+  void resizeRenderTexture(const ObjToken<ITextureCubeR>& tex, size_t width, size_t mips) override {
     std::unique_lock<std::mutex> lk(m_mt);
     GLTextureCubeR* texgl = tex.cast<GLTextureCubeR>();
     m_pendingCubeResizes.push_back({texgl, width, mips});
   }
 
-  void generateMipmaps(const ObjToken<ITextureCubeR>& tex) {
+  void generateMipmaps(const ObjToken<ITextureCubeR>& tex) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
     cmds.emplace_back(Command::Op::GenerateMips);
     cmds.back().target = tex.get();
   }
 
-  void schedulePostFrameHandler(std::function<void(void)>&& func) { m_pendingPosts1.push_back(std::move(func)); }
+  void schedulePostFrameHandler(std::function<void()>&& func) override { m_pendingPosts1.push_back(std::move(func)); }
 
-  void setClearColor(const float rgba[4]) {
+  void setClearColor(const float rgba[4]) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
     cmds.emplace_back(Command::Op::SetClearColor);
     cmds.back().rgba[0] = rgba[0];
@@ -1660,7 +1660,7 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
     cmds.back().rgba[3] = rgba[3];
   }
 
-  void clearTarget(bool render = true, bool depth = true) {
+  void clearTarget(bool render = true, bool depth = true) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
     cmds.emplace_back(Command::Op::ClearTarget);
     cmds.back().flags = 0;
@@ -1670,21 +1670,21 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
       cmds.back().flags |= GL_DEPTH_BUFFER_BIT;
   }
 
-  void draw(size_t start, size_t count) {
+  void draw(size_t start, size_t count) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
     cmds.emplace_back(Command::Op::Draw);
     cmds.back().start = start;
     cmds.back().count = count;
   }
 
-  void drawIndexed(size_t start, size_t count) {
+  void drawIndexed(size_t start, size_t count) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
     cmds.emplace_back(Command::Op::DrawIndexed);
     cmds.back().start = start;
     cmds.back().count = count;
   }
 
-  void drawInstances(size_t start, size_t count, size_t instCount, size_t startInst) {
+  void drawInstances(size_t start, size_t count, size_t instCount, size_t startInst) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
     cmds.emplace_back(Command::Op::DrawInstances);
     cmds.back().start = start;
@@ -1693,7 +1693,7 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
     cmds.back().startInst = startInst;
   }
 
-  void drawInstancesIndexed(size_t start, size_t count, size_t instCount, size_t startInst) {
+  void drawInstancesIndexed(size_t start, size_t count, size_t instCount, size_t startInst) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
     cmds.emplace_back(Command::Op::DrawInstancesIndexed);
     cmds.back().start = start;
@@ -1703,7 +1703,7 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
   }
 
   void resolveBindTexture(const ObjToken<ITextureR>& texture, const SWindowRect& rect, bool tlOrigin, int bindIdx,
-                          bool color, bool depth, bool clearDepth) {
+                          bool color, bool depth, bool clearDepth) override {
     GLTextureR* tex = texture.cast<GLTextureR>();
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
     cmds.emplace_back(Command::Op::ResolveBindTexture);
@@ -1723,7 +1723,7 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
     targetRect.size[1] = intersectRect.size[1];
   }
 
-  void resolveDisplay(const ObjToken<ITextureR>& source) {
+  void resolveDisplay(const ObjToken<ITextureR>& source) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
     cmds.emplace_back(Command::Op::Present);
     cmds.back().source = source;
@@ -1749,7 +1749,7 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
     m_pendingCubeFboAdds.push_back(tex);
   }
 
-  void execute() {
+  void execute() override {
     BOO_MSAN_NO_INTERCEPT
     SCOPED_GRAPHICS_DEBUG_GROUP(this, "GLCommandQueue::execute", {1.f, 0.f, 0.f, 1.f});
     std::unique_lock<std::mutex> lk(m_mt);

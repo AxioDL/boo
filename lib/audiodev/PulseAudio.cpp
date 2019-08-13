@@ -154,7 +154,7 @@ struct PulseAudioVoiceEngine : LinuxMidi {
     m_mainloop = nullptr;
   }
 
-  ~PulseAudioVoiceEngine() {
+  ~PulseAudioVoiceEngine() override {
     if (m_stream) {
       pa_stream_disconnect(m_stream);
       pa_stream_unref(m_stream);
@@ -279,14 +279,14 @@ struct PulseAudioVoiceEngine : LinuxMidi {
     return ret;
   }
 
-  std::string getCurrentAudioOutput() const { return m_sinkName; }
+  std::string getCurrentAudioOutput() const override { return m_sinkName; }
 
   bool m_sinkOk = false;
   static void _checkAudioSinkReply(pa_context* c, const pa_sink_info* i, int eol, PulseAudioVoiceEngine* userdata) {
     if (i)
       userdata->m_sinkOk = true;
   }
-  bool setCurrentAudioOutput(const char* name) {
+  bool setCurrentAudioOutput(const char* name) override {
     m_sinkOk = false;
     pa_operation* op;
     op = pa_context_get_sink_info_by_name(m_ctx, name, pa_sink_info_cb_t(_checkAudioSinkReply), this);
@@ -308,7 +308,7 @@ struct PulseAudioVoiceEngine : LinuxMidi {
     }
   }
 
-  void pumpAndMixVoices() {
+  void pumpAndMixVoices() override {
     if (!m_stream) {
       /* Dummy pump mode - use failsafe defaults for 1/60sec of samples */
       m_mixInfo.m_sampleRate = 32000.0;

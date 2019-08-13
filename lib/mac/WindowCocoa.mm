@@ -139,7 +139,7 @@ protected:
   }
 
 public:
-  ~GraphicsContextCocoa() {
+  ~GraphicsContextCocoa() override {
     if (m_dispLink) {
       CVDisplayLinkStop(m_dispLink);
       CVDisplayLinkRelease(m_dispLink);
@@ -223,36 +223,36 @@ public:
         m_dataFactory = _NewGLDataFactory(this, glCtx);
     }
 
-    ~GraphicsContextCocoaGL()
+    ~GraphicsContextCocoaGL() override
     {
         m_commandQueue->stopRenderer();
         fmt::print(fmt("CONTEXT DESTROYED\n"));
     }
 
-    void _setCallback(IWindowCallback* cb)
+    void _setCallback(IWindowCallback* cb) override
     {
         std::lock_guard<std::recursive_mutex> lk(m_callbackMutex);
         m_callback = cb;
     }
 
-    EGraphicsAPI getAPI() const
+    EGraphicsAPI getAPI() const override
     {
         return m_api;
     }
 
-    EPixelFormat getPixelFormat() const
+    EPixelFormat getPixelFormat() const override
     {
         return m_pf;
     }
 
-    void setPixelFormat(EPixelFormat pf)
+    void setPixelFormat(EPixelFormat pf) override
     {
         if (pf > EPixelFormat::RGBAF32_Z24)
             return;
         m_pf = pf;
     }
 
-    bool initializeContext(void*)
+    bool initializeContext(void*) override
     {
         m_nsContext = [[GraphicsContextCocoaGLInternal alloc] initWithBooContext:this];
         if (!m_nsContext)
@@ -266,26 +266,26 @@ public:
         return true;
     }
 
-    void makeCurrent()
+    void makeCurrent() override
     {
         [[m_nsContext openGLContext] makeCurrentContext];
     }
 
-    void postInit()
+    void postInit() override
     {
     }
 
-    IGraphicsCommandQueue* getCommandQueue()
+    IGraphicsCommandQueue* getCommandQueue() override
     {
         return m_commandQueue.get();
     }
 
-    IGraphicsDataFactory* getDataFactory()
+    IGraphicsDataFactory* getDataFactory() override
     {
         return m_dataFactory.get();
     }
 
-    IGraphicsDataFactory* getMainContextDataFactory()
+    IGraphicsDataFactory* getMainContextDataFactory() override
     {
         if (!m_mainCtx)
         {
@@ -298,7 +298,7 @@ public:
         return m_dataFactory.get();
     }
 
-    IGraphicsDataFactory* getLoadContextDataFactory()
+    IGraphicsDataFactory* getLoadContextDataFactory() override
     {
         if (!m_loadCtx)
         {
@@ -311,12 +311,12 @@ public:
         return m_dataFactory.get();
     }
 
-    void present()
+    void present() override
     {
         [[m_nsContext openGLContext] flushBuffer];
     }
 
-    BooCocoaResponder* responder() const
+    BooCocoaResponder* responder() const override
     {
         if (!m_nsContext)
             return nullptr;
@@ -384,31 +384,31 @@ public:
     m_dataFactory = _NewMetalDataFactory(this, metalCtx);
   }
 
-  ~GraphicsContextCocoaMetal() {
+  ~GraphicsContextCocoaMetal() override {
     m_commandQueue->stopRenderer();
     m_metalCtx->m_windows.erase(m_parentWindow);
   }
 
-  void _setCallback(IWindowCallback* cb) {
+  void _setCallback(IWindowCallback* cb) override {
     std::lock_guard<std::recursive_mutex> lk(m_callbackMutex);
     m_callback = cb;
   }
 
-  EGraphicsAPI getAPI() const {
+  EGraphicsAPI getAPI() const override {
     return m_api;
   }
 
-  EPixelFormat getPixelFormat() const {
+  EPixelFormat getPixelFormat() const override {
     return m_pf;
   }
 
-  void setPixelFormat(EPixelFormat pf) {
+  void setPixelFormat(EPixelFormat pf) override {
     if (pf > EPixelFormat::RGBAF32_Z24)
       return;
     m_pf = pf;
   }
 
-  bool initializeContext(void*) {
+  bool initializeContext(void*) override {
     MetalContext::Window& w = m_metalCtx->m_windows[m_parentWindow];
     m_nsContext = [[GraphicsContextCocoaMetalInternal alloc] initWithBooContext:this];
     if (!m_nsContext)
@@ -423,32 +423,32 @@ public:
     return true;
   }
 
-  void makeCurrent() {
+  void makeCurrent() override {
   }
 
-  void postInit() {
+  void postInit() override {
   }
 
-  IGraphicsCommandQueue* getCommandQueue() {
+  IGraphicsCommandQueue* getCommandQueue() override {
     return m_commandQueue.get();
   }
 
-  IGraphicsDataFactory* getDataFactory() {
+  IGraphicsDataFactory* getDataFactory() override {
     return m_dataFactory.get();
   }
 
-  IGraphicsDataFactory* getMainContextDataFactory() {
+  IGraphicsDataFactory* getMainContextDataFactory() override {
     return m_dataFactory.get();
   }
 
-  IGraphicsDataFactory* getLoadContextDataFactory() {
+  IGraphicsDataFactory* getLoadContextDataFactory() override {
     return m_dataFactory.get();
   }
 
-  void present() {
+  void present() override {
   }
 
-  BooCocoaResponder* responder() const {
+  BooCocoaResponder* responder() const override {
     if (!m_nsContext)
       return nullptr;
     return m_nsContext->resp;
@@ -1252,47 +1252,47 @@ public:
     m_nsWindow = nullptr;
   }
 
-  ~WindowCocoa() {
+  ~WindowCocoa() override {
     APP->_deletedWindow(this);
   }
 
-  void setCallback(IWindowCallback* cb) {
+  void setCallback(IWindowCallback* cb) override {
     m_gfxCtx->_setCallback(cb);
   }
 
-  void closeWindow() {
+  void closeWindow() override {
     dispatch_sync(dispatch_get_main_queue(),
                   ^{
                     [m_nsWindow close];
                   });
   }
 
-  void showWindow() {
+  void showWindow() override {
     dispatch_sync(dispatch_get_main_queue(),
                   ^{
                     [m_nsWindow makeKeyAndOrderFront:nil];
                   });
   }
 
-  void hideWindow() {
+  void hideWindow() override {
     dispatch_sync(dispatch_get_main_queue(),
                   ^{
                     [m_nsWindow orderOut:nil];
                   });
   }
 
-  std::string getTitle() {
+  std::string getTitle() override {
     return [[m_nsWindow title] UTF8String];
   }
 
-  void setTitle(std::string_view title) {
+  void setTitle(std::string_view title) override {
     dispatch_sync(dispatch_get_main_queue(),
                   ^{
                     [m_nsWindow setTitle:[NSString stringWithUTF8String:title.data()]];
                   });
   }
 
-  void setCursor(EMouseCursor cursor) {
+  void setCursor(EMouseCursor cursor) override {
     if (cursor == m_cursor)
       return;
     m_cursor = cursor;
@@ -1320,14 +1320,14 @@ public:
                    });
   }
 
-  void setWaitCursor(bool wait) {}
+  void setWaitCursor(bool wait) override {}
 
-  double getWindowRefreshRate() const {
+  double getWindowRefreshRate() const override {
     /* TODO: Actually get refresh rate */
     return 60.0;
   }
 
-  void setWindowFrameDefault() {
+  void setWindowFrameDefault() override {
     dispatch_sync(dispatch_get_main_queue(),
                   ^{
                     NSScreen* mainScreen = [NSScreen mainScreen];
@@ -1338,7 +1338,7 @@ public:
                   });
   }
 
-  void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const {
+  void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const override {
     NSView* view = [m_nsWindow contentView];
     NSRect wFrame = [view convertRectToBacking:view.frame];
     xOut = wFrame.origin.x;
@@ -1347,7 +1347,7 @@ public:
     hOut = wFrame.size.height;
   }
 
-  void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const {
+  void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const override {
     NSView* view = [m_nsWindow contentView];
     NSRect wFrame = [view convertRectToBacking:view.frame];
     xOut = wFrame.origin.x;
@@ -1356,7 +1356,7 @@ public:
     hOut = wFrame.size.height;
   }
 
-  void setWindowFrame(float x, float y, float w, float h) {
+  void setWindowFrame(float x, float y, float w, float h) override {
     dispatch_sync(dispatch_get_main_queue(),
                   ^{
                     [m_nsWindow setContentSize:NSMakeSize(w, h)];
@@ -1364,7 +1364,7 @@ public:
                   });
   }
 
-  void setWindowFrame(int x, int y, int w, int h) {
+  void setWindowFrame(int x, int y, int w, int h) override {
     dispatch_sync(dispatch_get_main_queue(),
                   ^{
                     [m_nsWindow setContentSize:NSMakeSize(w, h)];
@@ -1372,15 +1372,15 @@ public:
                   });
   }
 
-  float getVirtualPixelFactor() const {
+  float getVirtualPixelFactor() const override {
     return [m_nsWindow backingScaleFactor];
   }
 
-  bool isFullscreen() const {
+  bool isFullscreen() const override {
     return ([m_nsWindow styleMask] & NSWindowStyleMaskFullScreen) == NSWindowStyleMaskFullScreen;
   }
 
-  void setFullscreen(bool fs) {
+  void setFullscreen(bool fs) override {
     if ((fs && !isFullscreen()) || (!fs && isFullscreen()))
       dispatch_sync(dispatch_get_main_queue(),
                     ^{
@@ -1388,7 +1388,7 @@ public:
                     });
   }
 
-  void claimKeyboardFocus(const int coord[2]) {
+  void claimKeyboardFocus(const int coord[2]) override {
     BooCocoaResponder* resp = m_gfxCtx->responder();
     if (resp) {
       dispatch_async(dispatch_get_main_queue(),
@@ -1401,7 +1401,7 @@ public:
     }
   }
 
-  bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz) {
+  bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz) override {
     NSPasteboard* pb = [NSPasteboard generalPasteboard];
     [pb clearContents];
     NSData* d = [NSData dataWithBytes:data length:sz];
@@ -1409,7 +1409,7 @@ public:
     return true;
   }
 
-  std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz) {
+  std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz) override {
     NSPasteboard* pb = [NSPasteboard generalPasteboard];
     NSData* d = [pb dataForType:ClipboardTypes[int(type)]];
     if (!d)
@@ -1420,11 +1420,11 @@ public:
     return ret;
   }
 
-  ETouchType getTouchType() const {
+  ETouchType getTouchType() const override {
     return ETouchType::Trackpad;
   }
 
-  void setStyle(EWindowStyle style) {
+  void setStyle(EWindowStyle style) override {
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
     if ((style & EWindowStyle::Titlebar) != EWindowStyle::None)
       m_nsWindow.titleVisibility = NSWindowTitleVisible;
@@ -1443,7 +1443,7 @@ public:
       m_nsWindow.styleMask &= ~NSWindowStyleMaskResizable;
   }
 
-  EWindowStyle getStyle() const {
+  EWindowStyle getStyle() const override {
     EWindowStyle retval = EWindowStyle::None;
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
     retval |= m_nsWindow.titleVisibility == NSWindowTitleVisible ? EWindowStyle::Titlebar : EWindowStyle::None;
@@ -1455,34 +1455,34 @@ public:
     return retval;
   }
 
-  void setTouchBarProvider(void* provider) {
+  void setTouchBarProvider(void* provider) override {
     dispatch_sync(dispatch_get_main_queue(),
                   ^{
                     [m_nsWindow setTouchBarProvider:(__bridge_transfer id) provider];
                   });
   }
 
-  int waitForRetrace() {
+  int waitForRetrace() override {
     return static_cast<GraphicsContextCocoa*>(m_gfxCtx)->waitForRetrace();
   }
 
-  uintptr_t getPlatformHandle() const {
+  uintptr_t getPlatformHandle() const override {
     return (uintptr_t) m_nsWindow;
   }
 
-  IGraphicsCommandQueue* getCommandQueue() {
+  IGraphicsCommandQueue* getCommandQueue() override {
     return m_gfxCtx->getCommandQueue();
   }
 
-  IGraphicsDataFactory* getDataFactory() {
+  IGraphicsDataFactory* getDataFactory() override {
     return m_gfxCtx->getDataFactory();
   }
 
-  IGraphicsDataFactory* getMainContextDataFactory() {
+  IGraphicsDataFactory* getMainContextDataFactory() override {
     return m_gfxCtx->getMainContextDataFactory();
   }
 
-  IGraphicsDataFactory* getLoadContextDataFactory() {
+  IGraphicsDataFactory* getLoadContextDataFactory() override {
     return m_gfxCtx->getLoadContextDataFactory();
   }
 

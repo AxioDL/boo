@@ -196,7 +196,7 @@ class ApplicationXlib final : public IApplication {
   }
 #endif
 
-  void _deletedWindow(IWindow* window) { m_windows.erase((Window)window->getPlatformHandle()); }
+  void _deletedWindow(IWindow* window) override { m_windows.erase((Window)window->getPlatformHandle()); }
 
 public:
   ApplicationXlib(IApplicationCallback& callback, std::string_view uniqueName, std::string_view friendlyName,
@@ -368,7 +368,7 @@ public:
     XFlush(m_xDisp);
   }
 
-  ~ApplicationXlib() {
+  ~ApplicationXlib() override {
     for (auto& p : m_windows)
       if (auto w = p.second.lock())
         w->_cleanup();
@@ -385,7 +385,7 @@ public:
       XCloseDisplay(m_xDisp);
   }
 
-  EPlatformType getPlatformType() const { return EPlatformType::Xlib; }
+  EPlatformType getPlatformType() const override { return EPlatformType::Xlib; }
 
   /* Empty handler for SIGINT */
   static void _sigint(int) {}
@@ -414,7 +414,7 @@ public:
     return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
   }
 
-  int run() {
+  int run() override {
     if (!m_xDisp)
       return 1;
 
@@ -512,15 +512,15 @@ public:
     return clientReturn;
   }
 
-  std::string_view getUniqueName() const { return m_uniqueName; }
+  std::string_view getUniqueName() const override { return m_uniqueName; }
 
-  std::string_view getFriendlyName() const { return m_friendlyName; }
+  std::string_view getFriendlyName() const override { return m_friendlyName; }
 
-  std::string_view getProcessName() const { return m_pname; }
+  std::string_view getProcessName() const override { return m_pname; }
 
-  const std::vector<std::string>& getArgs() const { return m_args; }
+  const std::vector<std::string>& getArgs() const override { return m_args; }
 
-  std::shared_ptr<IWindow> newWindow(std::string_view title) {
+  std::shared_ptr<IWindow> newWindow(std::string_view title) override {
     XLockDisplay(m_xDisp);
 #if BOO_HAS_VULKAN
     std::shared_ptr<IWindow> newWindow = _WindowXlibNew(title, m_xDisp, m_xcbConn, m_xDefaultScreen, m_xIM, m_bestStyle,

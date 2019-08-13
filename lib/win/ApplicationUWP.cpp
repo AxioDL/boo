@@ -49,7 +49,7 @@ class ApplicationUWP final : public IApplication {
 
   Boo3DAppContextUWP m_3dCtx;
 
-  void _deletedWindow(IWindow* window) {}
+  void _deletedWindow(IWindow* window) override {}
 
 public:
   ApplicationUWP(IApplicationCallback& callback, SystemStringView uniqueName, SystemStringView friendlyName,
@@ -180,10 +180,10 @@ public:
     Log.report(logvisor::Fatal, fmt("system doesn't support D3D11 or D3D12"));
   }
 
-  EPlatformType getPlatformType() const { return EPlatformType::UWP; }
+  EPlatformType getPlatformType() const override { return EPlatformType::UWP; }
 
   std::thread m_clientThread;
-  int run() {
+  int run() override {
     /* Spawn client thread */
     int clientReturn = 0;
     m_clientThread = std::thread([&]() {
@@ -203,15 +203,15 @@ public:
       m_clientThread.join();
   }
 
-  SystemStringView getUniqueName() const { return m_uniqueName; }
+  SystemStringView getUniqueName() const override { return m_uniqueName; }
 
-  SystemStringView getFriendlyName() const { return m_friendlyName; }
+  SystemStringView getFriendlyName() const override { return m_friendlyName; }
 
-  SystemStringView getProcessName() const { return m_pname; }
+  SystemStringView getProcessName() const override { return m_pname; }
 
-  const std::vector<SystemString>& getArgs() const { return m_args; }
+  const std::vector<SystemString>& getArgs() const override { return m_args; }
 
-  std::shared_ptr<IWindow> newWindow(SystemStringView title, uint32_t sampleCount) {
+  std::shared_ptr<IWindow> newWindow(SystemStringView title, uint32_t sampleCount) override {
     if (!m_issuedWindow) {
       m_issuedWindow = true;
       return m_window;

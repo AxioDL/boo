@@ -227,29 +227,29 @@ public:
     }
   }
 
-  ~HIDListenerWinUSB() {
+  ~HIDListenerWinUSB() override {
     m_xinputRunning = false;
     if (m_xinputThread.joinable())
       m_xinputThread.join();
   }
 
   /* Automatic device scanning */
-  bool startScanning() {
+  bool startScanning() override {
     m_scanningEnabled = true;
     return true;
   }
-  bool stopScanning() {
+  bool stopScanning() override {
     m_scanningEnabled = false;
     return true;
   }
 
   /* Manual device scanning */
-  bool scanNow() {
+  bool scanNow() override {
     _pollDevices(nullptr);
     return true;
   }
 
-  bool _extDevConnect(const char* path) {
+  bool _extDevConnect(const char* path) override {
     char upperPath[1024];
     strcpy_s(upperPath, 1024, path);
     CharUpperA(upperPath);
@@ -258,7 +258,7 @@ public:
     return true;
   }
 
-  bool _extDevDisconnect(const char* path) {
+  bool _extDevDisconnect(const char* path) override {
     char upperPath[1024];
     strcpy_s(upperPath, 1024, path);
     CharUpperA(upperPath);

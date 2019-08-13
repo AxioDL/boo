@@ -11,15 +11,17 @@ struct WAVOutVoiceEngine : BaseAudioVoiceEngine {
 
   AudioChannelSet _getAvailableSet() { return AudioChannelSet::Stereo; }
 
-  std::string getCurrentAudioOutput() const { return "wavout"; }
+  std::string getCurrentAudioOutput() const override { return "wavout"; }
 
-  bool setCurrentAudioOutput(const char* name) { return false; }
+  bool setCurrentAudioOutput(const char* name) override { return false; }
 
-  std::vector<std::pair<std::string, std::string>> enumerateAudioOutputs() const { return {{"wavout", "WAVOut"}}; }
+  std::vector<std::pair<std::string, std::string>> enumerateAudioOutputs() const override {
+    return {{"wavout", "WAVOut"}};
+  }
 
-  std::vector<std::pair<std::string, std::string>> enumerateMIDIInputs() const { return {}; }
+  std::vector<std::pair<std::string, std::string>> enumerateMIDIInputs() const override { return {}; }
 
-  bool supportsVirtualMIDIIn() const { return false; }
+  bool supportsVirtualMIDIIn() const override { return false; }
 
   ReceiveFunctor* m_midiReceiver = nullptr;
 
@@ -27,26 +29,26 @@ struct WAVOutVoiceEngine : BaseAudioVoiceEngine {
     MIDIIn(WAVOutVoiceEngine* parent, bool virt, ReceiveFunctor&& receiver)
     : IMIDIIn(parent, virt, std::move(receiver)) {}
 
-    std::string description() const { return "WAVOut MIDI"; }
+    std::string description() const override { return "WAVOut MIDI"; }
   };
 
-  std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver) {
+  std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver) override {
     std::unique_ptr<IMIDIIn> ret = std::make_unique<MIDIIn>(nullptr, true, std::move(receiver));
     m_midiReceiver = &ret->m_receiver;
     return ret;
   }
 
-  std::unique_ptr<IMIDIOut> newVirtualMIDIOut() { return {}; }
+  std::unique_ptr<IMIDIOut> newVirtualMIDIOut() override { return {}; }
 
-  std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver) { return {}; }
+  std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver) override { return {}; }
 
-  std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver) { return {}; }
+  std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver) override { return {}; }
 
-  std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name) { return {}; }
+  std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name) override { return {}; }
 
-  std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver) { return {}; }
+  std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver) override { return {}; }
 
-  bool useMIDILock() const { return false; }
+  bool useMIDILock() const override { return false; }
 
   FILE* m_fp = nullptr;
   size_t m_bytesWritten = 0;
@@ -207,7 +209,7 @@ struct WAVOutVoiceEngine : BaseAudioVoiceEngine {
     fclose(m_fp);
   }
 
-  ~WAVOutVoiceEngine() { finishWav(); }
+  ~WAVOutVoiceEngine() override { finishWav(); }
 
   void _buildAudioRenderClient() {
     m_5msFrames = m_mixInfo.m_sampleRate * 5 / 1000;
@@ -221,7 +223,7 @@ struct WAVOutVoiceEngine : BaseAudioVoiceEngine {
     _resetSampleRate();
   }
 
-  void pumpAndMixVoices() {
+  void pumpAndMixVoices() override {
     size_t frameSz = 4 * m_mixInfo.m_channelMap.m_channelCount;
     _pumpAndMixVoices(m_5msFrames, m_interleavedBuf.data());
     fwrite(m_interleavedBuf.data(), 1, m_5msFrames * frameSz, m_fp);

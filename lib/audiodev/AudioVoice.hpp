@@ -64,13 +64,13 @@ protected:
 public:
   static AudioVoice*& _getHeadPtr(BaseAudioVoiceEngine* head);
   static std::unique_lock<std::recursive_mutex> _getHeadLock(BaseAudioVoiceEngine* head);
-  std::unique_lock<std::recursive_mutex> destructorLock();
+  std::unique_lock<std::recursive_mutex> destructorLock() override;
 
-  ~AudioVoice();
-  void resetSampleRate(double sampleRate);
-  void setPitchRatio(double ratio, bool slew);
-  void start();
-  void stop();
+  ~AudioVoice() override;
+  void resetSampleRate(double sampleRate) override;
+  void setPitchRatio(double ratio, bool slew) override;
+  void start() override;
+  void stop() override;
   double getSampleRateIn() const { return m_sampleRateIn; }
   double getSampleRateOut() const { return m_sampleRateOut; }
 };
@@ -91,7 +91,7 @@ inline size_t AudioVoice::pumpAndMix<float>(size_t frames) {
 class AudioVoiceMono : public AudioVoice {
   std::unordered_map<IAudioSubmix*, AudioMatrixMono> m_sendMatrices;
   bool m_silentOut = false;
-  void _resetSampleRate(double sampleRate);
+  void _resetSampleRate(double sampleRate) override;
 
   static size_t SRCCallback(AudioVoiceMono* ctx, int16_t** data, size_t requestedLen);
 
@@ -99,21 +99,21 @@ class AudioVoiceMono : public AudioVoice {
 
   template <typename T>
   size_t _pumpAndMix(size_t frames);
-  size_t pumpAndMix16(size_t frames) { return _pumpAndMix<int16_t>(frames); }
-  size_t pumpAndMix32(size_t frames) { return _pumpAndMix<int32_t>(frames); }
-  size_t pumpAndMixFlt(size_t frames) { return _pumpAndMix<float>(frames); }
+  size_t pumpAndMix16(size_t frames) override { return _pumpAndMix<int16_t>(frames); }
+  size_t pumpAndMix32(size_t frames) override { return _pumpAndMix<int32_t>(frames); }
+  size_t pumpAndMixFlt(size_t frames) override { return _pumpAndMix<float>(frames); }
 
 public:
   AudioVoiceMono(BaseAudioVoiceEngine& root, IAudioVoiceCallback* cb, double sampleRate, bool dynamicRate);
-  void resetChannelLevels();
-  void setMonoChannelLevels(IAudioSubmix* submix, const float coefs[8], bool slew);
-  void setStereoChannelLevels(IAudioSubmix* submix, const float coefs[8][2], bool slew);
+  void resetChannelLevels() override;
+  void setMonoChannelLevels(IAudioSubmix* submix, const float coefs[8], bool slew) override;
+  void setStereoChannelLevels(IAudioSubmix* submix, const float coefs[8][2], bool slew) override;
 };
 
 class AudioVoiceStereo : public AudioVoice {
   std::unordered_map<IAudioSubmix*, AudioMatrixStereo> m_sendMatrices;
   bool m_silentOut = false;
-  void _resetSampleRate(double sampleRate);
+  void _resetSampleRate(double sampleRate) override;
 
   static size_t SRCCallback(AudioVoiceStereo* ctx, int16_t** data, size_t requestedLen);
 
@@ -121,15 +121,15 @@ class AudioVoiceStereo : public AudioVoice {
 
   template <typename T>
   size_t _pumpAndMix(size_t frames);
-  size_t pumpAndMix16(size_t frames) { return _pumpAndMix<int16_t>(frames); }
-  size_t pumpAndMix32(size_t frames) { return _pumpAndMix<int32_t>(frames); }
-  size_t pumpAndMixFlt(size_t frames) { return _pumpAndMix<float>(frames); }
+  size_t pumpAndMix16(size_t frames) override { return _pumpAndMix<int16_t>(frames); }
+  size_t pumpAndMix32(size_t frames) override { return _pumpAndMix<int32_t>(frames); }
+  size_t pumpAndMixFlt(size_t frames) override { return _pumpAndMix<float>(frames); }
 
 public:
   AudioVoiceStereo(BaseAudioVoiceEngine& root, IAudioVoiceCallback* cb, double sampleRate, bool dynamicRate);
-  void resetChannelLevels();
-  void setMonoChannelLevels(IAudioSubmix* submix, const float coefs[8], bool slew);
-  void setStereoChannelLevels(IAudioSubmix* submix, const float coefs[8][2], bool slew);
+  void resetChannelLevels() override;
+  void setMonoChannelLevels(IAudioSubmix* submix, const float coefs[8], bool slew) override;
+  void setStereoChannelLevels(IAudioSubmix* submix, const float coefs[8][2], bool slew) override;
 };
 
 } // namespace boo

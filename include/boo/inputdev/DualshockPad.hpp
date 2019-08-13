@@ -112,15 +112,15 @@ class DualshockPad final : public TDeviceBase<IDualshockPadCallback> {
   uint8_t m_rumbleIntensity[2];
   EDualshockLED m_led;
   DualshockOutReport m_report;
-  void deviceDisconnected();
-  void initialCycle();
-  void transferCycle();
-  void finalCycle();
-  void receivedHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message);
+  void deviceDisconnected() override;
+  void initialCycle() override;
+  void transferCycle() override;
+  void finalCycle() override;
+  void receivedHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message) override;
 
 public:
   DualshockPad(DeviceToken* token);
-  ~DualshockPad();
+  ~DualshockPad() override;
 
   void startRumble(EDualshockMotor motor, uint8_t duration = 254, uint8_t intensity = 255) {
     m_rumbleRequest |= motor;
