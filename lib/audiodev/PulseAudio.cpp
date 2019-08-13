@@ -270,7 +270,7 @@ struct PulseAudioVoiceEngine : LinuxMidi {
     if (i)
       userdata->m_sinks.push_back(std::make_pair(i->name, i->description));
   }
-  std::vector<std::pair<std::string, std::string>> enumerateAudioOutputs() const {
+  std::vector<std::pair<std::string, std::string>> enumerateAudioOutputs() const override {
     pa_operation* op = pa_context_get_sink_info_list(m_ctx, pa_sink_info_cb_t(_getSinkInfoListReply), (void*)this);
     _paIterate(op);
     pa_operation_unref(op);
