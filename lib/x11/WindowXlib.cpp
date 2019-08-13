@@ -356,7 +356,7 @@ public:
     visualIdOut = m_visualid;
   }
 
-  void destroy() {
+  void destroy() override {
     if (m_glxCtx) {
       glXDestroyContext(m_xDisp, m_glxCtx);
       m_glxCtx = nullptr;
@@ -371,23 +371,23 @@ public:
     }
   }
 
-  ~GraphicsContextXlibGLX() { destroy(); }
+  ~GraphicsContextXlibGLX() override { destroy(); }
 
-  void resized(const SWindowRect& rect) {}
+  void resized(const SWindowRect& rect) override {}
 
-  void _setCallback(IWindowCallback* cb) { m_callback = cb; }
+  void _setCallback(IWindowCallback* cb) override { m_callback = cb; }
 
-  EGraphicsAPI getAPI() const { return m_api; }
+  EGraphicsAPI getAPI() const override { return m_api; }
 
-  EPixelFormat getPixelFormat() const { return m_pf; }
+  EPixelFormat getPixelFormat() const override { return m_pf; }
 
-  void setPixelFormat(EPixelFormat pf) {
+  void setPixelFormat(EPixelFormat pf) override {
     if (pf > EPixelFormat::RGBAF32_Z24)
       return;
     m_pf = pf;
   }
 
-  bool initializeContext(void*) {
+  bool initializeContext(void*) override {
     if (!glXCreateContextAttribsARB) {
       glXCreateContextAttribsARB =
           (glXCreateContextAttribsARBProc)glXGetProcAddressARB((const GLubyte*)"glXCreateContextAttribsARB");
@@ -424,25 +424,25 @@ public:
     return true;
   }
 
-  void makeCurrent() {
+  void makeCurrent() override {
     XLockDisplay(m_xDisp);
     if (!glXMakeContextCurrent(m_xDisp, m_glxWindow, m_glxWindow, m_glxCtx))
       Log.report(logvisor::Fatal, fmt("unable to make GLX context current"));
     XUnlockDisplay(m_xDisp);
   }
 
-  void postInit() {
+  void postInit() override {
     GLXExtensionCheck();
     XLockDisplay(m_xDisp);
     GLXEnableVSync(m_xDisp, m_glxWindow);
     XUnlockDisplay(m_xDisp);
   }
 
-  IGraphicsCommandQueue* getCommandQueue() { return m_commandQueue.get(); }
+  IGraphicsCommandQueue* getCommandQueue() override { return m_commandQueue.get(); }
 
-  IGraphicsDataFactory* getDataFactory() { return m_dataFactory.get(); }
+  IGraphicsDataFactory* getDataFactory() override { return m_dataFactory.get(); }
 
-  IGraphicsDataFactory* getMainContextDataFactory() {
+  IGraphicsDataFactory* getMainContextDataFactory() override {
     XLockDisplay(m_xDisp);
     if (!m_mainCtx) {
       s_glxError = false;
@@ -458,7 +458,7 @@ public:
     return getDataFactory();
   }
 
-  IGraphicsDataFactory* getLoadContextDataFactory() {
+  IGraphicsDataFactory* getLoadContextDataFactory() override {
     XLockDisplay(m_xDisp);
     if (!m_loadCtx) {
       s_glxError = false;
@@ -474,7 +474,7 @@ public:
     return getDataFactory();
   }
 
-  void present() { glXSwapBuffers(m_xDisp, m_glxWindow); }
+  void present() override { glXSwapBuffers(m_xDisp, m_glxWindow); }
 };
 
 #if BOO_HAS_VULKAN
@@ -520,28 +520,28 @@ public:
     }
   }
 
-  ~GraphicsContextXlibVulkan() { destroy(); }
+  ~GraphicsContextXlibVulkan() override { destroy(); }
 
   VulkanContext::Window* m_windowCtx = nullptr;
 
-  void resized(const SWindowRect& rect) {
+  void resized(const SWindowRect& rect) override {
     if (m_windowCtx)
       m_ctx->resizeSwapChain(*m_windowCtx, m_surface, m_format, m_colorspace, rect);
   }
 
-  void _setCallback(IWindowCallback* cb) { m_callback = cb; }
+  void _setCallback(IWindowCallback* cb) override { m_callback = cb; }
 
-  EGraphicsAPI getAPI() const { return m_api; }
+  EGraphicsAPI getAPI() const override { return m_api; }
 
-  EPixelFormat getPixelFormat() const { return m_pf; }
+  EPixelFormat getPixelFormat() const override { return m_pf; }
 
-  void setPixelFormat(EPixelFormat pf) {
+  void setPixelFormat(EPixelFormat pf) override {
     if (pf > EPixelFormat::RGBAF32_Z24)
       return;
     m_pf = pf;
   }
 
-  bool initializeContext(void* getVkProc) {
+  bool initializeContext(void* getVkProc) override {
     if (m_ctx->m_instance == VK_NULL_HANDLE)
       m_ctx->initVulkan(APP->getUniqueName(), PFN_vkGetInstanceProcAddr(getVkProc));
 
@@ -637,19 +637,19 @@ public:
     return true;
   }
 
-  void makeCurrent() {}
+  void makeCurrent() override {}
 
-  void postInit() {}
+  void postInit() override {}
 
-  IGraphicsCommandQueue* getCommandQueue() { return m_commandQueue.get(); }
+  IGraphicsCommandQueue* getCommandQueue() override { return m_commandQueue.get(); }
 
-  IGraphicsDataFactory* getDataFactory() { return m_dataFactory.get(); }
+  IGraphicsDataFactory* getDataFactory() override { return m_dataFactory.get(); }
 
-  IGraphicsDataFactory* getMainContextDataFactory() { return getDataFactory(); }
+  IGraphicsDataFactory* getMainContextDataFactory() override { return getDataFactory(); }
 
-  IGraphicsDataFactory* getLoadContextDataFactory() { return getDataFactory(); }
+  IGraphicsDataFactory* getLoadContextDataFactory() override { return getDataFactory(); }
 
-  void present() {}
+  void present() override {}
 };
 #endif
 
@@ -848,38 +848,38 @@ public:
     }
   }
 
-  ~WindowXlib() {
+  ~WindowXlib() override {
     _cleanup();
     if (APP)
       APP->_deletedWindow(this);
   }
 
-  void setCallback(IWindowCallback* cb) {
+  void setCallback(IWindowCallback* cb) override {
     XLockDisplay(m_xDisp);
     m_callback = cb;
     XUnlockDisplay(m_xDisp);
   }
 
-  void closeWindow() {
+  void closeWindow() override {
     // TODO: Free window resources and prevent further access
     XLockDisplay(m_xDisp);
     XUnmapWindow(m_xDisp, m_windowId);
     XUnlockDisplay(m_xDisp);
   }
 
-  void showWindow() {
+  void showWindow() override {
     XLockDisplay(m_xDisp);
     XMapWindow(m_xDisp, m_windowId);
     XUnlockDisplay(m_xDisp);
   }
 
-  void hideWindow() {
+  void hideWindow() override {
     XLockDisplay(m_xDisp);
     XUnmapWindow(m_xDisp, m_windowId);
     XUnlockDisplay(m_xDisp);
   }
 
-  std::string getTitle() {
+  std::string getTitle() override {
     unsigned long nitems;
     Atom actualType;
     int actualFormat;
@@ -897,7 +897,7 @@ public:
     return std::string();
   }
 
-  void setTitle(std::string_view title) {
+  void setTitle(std::string_view title) override {
     XLockDisplay(m_xDisp);
 
     /* Set the title of the window */
@@ -914,7 +914,7 @@ public:
     XUnlockDisplay(m_xDisp);
   }
 
-  void setCursor(EMouseCursor cursor) {
+  void setCursor(EMouseCursor cursor) override {
     if (cursor == m_cursor && !m_cursorWait)
       return;
     m_cursor = cursor;
@@ -923,7 +923,7 @@ public:
     XUnlockDisplay(m_xDisp);
   }
 
-  void setWaitCursor(bool wait) {
+  void setWaitCursor(bool wait) override {
     if (wait && !m_cursorWait) {
       XLockDisplay(m_xDisp);
       XDefineCursor(m_xDisp, m_windowId, X_CURSORS.m_wait);
@@ -942,7 +942,7 @@ public:
       return 60.0;
   }
 
-  double getWindowRefreshRate() const {
+  double getWindowRefreshRate() const override {
     BOO_MSAN_NO_INTERCEPT
     double ret = 60.0;
     int nmonitors;
@@ -969,7 +969,7 @@ public:
     return ret;
   }
 
-  void setWindowFrameDefault() {
+  void setWindowFrameDefault() override {
     BOO_MSAN_NO_INTERCEPT
     int x, y, w, h, nmonitors;
     Screen* screen = DefaultScreenOfDisplay(m_xDisp);
@@ -986,7 +986,7 @@ public:
     XUnlockDisplay(m_xDisp);
   }
 
-  void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const {
+  void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const override {
     BOO_MSAN_NO_INTERCEPT
     XWindowAttributes attrs = {};
     XLockDisplay(m_xDisp);
@@ -998,7 +998,7 @@ public:
     hOut = attrs.height;
   }
 
-  void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const {
+  void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const override {
     BOO_MSAN_NO_INTERCEPT
     XWindowAttributes attrs = {};
     XLockDisplay(m_xDisp);
@@ -1010,7 +1010,7 @@ public:
     hOut = attrs.height;
   }
 
-  void setWindowFrame(float x, float y, float w, float h) {
+  void setWindowFrame(float x, float y, float w, float h) override {
     BOO_MSAN_NO_INTERCEPT
     XWindowChanges values = {(int)x, (int)y, (int)w, (int)h};
     XLockDisplay(m_xDisp);
@@ -1018,7 +1018,7 @@ public:
     XUnlockDisplay(m_xDisp);
   }
 
-  void setWindowFrame(int x, int y, int w, int h) {
+  void setWindowFrame(int x, int y, int w, int h) override {
     BOO_MSAN_NO_INTERCEPT
     XWindowChanges values = {x, y, w, h};
     XLockDisplay(m_xDisp);
@@ -1026,9 +1026,9 @@ public:
     XUnlockDisplay(m_xDisp);
   }
 
-  float getVirtualPixelFactor() const { return m_pixelFactor; }
+  float getVirtualPixelFactor() const override { return m_pixelFactor; }
 
-  bool isFullscreen() const {
+  bool isFullscreen() const override {
     return m_inFs;
     unsigned long nitems;
     Atom actualType;
@@ -1054,7 +1054,7 @@ public:
     return false;
   }
 
-  void setStyle(EWindowStyle style) {
+  void setStyle(EWindowStyle style) override {
     struct {
       unsigned long flags;
       unsigned long functions;
@@ -1086,9 +1086,9 @@ public:
     m_styleFlags = style;
   }
 
-  EWindowStyle getStyle() const { return m_styleFlags; }
+  EWindowStyle getStyle() const override { return m_styleFlags; }
 
-  void setFullscreen(bool fs) {
+  void setFullscreen(bool fs) override {
     if (fs == m_inFs)
       return;
 
@@ -1121,7 +1121,7 @@ public:
     }
   } m_clipData;
 
-  void claimKeyboardFocus(const int coord[2]) {
+  void claimKeyboardFocus(const int coord[2]) override {
     if (m_xIC) {
       XLockDisplay(m_xDisp);
       if (!coord) {
@@ -1139,7 +1139,7 @@ public:
     }
   }
 
-  bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz) {
+  bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz) override {
     Atom xType = GetClipboardTypeAtom(type);
     if (!xType)
       return false;
@@ -1155,7 +1155,7 @@ public:
     return true;
   }
 
-  std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz) {
+  std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz) override {
     Atom xType = GetClipboardTypeAtom(type);
     if (!xType)
       return {};
@@ -1273,7 +1273,7 @@ public:
     return lhs.tv_nsec - rhs.tv_nsec;
   }
 
-  int waitForRetrace() {
+  int waitForRetrace() override {
     BOO_MSAN_NO_INTERCEPT
     struct timespec tp = {};
     clock_gettime(CLOCK_REALTIME, &tp);
@@ -1306,7 +1306,7 @@ public:
     }
   }
 
-  uintptr_t getPlatformHandle() const { return (uintptr_t)m_windowId; }
+  uintptr_t getPlatformHandle() const override { return (uintptr_t)m_windowId; }
 
   void _pointingDeviceChanged(int deviceId) {
     int nDevices;
@@ -1414,7 +1414,7 @@ public:
     }
 #endif
 
-  bool _incomingEvent(void* e) {
+  bool _incomingEvent(void* e) override {
     XEvent* event = (XEvent*)e;
     switch (event->type) {
     case SelectionRequest: {
@@ -1708,7 +1708,7 @@ public:
     return false;
   }
 
-  void _cleanup() {
+  void _cleanup() override {
     if (m_gfxCtx) {
       XLockDisplay(m_xDisp);
       m_gfxCtx->destroy();
@@ -1720,15 +1720,15 @@ public:
     }
   }
 
-  ETouchType getTouchType() const { return m_touchType; }
+  ETouchType getTouchType() const override { return m_touchType; }
 
-  IGraphicsCommandQueue* getCommandQueue() { return m_gfxCtx->getCommandQueue(); }
+  IGraphicsCommandQueue* getCommandQueue() override { return m_gfxCtx->getCommandQueue(); }
 
-  IGraphicsDataFactory* getDataFactory() { return m_gfxCtx->getDataFactory(); }
+  IGraphicsDataFactory* getDataFactory() override { return m_gfxCtx->getDataFactory(); }
 
-  IGraphicsDataFactory* getMainContextDataFactory() { return m_gfxCtx->getMainContextDataFactory(); }
+  IGraphicsDataFactory* getMainContextDataFactory() override { return m_gfxCtx->getMainContextDataFactory(); }
 
-  IGraphicsDataFactory* getLoadContextDataFactory() { return m_gfxCtx->getLoadContextDataFactory(); }
+  IGraphicsDataFactory* getLoadContextDataFactory() override { return m_gfxCtx->getLoadContextDataFactory(); }
 
   bool _isWindowMapped() {
     XWindowAttributes attr;

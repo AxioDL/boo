@@ -36,7 +36,7 @@ class XInputPad final : public TDeviceBase<IXInputPadCallback> {
 
 public:
   XInputPad(DeviceToken* token) : TDeviceBase<IXInputPadCallback>(dev_typeid(XInputPad), token) {}
-  void deviceDisconnected() {
+  void deviceDisconnected() override {
     std::lock_guard<std::mutex> lk(m_callbackLock);
     if (m_callback)
       m_callback->controllerDisconnected();

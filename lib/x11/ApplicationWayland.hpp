@@ -19,7 +19,7 @@ class ApplicationWayland final : public IApplication {
   const std::vector<std::string> m_args;
   bool m_singleInstance;
 
-  void _deletedWindow(IWindow* window) { (void)window; }
+  void _deletedWindow(IWindow* window) override { (void)window; }
 
 public:
   ApplicationWayland(IApplicationCallback& callback, std::string_view uniqueName, std::string_view friendlyName,
@@ -35,19 +35,19 @@ public:
     (void)m_singleInstance;
   }
 
-  EPlatformType getPlatformType() const { return EPlatformType::Wayland; }
+  EPlatformType getPlatformType() const override { return EPlatformType::Wayland; }
 
-  int run() { return 0; }
+  int run() override { return 0; }
 
-  std::string_view getUniqueName() const { return m_uniqueName; }
+  std::string_view getUniqueName() const override { return m_uniqueName; }
 
-  std::string_view getFriendlyName() const { return m_friendlyName; }
+  std::string_view getFriendlyName() const override { return m_friendlyName; }
 
-  std::string_view getProcessName() const { return m_pname; }
+  std::string_view getProcessName() const override { return m_pname; }
 
-  const std::vector<std::string>& getArgs() const { return m_args; }
+  const std::vector<std::string>& getArgs() const override { return m_args; }
 
-  std::shared_ptr<IWindow> newWindow(std::string_view title) { return _WindowWaylandNew(title); }
+  std::shared_ptr<IWindow> newWindow(std::string_view title) override { return _WindowWaylandNew(title); }
 };
 
 } // namespace boo

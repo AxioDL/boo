@@ -39,7 +39,7 @@ class HIDDeviceWinUSB final : public IHIDDevice {
   std::condition_variable m_initCond;
   std::thread m_thread;
 
-  bool _sendUSBInterruptTransfer(const uint8_t* data, size_t length) {
+  bool _sendUSBInterruptTransfer(const uint8_t* data, size_t length) override {
     if (m_usbHandle) {
       ULONG lengthTransferred = 0;
       if (!WinUsb_WritePipe(m_usbHandle, m_usbIntfOutPipe, (PUCHAR)data, (ULONG)length, &lengthTransferred, NULL) ||
@@ -50,7 +50,7 @@ class HIDDeviceWinUSB final : public IHIDDevice {
     return false;
   }
 
-  size_t _receiveUSBInterruptTransfer(uint8_t* data, size_t length) {
+  size_t _receiveUSBInterruptTransfer(uint8_t* data, size_t length) override {
     if (m_usbHandle) {
       ULONG lengthTransferred = 0;
       if (!WinUsb_ReadPipe(m_usbHandle, m_usbIntfInPipe, (PUCHAR)data, (ULONG)length, &lengthTransferred, NULL))
@@ -199,14 +199,14 @@ class HIDDeviceWinUSB final : public IHIDDevice {
     device->m_hidHandle = nullptr;
   }
 
-  void _deviceDisconnected() { m_runningTransferLoop = false; }
+  void _deviceDisconnected() override { m_runningTransferLoop = false; }
 
   std::vector<uint8_t> m_sendBuf;
   std::vector<uint8_t> m_recvBuf;
 
-  const PHIDP_PREPARSED_DATA _getReportDescriptor() { return m_preparsedData; }
+  const PHIDP_PREPARSED_DATA _getReportDescriptor() override { return m_preparsedData; }
 
-  bool _sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message) {
+  bool _sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message) override {
     size_t maxOut = std::max(m_minFeatureSz, std::max(m_minOutputSz, length));
     if (m_sendBuf.size() < maxOut)
       m_sendBuf.resize(maxOut);
@@ -250,7 +250,7 @@ class HIDDeviceWinUSB final : public IHIDDevice {
     return true;
   }
 
-  size_t _receiveHIDReport(uint8_t* data, size_t length, HIDReportType tp, uint32_t message) {
+  size_t _receiveHIDReport(uint8_t* data, size_t length, HIDReportType tp, uint32_t message) override {
     size_t maxIn = std::max(m_minFeatureSz, std::max(m_minInputSz, length));
     if (m_recvBuf.size() < maxIn)
       m_recvBuf.resize(maxIn);
@@ -273,7 +273,7 @@ public:
   HIDDeviceWinUSB(DeviceToken& token, const std::shared_ptr<DeviceBase>& devImp)
   : m_token(token), m_devImp(devImp), m_devPath(token.getDevicePath()) {}
 
-  void _startThread() {
+  void _startThread() override {
     std::unique_lock<std::mutex> lk(m_initMutex);
     DeviceType dType = m_token.getDeviceType();
     if (dType == DeviceType::USB)
@@ -287,7 +287,7 @@ public:
     m_initCond.wait(lk);
   }
 
-  ~HIDDeviceWinUSB() {
+  ~HIDDeviceWinUSB() override {
     m_runningTransferLoop = false;
     if (m_thread.joinable())
       m_thread.detach();

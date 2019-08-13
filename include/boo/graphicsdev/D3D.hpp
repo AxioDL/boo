@@ -17,10 +17,10 @@ struct BaseGraphicsData;
 
 class D3D11DataFactory : public IGraphicsDataFactory {
 public:
-  virtual ~D3D11DataFactory() = default;
+  ~D3D11DataFactory() override = default;
 
-  Platform platform() const { return Platform::D3D11; }
-  const SystemChar* platformName() const { return _SYS_STR("D3D11"); }
+  Platform platform() const override { return Platform::D3D11; }
+  const SystemChar* platformName() const override { return _SYS_STR("D3D11"); }
 
   class Context final : public IGraphicsDataFactory::Context {
     friend class D3D11DataFactoryImpl;
@@ -30,28 +30,30 @@ public:
     ~Context();
 
   public:
-    Platform platform() const { return Platform::D3D11; }
-    const SystemChar* platformName() const { return _SYS_STR("D3D11"); }
+    Platform platform() const override { return Platform::D3D11; }
+    const SystemChar* platformName() const override { return _SYS_STR("D3D11"); }
 
-    ObjToken<IGraphicsBufferS> newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
-    ObjToken<IGraphicsBufferD> newDynamicBuffer(BufferUse use, size_t stride, size_t count);
+    ObjToken<IGraphicsBufferS> newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count) override;
+    ObjToken<IGraphicsBufferD> newDynamicBuffer(BufferUse use, size_t stride, size_t count) override;
 
     ObjToken<ITextureS> newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                         TextureClampMode clampMode, const void* data, size_t sz);
+                                         TextureClampMode clampMode, const void* data, size_t sz) override;
     ObjToken<ITextureSA> newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
                                                TextureFormat fmt, TextureClampMode clampMode, const void* data,
-                                               size_t sz);
-    ObjToken<ITextureD> newDynamicTexture(size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode);
+                                               size_t sz) override;
+    ObjToken<ITextureD> newDynamicTexture(size_t width, size_t height, TextureFormat fmt,
+                                          TextureClampMode clampMode) override;
     ObjToken<ITextureR> newRenderTexture(size_t width, size_t height, TextureClampMode clampMode, size_t colorBindCount,
-                                         size_t depthBindCount);
-    ObjToken<ITextureCubeR> newCubeRenderTexture(size_t width, size_t mips);
+                                         size_t depthBindCount) override;
+    ObjToken<ITextureCubeR> newCubeRenderTexture(size_t width, size_t mips) override;
 
-    ObjToken<IShaderStage> newShaderStage(const uint8_t* data, size_t size, PipelineStage stage);
+    ObjToken<IShaderStage> newShaderStage(const uint8_t* data, size_t size, PipelineStage stage) override;
 
     ObjToken<IShaderPipeline> newShaderPipeline(ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment,
                                                 ObjToken<IShaderStage> geometry, ObjToken<IShaderStage> control,
                                                 ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
-                                                const AdditionalPipelineInfo& additionalInfo, bool asynchronous = true);
+                                                const AdditionalPipelineInfo& additionalInfo,
+                                                bool asynchronous = true) override;
 
     ObjToken<IShaderDataBinding>
     newShaderDataBinding(const ObjToken<IShaderPipeline>& pipeline, const ObjToken<IGraphicsBuffer>& vbo,
@@ -59,7 +61,7 @@ public:
                          size_t ubufCount, const ObjToken<IGraphicsBuffer>* ubufs, const PipelineStage* ubufStages,
                          const size_t* ubufOffs, const size_t* ubufSizes, size_t texCount,
                          const ObjToken<ITexture>* texs, const int* bindIdxs, const bool* bindDepth,
-                         size_t baseVert = 0, size_t baseInst = 0);
+                         size_t baseVert = 0, size_t baseInst = 0) override;
   };
 
   static std::vector<uint8_t> CompileHLSL(const char* source, PipelineStage stage);

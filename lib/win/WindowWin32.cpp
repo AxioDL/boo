@@ -88,35 +88,35 @@ public:
       Log.report(logvisor::Fatal, fmt("unable to get DXGI output"));
   }
 
-  ~GraphicsContextWin32D3D() { m_3dCtx.m_ctx11.m_windows.erase(m_parentWindow); }
+  ~GraphicsContextWin32D3D() override { m_3dCtx.m_ctx11.m_windows.erase(m_parentWindow); }
 
-  void _setCallback(IWindowCallback* cb) { m_callback = cb; }
+  void _setCallback(IWindowCallback* cb) override { m_callback = cb; }
 
-  EGraphicsAPI getAPI() const { return m_api; }
+  EGraphicsAPI getAPI() const override { return m_api; }
 
-  EPixelFormat getPixelFormat() const { return m_pf; }
+  EPixelFormat getPixelFormat() const override { return m_pf; }
 
-  void setPixelFormat(EPixelFormat pf) {
+  void setPixelFormat(EPixelFormat pf) override {
     if (pf > EPixelFormat::RGBAF32_Z24)
       return;
     m_pf = pf;
   }
 
-  bool initializeContext(void*) { return true; }
+  bool initializeContext(void*) override { return true; }
 
-  void makeCurrent() {}
+  void makeCurrent() override {}
 
-  void postInit() {}
+  void postInit() override {}
 
-  void present() {}
+  void present() override {}
 
-  IGraphicsCommandQueue* getCommandQueue() { return m_commandQueue.get(); }
+  IGraphicsCommandQueue* getCommandQueue() override { return m_commandQueue.get(); }
 
-  IGraphicsDataFactory* getDataFactory() { return m_dataFactory.get(); }
+  IGraphicsDataFactory* getDataFactory() override { return m_dataFactory.get(); }
 
-  IGraphicsDataFactory* getMainContextDataFactory() { return m_dataFactory.get(); }
+  IGraphicsDataFactory* getMainContextDataFactory() override { return m_dataFactory.get(); }
 
-  IGraphicsDataFactory* getLoadContextDataFactory() { return m_dataFactory.get(); }
+  IGraphicsDataFactory* getLoadContextDataFactory() override { return m_dataFactory.get(); }
 };
 
 struct GraphicsContextWin32GL : GraphicsContextWin32 {
@@ -249,23 +249,23 @@ public:
     m_commandQueue->startRenderer();
   }
 
-  ~GraphicsContextWin32GL() { m_3dCtx.m_ctxOgl.m_windows.erase(m_parentWindow); }
+  ~GraphicsContextWin32GL() override { m_3dCtx.m_ctxOgl.m_windows.erase(m_parentWindow); }
 
-  void _setCallback(IWindowCallback* cb) { m_callback = cb; }
+  void _setCallback(IWindowCallback* cb) override { m_callback = cb; }
 
-  EGraphicsAPI getAPI() const { return m_api; }
+  EGraphicsAPI getAPI() const override { return m_api; }
 
-  EPixelFormat getPixelFormat() const { return m_pf; }
+  EPixelFormat getPixelFormat() const override { return m_pf; }
 
-  void setPixelFormat(EPixelFormat pf) {
+  void setPixelFormat(EPixelFormat pf) override {
     if (pf > EPixelFormat::RGBAF32_Z24)
       return;
     m_pf = pf;
   }
 
-  bool initializeContext(void*) { return true; }
+  bool initializeContext(void*) override { return true; }
 
-  void makeCurrent() {
+  void makeCurrent() override {
     OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
     // if (!wglMakeCurrent(w.m_deviceContext, w.m_mainContext))
     //    Log.report(logvisor::Fatal, fmt("unable to make WGL context current"));
@@ -277,7 +277,7 @@ public:
       Log.report(logvisor::Fatal, fmt("unable to make WGL context current"));
   }
 
-  void postInit() {
+  void postInit() override {
     // OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
 
     // wglCreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC)
@@ -293,18 +293,18 @@ public:
     wglSwapIntervalEXT(1);
   }
 
-  void present() {
+  void present() override {
     OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
     SwapBuffers(w.m_deviceContext);
   }
 
-  IGraphicsCommandQueue* getCommandQueue() { return m_commandQueue.get(); }
+  IGraphicsCommandQueue* getCommandQueue() override { return m_commandQueue.get(); }
 
-  IGraphicsDataFactory* getDataFactory() { return m_dataFactory.get(); }
+  IGraphicsDataFactory* getDataFactory() override { return m_dataFactory.get(); }
 
   /* Creates a new context on current thread!! Call from client loading thread */
   HGLRC m_mainCtx = 0;
-  IGraphicsDataFactory* getMainContextDataFactory() {
+  IGraphicsDataFactory* getMainContextDataFactory() override {
     OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
     if (!m_mainCtx) {
       m_mainCtx = wglCreateContextAttribsARB(w.m_deviceContext, w.m_mainContext, ContextAttribs);
@@ -318,7 +318,7 @@ public:
 
   /* Creates a new context on current thread!! Call from client loading thread */
   HGLRC m_loadCtx = 0;
-  IGraphicsDataFactory* getLoadContextDataFactory() {
+  IGraphicsDataFactory* getLoadContextDataFactory() override {
     OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
     if (!m_loadCtx) {
       m_loadCtx = wglCreateContextAttribsARB(w.m_deviceContext, w.m_mainContext, ContextAttribs);
@@ -400,7 +400,7 @@ public:
     m_ctx->m_windows.erase(m_parentWindow);
   }
 
-  ~GraphicsContextWin32Vulkan() { destroy(); }
+  ~GraphicsContextWin32Vulkan() override { destroy(); }
 
   VulkanContext::Window* m_windowCtx = nullptr;
 
@@ -409,19 +409,19 @@ public:
       m_ctx->resizeSwapChain(*m_windowCtx, m_surface, m_format, m_colorspace, rect);
   }
 
-  void _setCallback(IWindowCallback* cb) { m_callback = cb; }
+  void _setCallback(IWindowCallback* cb) override { m_callback = cb; }
 
-  EGraphicsAPI getAPI() const { return m_api; }
+  EGraphicsAPI getAPI() const override { return m_api; }
 
-  EPixelFormat getPixelFormat() const { return m_pf; }
+  EPixelFormat getPixelFormat() const override { return m_pf; }
 
-  void setPixelFormat(EPixelFormat pf) {
+  void setPixelFormat(EPixelFormat pf) override {
     if (pf > EPixelFormat::RGBAF32_Z24)
       return;
     m_pf = pf;
   }
 
-  bool initializeContext(void*) {
+  bool initializeContext(void*) override {
     m_windowCtx = m_ctx->m_windows.emplace(std::make_pair(m_parentWindow, std::make_unique<VulkanContext::Window>()))
                       .first->second.get();
     m_windowCtx->m_hwnd = m_hwnd;
@@ -509,19 +509,19 @@ public:
     return true;
   }
 
-  void makeCurrent() {}
+  void makeCurrent() override {}
 
-  void postInit() {}
+  void postInit() override {}
 
-  IGraphicsCommandQueue* getCommandQueue() { return m_commandQueue.get(); }
+  IGraphicsCommandQueue* getCommandQueue() override { return m_commandQueue.get(); }
 
-  IGraphicsDataFactory* getDataFactory() { return m_dataFactory.get(); }
+  IGraphicsDataFactory* getDataFactory() override { return m_dataFactory.get(); }
 
-  IGraphicsDataFactory* getMainContextDataFactory() { return getDataFactory(); }
+  IGraphicsDataFactory* getMainContextDataFactory() override { return getDataFactory(); }
 
-  IGraphicsDataFactory* getLoadContextDataFactory() { return getDataFactory(); }
+  IGraphicsDataFactory* getLoadContextDataFactory() override { return getDataFactory(); }
 
-  void present() {}
+  void present() override {}
 };
 #endif
 
@@ -874,37 +874,37 @@ public:
     m_gfxCtx.reset(new GraphicsContextWin32D3D(api, this, m_hwnd, b3dCtx));
   }
 
-  void _cleanup() { m_gfxCtx.reset(); }
+  void _cleanup() override { m_gfxCtx.reset(); }
 
-  void setCallback(IWindowCallback* cb) { m_callback = cb; }
+  void setCallback(IWindowCallback* cb) override { m_callback = cb; }
 
-  void closeWindow() {
+  void closeWindow() override {
     // TODO: Perform thread-coalesced deallocation
     ShowWindow(m_hwnd, SW_HIDE);
   }
 
-  void showWindow() { ShowWindow(m_hwnd, SW_SHOW); }
+  void showWindow() override { ShowWindow(m_hwnd, SW_SHOW); }
 
-  void hideWindow() { ShowWindow(m_hwnd, SW_HIDE); }
+  void hideWindow() override { ShowWindow(m_hwnd, SW_HIDE); }
 
-  SystemString getTitle() {
+  SystemString getTitle() override {
     wchar_t title[256];
     int c = GetWindowTextW(m_hwnd, title, 256);
     return SystemString(title, c);
   }
 
-  void setTitle(SystemStringView title) { SetWindowTextW(m_hwnd, title.data()); }
+  void setTitle(SystemStringView title) override { SetWindowTextW(m_hwnd, title.data()); }
 
   static void _setCursor(HCURSOR cur) { PostThreadMessageW(g_mainThreadId, WM_USER + 2, WPARAM(cur), 0); }
 
-  void setCursor(EMouseCursor cursor) {
+  void setCursor(EMouseCursor cursor) override {
     if (cursor == m_cursor && !m_cursorWait)
       return;
     m_cursor = cursor;
     _setCursor(GetWin32Cursor(cursor));
   }
 
-  void setWaitCursor(bool wait) {
+  void setWaitCursor(bool wait) override {
     if (wait && !m_cursorWait) {
       _setCursor(WIN32_CURSORS.m_wait);
       m_cursorWait = true;
@@ -914,12 +914,12 @@ public:
     }
   }
 
-  double getWindowRefreshRate() const {
+  double getWindowRefreshRate() const override {
     /* TODO: Actually get refresh rate */
     return 60.0;
   }
 
-  void setWindowFrameDefault() {
+  void setWindowFrameDefault() override {
     MONITORINFO monInfo = {};
     monInfo.cbSize = sizeof(MONITORINFO);
     HMONITOR mon = MonitorFromWindow(m_hwnd, MONITOR_DEFAULTTOPRIMARY);
@@ -929,7 +929,7 @@ public:
     setWindowFrame(x, y, w, h);
   }
 
-  void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const {
+  void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const override {
     RECT rct;
     GetClientRect(m_hwnd, &rct);
     POINT pt;
@@ -942,7 +942,7 @@ public:
     hOut = rct.bottom;
   }
 
-  void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const {
+  void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const override {
     RECT rct;
     GetClientRect(m_hwnd, &rct);
     POINT pt;
@@ -955,15 +955,15 @@ public:
     hOut = rct.bottom;
   }
 
-  void setWindowFrame(float x, float y, float w, float h) { setWindowFrame(int(x), int(y), int(w), int(h)); }
+  void setWindowFrame(float x, float y, float w, float h) override { setWindowFrame(int(x), int(y), int(w), int(h)); }
 
-  void setWindowFrame(int x, int y, int w, int h) {
+  void setWindowFrame(int x, int y, int w, int h) override {
     RECT r = {x, y, x + w, y + h};
     AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
     MoveWindow(m_hwnd, r.left, r.top, r.right - r.left, r.bottom - r.top, true);
   }
 
-  float getVirtualPixelFactor() const {
+  float getVirtualPixelFactor() const override {
 #if _WIN32_WINNT_WINBLUE
     if (MyGetScaleFactorForMonitor) {
       DEVICE_SCALE_FACTOR Factor;
@@ -977,9 +977,9 @@ public:
     return 1.f;
   }
 
-  bool isFullscreen() const { return m_gfxCtx->m_3dCtx.isFullscreen(this); }
+  bool isFullscreen() const override { return m_gfxCtx->m_3dCtx.isFullscreen(this); }
 
-  void setFullscreen(bool fs) { m_gfxCtx->m_3dCtx.setFullscreen(this, fs); }
+  void setFullscreen(bool fs) override { m_gfxCtx->m_3dCtx.setFullscreen(this, fs); }
 
   void _immSetOpenStatus(bool open) {
     if (GetCurrentThreadId() != g_mainThreadId) {
@@ -1005,7 +1005,7 @@ public:
     ImmSetCompositionWindow(m_imc, &m_cForm);
   }
 
-  void claimKeyboardFocus(const int coord[2]) {
+  void claimKeyboardFocus(const int coord[2]) override {
     if (!coord) {
       //_immSetOpenStatus(false);
       return;
@@ -1014,7 +1014,7 @@ public:
     //_immSetOpenStatus(true);
   }
 
-  bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz) {
+  bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz) override {
     switch (type) {
     case EClipboardType::String: {
       HGLOBAL gStr = MakeANSICRLF(reinterpret_cast<const char*>(data), sz);
@@ -1038,7 +1038,7 @@ public:
     return false;
   }
 
-  std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz) {
+  std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz) override {
     switch (type) {
     case EClipboardType::String: {
       OpenClipboard(m_hwnd);
@@ -1068,9 +1068,12 @@ public:
     return std::unique_ptr<uint8_t[]>();
   }
 
-  int waitForRetrace() { m_gfxCtx->m_output->WaitForVBlank(); return 1; }
+  int waitForRetrace() override {
+    m_gfxCtx->m_output->WaitForVBlank();
+    return 1;
+  }
 
-  uintptr_t getPlatformHandle() const { return uintptr_t(m_hwnd); }
+  uintptr_t getPlatformHandle() const override { return uintptr_t(m_hwnd); }
 
   void buttonDown(HWNDEvent& e, EMouseButton button) {
     if (m_callback) {
@@ -1105,7 +1108,7 @@ public:
   }
 
   bool mouseTracking = false;
-  bool _incomingEvent(void* ev) {
+  bool _incomingEvent(void* ev) override {
     HWNDEvent& e = *static_cast<HWNDEvent*>(ev);
     switch (e.uMsg) {
     case WM_CLOSE:
@@ -1288,9 +1291,9 @@ public:
     return false;
   }
 
-  ETouchType getTouchType() const { return ETouchType::None; }
+  ETouchType getTouchType() const override { return ETouchType::None; }
 
-  void setStyle(EWindowStyle style) {
+  void setStyle(EWindowStyle style) override {
     LONG sty = GetWindowLong(m_hwnd, GWL_STYLE);
 
     if ((style & EWindowStyle::Titlebar) != EWindowStyle::None)
@@ -1311,7 +1314,7 @@ public:
     SetWindowLong(m_hwnd, GWL_STYLE, sty);
   }
 
-  EWindowStyle getStyle() const {
+  EWindowStyle getStyle() const override {
     LONG sty = GetWindowLong(m_hwnd, GWL_STYLE);
     EWindowStyle retval = EWindowStyle::None;
     if ((sty & WS_CAPTION) != 0)
@@ -1323,14 +1326,14 @@ public:
     return retval;
   }
 
-  IGraphicsCommandQueue* getCommandQueue() { return m_gfxCtx->getCommandQueue(); }
-  IGraphicsDataFactory* getDataFactory() { return m_gfxCtx->getDataFactory(); }
+  IGraphicsCommandQueue* getCommandQueue() override { return m_gfxCtx->getCommandQueue(); }
+  IGraphicsDataFactory* getDataFactory() override { return m_gfxCtx->getDataFactory(); }
 
   /* Creates a new context on current thread!! Call from main client thread */
-  IGraphicsDataFactory* getMainContextDataFactory() { return m_gfxCtx->getMainContextDataFactory(); }
+  IGraphicsDataFactory* getMainContextDataFactory() override { return m_gfxCtx->getMainContextDataFactory(); }
 
   /* Creates a new context on current thread!! Call from client loading thread */
-  IGraphicsDataFactory* getLoadContextDataFactory() { return m_gfxCtx->getLoadContextDataFactory(); }
+  IGraphicsDataFactory* getLoadContextDataFactory() override { return m_gfxCtx->getLoadContextDataFactory(); }
 };
 
 std::shared_ptr<IWindow> _WindowWin32New(SystemStringView title, Boo3DAppContextWin32& d3dCtx) {

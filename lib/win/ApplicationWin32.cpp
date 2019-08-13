@@ -86,7 +86,7 @@ class ApplicationWin32 final : public IApplication {
   PFN_vkGetInstanceProcAddr m_getVkProc = nullptr;
 #endif
 
-  void _deletedWindow(IWindow* window) { m_allWindows.erase(HWND(window->getPlatformHandle())); }
+  void _deletedWindow(IWindow* window) override { m_allWindows.erase(HWND(window->getPlatformHandle())); }
 
 public:
   ApplicationWin32(IApplicationCallback& callback, SystemStringView uniqueName, SystemStringView friendlyName,
@@ -272,7 +272,7 @@ public:
     Log.report(logvisor::Fatal, fmt("system doesn't support Vulkan, D3D11, or OpenGL"));
   }
 
-  EPlatformType getPlatformType() const { return EPlatformType::Win32; }
+  EPlatformType getPlatformType() const override { return EPlatformType::Win32; }
 
   LRESULT winHwndHandler(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     /* Lookup boo window instance */
@@ -358,7 +358,7 @@ public:
     g_nwcv.notify_one();
   }
 
-  int run() {
+  int run() override {
     g_mainThreadId = GetCurrentThreadId();
 
     /* Spawn client thread */
@@ -424,22 +424,22 @@ public:
     return clientReturn;
   }
 
-  ~ApplicationWin32() {
+  ~ApplicationWin32() override {
     for (auto& p : m_allWindows)
       if (auto w = p.second.lock())
         w->_cleanup();
   }
 
-  SystemStringView getUniqueName() const { return m_uniqueName; }
+  SystemStringView getUniqueName() const override { return m_uniqueName; }
 
-  SystemStringView getFriendlyName() const { return m_friendlyName; }
+  SystemStringView getFriendlyName() const override { return m_friendlyName; }
 
-  SystemStringView getProcessName() const { return m_pname; }
+  SystemStringView getProcessName() const override { return m_pname; }
 
-  const std::vector<SystemString>& getArgs() const { return m_args; }
+  const std::vector<SystemString>& getArgs() const override { return m_args; }
 
   std::shared_ptr<IWindow> m_mwret;
-  std::shared_ptr<IWindow> newWindow(SystemStringView title) {
+  std::shared_ptr<IWindow> newWindow(SystemStringView title) override {
     if (GetCurrentThreadId() != g_mainThreadId) {
       std::unique_lock<std::mutex> lk(g_nwmt);
       if (!PostThreadMessageW(g_mainThreadId, WM_USER, WPARAM(&title), 0))

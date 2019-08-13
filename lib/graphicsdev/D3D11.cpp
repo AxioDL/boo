@@ -98,7 +98,7 @@ public:
   size_t m_stride;
   size_t m_count;
   ComPtr<ID3D11Buffer> m_buf;
-  ~D3D11GraphicsBufferS() = default;
+  ~D3D11GraphicsBufferS() override = default;
 };
 
 template <class DataCls>
@@ -127,11 +127,11 @@ public:
   size_t m_stride;
   size_t m_count;
   ComPtr<ID3D11Buffer> m_bufs[3];
-  ~D3D11GraphicsBufferD() = default;
+  ~D3D11GraphicsBufferD() override = default;
 
-  void load(const void* data, size_t sz);
-  void* map(size_t sz);
-  void unmap();
+  void load(const void* data, size_t sz) override;
+  void* map(size_t sz) override;
+  void unmap() override;
 };
 
 class D3D11TextureS : public GraphicsDataNode<ITextureS> {
@@ -200,7 +200,7 @@ class D3D11TextureS : public GraphicsDataNode<ITextureS> {
 public:
   ComPtr<ID3D11Texture2D> m_tex;
   ComPtr<ID3D11ShaderResourceView> m_srv;
-  ~D3D11TextureS() = default;
+  ~D3D11TextureS() override = default;
 };
 
 class D3D11TextureSA : public GraphicsDataNode<ITextureSA> {
@@ -256,7 +256,7 @@ class D3D11TextureSA : public GraphicsDataNode<ITextureSA> {
 public:
   ComPtr<ID3D11Texture2D> m_tex;
   ComPtr<ID3D11ShaderResourceView> m_srv;
-  ~D3D11TextureSA() = default;
+  ~D3D11TextureSA() override = default;
 };
 
 class D3D11TextureD : public GraphicsDataNode<ITextureD> {
@@ -306,11 +306,11 @@ class D3D11TextureD : public GraphicsDataNode<ITextureD> {
 public:
   ComPtr<ID3D11Texture2D> m_texs[3];
   ComPtr<ID3D11ShaderResourceView> m_srvs[3];
-  ~D3D11TextureD() = default;
+  ~D3D11TextureD() override = default;
 
-  void load(const void* data, size_t sz);
-  void* map(size_t sz);
-  void unmap();
+  void load(const void* data, size_t sz) override;
+  void* map(size_t sz) override;
+  void unmap() override;
 };
 
 #define MAX_BIND_TEXS 4
@@ -398,7 +398,7 @@ public:
   ComPtr<ID3D11Texture2D> m_depthBindTex[MAX_BIND_TEXS];
   ComPtr<ID3D11ShaderResourceView> m_depthSrv[MAX_BIND_TEXS];
 
-  ~D3D11TextureR() = default;
+  ~D3D11TextureR() override = default;
 
   void resize(D3D11Context* ctx, size_t width, size_t height) {
     if (width < 1)
@@ -455,7 +455,7 @@ public:
 
   ComPtr<ID3D11ShaderResourceView> m_colorSrv;
 
-  ~D3D11TextureCubeR() = default;
+  ~D3D11TextureCubeR() override = default;
 
   void resize(D3D11Context* ctx, size_t width, size_t mips) {
     if (width < 1)
@@ -687,7 +687,7 @@ public:
   D3D11_PRIMITIVE_TOPOLOGY m_topology;
   size_t m_stride = 0;
   size_t m_instStride = 0;
-  ~D3D11ShaderPipeline() = default;
+  ~D3D11ShaderPipeline() override = default;
   D3D11ShaderPipeline& operator=(const D3D11ShaderPipeline&) = delete;
   D3D11ShaderPipeline(const D3D11ShaderPipeline&) = delete;
 
@@ -703,7 +703,7 @@ public:
     ctx->IASetInputLayout(m_inLayout.Get());
     ctx->IASetPrimitiveTopology(m_topology);
   }
-  bool isReady() const { return true; }
+  bool isReady() const override { return true; }
 };
 
 struct D3D11ShaderDataBinding : public GraphicsDataNode<IShaderDataBinding> {
@@ -919,8 +919,8 @@ struct D3D11ShaderDataBinding : public GraphicsDataNode<IShaderDataBinding> {
 };
 
 struct D3D11CommandQueue final : IGraphicsCommandQueue {
-  Platform platform() const { return IGraphicsDataFactory::Platform::D3D11; }
-  const SystemChar* platformName() const { return _SYS_STR("D3D11"); }
+  Platform platform() const override { return IGraphicsDataFactory::Platform::D3D11; }
+  const SystemChar* platformName() const override { return _SYS_STR("D3D11"); }
   D3D11Context* m_ctx;
   D3D11Context::Window* m_windowCtx;
   IGraphicsContext* m_parent;
@@ -964,20 +964,20 @@ struct D3D11CommandQueue final : IGraphicsCommandQueue {
     m_deferredCtx.As(&m_deferredAnnot);
   }
 
-  void startRenderer();
+  void startRenderer() override;
 
-  void stopRenderer() {
+  void stopRenderer() override {
     m_running = false;
     m_cv.notify_one();
     m_thr.join();
   }
 
-  ~D3D11CommandQueue() {
+  ~D3D11CommandQueue() override {
     if (m_running)
       stopRenderer();
   }
 
-  void setShaderDataBinding(const boo::ObjToken<IShaderDataBinding>& binding) {
+  void setShaderDataBinding(const boo::ObjToken<IShaderDataBinding>& binding) override {
     D3D11ShaderDataBinding* cbind = binding.cast<D3D11ShaderDataBinding>();
     cbind->bind(m_deferredCtx.Get(), m_fillBuf);
     m_cmdLists[m_fillBuf].resTokens.push_back(binding.get());
@@ -989,7 +989,7 @@ struct D3D11CommandQueue final : IGraphicsCommandQueue {
   }
 
   boo::ObjToken<ITexture> m_boundTarget;
-  void setRenderTarget(const boo::ObjToken<ITextureR>& target) {
+  void setRenderTarget(const boo::ObjToken<ITextureR>& target) override {
     D3D11TextureR* ctarget = target.cast<D3D11TextureR>();
     ID3D11RenderTargetView* view[] = {ctarget->m_rtv.Get()};
     m_deferredCtx->OMSetRenderTargets(1, view, ctarget->m_dsv.Get());
@@ -998,7 +998,7 @@ struct D3D11CommandQueue final : IGraphicsCommandQueue {
 
   static constexpr int CubeFaceRemap[] = {0, 1, 3, 2, 4, 5};
   int m_boundFace = 0;
-  void setRenderTarget(const ObjToken<ITextureCubeR>& target, int face) {
+  void setRenderTarget(const ObjToken<ITextureCubeR>& target, int face) override {
     face = CubeFaceRemap[face];
     D3D11TextureCubeR* ctarget = target.cast<D3D11TextureCubeR>();
     ID3D11RenderTargetView* view[] = {ctarget->m_rtv[face].Get()};
@@ -1007,7 +1007,7 @@ struct D3D11CommandQueue final : IGraphicsCommandQueue {
     m_boundFace = face;
   }
 
-  void setViewport(const SWindowRect& rect, float znear, float zfar) {
+  void setViewport(const SWindowRect& rect, float znear, float zfar) override {
     if (m_boundTarget) {
       int boundHeight = 0;
       switch (m_boundTarget->type()) {
@@ -1034,7 +1034,7 @@ struct D3D11CommandQueue final : IGraphicsCommandQueue {
     }
   }
 
-  void setScissor(const SWindowRect& rect) {
+  void setScissor(const SWindowRect& rect) override {
     if (m_boundTarget) {
       D3D11TextureR* ctarget = m_boundTarget.cast<D3D11TextureR>();
       int boundHeight = 0;
@@ -1059,32 +1059,32 @@ struct D3D11CommandQueue final : IGraphicsCommandQueue {
   }
 
   std::unordered_map<D3D11TextureR*, std::pair<size_t, size_t>> m_texResizes;
-  void resizeRenderTexture(const boo::ObjToken<ITextureR>& tex, size_t width, size_t height) {
+  void resizeRenderTexture(const boo::ObjToken<ITextureR>& tex, size_t width, size_t height) override {
     D3D11TextureR* ctex = tex.cast<D3D11TextureR>();
     std::unique_lock<std::mutex> lk(m_mt);
     m_texResizes[ctex] = std::make_pair(width, height);
   }
 
   std::unordered_map<D3D11TextureCubeR*, std::pair<size_t, size_t>> m_cubeTexResizes;
-  void resizeRenderTexture(const boo::ObjToken<ITextureCubeR>& tex, size_t width, size_t mips) {
+  void resizeRenderTexture(const boo::ObjToken<ITextureCubeR>& tex, size_t width, size_t mips) override {
     D3D11TextureCubeR* ctex = tex.cast<D3D11TextureCubeR>();
     std::unique_lock<std::mutex> lk(m_mt);
     m_cubeTexResizes[ctex] = std::make_pair(width, mips);
   }
 
-  void generateMipmaps(const ObjToken<ITextureCubeR>& tex);
+  void generateMipmaps(const ObjToken<ITextureCubeR>& tex) override;
 
-  void schedulePostFrameHandler(std::function<void(void)>&& func) { func(); }
+  void schedulePostFrameHandler(std::function<void()>&& func) override { func(); }
 
   float m_clearColor[4] = {0.0, 0.0, 0.0, 0.0};
-  void setClearColor(const float rgba[4]) {
+  void setClearColor(const float rgba[4]) override {
     m_clearColor[0] = rgba[0];
     m_clearColor[1] = rgba[1];
     m_clearColor[2] = rgba[2];
     m_clearColor[3] = rgba[3];
   }
 
-  void clearTarget(bool render = true, bool depth = true) {
+  void clearTarget(bool render = true, bool depth = true) override {
     if (!m_boundTarget)
       return;
     switch (m_boundTarget->type()) {
@@ -1109,15 +1109,15 @@ struct D3D11CommandQueue final : IGraphicsCommandQueue {
     }
   }
 
-  void draw(size_t start, size_t count) { m_deferredCtx->Draw(count, start); }
+  void draw(size_t start, size_t count) override { m_deferredCtx->Draw(count, start); }
 
-  void drawIndexed(size_t start, size_t count) { m_deferredCtx->DrawIndexed(count, start, 0); }
+  void drawIndexed(size_t start, size_t count) override { m_deferredCtx->DrawIndexed(count, start, 0); }
 
-  void drawInstances(size_t start, size_t count, size_t instCount, size_t startInst) {
+  void drawInstances(size_t start, size_t count, size_t instCount, size_t startInst) override {
     m_deferredCtx->DrawInstanced(count, instCount, start, startInst);
   }
 
-  void drawInstancesIndexed(size_t start, size_t count, size_t instCount, size_t startInst) {
+  void drawInstancesIndexed(size_t start, size_t count, size_t instCount, size_t startInst) override {
     m_deferredCtx->DrawIndexedInstanced(count, instCount, start, 0, startInst);
   }
 
@@ -1147,7 +1147,7 @@ struct D3D11CommandQueue final : IGraphicsCommandQueue {
   }
 
   void resolveBindTexture(const boo::ObjToken<ITextureR>& texture, const SWindowRect& rect, bool tlOrigin, int bindIdx,
-                          bool color, bool depth, bool clearDepth) {
+                          bool color, bool depth, bool clearDepth) override {
     const D3D11TextureR* tex = texture.cast<D3D11TextureR>();
     _resolveBindTexture(m_deferredCtx.Get(), tex, rect, tlOrigin, bindIdx, color, depth);
     if (clearDepth)
@@ -1155,17 +1155,17 @@ struct D3D11CommandQueue final : IGraphicsCommandQueue {
   }
 
   boo::ObjToken<ITextureR> m_doPresent;
-  void resolveDisplay(const boo::ObjToken<ITextureR>& source) { m_doPresent = source; }
+  void resolveDisplay(const boo::ObjToken<ITextureR>& source) override { m_doPresent = source; }
 
-  void execute();
+  void execute() override;
 
 #ifdef BOO_GRAPHICS_DEBUG_GROUPS
-  void pushDebugGroup(const char* name, const std::array<float, 4>& color) {
+  void pushDebugGroup(const char* name, const std::array<float, 4>& color) override {
     if (m_deferredAnnot)
       m_deferredAnnot->BeginEvent(MBSTWCS(name).c_str());
   }
 
-  void popDebugGroup() {
+  void popDebugGroup() override {
     if (m_deferredAnnot)
       m_deferredAnnot->EndEvent();
   }
@@ -1282,18 +1282,18 @@ public:
       m_ctx->m_sampleCount = flp2(m_ctx->m_sampleCount - 1);
   }
 
-  boo::ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs) {
+  boo::ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs) override {
     D3D11CommandQueue* q = static_cast<D3D11CommandQueue*>(m_parent->getCommandQueue());
     boo::ObjToken<BaseGraphicsPool> pool(new BaseGraphicsPool(*this __BooTraceArgsUse));
     return {new D3D11GraphicsBufferD<BaseGraphicsPool>(pool, q, use, m_ctx, stride, count)};
   }
 
-  void commitTransaction(const FactoryCommitFunc& trans __BooTraceArgs) {
+  void commitTransaction(const FactoryCommitFunc& trans __BooTraceArgs) override {
     D3D11DataFactory::Context ctx(*this __BooTraceArgsUse);
     trans(ctx);
   }
 
-  void setDisplayGamma(float gamma) {
+  void setDisplayGamma(float gamma) override {
     if (m_ctx->m_fbFormat == DXGI_FORMAT_R16G16B16A16_FLOAT)
       m_gamma = gamma * 2.2f;
     else
@@ -1302,12 +1302,12 @@ public:
       UpdateGammaLUT(m_gammaLUT.get(), m_gamma);
   }
 
-  bool isTessellationSupported(uint32_t& maxPatchSizeOut) {
+  bool isTessellationSupported(uint32_t& maxPatchSizeOut) override {
     maxPatchSizeOut = 32;
     return true;
   }
-  void waitUntilShadersReady() {}
-  bool areShadersReady() { return true; }
+  void waitUntilShadersReady() override {}
+  bool areShadersReady() override { return true; }
 };
 
 void D3D11CommandQueue::generateMipmaps(const ObjToken<ITextureCubeR>& tex) {
