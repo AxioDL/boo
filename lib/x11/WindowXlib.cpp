@@ -510,7 +510,7 @@ public:
     visualIdOut = screen->root_visual->visualid;
   }
 
-  void destroy() {
+  void destroy() override {
     VulkanContext::Window& m_windowCtx = *m_ctx->m_windows[m_parentWindow];
     m_windowCtx.m_swapChains[0].destroy(m_ctx->m_dev);
     m_windowCtx.m_swapChains[1].destroy(m_ctx->m_dev);
