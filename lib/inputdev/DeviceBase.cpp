@@ -37,25 +37,25 @@ size_t DeviceBase::receiveUSBInterruptTransfer(uint8_t* data, size_t length) {
   return false;
 }
 
-unsigned DeviceBase::getVendorId() {
+unsigned DeviceBase::getVendorId() const {
   if (m_token)
     return m_token->getVendorId();
   return -1;
 }
 
-unsigned DeviceBase::getProductId() {
+unsigned DeviceBase::getProductId() const {
   if (m_token)
     return m_token->getProductId();
   return -1;
 }
 
-std::string_view DeviceBase::getVendorName() {
+std::string_view DeviceBase::getVendorName() const {
   if (m_token)
     return m_token->getVendorName();
   return {};
 }
 
-std::string_view DeviceBase::getProductName() {
+std::string_view DeviceBase::getProductName() const {
   if (m_token)
     return m_token->getProductName();
   return {};
@@ -63,14 +63,14 @@ std::string_view DeviceBase::getProductName() {
 
 #if _WIN32
 #if !WINDOWS_STORE
-const PHIDP_PREPARSED_DATA DeviceBase::getReportDescriptor() {
+PHIDP_PREPARSED_DATA DeviceBase::getReportDescriptor() const {
   if (m_hidDev)
     return m_hidDev->_getReportDescriptor();
   return {};
 }
 #endif
 #else
-std::vector<uint8_t> DeviceBase::getReportDescriptor() {
+std::vector<uint8_t> DeviceBase::getReportDescriptor() const {
   if (m_hidDev)
     return m_hidDev->_getReportDescriptor();
   return {};

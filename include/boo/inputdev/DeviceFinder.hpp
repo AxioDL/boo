@@ -41,11 +41,8 @@ private:
 
   /* Friend methods for platform-listener to find/insert/remove
    * tokens with type-filtering */
-  bool _hasToken(const std::string& path) {
-    auto preCheck = m_tokens.find(path);
-    if (preCheck != m_tokens.end())
-      return true;
-    return false;
+  bool _hasToken(const std::string& path) const {
+    return m_tokens.find(path) != m_tokens.end();
   }
   bool _insertToken(std::unique_ptr<DeviceToken>&& token) {
     if (DeviceSignature::DeviceMatchToken(*token, m_types)) {
@@ -77,8 +74,12 @@ public:
   public:
     CDeviceTokensHandle(DeviceFinder& finder) : m_finder(finder) { m_finder.m_tokensLock.lock(); }
     ~CDeviceTokensHandle() { m_finder.m_tokensLock.unlock(); }
-    TDeviceTokens::iterator begin() { return m_finder.m_tokens.begin(); }
-    TDeviceTokens::iterator end() { return m_finder.m_tokens.end(); }
+
+    TDeviceTokens::iterator begin() noexcept { return m_finder.m_tokens.begin(); }
+    TDeviceTokens::iterator end() noexcept { return m_finder.m_tokens.end(); }
+
+    TDeviceTokens::const_iterator begin() const noexcept { return m_finder.m_tokens.begin(); }
+    TDeviceTokens::const_iterator end() const noexcept { return m_finder.m_tokens.end(); }
   };
 
   /* Application must specify its interested device-types */
