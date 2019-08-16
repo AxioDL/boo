@@ -136,7 +136,7 @@ public:
 
   void stopRumble(int motor) { m_rumbleRequest &= ~EDualshockMotor(motor); }
 
-  EDualshockLED getLED() { return m_led; }
+  EDualshockLED getLED() const { return m_led; }
 
   void setLED(EDualshockLED led, bool on = true) {
     if (on)

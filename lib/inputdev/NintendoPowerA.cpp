@@ -33,12 +33,10 @@ void NintendoPowerA::finalCycle() {}
 
 void NintendoPowerA::receivedHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message) {}
 
-bool NintendoPowerAState::operator==(const NintendoPowerAState& other) {
-  return !memcmp(this, &other, sizeof(NintendoPowerAState));
+bool NintendoPowerAState::operator==(const NintendoPowerAState& other) const {
+  return memcmp(this, &other, sizeof(NintendoPowerAState)) == 0;
 }
 
-bool NintendoPowerAState::operator!=(const NintendoPowerAState& other) {
-  return memcmp(this, &other, sizeof(NintendoPowerAState));
-}
+bool NintendoPowerAState::operator!=(const NintendoPowerAState& other) const { return !operator==(other); }
 
 } // namespace boo

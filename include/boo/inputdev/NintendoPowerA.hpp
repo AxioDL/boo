@@ -23,8 +23,8 @@ struct NintendoPowerAState {
   uint8_t leftY;
   uint8_t rightX;
   uint8_t rightY;
-  bool operator==(const NintendoPowerAState& other);
-  bool operator!=(const NintendoPowerAState& other);
+  bool operator==(const NintendoPowerAState& other) const;
+  bool operator!=(const NintendoPowerAState& other) const;
 };
 
 class NintendoPowerA;
