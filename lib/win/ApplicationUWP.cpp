@@ -60,7 +60,7 @@ public:
   , m_pname(pname)
   , m_args(args)
   , m_singleInstance(singleInstance) {
-    typedef HRESULT(WINAPI * CreateDXGIFactory1PROC)(REFIID riid, _COM_Outptr_ void** ppFactory);
+    using CreateDXGIFactory1PROC = HRESULT (WINAPI *)(REFIID riid, _COM_Outptr_ void** ppFactory);
     CreateDXGIFactory1PROC MyCreateDXGIFactory1 = CreateDXGIFactory1;
 
     bool no12 = true;

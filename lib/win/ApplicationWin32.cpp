@@ -110,8 +110,8 @@ public:
     if (!dxgilib)
       Log.report(logvisor::Fatal, fmt("unable to load dxgi.dll"));
 
-    typedef HRESULT(WINAPI * CreateDXGIFactory1PROC)(REFIID riid, _COM_Outptr_ void** ppFactory);
-    CreateDXGIFactory1PROC MyCreateDXGIFactory1 = (CreateDXGIFactory1PROC)GetProcAddress(dxgilib, "CreateDXGIFactory1");
+    using CreateDXGIFactory1PROC =  HRESULT(WINAPI*)(REFIID riid, _COM_Outptr_ void** ppFactory);
+    auto MyCreateDXGIFactory1 = (CreateDXGIFactory1PROC)GetProcAddress(dxgilib, "CreateDXGIFactory1");
     if (!MyCreateDXGIFactory1)
       Log.report(logvisor::Fatal, fmt("unable to find CreateDXGIFactory1 in DXGI.dll\n"));
 

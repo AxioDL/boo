@@ -16,8 +16,9 @@ class DeviceBase;
 #define dev_typeid(type) std::hash<std::string>()(#type)
 
 struct DeviceSignature {
-  typedef std::vector<const DeviceSignature*> TDeviceSignatureSet;
-  typedef std::function<std::shared_ptr<DeviceBase>(DeviceToken*)> TFactoryLambda;
+  using TDeviceSignatureSet = std::vector<const DeviceSignature*>;
+  using TFactoryLambda = std::function<std::shared_ptr<DeviceBase>(DeviceToken*)>;
+
   const char* m_name = nullptr;
   uint64_t m_typeHash = 0;
   unsigned m_vid = 0;
