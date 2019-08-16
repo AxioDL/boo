@@ -187,7 +187,7 @@ public:
     m_udevThread = std::thread(std::bind(&HIDListenerUdev::_udevProc, this), this);
   }
 
-  ~HIDListenerUdev() {
+  ~HIDListenerUdev() override {
     pthread_cancel(m_udevThread.native_handle());
     if (m_udevThread.joinable())
       m_udevThread.join();
@@ -195,17 +195,17 @@ public:
   }
 
   /* Automatic device scanning */
-  bool startScanning() {
+  bool startScanning() override {
     m_scanningEnabled = true;
     return true;
   }
-  bool stopScanning() {
+  bool stopScanning() override {
     m_scanningEnabled = false;
     return true;
   }
 
   /* Manual device scanning */
-  bool scanNow() {
+  bool scanNow() override {
     udev_enumerate* uenum = udev_enumerate_new(GetUdev());
     udev_enumerate_add_match_subsystem(uenum, "usb");
     udev_enumerate_add_match_subsystem(uenum, "bluetooth");
