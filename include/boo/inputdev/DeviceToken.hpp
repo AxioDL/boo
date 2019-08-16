@@ -28,14 +28,7 @@ class DeviceToken {
 
 public:
   DeviceToken(const DeviceToken&) = delete;
-  DeviceToken(const DeviceToken&& other)
-  : m_devType(other.m_devType)
-  , m_vendorId(other.m_vendorId)
-  , m_productId(other.m_productId)
-  , m_vendorName(other.m_vendorName)
-  , m_productName(other.m_productName)
-  , m_devPath(other.m_devPath)
-  , m_connectedDev(other.m_connectedDev) {}
+  DeviceToken(DeviceToken&& other) noexcept = default;
   DeviceToken(DeviceType devType, unsigned vid, unsigned pid, const char* vname, const char* pname, const char* path)
   : m_devType(devType), m_vendorId(vid), m_productId(pid), m_devPath(path), m_connectedDev(NULL) {
     if (vname)
@@ -43,6 +36,12 @@ public:
     if (pname)
       m_productName = pname;
   }
+
+  DeviceToken& operator=(const DeviceToken&) = delete;
+  DeviceToken& operator=(DeviceToken&&) noexcept = default;
+
+  bool operator==(const DeviceToken& rhs) const { return m_devPath == rhs.m_devPath; }
+  bool operator<(const DeviceToken& rhs) const { return m_devPath < rhs.m_devPath; }
 
   DeviceType getDeviceType() const { return m_devType; }
   unsigned getVendorId() const { return m_vendorId; }
@@ -56,9 +55,6 @@ public:
       m_connectedDev = DeviceSignature::DeviceNew(*this);
     return m_connectedDev;
   }
-
-  bool operator==(const DeviceToken& rhs) const { return m_devPath == rhs.m_devPath; }
-  bool operator<(const DeviceToken& rhs) const { return m_devPath < rhs.m_devPath; }
 };
 
 } // namespace boo
