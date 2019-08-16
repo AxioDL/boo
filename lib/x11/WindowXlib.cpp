@@ -227,7 +227,7 @@ struct XlibAtoms {
     m_imagePng = XInternAtom(disp, "image/png", false);
   }
 };
-static XlibAtoms* S_ATOMS = NULL;
+static XlibAtoms* S_ATOMS = nullptr;
 
 static Atom GetClipboardTypeAtom(EClipboardType t) {
   switch (t) {

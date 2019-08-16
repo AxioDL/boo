@@ -93,7 +93,7 @@ static const NSOpenGLPixelFormatAttribute PF_RGBAF32_Z24_ATTRS[] =
 
 static const NSOpenGLPixelFormatAttribute* PF_TABLE[] =
 {
-    NULL,
+    nullptr,
     PF_RGBA8_ATTRS,
     PF_RGBA16_ATTRS,
     PF_RGBA8_Z24_ATTRS,
@@ -330,15 +330,15 @@ IGraphicsContext* _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI api,
                                              GLContext* glCtx)
 {
     if (api != IGraphicsContext::EGraphicsAPI::OpenGL3_3 && api != IGraphicsContext::EGraphicsAPI::OpenGL4_2)
-        return NULL;
+        return nullptr;
 
     /* Create temporary context to query GL version */
     NSOpenGLPixelFormat* nspf = [[NSOpenGLPixelFormat alloc] initWithAttributes:PF_RGBA8_ATTRS];
     if (!nspf)
-        return NULL;
+        return nullptr;
     NSOpenGLContext* nsctx = [[NSOpenGLContext alloc] initWithFormat:nspf shareContext:nil];
     if (!nsctx)
-        return NULL;
+        return nullptr;
     [nsctx makeCurrentContext];
     const char* glVersion = (char*)glGetString(GL_VERSION);
     unsigned major = 0;
@@ -352,13 +352,13 @@ IGraphicsContext* _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI api,
         Log.report(logvisor::Fatal, fmt("glewInit failed"));
     [NSOpenGLContext clearCurrentContext];
     if (!glVersion)
-        return NULL;
+        return nullptr;
 
     if (major > 4 || (major == 4 && minor >= 2))
         api = IGraphicsContext::EGraphicsAPI::OpenGL4_2;
     else if (major == 3 && minor >= 3)
         if (api == IGraphicsContext::EGraphicsAPI::OpenGL4_2)
-            return NULL;
+            return nullptr;
 
     return new GraphicsContextCocoaGL(api, parentWindow, lastGLCtx, glCtx);
 }

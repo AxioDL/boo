@@ -188,7 +188,7 @@ static void SetImageLayout(VkCommandBuffer cmd, VkImage image, VkImageAspectFlag
                            uint32_t layerCount, uint32_t baseMipLevel = 0) {
   VkImageMemoryBarrier imageMemoryBarrier = {};
   imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  imageMemoryBarrier.pNext = NULL;
+  imageMemoryBarrier.pNext = nullptr;
   imageMemoryBarrier.srcAccessMask = 0;
   imageMemoryBarrier.dstAccessMask = 0;
   imageMemoryBarrier.oldLayout = old_image_layout;
@@ -261,7 +261,7 @@ static void SetImageLayout(VkCommandBuffer cmd, VkImage image, VkImageAspectFlag
     break;
   }
 
-  vk::CmdPipelineBarrier(cmd, src_stages, dest_stages, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier);
+  vk::CmdPipelineBarrier(cmd, src_stages, dest_stages, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
 }
 
 static VkResult InitGlobalExtensionProperties(VulkanContext::LayerProperties& layerProps) {

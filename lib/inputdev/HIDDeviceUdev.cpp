@@ -102,7 +102,7 @@ class HIDDeviceUdev final : public IHIDDevice {
     }
 
     /* Request that kernel disconnects existing driver */
-    usbdevfs_ioctl disconnectReq = {0, USBDEVFS_DISCONNECT, NULL};
+    usbdevfs_ioctl disconnectReq = {0, USBDEVFS_DISCONNECT, nullptr};
     ioctl(fd, USBDEVFS_IOCTL, &disconnectReq);
 
     /* Return control to main thread */

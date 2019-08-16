@@ -18,12 +18,13 @@ class DeviceBase;
 struct DeviceSignature {
   typedef std::vector<const DeviceSignature*> TDeviceSignatureSet;
   typedef std::function<std::shared_ptr<DeviceBase>(DeviceToken*)> TFactoryLambda;
-  const char* m_name;
-  uint64_t m_typeHash;
-  unsigned m_vid, m_pid;
+  const char* m_name = nullptr;
+  uint64_t m_typeHash = 0;
+  unsigned m_vid = 0;
+  unsigned m_pid = 0;
   TFactoryLambda m_factory;
-  DeviceType m_type;
-  DeviceSignature() : m_name(NULL), m_typeHash(dev_typeid(DeviceSignature)) {} /* Sentinel constructor */
+  DeviceType m_type{};
+  DeviceSignature() : m_typeHash(dev_typeid(DeviceSignature)) {} /* Sentinel constructor */
   DeviceSignature(const char* name, uint64_t typeHash, unsigned vid, unsigned pid, TFactoryLambda&& factory,
                   DeviceType type = DeviceType::None)
   : m_name(name), m_typeHash(typeHash), m_vid(vid), m_pid(pid), m_factory(factory), m_type(type) {}

@@ -459,7 +459,7 @@ public:
       FD_ZERO(&fds);
       FD_SET(m_x11Fd, &fds);
       FD_SET(m_dbusFd, &fds);
-      if (pselect(m_maxFd + 1, &fds, NULL, NULL, NULL, &origmask) < 0) {
+      if (pselect(m_maxFd + 1, &fds, nullptr, nullptr, nullptr, &origmask) < 0) {
         /* SIGINT/SIGUSR2 handled here */
         if (errno == EINTR)
           break;
