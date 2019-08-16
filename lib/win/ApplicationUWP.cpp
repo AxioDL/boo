@@ -222,7 +222,7 @@ public:
   void _setWindow(CoreWindow ^ window) { m_window = _WindowUWPNew(m_friendlyName, m_3dCtx); }
 };
 
-IApplication* APP = NULL;
+IApplication* APP = nullptr;
 ref class AppView sealed : public IFrameworkView {
   ApplicationUWP m_app;
 

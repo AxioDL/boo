@@ -38,9 +38,9 @@ namespace boo {
 static logvisor::Module Log("boo::WASAPI");
 
 #define SAFE_RELEASE(punk)                                                                                             \
-  if ((punk) != NULL) {                                                                                                \
+  if ((punk) != nullptr) {                                                                                             \
     (punk)->Release();                                                                                                 \
-    (punk) = NULL;                                                                                                     \
+    (punk) = nullptr;                                                                                                  \
   }
 
 struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
@@ -90,7 +90,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
         AddRef();
         *ppvInterface = (IMMNotificationClient*)this;
       } else {
-        *ppvInterface = NULL;
+        *ppvInterface = nullptr;
         return E_NOINTERFACE;
       }
       return S_OK;
@@ -303,7 +303,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
         AddRef();
         *ppvInterface = (IActivateAudioInterfaceCompletionHandler*)this;
       } else {
-        *ppvInterface = NULL;
+        *ppvInterface = nullptr;
         return E_NOINTERFACE;
       }
       return S_OK;
@@ -663,7 +663,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
       m_hdr.dwBufferLength = 512;
       m_hdr.dwFlags = MHDR_ISSTRM;
       midiOutPrepareHeader(m_midi, &m_hdr, sizeof(m_hdr));
-      midiStreamOpen(&m_strm, &id, 1, NULL, NULL, CALLBACK_NULL);
+      midiStreamOpen(&m_strm, &id, 1, 0, 0, CALLBACK_NULL);
     }
 
     ~MIDIOut() override {
@@ -712,7 +712,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
       m_hdr.dwBufferLength = 512;
       m_hdr.dwFlags = MHDR_ISSTRM;
       midiOutPrepareHeader(m_midiOut, &m_hdr, sizeof(m_hdr));
-      midiStreamOpen(&m_strm, &id, 1, NULL, NULL, CALLBACK_NULL);
+      midiStreamOpen(&m_strm, &id, 1, 0, 0, CALLBACK_NULL);
     }
 
     ~MIDIInOut() override {
@@ -835,7 +835,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     if (!ret)
       return {};
 
-    if (FAILED(midiOutOpen(&static_cast<MIDIOut&>(*ret).m_midi, id, NULL, NULL, CALLBACK_NULL)))
+    if (FAILED(midiOutOpen(&static_cast<MIDIOut&>(*ret).m_midi, id, 0, 0, CALLBACK_NULL)))
       return {};
 
     static_cast<MIDIOut&>(*ret).prepare();
@@ -861,7 +861,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
       return {};
     midiInStart(static_cast<MIDIInOut&>(*ret).m_midiIn);
 
-    if (FAILED(midiOutOpen(&static_cast<MIDIInOut&>(*ret).m_midiOut, outId, NULL, NULL, CALLBACK_NULL)))
+    if (FAILED(midiOutOpen(&static_cast<MIDIInOut&>(*ret).m_midiOut, outId, 0, 0, CALLBACK_NULL)))
       return {};
 
     static_cast<MIDIInOut&>(*ret).prepare();

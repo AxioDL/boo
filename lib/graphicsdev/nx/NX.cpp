@@ -1801,7 +1801,7 @@ bool NXContext::initialize() {
 
   gfxInitDefault();
   gfxSetMode(GfxMode_TiledDouble);
-  consoleInit(NULL);
+  consoleInit(nullptr);
   printf("Activated console\n\n");
   m_screen = nouveau_switch_screen_create();
   if (!m_screen) {

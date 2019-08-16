@@ -51,17 +51,17 @@ class HIDListenerWinUSB final : public IHIDListener {
     CHAR szVid[MAX_DEVICE_ID_LEN], szPid[MAX_DEVICE_ID_LEN], szMi[MAX_DEVICE_ID_LEN];
 
     /* List all connected HID devices */
-    hDevInfo = SetupDiGetClassDevs(NULL, 0, 0, DIGCF_PRESENT | DIGCF_ALLCLASSES | DIGCF_DEVICEINTERFACE);
+    hDevInfo = SetupDiGetClassDevs(nullptr, 0, 0, DIGCF_PRESENT | DIGCF_ALLCLASSES | DIGCF_DEVICEINTERFACE);
     if (hDevInfo == INVALID_HANDLE_VALUE)
       return;
 
     for (i = 0;; ++i) {
-      if (!SetupDiEnumDeviceInterfaces(hDevInfo, NULL, TypeGUID, i, &DeviceInterfaceData))
+      if (!SetupDiEnumDeviceInterfaces(hDevInfo, nullptr, TypeGUID, i, &DeviceInterfaceData))
         break;
 
       DeviceInterfaceDetailData.wtf.cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
       if (!SetupDiGetDeviceInterfaceDetailA(hDevInfo, &DeviceInterfaceData, &DeviceInterfaceDetailData.wtf,
-                                            sizeof(DeviceInterfaceDetailData), NULL, &DeviceInfoData))
+                                            sizeof(DeviceInterfaceDetailData), nullptr, &DeviceInfoData))
         continue;
 
       r = CM_Get_Device_IDA(DeviceInfoData.DevInst, szDeviceInstanceID, MAX_PATH, 0);
@@ -73,7 +73,7 @@ class HIDListenerWinUSB final : public IHIDListener {
       szVid[0] = '\0';
       szPid[0] = '\0';
       szMi[0] = '\0';
-      while (pszToken != NULL) {
+      while (pszToken != nullptr) {
         for (j = 0; j < 3; ++j) {
           if (strncmp(pszToken, arPrefix[j], 4) == 0) {
             switch (j) {
@@ -91,14 +91,14 @@ class HIDListenerWinUSB final : public IHIDListener {
             }
           }
         }
-        pszToken = strtok_s(NULL, "\\#&", &pszNextToken);
+        pszToken = strtok_s(nullptr, "\\#&", &pszNextToken);
       }
 
       if (!szVid[0] || !szPid[0])
         continue;
 
-      unsigned vid = strtol(szVid + 4, NULL, 16);
-      unsigned pid = strtol(szPid + 4, NULL, 16);
+      unsigned vid = strtol(szVid + 4, nullptr, 16);
+      unsigned pid = strtol(szPid + 4, nullptr, 16);
 
       CHAR productW[1024] = {0};
       // CHAR product[1024] = {0};
@@ -121,8 +121,8 @@ class HIDListenerWinUSB final : public IHIDListener {
 
       if (type == DeviceType::HID) {
         HANDLE devHnd = CreateFileA(DeviceInterfaceDetailData.wtf.DevicePath, GENERIC_WRITE | GENERIC_READ,
-                                    FILE_SHARE_WRITE | FILE_SHARE_READ, NULL, OPEN_EXISTING,
-                                    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, NULL);
+                                    FILE_SHARE_WRITE | FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, nullptr);
         if (INVALID_HANDLE_VALUE == devHnd)
           continue;
         PHIDP_PREPARSED_DATA preparsedData;

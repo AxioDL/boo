@@ -26,7 +26,7 @@ extern PFN_GetScaleFactorForMonitor MyGetScaleFactorForMonitor;
 
 struct OGLContext {
   ComPtr<IDXGIFactory1> m_dxFactory;
-  HGLRC m_lastContext = 0;
+  HGLRC m_lastContext = nullptr;
   struct Window {
     HWND m_hwnd;
     HDC m_deviceContext;

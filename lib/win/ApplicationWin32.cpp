@@ -340,7 +340,7 @@ public:
       MONITORINFO monitor_info;
       monitor_info.cbSize = sizeof(monitor_info);
       GetMonitorInfo(MonitorFromWindow(win.m_hwnd, MONITOR_DEFAULTTONEAREST), &monitor_info);
-      SetWindowPos(win.m_hwnd, NULL, monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
+      SetWindowPos(win.m_hwnd, nullptr, monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
                    monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
                    monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
                    SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
@@ -350,7 +350,7 @@ public:
       SetWindowLong(win.m_hwnd, GWL_STYLE, win.m_fsStyle);
       SetWindowLong(win.m_hwnd, GWL_EXSTYLE, win.m_fsExStyle);
 
-      SetWindowPos(win.m_hwnd, NULL, win.m_fsRect.left, win.m_fsRect.top, win.m_fsRect.right - win.m_fsRect.left,
+      SetWindowPos(win.m_hwnd, nullptr, win.m_fsRect.left, win.m_fsRect.top, win.m_fsRect.right - win.m_fsRect.left,
                    win.m_fsRect.bottom - win.m_fsRect.top, SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
       win.m_fs = false;
@@ -372,8 +372,8 @@ public:
     });
 
     /* Pump messages */
-    MSG msg = {0};
-    while (GetMessage(&msg, NULL, 0, 0)) {
+    MSG msg = {};
+    while (GetMessage(&msg, nullptr, 0, 0)) {
       if (!msg.hwnd) {
         /* PostThreadMessage events */
         switch (msg.message) {
@@ -457,7 +457,7 @@ public:
   }
 };
 
-IApplication* APP = NULL;
+IApplication* APP = nullptr;
 int ApplicationRun(IApplication::EPlatformType platform, IApplicationCallback& cb, SystemStringView uniqueName,
                    SystemStringView friendlyName, SystemStringView pname, const std::vector<SystemString>& args,
                    std::string_view gfxApi, uint32_t samples, uint32_t anisotropy, bool deepColor,
@@ -484,7 +484,7 @@ int ApplicationRun(IApplication::EPlatformType platform, IApplicationCallback& c
   WIN32_CURSORS.m_wait = LoadCursor(nullptr, IDC_WAIT);
 
   /* One class for *all* boo windows */
-  WNDCLASS wndClass = {0, WindowProc, 0, 0, GetModuleHandle(nullptr), 0, 0, 0, 0, L"BooWindow"};
+  WNDCLASS wndClass = {0, WindowProc, 0, 0, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"BooWindow"};
   wndClass.hIcon = LoadIconW(wndClass.hInstance, MAKEINTRESOURCEW(101));
   wndClass.hCursor = WIN32_CURSORS.m_arrow;
   RegisterClassW(&wndClass);

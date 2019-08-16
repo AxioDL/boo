@@ -198,7 +198,7 @@ public:
         Log.report(logvisor::Fatal, fmt("glewInit failed"));
       wglCreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC)wglGetProcAddress("wglCreateContextAttribsARB");
       wglChoosePixelFormatARB = (PFNWGLCHOOSEPIXELFORMATARBPROC)wglGetProcAddress("wglChoosePixelFormatARB");
-      wglMakeCurrent(w.m_deviceContext, 0);
+      wglMakeCurrent(w.m_deviceContext, nullptr);
       wglDeleteContext(tmpCtx);
 
       if (b3dCtx.m_ctxOgl.m_glCtx.m_deepColor) {
@@ -303,7 +303,7 @@ public:
   IGraphicsDataFactory* getDataFactory() override { return m_dataFactory.get(); }
 
   /* Creates a new context on current thread!! Call from client loading thread */
-  HGLRC m_mainCtx = 0;
+  HGLRC m_mainCtx = nullptr;
   IGraphicsDataFactory* getMainContextDataFactory() override {
     OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
     if (!m_mainCtx) {
@@ -317,7 +317,7 @@ public:
   }
 
   /* Creates a new context on current thread!! Call from client loading thread */
-  HGLRC m_loadCtx = 0;
+  HGLRC m_loadCtx = nullptr;
   IGraphicsDataFactory* getLoadContextDataFactory() override {
     OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
     if (!m_loadCtx) {
@@ -852,7 +852,7 @@ public:
     AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
 
     m_hwnd = CreateWindowW(L"BooWindow", title.data(), WS_OVERLAPPEDWINDOW, r.left, r.top, r.right - r.left,
-                           r.bottom - r.top, NULL, NULL, NULL, NULL);
+                           r.bottom - r.top, nullptr, nullptr, nullptr, nullptr);
     HINSTANCE wndInstance = HINSTANCE(GetWindowLongPtr(m_hwnd, GWLP_HINSTANCE));
     m_imc = ImmGetContext(m_hwnd);
 

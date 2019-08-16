@@ -27,8 +27,8 @@ class HIDDeviceWinUSB final : public IHIDDevice {
   DeviceToken& m_token;
   std::shared_ptr<DeviceBase> m_devImp;
 
-  HANDLE m_devHandle = 0;
-  HANDLE m_hidHandle = 0;
+  HANDLE m_devHandle = nullptr;
+  HANDLE m_hidHandle = nullptr;
   WINUSB_INTERFACE_HANDLE m_usbHandle = nullptr;
   unsigned m_usbIntfInPipe = 0;
   unsigned m_usbIntfOutPipe = 0;
@@ -42,9 +42,10 @@ class HIDDeviceWinUSB final : public IHIDDevice {
   bool _sendUSBInterruptTransfer(const uint8_t* data, size_t length) override {
     if (m_usbHandle) {
       ULONG lengthTransferred = 0;
-      if (!WinUsb_WritePipe(m_usbHandle, m_usbIntfOutPipe, (PUCHAR)data, (ULONG)length, &lengthTransferred, NULL) ||
-          lengthTransferred != length)
+      if (!WinUsb_WritePipe(m_usbHandle, m_usbIntfOutPipe, (PUCHAR)data, (ULONG)length, &lengthTransferred, nullptr) ||
+          lengthTransferred != length) {
         return false;
+      }
       return true;
     }
     return false;
@@ -53,7 +54,7 @@ class HIDDeviceWinUSB final : public IHIDDevice {
   size_t _receiveUSBInterruptTransfer(uint8_t* data, size_t length) override {
     if (m_usbHandle) {
       ULONG lengthTransferred = 0;
-      if (!WinUsb_ReadPipe(m_usbHandle, m_usbIntfInPipe, (PUCHAR)data, (ULONG)length, &lengthTransferred, NULL))
+      if (!WinUsb_ReadPipe(m_usbHandle, m_usbIntfInPipe, (PUCHAR)data, (ULONG)length, &lengthTransferred, nullptr))
         return 0;
       return lengthTransferred;
     }
@@ -66,8 +67,8 @@ class HIDDeviceWinUSB final : public IHIDDevice {
 
     /* POSIX.. who needs it?? -MS */
     device->m_devHandle =
-        CreateFileA(device->m_devPath.data(), GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, NULL,
-                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, NULL);
+        CreateFileA(device->m_devPath.data(), GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, nullptr,
+                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, nullptr);
     if (INVALID_HANDLE_VALUE == device->m_devHandle) {
       device->m_devImp->deviceError(fmt("Unable to open {}@{}: {}\n"),
         device->m_token.getProductName(), device->m_devPath, GetLastError());
@@ -150,8 +151,8 @@ class HIDDeviceWinUSB final : public IHIDDevice {
     /* POSIX.. who needs it?? -MS */
     device->m_overlapped.hEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     device->m_hidHandle =
-        CreateFileA(device->m_devPath.data(), GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, NULL,
-                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, NULL);
+        CreateFileA(device->m_devPath.data(), GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, nullptr,
+                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, nullptr);
     if (INVALID_HANDLE_VALUE == device->m_hidHandle) {
       device->m_devImp->deviceError(fmt("Unable to open {}@{}: {}\n"),
         device->m_token.getProductName(), device->m_devPath, GetLastError());
