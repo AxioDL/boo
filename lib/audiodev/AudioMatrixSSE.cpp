@@ -6,13 +6,13 @@
 
 namespace boo {
 
-typedef union {
+union TVectorUnion {
   float v[4];
 #if __SSE__
   __m128 q;
   __m64 d[2];
 #endif
-} TVectorUnion;
+};
 
 static constexpr TVectorUnion Min32Vec = {{INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN}};
 static constexpr TVectorUnion Max32Vec = {{INT32_MAX, INT32_MAX, INT32_MAX, INT32_MAX}};

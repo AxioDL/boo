@@ -20,7 +20,7 @@ extern std::condition_variable g_nwcv;
 
 #if _WIN32_WINNT_WINBLUE && !WINDOWS_STORE
 #include <ShellScalingApi.h>
-typedef HRESULT(WINAPI* PFN_GetScaleFactorForMonitor)(_In_ HMONITOR, _Out_ DEVICE_SCALE_FACTOR*);
+using PFN_GetScaleFactorForMonitor = HRESULT(WINAPI*)(_In_ HMONITOR, _Out_ DEVICE_SCALE_FACTOR*);
 extern PFN_GetScaleFactorForMonitor MyGetScaleFactorForMonitor;
 #endif
 

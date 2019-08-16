@@ -12,12 +12,12 @@
 
 #ifdef TE_VIRTUAL_MIDI
 #include <teVirtualMIDI.h>
-typedef LPVM_MIDI_PORT(CALLBACK* pfnvirtualMIDICreatePortEx2)(LPCWSTR portName, LPVM_MIDI_DATA_CB callback,
+using pfnvirtualMIDICreatePortEx2 = LPVM_MIDI_PORT(CALLBACK*)(LPCWSTR portName, LPVM_MIDI_DATA_CB callback,
                                                               DWORD_PTR dwCallbackInstance, DWORD maxSysexLength,
                                                               DWORD flags);
-typedef void(CALLBACK* pfnvirtualMIDIClosePort)(LPVM_MIDI_PORT midiPort);
-typedef BOOL(CALLBACK* pfnvirtualMIDISendData)(LPVM_MIDI_PORT midiPort, LPBYTE midiDataBytes, DWORD length);
-typedef LPCWSTR(CALLBACK* pfnvirtualMIDIGetDriverVersion)(PWORD major, PWORD minor, PWORD release, PWORD build);
+using pfnvirtualMIDIClosePort = void(CALLBACK*)(LPVM_MIDI_PORT midiPort);
+using pfnvirtualMIDISendData = BOOL(CALLBACK*)(LPVM_MIDI_PORT midiPort, LPBYTE midiDataBytes, DWORD length);
+using pfnvirtualMIDIGetDriverVersion = LPCWSTR(CALLBACK*)(PWORD major, PWORD minor, PWORD release, PWORD build);
 static pfnvirtualMIDICreatePortEx2 virtualMIDICreatePortEx2PROC = nullptr;
 static pfnvirtualMIDIClosePort virtualMIDIClosePortPROC = nullptr;
 static pfnvirtualMIDISendData virtualMIDISendDataPROC = nullptr;

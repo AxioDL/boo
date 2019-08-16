@@ -59,7 +59,7 @@
 #undef False
 #undef True
 
-typedef GLXContext (*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
+using glXCreateContextAttribsARBProc = GLXContext (*)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
 static glXCreateContextAttribsARBProc glXCreateContextAttribsARB = 0;
 static bool s_glxError;
 static int ctxErrorHandler(Display* dpy, XErrorEvent* ev) {

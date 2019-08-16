@@ -9,7 +9,7 @@
 #include <vector>
 #include <unordered_set>
 
-typedef HRESULT(WINAPI* pD3DCreateBlob)(SIZE_T Size, ID3DBlob** ppBlob);
+using pD3DCreateBlob = HRESULT(WINAPI*)(SIZE_T Size, ID3DBlob** ppBlob);
 extern pD3DCreateBlob D3DCreateBlobPROC;
 
 namespace boo {
