@@ -8,13 +8,12 @@ class HIDListenerBSD final : public IHIDListener {
 
 public:
   HIDListenerBSD(DeviceFinder& finder) : m_finder(finder) {}
+  ~HIDListenerBSD() override = default;
 
-  ~HIDListenerBSD() {}
+  bool startScanning() override { return false; }
+  bool stopScanning() override { return false; }
 
-  bool startScanning() { return false; }
-  bool stopScanning() { return false; }
-
-  bool scanNow() { return false; }
+  bool scanNow() override { return false; }
 };
 
 IHIDListener* IHIDListenerNew(DeviceFinder& finder) { return new HIDListenerBSD(finder); }

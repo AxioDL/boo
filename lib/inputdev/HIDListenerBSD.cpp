@@ -16,8 +16,7 @@ class HIDDeviceBSD final : public IHIDDevice {
 
 public:
   HIDDeviceBSD(DeviceToken& token, DeviceBase& devImp) : m_token(token), m_devImp(devImp) {}
-
-  ~HIDDeviceBSD() {}
+  ~HIDDeviceBSD() override = default;
 };
 
 std::shared_ptr<IHIDDevice> IHIDDeviceNew(DeviceToken& token, const std::shared_ptr<DeviceBase>& devImp) {
