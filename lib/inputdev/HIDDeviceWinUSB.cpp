@@ -2,12 +2,13 @@
 #include "IHIDDevice.hpp"
 #include "boo/inputdev/DeviceToken.hpp"
 #include "boo/inputdev/DeviceBase.hpp"
-#include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <cstring>
-#include <cstdio>
+
 #include <algorithm>
+#include <condition_variable>
+#include <cstdio>
+#include <cstring>
+#include <mutex>
+#include <thread>
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN 1

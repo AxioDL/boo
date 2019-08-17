@@ -1,8 +1,6 @@
 #pragma once
 
 #include <atomic>
-#include <mutex>
-#include "nxstl/mutex"
 
 namespace boo {
 
@@ -13,12 +11,10 @@ protected:
   virtual ~IObj() = default;
 
 public:
-  virtual std::unique_lock<std::recursive_mutex> destructorLock() = 0;
   void increment() { m_refCount.fetch_add(1, std::memory_order_relaxed); }
   void decrement() {
-    if (m_refCount.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+    if (m_refCount.fetch_sub(1, std::memory_order_release) == 1) {
       std::atomic_thread_fence(std::memory_order_acquire);
-      auto lk = destructorLock();
       delete this;
     }
   }

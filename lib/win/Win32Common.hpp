@@ -14,6 +14,9 @@
 #endif
 #include "boo/graphicsdev/GL.hpp"
 
+#include <condition_variable>
+#include <mutex>
+
 extern DWORD g_mainThreadId;
 extern std::mutex g_nwmt;
 extern std::condition_variable g_nwcv;

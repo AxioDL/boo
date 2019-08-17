@@ -25,6 +25,9 @@ PFN_GetScaleFactorForMonitor MyGetScaleFactorForMonitor = nullptr;
 #include "boo/graphicsdev/Vulkan.hpp"
 #endif
 
+#include <condition_variable>
+#include <mutex>
+
 DWORD g_mainThreadId = 0;
 std::mutex g_nwmt;
 std::condition_variable g_nwcv;
