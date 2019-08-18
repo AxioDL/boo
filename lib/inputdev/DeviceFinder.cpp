@@ -41,7 +41,7 @@ bool DeviceFinder::_insertToken(std::unique_ptr<DeviceToken>&& token) {
   }
 
   m_tokensLock.lock();
-  TInsertedDeviceToken insertedTok = m_tokens.insert(std::make_pair(token->getDevicePath(), std::move(token)));
+  const TInsertedDeviceToken insertedTok = m_tokens.emplace(token->getDevicePath(), std::move(token));
   m_tokensLock.unlock();
   deviceConnected(*insertedTok.first->second);
   return true;
