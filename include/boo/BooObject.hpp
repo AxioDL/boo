@@ -69,7 +69,7 @@ public:
   T* cast() const noexcept {
     return static_cast<T*>(m_obj);
   }
-  operator bool() const noexcept { return m_obj != nullptr; }
+  explicit operator bool() const noexcept { return m_obj != nullptr; }
   void reset() noexcept {
     if (m_obj)
       m_obj->decrement();
