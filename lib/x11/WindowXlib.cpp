@@ -18,6 +18,7 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include <thread>
 #include <unordered_set>
 
 #include <unistd.h>
