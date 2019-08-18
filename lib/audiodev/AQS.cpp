@@ -1,5 +1,4 @@
 #include "AudioVoiceEngine.hpp"
-#include "logvisor/logvisor.hpp"
 #include "boo/IApplication.hpp"
 #include "../CFPointer.hpp"
 
@@ -7,8 +6,7 @@
 #include <CoreMIDI/CoreMIDI.h>
 #include <CoreAudio/HostTime.h>
 
-#include <mutex>
-#include <condition_variable>
+#include <logvisor/logvisor.hpp>
 
 namespace boo {
 static logvisor::Module Log("boo::AQS");

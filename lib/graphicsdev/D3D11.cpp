@@ -1,18 +1,20 @@
 #include "../win/Win32Common.hpp"
-#include "logvisor/logvisor.hpp"
 #include "boo/graphicsdev/D3D.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include "Common.hpp"
-#include <vector>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <d3dcompiler.h>
-#include <comdef.h>
+
 #include <algorithm>
 #include <atomic>
+#include <condition_variable>
 #include <forward_list>
-#include "xxhash/xxhash.h"
+#include <mutex>
+#include <thread>
+#include <vector>
+
+#include <d3dcompiler.h>
+#include <comdef.h>
+
+#include <logvisor/logvisor.hpp>
 
 #undef min
 #undef max

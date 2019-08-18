@@ -1060,9 +1060,6 @@ struct VulkanDescriptorPool : ListNode<VulkanDescriptorPool, VulkanDataFactoryIm
 
   ~VulkanDescriptorPool() { vk::DestroyDescriptorPool(m_head->m_ctx->m_dev, m_descPool, nullptr); }
 
-  std::unique_lock<std::recursive_mutex> destructorLock() override {
-    return std::unique_lock<std::recursive_mutex>{m_head->m_dataMutex};
-  }
   static std::unique_lock<std::recursive_mutex> _getHeadLock(VulkanDataFactoryImpl* factory) {
     return std::unique_lock<std::recursive_mutex>{factory->m_dataMutex};
   }

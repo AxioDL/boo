@@ -2,21 +2,21 @@
 #include "boo/graphicsdev/glew.h"
 #include "boo/IApplication.hpp"
 #include "Common.hpp"
-#include <thread>
-#include <condition_variable>
+
 #include <array>
-#include <unordered_map>
-#include <unordered_set>
-#include "xxhash/xxhash.h"
-#include "glslang/Public/ShaderLang.h"
-#include "glslang/Include/Types.h"
-#include "StandAlone/ResourceLimits.h"
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+
+#include <glslang/Public/ShaderLang.h>
+#include <glslang/Include/Types.h>
+#include <StandAlone/ResourceLimits.h>
+
+#include <logvisor/logvisor.hpp>
 
 #if _WIN32
 #include "../win/WinCommon.hpp"
 #endif
-
-#include "logvisor/logvisor.hpp"
 
 #undef min
 #undef max

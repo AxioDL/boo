@@ -11,16 +11,16 @@
 #include <X11/Xlib-xcb.h>
 #endif
 
-#include <limits.h>
-#include <unistd.h>
-#include <cstdlib>
-#include <cstdio>
+#include <climits>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <memory>
+#include <string>
+#include <unordered_set>
 
-#include <thread>
-#include <mutex>
-#include <condition_variable>
+#include <unistd.h>
 
 #include <GL/glx.h>
 
@@ -32,7 +32,7 @@
 #include <X11/extensions/XInput2.h>
 #include <X11/Xatom.h>
 #include <X11/extensions/Xrandr.h>
-#include "logvisor/logvisor.hpp"
+#include <logvisor/logvisor.hpp>
 
 #include "XlibCommon.hpp"
 

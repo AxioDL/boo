@@ -1,12 +1,12 @@
 #pragma once
 
 #include <soxr.h>
-#include <list>
+#include <mutex>
 #include <unordered_map>
 #include "boo/audiodev/IAudioVoice.hpp"
 #include "AudioMatrix.hpp"
-#include "Common.hpp"
 #include "AudioVoiceEngine.hpp"
+#include "Common.hpp"
 
 struct AudioUnitVoiceEngine;
 struct VSTVoiceEngine;
@@ -64,7 +64,6 @@ protected:
 public:
   static AudioVoice*& _getHeadPtr(BaseAudioVoiceEngine* head);
   static std::unique_lock<std::recursive_mutex> _getHeadLock(BaseAudioVoiceEngine* head);
-  std::unique_lock<std::recursive_mutex> destructorLock() override;
 
   ~AudioVoice() override;
   void resetSampleRate(double sampleRate) override;

@@ -1,9 +1,13 @@
-#include "boo/IApplication.hpp"
-#include "logvisor/logvisor.hpp"
 #include "nxstl/thread"
 #include "nxstl/condition_variable"
+#include "nxstl/mutex"
+
+#include "boo/IApplication.hpp"
 #include "boo/graphicsdev/NX.hpp"
-#include <limits.h>
+
+#include <climits>
+
+#include <logvisor/logvisor.hpp>
 
 #include <switch.h>
 

@@ -3,14 +3,15 @@
 /* Private header for managing shader data
  * binding lifetimes through rendering cycle */
 
+#include <array>
 #include <atomic>
-#include <vector>
-#include <mutex>
 #include <cassert>
-#include <thread>
-#include <mutex>
 #include <condition_variable>
+#include <mutex>
 #include <queue>
+#include <thread>
+#include <vector>
+
 #include "boo/graphicsdev/IGraphicsDataFactory.hpp"
 #include "boo/graphicsdev/IGraphicsCommandQueue.hpp"
 #include "../Common.hpp"
@@ -62,9 +63,6 @@ struct BaseGraphicsData : ListNode<BaseGraphicsData, GraphicsDataFactoryHead*> {
   size_t countForward() {
     auto* head = getHead<T>();
     return head ? head->countForward() : 0;
-  }
-  std::unique_lock<std::recursive_mutex> destructorLock() override {
-    return std::unique_lock<std::recursive_mutex>{m_head->m_dataMutex};
   }
 
   explicit BaseGraphicsData(GraphicsDataFactoryHead& head __BooTraceArgs)
@@ -131,9 +129,6 @@ struct BaseGraphicsPool : ListNode<BaseGraphicsPool, GraphicsDataFactoryHead*> {
     auto* head = getHead<T>();
     return head ? head->countForward() : 0;
   }
-  std::unique_lock<std::recursive_mutex> destructorLock() override {
-    return std::unique_lock<std::recursive_mutex>{m_head->m_dataMutex};
-  }
 
   explicit BaseGraphicsPool(GraphicsDataFactoryHead& head __BooTraceArgs)
   : ListNode<BaseGraphicsPool, GraphicsDataFactoryHead*>(&head) __BooTraceInitializer {}
@@ -156,10 +151,6 @@ struct GraphicsDataNode : ListNode<GraphicsDataNode<NodeCls, DataCls>, ObjToken<
   }
   static std::unique_lock<std::recursive_mutex> _getHeadLock(ObjToken<DataCls>& head) {
     return std::unique_lock<std::recursive_mutex>{head->m_head->m_dataMutex};
-  }
-
-  std::unique_lock<std::recursive_mutex> destructorLock() override {
-    return std::unique_lock<std::recursive_mutex>{base::m_head->m_head->m_dataMutex};
   }
 
   explicit GraphicsDataNode(const ObjToken<DataCls>& data)
