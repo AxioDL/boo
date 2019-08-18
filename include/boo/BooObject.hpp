@@ -70,8 +70,8 @@ public:
     return static_cast<T*>(m_obj);
   }
   explicit operator bool() const noexcept { return m_obj != nullptr; }
-  constexpr bool operator==(const ObjToken<SubCls>& other) const noexcept { return m_obj == other.m_obj; }
-  constexpr bool operator!=(const ObjToken<SubCls>& other) const noexcept { return !(*this == other); }
+  constexpr bool operator==(const ObjToken& other) const noexcept { return m_obj == other.m_obj; }
+  constexpr bool operator!=(const ObjToken& other) const noexcept { return !(*this == other); }
   void reset() noexcept {
     if (m_obj)
       m_obj->decrement();
