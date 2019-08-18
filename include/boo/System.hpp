@@ -37,12 +37,12 @@ static inline ComPtr<T>* ReferenceComPtr(ComPtr<T>& ptr) {
     using T = std::underlying_type_t<type>;                                                                            \
     return type(static_cast<T>(a) & static_cast<T>(b));                                                                \
   }                                                                                                                    \
-  inline type& operator|=(type& a, const type& b) {                                                                    \
+  constexpr type& operator|=(type& a, type b) {                                                                        \
     using T = std::underlying_type_t<type>;                                                                            \
     a = type(static_cast<T>(a) | static_cast<T>(b));                                                                   \
     return a;                                                                                                          \
   }                                                                                                                    \
-  inline type& operator&=(type& a, const type& b) {                                                                    \
+  constexpr type& operator&=(type& a, type b) {                                                                        \
     using T = std::underlying_type_t<type>;                                                                            \
     a = type(static_cast<T>(a) & static_cast<T>(b));                                                                   \
     return a;                                                                                                          \
