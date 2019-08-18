@@ -118,7 +118,7 @@ ENABLE_BITWISE_ENUM(VertexSemantic)
 
 /** Used to create IVertexFormat */
 struct VertexElementDescriptor {
-  VertexSemantic semantic;
+  VertexSemantic semantic{};
   int semanticIdx = 0;
   VertexElementDescriptor() = default;
   VertexElementDescriptor(VertexSemantic s, int idx = 0) : semantic(s), semanticIdx(idx) {}
