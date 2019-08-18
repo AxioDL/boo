@@ -1,5 +1,8 @@
 #include "boo/inputdev/DeviceFinder.hpp"
 
+#include <cstdio>
+#include <cstdlib>
+
 #if _WIN32
 #include <Dbt.h>
 #include <hidclass.h>
@@ -9,6 +12,76 @@
 namespace boo {
 
 DeviceFinder* DeviceFinder::skDevFinder = nullptr;
+
+DeviceFinder::DeviceFinder(std::unordered_set<uint64_t> types) {
+  if (skDevFinder) {
+    fmt::print(stderr, fmt("only one instance of CDeviceFinder may be constructed"));
+    std::abort();
+  }
+  skDevFinder = this;
+  for (const uint64_t& typeHash : types) {
+    const DeviceSignature* sigIter = BOO_DEVICE_SIGS;
+    while (sigIter->m_name) {
+      if (sigIter->m_typeHash == typeHash)
+        m_types.push_back(sigIter);
+      ++sigIter;
+    }
+  }
+}
+
+DeviceFinder::~DeviceFinder() {
+  if (m_listener)
+    m_listener->stopScanning();
+  skDevFinder = nullptr;
+}
+
+bool DeviceFinder::_insertToken(std::unique_ptr<DeviceToken>&& token) {
+  if (DeviceSignature::DeviceMatchToken(*token, m_types)) {
+    m_tokensLock.lock();
+    TInsertedDeviceToken insertedTok = m_tokens.insert(std::make_pair(token->getDevicePath(), std::move(token)));
+    m_tokensLock.unlock();
+    deviceConnected(*insertedTok.first->second);
+    return true;
+  }
+  return false;
+}
+
+void DeviceFinder::_removeToken(const std::string& path) {
+  auto preCheck = m_tokens.find(path);
+  if (preCheck != m_tokens.end()) {
+    DeviceToken& tok = *preCheck->second;
+    std::shared_ptr<DeviceBase> dev = tok.m_connectedDev;
+    tok._deviceClose();
+    deviceDisconnected(tok, dev.get());
+    m_tokensLock.lock();
+    m_tokens.erase(preCheck);
+    m_tokensLock.unlock();
+  }
+}
+
+bool DeviceFinder::startScanning() {
+  if (!m_listener)
+    m_listener = IHIDListenerNew(*this);
+  if (m_listener)
+    return m_listener->startScanning();
+  return false;
+}
+
+bool DeviceFinder::stopScanning() {
+  if (!m_listener)
+    m_listener = IHIDListenerNew(*this);
+  if (m_listener)
+    return m_listener->stopScanning();
+  return false;
+}
+
+bool DeviceFinder::scanNow() {
+  if (!m_listener)
+    m_listener = IHIDListenerNew(*this);
+  if (m_listener)
+    return m_listener->scanNow();
+  return false;
+}
 
 #if _WIN32 && !WINDOWS_STORE
 /* Windows-specific WM_DEVICECHANGED handler */
