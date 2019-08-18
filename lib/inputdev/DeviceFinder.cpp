@@ -36,27 +36,30 @@ DeviceFinder::~DeviceFinder() {
 }
 
 bool DeviceFinder::_insertToken(std::unique_ptr<DeviceToken>&& token) {
-  if (DeviceSignature::DeviceMatchToken(*token, m_types)) {
-    m_tokensLock.lock();
-    TInsertedDeviceToken insertedTok = m_tokens.insert(std::make_pair(token->getDevicePath(), std::move(token)));
-    m_tokensLock.unlock();
-    deviceConnected(*insertedTok.first->second);
-    return true;
+  if (!DeviceSignature::DeviceMatchToken(*token, m_types)) {
+    return false;
   }
-  return false;
+
+  m_tokensLock.lock();
+  TInsertedDeviceToken insertedTok = m_tokens.insert(std::make_pair(token->getDevicePath(), std::move(token)));
+  m_tokensLock.unlock();
+  deviceConnected(*insertedTok.first->second);
+  return true;
 }
 
 void DeviceFinder::_removeToken(const std::string& path) {
-  auto preCheck = m_tokens.find(path);
-  if (preCheck != m_tokens.end()) {
-    DeviceToken& tok = *preCheck->second;
-    std::shared_ptr<DeviceBase> dev = tok.m_connectedDev;
-    tok._deviceClose();
-    deviceDisconnected(tok, dev.get());
-    m_tokensLock.lock();
-    m_tokens.erase(preCheck);
-    m_tokensLock.unlock();
+  const auto preCheck = m_tokens.find(path);
+  if (preCheck == m_tokens.end()) {
+    return;
   }
+
+  DeviceToken& tok = *preCheck->second;
+  std::shared_ptr<DeviceBase> dev = tok.m_connectedDev;
+  tok._deviceClose();
+  deviceDisconnected(tok, dev.get());
+  m_tokensLock.lock();
+  m_tokens.erase(preCheck);
+  m_tokensLock.unlock();
 }
 
 bool DeviceFinder::startScanning() {
