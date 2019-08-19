@@ -1,4 +1,4 @@
-#include "UWPCommon.hpp"
+#include "lib/win/UWPCommon.hpp"
 
 using namespace Windows::Foundation;
 using namespace Windows::UI::Core;
@@ -12,12 +12,15 @@ using namespace Platform;
 #define D3D11_CREATE_DEVICE_FLAGS 0
 #endif
 
-#include "boo/System.hpp"
+#include <cstdlib>
+
 #include "boo/IApplication.hpp"
-#include "boo/inputdev/DeviceFinder.hpp"
-#include "boo/graphicsdev/D3D.hpp"
-#include "logvisor/logvisor.hpp"
+#include "boo/System.hpp"
 #include "boo/UWPViewProvider.hpp"
+#include "boo/graphicsdev/D3D.hpp"
+#include "boo/inputdev/DeviceFinder.hpp"
+
+#include <logvisor/logvisor.hpp>
 
 #if _WIN32_WINNT_WIN10
 PFN_D3D12_SERIALIZE_ROOT_SIGNATURE D3D12SerializeRootSignaturePROC = nullptr;

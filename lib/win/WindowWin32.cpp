@@ -1,15 +1,16 @@
-#include "Win32Common.hpp"
-#include <Windowsx.h>
-#include "boo/IApplication.hpp"
-#include "boo/IWindow.hpp"
-#include "boo/IGraphicsContext.hpp"
-#include "logvisor/logvisor.hpp"
+#include "lib/win/Win32Common.hpp"
 
+#include <Windowsx.h>
+
+#include "boo/IApplication.hpp"
+#include "boo/IGraphicsContext.hpp"
+#include "boo/IWindow.hpp"
+
+#include "boo/audiodev/IAudioVoiceEngine.hpp"
 #include "boo/graphicsdev/D3D.hpp"
 #include "boo/graphicsdev/GL.hpp"
 #include "boo/graphicsdev/glew.h"
 #include "boo/graphicsdev/wglew.h"
-#include "boo/audiodev/IAudioVoiceEngine.hpp"
 
 #if BOO_HAS_VULKAN
 #include "boo/graphicsdev/Vulkan.hpp"
@@ -18,6 +19,8 @@
 #if _WIN32_WINNT_WIN10
 #include <dxgi1_5.h>
 #endif
+
+#include <logvisor/logvisor.hpp>
 
 static const int ContextAttribs[] = {WGL_CONTEXT_MAJOR_VERSION_ARB, 3, WGL_CONTEXT_MINOR_VERSION_ARB, 3,
                                      WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,

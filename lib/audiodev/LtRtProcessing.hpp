@@ -1,9 +1,11 @@
 #pragma once
 
+#include <cstdint>
+#include <memory>
+
 #include "boo/System.hpp"
 #include "boo/audiodev/IAudioVoice.hpp"
-#include "Common.hpp"
-#include <memory>
+#include "lib/audiodev/Common.hpp"
 
 #if INTEL_IPP
 #include "ipp.h"

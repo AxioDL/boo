@@ -1,8 +1,9 @@
-#include "AudioVoiceEngine.hpp"
-#include "logvisor/logvisor.hpp"
-#include "boo/boo.hpp"
-#include "LinuxMidi.hpp"
+#include "lib/audiodev/AudioVoiceEngine.hpp"
 
+#include "boo/boo.hpp"
+#include "lib/audiodev/LinuxMidi.hpp"
+
+#include <logvisor/logvisor.hpp>
 #include <pulse/pulseaudio.h>
 #include <unistd.h>
 

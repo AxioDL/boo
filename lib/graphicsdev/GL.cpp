@@ -1,7 +1,10 @@
 #include "boo/graphicsdev/GL.hpp"
 #include "boo/graphicsdev/glew.h"
+#include "boo/graphicsdev/GLSLMacros.hpp"
+
 #include "boo/IApplication.hpp"
-#include "Common.hpp"
+#include "boo/IGraphicsContext.hpp"
+#include "lib/graphicsdev/Common.hpp"
 
 #include <array>
 #include <condition_variable>
@@ -15,7 +18,7 @@
 #include <logvisor/logvisor.hpp>
 
 #if _WIN32
-#include "../win/WinCommon.hpp"
+#include "lib/win/WinCommon.hpp"
 #endif
 
 #undef min

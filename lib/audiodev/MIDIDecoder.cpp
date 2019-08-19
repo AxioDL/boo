@@ -1,7 +1,10 @@
 #include "boo/audiodev/MIDIDecoder.hpp"
-#include "MIDICommon.hpp"
-#include <memory>
+
 #include <algorithm>
+
+#include "boo/audiodev/IMIDIReader.hpp"
+#include "lib/audiodev/MIDICommon.hpp"
+
 
 namespace boo {
 

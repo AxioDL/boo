@@ -4,6 +4,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_set>
+
 #include "boo/inputdev/DeviceSignature.hpp"
 #include "boo/inputdev/DeviceToken.hpp"
 #include "boo/inputdev/IHIDListener.hpp"

@@ -2,12 +2,12 @@
 
 #if _WIN32
 
-#include "IGraphicsDataFactory.hpp"
-#include "IGraphicsCommandQueue.hpp"
-#include "boo/IGraphicsContext.hpp"
-#include "boo/System.hpp"
+#include <cstddef>
 #include <vector>
-#include <unordered_set>
+
+#include "boo/BooObject.hpp"
+#include "boo/System.hpp"
+#include "boo/graphicsdev/IGraphicsDataFactory.hpp"
 
 using pD3DCreateBlob = HRESULT(WINAPI*)(SIZE_T Size, ID3DBlob** ppBlob);
 extern pD3DCreateBlob D3DCreateBlobPROC;

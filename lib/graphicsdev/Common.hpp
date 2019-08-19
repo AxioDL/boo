@@ -14,7 +14,7 @@
 
 #include "boo/graphicsdev/IGraphicsDataFactory.hpp"
 #include "boo/graphicsdev/IGraphicsCommandQueue.hpp"
-#include "../Common.hpp"
+#include "lib/Common.hpp"
 
 namespace boo {
 

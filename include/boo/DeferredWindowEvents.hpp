@@ -1,8 +1,11 @@
 #pragma once
 
-#include <boo/boo.hpp>
-#include <mutex>
+#include <chrono>
 #include <condition_variable>
+#include <mutex>
+#include <vector>
+
+#include "boo/IWindow.hpp"
 #include "nxstl/condition_variable"
 
 namespace boo {

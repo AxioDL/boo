@@ -1,14 +1,16 @@
-#include "../win/Win32Common.hpp"
-#include "AudioVoiceEngine.hpp"
-#include "logvisor/logvisor.hpp"
+#include "lib/win/Win32Common.hpp"
+
+#include <iterator>
+
 #include "boo/IApplication.hpp"
+#include "lib/audiodev/AudioVoiceEngine.hpp"
 
 #include <Mmdeviceapi.h>
 #include <Audioclient.h>
 #include <mmsystem.h>
 #include <Functiondiscoverykeys_devpkey.h>
 
-#include <iterator>
+#include <logvisor/logvisor.hpp>
 
 #ifdef TE_VIRTUAL_MIDI
 #include <teVirtualMIDI.h>

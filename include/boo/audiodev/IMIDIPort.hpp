@@ -1,9 +1,10 @@
 #pragma once
 
-#include <string>
-#include <functional>
-#include <vector>
+#include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <string>
+#include <vector>
 
 namespace boo {
 struct IAudioVoiceEngine;

@@ -1,16 +1,17 @@
-#include "../mac/CocoaCommon.hpp"
+#include "lib/mac/CocoaCommon.hpp"
 
 #if BOO_HAS_METAL
 
-#include "logvisor/logvisor.hpp"
 #include "boo/IApplication.hpp"
-#include "boo/graphicsdev/Metal.hpp"
 #include "boo/IGraphicsContext.hpp"
-#include "Common.hpp"
-#include <vector>
+#include "boo/graphicsdev/Metal.hpp"
+#include "lib/graphicsdev/Common.hpp"
+
 #include <unordered_map>
 #include <unordered_set>
-#include "xxhash/xxhash.h"
+#include <vector>
+
+#include <logvisor/logvisor.hpp>
 
 #if !__has_feature(objc_arc)
 #error ARC Required

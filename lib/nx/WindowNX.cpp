@@ -1,8 +1,9 @@
 #include "boo/IWindow.hpp"
+
 #include "boo/IGraphicsContext.hpp"
-#include "logvisor/logvisor.hpp"
 #include "boo/graphicsdev/NX.hpp"
 
+#include <logvisor/logvisor.hpp>
 #include <switch.h>
 
 namespace boo {

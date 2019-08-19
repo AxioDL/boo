@@ -1,10 +1,11 @@
 #include "boo/inputdev/DualshockPad.hpp"
 #include "boo/inputdev/DeviceSignature.hpp"
+
 #define _USE_MATH_DEFINES
 #include <cmath>
-#include <iostream>
 #include <cstdio>
-#include <memory.h>
+#include <cstring>
+#include <iostream>
 
 #ifdef _MSC_VER
 inline uint16_t bswap16(uint16_t val) { return _byteswap_ushort(val); }

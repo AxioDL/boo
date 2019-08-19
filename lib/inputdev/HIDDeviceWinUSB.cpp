@@ -1,5 +1,6 @@
 #define _CRT_SECURE_NO_WARNINGS 1 /* STFU MSVC */
-#include "IHIDDevice.hpp"
+#include "lib/inputdev/IHIDDevice.hpp"
+
 #include "boo/inputdev/DeviceToken.hpp"
 #include "boo/inputdev/DeviceBase.hpp"
 

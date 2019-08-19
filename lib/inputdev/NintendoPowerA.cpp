@@ -1,6 +1,9 @@
 #include "boo/inputdev/NintendoPowerA.hpp"
+
+#include <cstring>
+
 #include "boo/inputdev/DeviceSignature.hpp"
-#include <memory.h>
+
 namespace boo {
 NintendoPowerA::NintendoPowerA(DeviceToken* token)
 : TDeviceBase<INintendoPowerACallback>(dev_typeid(NintendoPowerA), token) {}

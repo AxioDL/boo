@@ -1,12 +1,13 @@
 #pragma once
 
-#include <memory>
-#include <functional>
+#include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <initializer_list>
 #include <vector>
-#include "boo/System.hpp"
-#include "boo/ThreadLocalPtr.hpp"
+
 #include "boo/BooObject.hpp"
+#include "boo/System.hpp"
 
 #ifdef __SWITCH__
 #include <ctype.h>

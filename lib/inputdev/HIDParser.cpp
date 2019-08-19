@@ -1,6 +1,8 @@
 #include "boo/inputdev/HIDParser.hpp"
-#include <map>
+
 #include <algorithm>
+#include <map>
+#include <type_traits>
 
 #undef min
 #undef max

@@ -1,5 +1,5 @@
-#include "AudioMatrix.hpp"
-#include "AudioVoiceEngine.hpp"
+#include "lib/audiodev/AudioMatrix.hpp"
+#include "lib/audiodev/AudioVoiceEngine.hpp"
 #include <cstring>
 
 namespace boo {

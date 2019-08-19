@@ -1,5 +1,7 @@
 #include "boo/audiodev/MIDIEncoder.hpp"
-#include "MIDICommon.hpp"
+
+#include "boo/audiodev/IMIDIPort.hpp"
+#include "lib/audiodev/MIDICommon.hpp"
 
 namespace boo {
 

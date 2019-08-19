@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../CFPointer.hpp"
+#include "lib/CFPointer.hpp"
 #include <IOKit/IOTypes.h>
 #include <IOKit/IOKitLib.h>
 #include <IOKit/IOCFPlugIn.h>

@@ -1,12 +1,13 @@
 #include <AppKit/AppKit.h>
+
 #include <thread>
 
 #include "boo/IApplication.hpp"
 #include "boo/graphicsdev/Metal.hpp"
-#include "CocoaCommon.hpp"
-#include "../Common.hpp"
+#include "lib/Common.hpp"
+#include "lib/mac/CocoaCommon.hpp"
 
-#include "logvisor/logvisor.hpp"
+#include <logvisor/logvisor.hpp>
 
 #if !__has_feature(objc_arc)
 #error ARC Required

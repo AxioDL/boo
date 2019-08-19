@@ -1,9 +1,12 @@
 #pragma once
 #if BOO_HAS_NX
 
-#include "IGraphicsDataFactory.hpp"
-#include "IGraphicsCommandQueue.hpp"
-#include "nx_compiler.hpp"
+#include <unordered_map>
+
+#include "boo/BooObject.hpp"
+#include "boo/graphicsdev/IGraphicsCommandQueue.hpp"
+#include "boo/graphicsdev/IGraphicsDataFactory.hpp"
+#include "boo/graphicsdev/nx_compiler.hpp"
 
 #include <switch/nvidia/fence.h>
 

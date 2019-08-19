@@ -1,11 +1,12 @@
-#include "UWPCommon.hpp"
-#include "boo/IApplication.hpp"
-#include "boo/IWindow.hpp"
-#include "boo/IGraphicsContext.hpp"
-#include "logvisor/logvisor.hpp"
+#include "lib/win/UWPCommon.hpp"
 
-#include "boo/graphicsdev/D3D.hpp"
+#include "boo/IApplication.hpp"
+#include "boo/IGraphicsContext.hpp"
+#include "boo/IWindow.hpp"
 #include "boo/audiodev/IAudioVoiceEngine.hpp"
+#include "boo/graphicsdev/D3D.hpp"
+
+#include <logvisor/logvisor.hpp>
 
 using namespace Windows::UI;
 using namespace Windows::UI::Core;

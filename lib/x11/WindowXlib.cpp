@@ -1,10 +1,11 @@
 #include "boo/IWindow.hpp"
-#include "boo/IGraphicsContext.hpp"
+
 #include "boo/IApplication.hpp"
-#include "boo/graphicsdev/GL.hpp"
+#include "boo/IGraphicsContext.hpp"
 #include "boo/audiodev/IAudioVoiceEngine.hpp"
+#include "boo/graphicsdev/GL.hpp"
 #include "boo/graphicsdev/glew.h"
-#include "../Common.hpp"
+#include "lib/Common.hpp"
 
 #if BOO_HAS_VULKAN
 #include "boo/graphicsdev/Vulkan.hpp"
@@ -35,7 +36,7 @@
 #include <X11/extensions/Xrandr.h>
 #include <logvisor/logvisor.hpp>
 
-#include "XlibCommon.hpp"
+#include "lib/x11/XlibCommon.hpp"
 
 #define REF_DPMM 3.78138
 #define FS_ATOM "_NET_WM_STATE_FULLSCREEN"

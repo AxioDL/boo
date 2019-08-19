@@ -1,8 +1,10 @@
 #pragma once
 
+#include <memory>
 #include <string>
-#include "DeviceBase.hpp"
-#include "DeviceSignature.hpp"
+
+#include "boo/inputdev/DeviceBase.hpp"
+#include "boo/inputdev/DeviceSignature.hpp"
 
 namespace boo {
 

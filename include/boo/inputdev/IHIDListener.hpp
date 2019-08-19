@@ -1,8 +1,11 @@
 #pragma once
 
-#include <unordered_map>
+#include <memory>
 #include <mutex>
-#include "DeviceToken.hpp"
+#include <unordered_map>
+#include <utility>
+
+#include "boo/inputdev/DeviceToken.hpp"
 
 namespace boo {
 class DeviceFinder;

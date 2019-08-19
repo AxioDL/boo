@@ -1,4 +1,5 @@
-#include "Win32Common.hpp"
+#include "lib/win/Win32Common.hpp"
+
 #include <shellapi.h>
 #include <initguid.h>
 #include <Usbiodef.h>
@@ -15,18 +16,20 @@ PFN_GetScaleFactorForMonitor MyGetScaleFactorForMonitor = nullptr;
 #define D3D11_CREATE_DEVICE_FLAGS 0
 #endif
 
-#include "boo/System.hpp"
+#include <condition_variable>
+#include <cstdlib>
+#include <mutex>
+
 #include "boo/IApplication.hpp"
-#include "boo/inputdev/DeviceFinder.hpp"
+#include "boo/System.hpp"
 #include "boo/graphicsdev/D3D.hpp"
-#include "logvisor/logvisor.hpp"
+#include "boo/inputdev/DeviceFinder.hpp"
+
+#include <logvisor/logvisor.hpp>
 
 #if BOO_HAS_VULKAN
 #include "boo/graphicsdev/Vulkan.hpp"
 #endif
-
-#include <condition_variable>
-#include <mutex>
 
 DWORD g_mainThreadId = 0;
 std::mutex g_nwmt;

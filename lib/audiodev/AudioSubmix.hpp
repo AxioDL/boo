@@ -1,12 +1,15 @@
 #pragma once
 
-#include "boo/audiodev/IAudioSubmix.hpp"
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <list>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
-#include "Common.hpp"
+
+#include "boo/audiodev/IAudioSubmix.hpp"
+#include "lib/audiodev/Common.hpp"
 
 #if __SSE__
 #include <immintrin.h>
