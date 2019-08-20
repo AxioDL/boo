@@ -9,6 +9,7 @@
 #include "boo/BooObject.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include "boo/System.hpp"
+#include "boo/IWindow.hpp"
 #include "boo/graphicsdev/IGraphicsDataFactory.hpp"
 #include "boo/graphicsdev/VulkanDispatchTable.hpp"
 

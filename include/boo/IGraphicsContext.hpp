@@ -14,7 +14,7 @@ class IGraphicsContext {
 
 public:
   enum class EGraphicsAPI {
-    None = 0,
+    Invalid = 0,
     OpenGL3_3 = 1,
     OpenGL4_2 = 2,
     Vulkan = 3,
@@ -26,7 +26,7 @@ public:
   };
 
   enum class EPixelFormat {
-    None = 0,
+    Invalid = 0,
     RGBA8 = 1, /* Default */
     RGBA16 = 2,
     RGBA8_Z24 = 3,
