@@ -2,9 +2,11 @@
 #ifdef __APPLE__
 #if BOO_HAS_METAL
 
-#include "IGraphicsDataFactory.hpp"
-#include "IGraphicsCommandQueue.hpp"
+#include "boo/BooObject.hpp"
 #include "boo/IGraphicsContext.hpp"
+#include "boo/System.hpp"
+#include "boo/graphicsdev/IGraphicsCommandQueue.hpp"
+#include "boo/graphicsdev/IGraphicsDataFactory.hpp"
 
 namespace boo {
 struct BaseGraphicsData;

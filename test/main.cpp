@@ -1,14 +1,15 @@
-#include <cstdio>
-#include <cmath>
 #include <boo/boo.hpp>
-#include <boo/graphicsdev/GL.hpp>
-#include <boo/graphicsdev/Vulkan.hpp>
 #include <boo/graphicsdev/D3D.hpp>
+#include <boo/graphicsdev/GL.hpp>
+#include <boo/graphicsdev/GLSLMacros.hpp>
 #include <boo/graphicsdev/Metal.hpp>
-#include <thread>
-#include <mutex>
+#include <boo/graphicsdev/Vulkan.hpp>
+
 #include <condition_variable>
-#include "logvisor/logvisor.hpp"
+#include <cstdio>
+#include <thread>
+
+#include <logvisor/logvisor.hpp>
 
 namespace boo {
 

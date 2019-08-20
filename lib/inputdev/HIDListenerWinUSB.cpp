@@ -1,9 +1,12 @@
 #define _CRT_SECURE_NO_WARNINGS 1 /* STFU MSVC */
+
 #include "boo/inputdev/IHIDListener.hpp"
-#include "boo/inputdev/DeviceFinder.hpp"
-#include "boo/inputdev/XInputPad.hpp"
+
 #include <cstring>
 #include <thread>
+
+#include "boo/inputdev/DeviceFinder.hpp"
+#include "boo/inputdev/XInputPad.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN 1

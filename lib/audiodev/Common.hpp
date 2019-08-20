@@ -1,8 +1,8 @@
 #pragma once
 
 #include <soxr.h>
-#include "../Common.hpp"
 #include "boo/audiodev/IAudioVoice.hpp"
+#include "lib/Common.hpp"
 
 namespace boo {
 

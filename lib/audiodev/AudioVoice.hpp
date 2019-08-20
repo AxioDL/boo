@@ -1,12 +1,14 @@
 #pragma once
 
-#include <soxr.h>
 #include <mutex>
 #include <unordered_map>
+
 #include "boo/audiodev/IAudioVoice.hpp"
-#include "AudioMatrix.hpp"
-#include "AudioVoiceEngine.hpp"
-#include "Common.hpp"
+#include "lib/audiodev/AudioMatrix.hpp"
+#include "lib/audiodev/AudioVoiceEngine.hpp"
+#include "lib/audiodev/Common.hpp"
+
+#include <soxr.h>
 
 struct AudioUnitVoiceEngine;
 struct VSTVoiceEngine;

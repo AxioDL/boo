@@ -1,6 +1,7 @@
-#include "AudioVoiceEngine.hpp"
+#include "lib/audiodev/AudioVoiceEngine.hpp"
+
 #include "boo/IApplication.hpp"
-#include "../CFPointer.hpp"
+#include "lib/CFPointer.hpp"
 
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreMIDI/CoreMIDI.h>

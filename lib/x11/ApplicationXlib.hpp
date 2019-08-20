@@ -4,7 +4,7 @@
 
 #include "boo/IApplication.hpp"
 #include "boo/graphicsdev/GL.hpp"
-#include "../Common.hpp"
+#include "lib/Common.hpp"
 
 #include <X11/Xlib.h>
 #include <X11/XKBlib.h>
@@ -16,6 +16,7 @@
 #include <dbus/dbus.h>
 DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
 
+#include <clocale>
 #include <condition_variable>
 #include <csignal>
 #include <locale>

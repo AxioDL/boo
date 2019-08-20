@@ -1,10 +1,11 @@
 #pragma once
 
-#include <vector>
+#include <cstdint>
 #include <functional>
-#include <typeindex>
 #include <memory>
 #include <string>
+#include <typeindex>
+#include <vector>
 
 namespace boo {
 

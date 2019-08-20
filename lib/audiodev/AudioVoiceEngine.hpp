@@ -1,12 +1,18 @@
 #pragma once
 
-#include "boo/audiodev/IAudioVoiceEngine.hpp"
-#include "LtRtProcessing.hpp"
-#include "Common.hpp"
-#include "AudioVoice.hpp"
-#include "AudioSubmix.hpp"
-#include <functional>
+#include <cstddef>
+#include <cstdint>
+#include <list>
+#include <memory>
 #include <mutex>
+#include <vector>
+
+#include "boo/BooObject.hpp"
+#include "boo/audiodev/IAudioVoiceEngine.hpp"
+#include "lib/audiodev/AudioSubmix.hpp"
+#include "lib/audiodev/AudioVoice.hpp"
+#include "lib/audiodev/Common.hpp"
+#include "lib/audiodev/LtRtProcessing.hpp"
 
 namespace boo {
 

@@ -1,6 +1,9 @@
-#include "AudioVoiceEngine.hpp"
-#include "logvisor/logvisor.hpp"
+#include "lib/audiodev/AudioVoiceEngine.hpp"
+
+#include <cstdio>
+
 #include "boo/audiodev/IAudioVoiceEngine.hpp"
+#include <logvisor/logvisor.hpp>
 
 namespace boo {
 

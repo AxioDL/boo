@@ -1,10 +1,11 @@
 #pragma once
 #if BOO_HAS_GL
 
-#include "IGraphicsDataFactory.hpp"
-#include "IGraphicsCommandQueue.hpp"
-#include "boo/IGraphicsContext.hpp"
-#include "GLSLMacros.hpp"
+#include <cstdint>
+
+#include "boo/BooObject.hpp"
+#include "boo/graphicsdev/IGraphicsCommandQueue.hpp"
+#include "boo/graphicsdev/IGraphicsDataFactory.hpp"
 
 namespace boo {
 struct BaseGraphicsData;

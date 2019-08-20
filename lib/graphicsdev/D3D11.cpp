@@ -1,12 +1,12 @@
 #include "../win/Win32Common.hpp"
 #include "boo/graphicsdev/D3D.hpp"
+#include "boo/graphicsdev/IGraphicsCommandQueue.hpp"
 #include "boo/IGraphicsContext.hpp"
-#include "Common.hpp"
+#include "lib/graphicsdev/Common.hpp"
 
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
-#include <forward_list>
 #include <mutex>
 #include <thread>
 #include <vector>

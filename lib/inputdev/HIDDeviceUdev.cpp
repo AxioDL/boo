@@ -1,22 +1,24 @@
-#include "IHIDDevice.hpp"
+#include "lib/inputdev/IHIDDevice.hpp"
+
+#include <condition_variable>
+#include <cstdio>
+#include <cstring>
+#include <mutex>
+#include <thread>
+
 #include "boo/inputdev/DeviceToken.hpp"
 #include "boo/inputdev/DeviceBase.hpp"
-#include <thread>
-#include <mutex>
-#include <condition_variable>
+#include "boo/inputdev/HIDParser.hpp"
 
-#include <cstdio>
+#include <fcntl.h>
 #include <libudev.h>
-#include <stropts.h>
 #include <linux/usb/ch9.h>
 #include <linux/usbdevice_fs.h>
 #include <linux/input.h>
 #include <linux/hidraw.h>
-#include <fcntl.h>
+#include <stropts.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
-#include <cstring>
-#include "boo/inputdev/HIDParser.hpp"
 
 namespace boo {
 

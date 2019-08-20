@@ -1,7 +1,6 @@
 #include "boo/inputdev/DeviceBase.hpp"
 #include "boo/inputdev/DeviceToken.hpp"
-#include "IHIDDevice.hpp"
-#include <cstdarg>
+#include "lib/inputdev/IHIDDevice.hpp"
 
 namespace boo {
 

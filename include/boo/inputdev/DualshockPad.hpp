@@ -1,8 +1,9 @@
 #pragma once
+
 #include <cstdint>
-#include <type_traits>
-#include "DeviceBase.hpp"
+
 #include "boo/System.hpp"
+#include "boo/inputdev/DeviceBase.hpp"
 
 namespace boo {
 

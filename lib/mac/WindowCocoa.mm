@@ -1,10 +1,10 @@
 #include "boo/graphicsdev/Metal.hpp"
-#include "CocoaCommon.hpp"
 
 #include "boo/IApplication.hpp"
 #include "boo/IGraphicsContext.hpp"
 #include "boo/IWindow.hpp"
 #include "boo/audiodev/IAudioVoiceEngine.hpp"
+#include "lib/mac/CocoaCommon.hpp"
 
 #include <condition_variable>
 #include <memory>

@@ -1,15 +1,18 @@
 #include "boo/graphicsdev/Vulkan.hpp"
-#include "boo/IGraphicsContext.hpp"
-#include <vector>
+
 #include <array>
 #include <cmath>
+#include <vector>
+
 #include <glslang/Public/ShaderLang.h>
 #include <StandAlone/ResourceLimits.h>
 #include <SPIRV/GlslangToSpv.h>
 #include <SPIRV/disassemble.h>
+
+#include "boo/IGraphicsContext.hpp"
 #include "boo/graphicsdev/GLSLMacros.hpp"
-#include "Common.hpp"
-#include "xxhash/xxhash.h"
+#include "boo/graphicsdev/IGraphicsCommandQueue.hpp"
+#include "lib/graphicsdev/Common.hpp"
 
 #define AMD_PAL_HACK 1
 
@@ -17,7 +20,7 @@
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
 #include "vk_mem_alloc.h"
 
-#include "logvisor/logvisor.hpp"
+#include <logvisor/logvisor.hpp>
 
 #define BOO_VK_MAX_DESCRIPTOR_SETS 65536
 

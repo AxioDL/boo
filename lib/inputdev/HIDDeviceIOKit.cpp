@@ -1,9 +1,12 @@
-#include "IHIDDevice.hpp"
+#include "lib/inputdev/IHIDDevice.hpp"
+
+#include <thread>
+
+#include "lib/inputdev/IOKitPointer.hpp"
+
 #include <IOKit/hid/IOHIDLib.h>
 #include <IOKit/hid/IOHIDDevicePlugin.h>
 #include <IOKit/usb/IOUSBLib.h>
-#include "IOKitPointer.hpp"
-#include <thread>
 
 namespace boo {
 

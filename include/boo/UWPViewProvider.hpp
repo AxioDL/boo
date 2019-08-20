@@ -1,6 +1,6 @@
 #pragma once
 
-#include "IApplication.hpp"
+#include "boo/IApplication.hpp"
 
 namespace boo {
 

@@ -1,5 +1,6 @@
 #include "boo/inputdev/DolphinSmashAdapter.hpp"
 #include "boo/inputdev/DeviceSignature.hpp"
+
 #include <cstdio>
 #include <cstring>
 

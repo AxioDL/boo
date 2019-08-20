@@ -1,7 +1,6 @@
 #pragma once
 
 #include "boo/audiodev/IMIDIReader.hpp"
-#include "boo/audiodev/IMIDIPort.hpp"
 
 namespace boo {
 

@@ -1,7 +1,7 @@
-#include "AudioSubmix.hpp"
-#include "AudioVoiceEngine.hpp"
-#include "AudioVoice.hpp"
-#include <cstring>
+#include "lib/audiodev/AudioSubmix.hpp"
+#include "lib/audiodev/AudioVoice.hpp"
+#include "lib/audiodev/AudioVoiceEngine.hpp"
+
 #include <algorithm>
 
 #undef min

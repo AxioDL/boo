@@ -1,4 +1,5 @@
 #define _CRT_SECURE_NO_WARNINGS 1 /* STFU MSVC */
+
 #include "boo/inputdev/IHIDListener.hpp"
 #include "boo/inputdev/DeviceFinder.hpp"
 

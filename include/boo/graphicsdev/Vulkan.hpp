@@ -1,15 +1,15 @@
 #pragma once
 #if BOO_HAS_VULKAN
 
-#include "IGraphicsDataFactory.hpp"
-#include "IGraphicsCommandQueue.hpp"
-#include "boo/IGraphicsContext.hpp"
-#include "GLSLMacros.hpp"
-#include <vector>
-#include <unordered_set>
-#include <unordered_map>
 #include <mutex>
 #include <queue>
+#include <unordered_map>
+#include <vector>
+
+#include "boo/BooObject.hpp"
+#include "boo/IGraphicsContext.hpp"
+#include "boo/System.hpp"
+#include "boo/graphicsdev/IGraphicsDataFactory.hpp"
 #include "boo/graphicsdev/VulkanDispatchTable.hpp"
 
 /* Forward-declare handle type for Vulkan Memory Allocator */

@@ -1,8 +1,9 @@
 #pragma once
 
-#include "boo/inputdev/DeviceToken.hpp"
-#include "boo/inputdev/DeviceBase.hpp"
 #include <memory>
+
+#include "boo/inputdev/DeviceBase.hpp"
+#include "boo/inputdev/DeviceToken.hpp"
 
 #if _WIN32
 #include <hidsdi.h>

@@ -1,9 +1,9 @@
 #pragma once
 
-#include "DeviceBase.hpp"
-#include "HIDParser.hpp"
-#include <map>
-#include <mutex>
+#include <functional>
+
+#include "boo/inputdev/DeviceBase.hpp"
+#include "boo/inputdev/HIDParser.hpp"
 
 namespace boo {
 

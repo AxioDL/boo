@@ -4,11 +4,14 @@
 
 #define APPLICATION_UNIX_CPP
 
-#include <dbus/dbus.h>
 #include <cstdint>
-#include <unistd.h>
-#include "logvisor/logvisor.hpp"
+#include <cstdlib>
+
 #include "boo/IApplication.hpp"
+
+#include <dbus/dbus.h>
+#include <logvisor/logvisor.hpp>
+#include <unistd.h>
 
 namespace boo {
 static logvisor::Module Log("boo::ApplicationUnix");

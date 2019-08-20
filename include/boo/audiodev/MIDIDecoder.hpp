@@ -1,11 +1,9 @@
 #pragma once
 
-#include "boo/audiodev/IMIDIReader.hpp"
-#include "boo/audiodev/IMIDIPort.hpp"
-#include <functional>
 #include <vector>
 
 namespace boo {
+class IMIDIReader;
 
 class MIDIDecoder {
   IMIDIReader& m_out;

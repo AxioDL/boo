@@ -1,10 +1,14 @@
 #pragma once
 
-#include "boo/System.hpp"
-#include <vector>
-#include <stack>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
+#include <stack>
+#include <utility>
+#include <vector>
+
+#include "boo/System.hpp"
 
 #if _WIN32
 #include <hidsdi.h>

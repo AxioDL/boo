@@ -1,6 +1,6 @@
 #pragma once
 
-#include "WinCommon.hpp"
+#include "lib/win/WinCommon.hpp"
 
 struct Boo3DAppContextUWP : Boo3DAppContext {
   bool isFullscreen(const boo::IWindow* window) {

@@ -1,5 +1,7 @@
-#include "AudioVoiceEngine.hpp"
+#include "lib/audiodev/AudioVoiceEngine.hpp"
+
 #include <cassert>
+#include <cstring>
 
 namespace boo {
 
