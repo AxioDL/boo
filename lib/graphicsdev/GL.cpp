@@ -24,38 +24,38 @@
 #undef min
 #undef max
 
-static const char* GammaVS = "#version 330\n" BOO_GLSL_BINDING_HEAD
-                             "layout(location=0) in vec4 posIn;\n"
-                             "layout(location=1) in vec4 uvIn;\n"
-                             "\n"
-                             "struct VertToFrag\n"
-                             "{\n"
-                             "    vec2 uv;\n"
-                             "};\n"
-                             "\n"
-                             "SBINDING(0) out VertToFrag vtf;\n"
-                             "void main()\n"
-                             "{\n"
-                             "    vtf.uv = uvIn.xy;\n"
-                             "    gl_Position = posIn;\n"
-                             "}\n";
+constexpr char GammaVS[] = "#version 330\n" BOO_GLSL_BINDING_HEAD
+                           "layout(location=0) in vec4 posIn;\n"
+                           "layout(location=1) in vec4 uvIn;\n"
+                           "\n"
+                           "struct VertToFrag\n"
+                           "{\n"
+                           "    vec2 uv;\n"
+                           "};\n"
+                           "\n"
+                           "SBINDING(0) out VertToFrag vtf;\n"
+                           "void main()\n"
+                           "{\n"
+                           "    vtf.uv = uvIn.xy;\n"
+                           "    gl_Position = posIn;\n"
+                           "}\n";
 
-static const char* GammaFS = "#version 330\n" BOO_GLSL_BINDING_HEAD
-                             "struct VertToFrag\n"
-                             "{\n"
-                             "    vec2 uv;\n"
-                             "};\n"
-                             "\n"
-                             "SBINDING(0) in VertToFrag vtf;\n"
-                             "layout(location=0) out vec4 colorOut;\n"
-                             "TBINDING0 uniform sampler2D screenTex;\n"
-                             "TBINDING1 uniform sampler2D gammaLUT;\n"
-                             "void main()\n"
-                             "{\n"
-                             "    ivec4 tex = ivec4(texture(screenTex, vtf.uv) * 65535.0);\n"
-                             "    for (int i=0 ; i<3 ; ++i)\n"
-                             "        colorOut[i] = texelFetch(gammaLUT, ivec2(tex[i] % 256, tex[i] / 256), 0).r;\n"
-                             "}\n";
+constexpr char GammaFS[] = "#version 330\n" BOO_GLSL_BINDING_HEAD
+                           "struct VertToFrag\n"
+                           "{\n"
+                           "    vec2 uv;\n"
+                           "};\n"
+                           "\n"
+                           "SBINDING(0) in VertToFrag vtf;\n"
+                           "layout(location=0) out vec4 colorOut;\n"
+                           "TBINDING0 uniform sampler2D screenTex;\n"
+                           "TBINDING1 uniform sampler2D gammaLUT;\n"
+                           "void main()\n"
+                           "{\n"
+                           "    ivec4 tex = ivec4(texture(screenTex, vtf.uv) * 65535.0);\n"
+                           "    for (int i=0 ; i<3 ; ++i)\n"
+                           "        colorOut[i] = texelFetch(gammaLUT, ivec2(tex[i] % 256, tex[i] / 256), 0).r;\n"
+                           "}\n";
 
 namespace boo {
 static logvisor::Module Log("boo::GL");
@@ -901,15 +901,18 @@ public:
         if (const GLShaderStage* stage = shader.cast<GLShaderStage>()) {
           for (const auto& name : stage->getBlockNames()) {
             GLint uniLoc = glGetUniformBlockIndex(m_prog, name.first.c_str());
-            // if (uniLoc < 0)
-            //    Log.report(logvisor::Warning, fmt("unable to find uniform block '%s'"), uniformBlockNames[i]);
+            // if (uniLoc < 0) {
+            //    Log.report(logvisor::Warning, fmt("unable to find uniform block '{}'"), uniformBlockNames[i]);
+            // }
             m_uniLocs[name.second] = uniLoc;
           }
           for (const auto& name : stage->getTexNames()) {
             GLint texLoc = glGetUniformLocation(m_prog, name.first.c_str());
-            if (texLoc < 0) { /* Log.report(logvisor::Warning, fmt("unable to find sampler variable '%s'"), texNames[i]); */
-            } else
+            if (texLoc < 0) {
+              // Log.report(logvisor::Warning, fmt("unable to find sampler variable '{}'"), texNames[i]);
+            } else {
               glUniform1i(texLoc, name.second);
+            }
           }
         }
       }
@@ -1957,8 +1960,9 @@ GLShaderDataBinding(const ObjToken<BaseGraphicsData>& d, const ObjToken<IShaderP
     m_ubufOffs.reserve(ubufCount);
     for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
-      if (ubufOffs[i] % 256)
-        Log.report(logvisor::Fatal, fmt("non-256-byte-aligned uniform-offset {} provided to newShaderDataBinding"), int(i));
+      if (ubufOffs[i] % 256) {
+        Log.report(logvisor::Fatal, fmt("non-256-byte-aligned uniform-offset {} provided to newShaderDataBinding"), i);
+      }
 #endif
       m_ubufOffs.emplace_back(ubufOffs[i], (ubufSizes[i] + 255) & ~255);
     }
@@ -1966,8 +1970,9 @@ GLShaderDataBinding(const ObjToken<BaseGraphicsData>& d, const ObjToken<IShaderP
   m_ubufs.reserve(ubufCount);
   for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
-    if (!ubufs[i])
-      Log.report(logvisor::Fatal, fmt("null uniform-buffer {} provided to newShaderDataBinding"), int(i));
+    if (!ubufs[i]) {
+      Log.report(logvisor::Fatal, fmt("null uniform-buffer {} provided to newShaderDataBinding"), i);
+    }
 #endif
     m_ubufs.push_back(ubufs[i]);
   }
