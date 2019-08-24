@@ -350,8 +350,11 @@ struct GraphicsContextWin32Vulkan : GraphicsContextWin32 {
   bool m_vsyncRunning;
 
   static void ThrowIfFailed(VkResult res) {
-    if (res != VK_SUCCESS)
-      Log.report(logvisor::Fatal, fmt("%d\n"), res);
+    if (res == VK_SUCCESS) {
+      return;
+    }
+
+    Log.report(logvisor::Fatal, fmt("{}\n"), res);
   }
 
 public:

@@ -259,12 +259,12 @@ LtRtProcessing::LtRtProcessing(int _5msFrames, const AudioVoiceEngineMixInfo& mi
 template <typename T>
 void LtRtProcessing::Process(const T* input, T* output, int frameCount) {
 #if 0
-    for (int i=0 ; i<frameCount ; ++i)
-    {
-        output[i * 2] = input[i * 5 + 3];
-        output[i * 2 + 1] = input[i * 5 + 4];
-    }
-    return;
+  for (int i=0 ; i<frameCount ; ++i)
+  {
+    output[i * 2] = input[i * 5 + 3];
+    output[i * 2 + 1] = input[i * 5 + 4];
+  }
+  return;
 #endif
 
   int outFramesRem = frameCount;
@@ -273,14 +273,14 @@ void LtRtProcessing::Process(const T* input, T* output, int frameCount) {
   int tail = std::min(m_windowFrames * 2, m_bufferTail + frameCount);
   int samples = (tail - m_bufferTail) * 5;
   memmove(&inBuf[m_bufferTail * 5], input, samples * sizeof(T));
-  // printf("input %d to %d\n", tail - m_bufferTail, m_bufferTail);
+  // fmt::print("input {} to {}\n", tail - m_bufferTail, m_bufferTail);
   input += samples;
   frameCount -= tail - m_bufferTail;
 
   int head = std::min(m_windowFrames * 2, m_bufferHead + outFramesRem);
   samples = (head - m_bufferHead) * 2;
   memmove(output, outBuf + m_bufferHead * 2, samples * sizeof(T));
-  // printf("output %d from %d\n", head - m_bufferHead, m_bufferHead);
+  // fmt::print("output {} from {}\n", head - m_bufferHead, m_bufferHead);
   output += samples;
   outFramesRem -= head - m_bufferHead;
 
@@ -300,7 +300,7 @@ void LtRtProcessing::Process(const T* input, T* output, int frameCount) {
       for (int i = 0; i < m_windowFrames; ++i, ++delayI) {
         out[i * 2] = ClampFull<T>(in[delayI * 5] + 0.7071068f * in[delayI * 5 + 2]);
         out[i * 2 + 1] = ClampFull<T>(in[delayI * 5 + 1] + 0.7071068f * in[delayI * 5 + 2]);
-        // printf("in %d out %d\n", bufIdx * m_5msFrames + delayI, bufIdx * m_5msFrames + i);
+        // fmt::print("in {} out {}\n", bufIdx * m_5msFrames + delayI, bufIdx * m_5msFrames + i);
       }
     } else {
       int delayI = m_windowFrames * 2 - m_halfFrames;
@@ -308,13 +308,13 @@ void LtRtProcessing::Process(const T* input, T* output, int frameCount) {
       for (i = 0; i < m_halfFrames; ++i, ++delayI) {
         out[i * 2] = ClampFull<T>(in[delayI * 5] + 0.7071068f * in[delayI * 5 + 2]);
         out[i * 2 + 1] = ClampFull<T>(in[delayI * 5 + 1] + 0.7071068f * in[delayI * 5 + 2]);
-        // printf("in %d out %d\n", bufIdx * m_5msFrames + delayI, bufIdx * m_5msFrames + i);
+        // fmt::print("in {} out {}\n", bufIdx * m_5msFrames + delayI, bufIdx * m_5msFrames + i);
       }
       delayI = 0;
       for (; i < m_windowFrames; ++i, ++delayI) {
         out[i * 2] = ClampFull<T>(in[delayI * 5] + 0.7071068f * in[delayI * 5 + 2]);
         out[i * 2 + 1] = ClampFull<T>(in[delayI * 5 + 1] + 0.7071068f * in[delayI * 5 + 2]);
-        // printf("in %d out %d\n", bufIdx * m_5msFrames + delayI, bufIdx * m_5msFrames + i);
+        // fmt::print("in {} out {}\n", bufIdx * m_5msFrames + delayI, bufIdx * m_5msFrames + i);
       }
     }
 #if INTEL_IPP
@@ -328,14 +328,14 @@ void LtRtProcessing::Process(const T* input, T* output, int frameCount) {
   if (frameCount) {
     samples = frameCount * 5;
     memmove(inBuf, input, samples * sizeof(T));
-    // printf("input %d to %d\n", frameCount, 0);
+    // fmt::print("input {} to {}\n", frameCount, 0);
     m_bufferTail = frameCount;
   }
 
   if (outFramesRem) {
     samples = outFramesRem * 2;
     memmove(output, outBuf, samples * sizeof(T));
-    // printf("output %d from %d\n", outFramesRem, 0);
+    // fmt::print("output {} from {}\n", outFramesRem, 0);
     m_bufferHead = outFramesRem;
   }
 }

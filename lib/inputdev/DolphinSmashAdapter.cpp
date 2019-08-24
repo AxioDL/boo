@@ -55,7 +55,7 @@ void DolphinSmashAdapter::transferCycle() {
   if (recvSz != 37 || payload[0] != 0x21)
     return;
 
-  // printf("RECEIVED DATA %zu %02X\n", recvSz, payload[0]);
+  // fmt::print("RECEIVED DATA {} {:02X}\n", recvSz, payload[0]);
 
   std::lock_guard<std::mutex> lk(m_callbackLock);
   if (!m_callback)

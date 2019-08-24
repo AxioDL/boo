@@ -73,7 +73,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     argSize = sizeof(devId);
     if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &propertyAddress, sizeof(devName), &devName, &argSize,
                                    &devId) != noErr) {
-      Log.report(logvisor::Error, fmt("unable to resolve audio device UID %s, using default"),
+      Log.report(logvisor::Error, fmt("unable to resolve audio device UID {}, using default"),
                  CFStringGetCStringPtr(devName, kCFStringEncodingUTF8));
       argSize = sizeof(devId);
       propertyAddress.mSelector = kAudioHardwarePropertyDefaultOutputDevice;
@@ -758,7 +758,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
           chMapOut.m_channels[4] = AudioChannel::FrontCenter;
           break;
         default:
-          Log.report(logvisor::Warning, fmt("unknown channel layout %u; using stereo"), layout.mChannelLayoutTag);
+          Log.report(logvisor::Warning, fmt("unknown channel layout {}; using stereo"), layout.mChannelLayoutTag);
           chMapOut.m_channelCount = 2;
           chMapOut.m_channels[0] = AudioChannel::FrontLeft;
           chMapOut.m_channels[1] = AudioChannel::FrontRight;

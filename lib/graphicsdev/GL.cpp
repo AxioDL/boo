@@ -901,15 +901,18 @@ public:
         if (const GLShaderStage* stage = shader.cast<GLShaderStage>()) {
           for (const auto& name : stage->getBlockNames()) {
             GLint uniLoc = glGetUniformBlockIndex(m_prog, name.first.c_str());
-            // if (uniLoc < 0)
-            //    Log.report(logvisor::Warning, fmt("unable to find uniform block '%s'"), uniformBlockNames[i]);
+            // if (uniLoc < 0) {
+            //    Log.report(logvisor::Warning, fmt("unable to find uniform block '{}'"), uniformBlockNames[i]);
+            // }
             m_uniLocs[name.second] = uniLoc;
           }
           for (const auto& name : stage->getTexNames()) {
             GLint texLoc = glGetUniformLocation(m_prog, name.first.c_str());
-            if (texLoc < 0) { /* Log.report(logvisor::Warning, fmt("unable to find sampler variable '%s'"), texNames[i]); */
-            } else
+            if (texLoc < 0) {
+              // Log.report(logvisor::Warning, fmt("unable to find sampler variable '{}'"), texNames[i]);
+            } else {
               glUniform1i(texLoc, name.second);
+            }
           }
         }
       }
@@ -1957,8 +1960,9 @@ GLShaderDataBinding(const ObjToken<BaseGraphicsData>& d, const ObjToken<IShaderP
     m_ubufOffs.reserve(ubufCount);
     for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
-      if (ubufOffs[i] % 256)
-        Log.report(logvisor::Fatal, fmt("non-256-byte-aligned uniform-offset {} provided to newShaderDataBinding"), int(i));
+      if (ubufOffs[i] % 256) {
+        Log.report(logvisor::Fatal, fmt("non-256-byte-aligned uniform-offset {} provided to newShaderDataBinding"), i);
+      }
 #endif
       m_ubufOffs.emplace_back(ubufOffs[i], (ubufSizes[i] + 255) & ~255);
     }
@@ -1966,8 +1970,9 @@ GLShaderDataBinding(const ObjToken<BaseGraphicsData>& d, const ObjToken<IShaderP
   m_ubufs.reserve(ubufCount);
   for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
-    if (!ubufs[i])
-      Log.report(logvisor::Fatal, fmt("null uniform-buffer {} provided to newShaderDataBinding"), int(i));
+    if (!ubufs[i]) {
+      Log.report(logvisor::Fatal, fmt("null uniform-buffer {} provided to newShaderDataBinding"), i);
+    }
 #endif
     m_ubufs.push_back(ubufs[i]);
   }
