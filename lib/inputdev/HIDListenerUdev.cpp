@@ -118,14 +118,14 @@ class HIDListenerUdev final : public IHIDListener {
     }
 
 #if 0
-        udev_list_entry* att = nullptr;
-        udev_list_entry_foreach(att, attrs)
-        {
-            const char* name = udev_list_entry_get_name(att);
-            const char* val = udev_list_entry_get_value(att);
-            fprintf(stderr, "%s %s\n", name, val);
-        }
-        fprintf(stderr, "\n\n");
+    udev_list_entry* att = nullptr;
+    udev_list_entry_foreach(att, attrs)
+    {
+      const char* name = udev_list_entry_get_name(att);
+      const char* val = udev_list_entry_get_value(att);
+      fmt::print(stderr, fmt("{} {}\n"), name, val);
+    }
+    std::fputs("\n\n", stderr);
 #endif
 
     m_finder._insertToken(std::make_unique<DeviceToken>(type, vid, pid, manuf, product, devPath));

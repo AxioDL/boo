@@ -750,9 +750,10 @@ struct D3D11ShaderDataBinding : public GraphicsDataNode<IShaderDataBinding> {
       m_ubufNumConsts.reset(new UINT[ubufCount]);
       for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
-        if (ubufOffs[i] % 256)
-          Log.report(logvisor::Fatal, fmt("non-256-byte-aligned uniform-offset %d provided to newShaderDataBinding"),
-                     int(i));
+        if (ubufOffs[i] % 256) {
+          Log.report(logvisor::Fatal, fmt("non-256-byte-aligned uniform-offset {} provided to newShaderDataBinding"),
+                     i);
+        }
 #endif
         m_ubufFirstConsts[i] = ubufOffs[i] / 16;
         m_ubufNumConsts[i] = ((ubufSizes[i] + 255) & ~255) / 16;
@@ -760,8 +761,9 @@ struct D3D11ShaderDataBinding : public GraphicsDataNode<IShaderDataBinding> {
     }
     for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
-      if (!ubufs[i])
-        Log.report(logvisor::Fatal, fmt("null uniform-buffer %d provided to newShaderDataBinding"), int(i));
+      if (!ubufs[i]) {
+        Log.report(logvisor::Fatal, fmt("null uniform-buffer {} provided to newShaderDataBinding"), i);
+      }
 #endif
       m_ubufs.push_back(ubufs[i]);
     }
@@ -1579,7 +1581,7 @@ std::vector<uint8_t> D3D11DataFactory::CompileHLSL(const char* source, PipelineS
   if (FAILED(D3DCompilePROC(source, strlen(source), "Boo HLSL Source", nullptr, nullptr, "main",
                             D3DShaderTypes[int(stage)], BOO_D3DCOMPILE_FLAG, 0, &blobOut, &errBlob))) {
     fmt::print(fmt("{}\n"), source);
-    Log.report(logvisor::Fatal, fmt("error compiling shader: %s"), errBlob->GetBufferPointer());
+    Log.report(logvisor::Fatal, fmt("error compiling shader: {}"), errBlob->GetBufferPointer());
     return {};
   }
   std::vector<uint8_t> ret(blobOut->GetBufferSize());

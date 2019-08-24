@@ -108,7 +108,7 @@ class HIDListenerIOKit : public IHIDListener {
 
       listener->m_finder._insertToken(std::make_unique<DeviceToken>(DeviceType::USB, vid, pid, vstr, pstr, devPath));
 
-      // printf("ADDED %08X %s\n", obj.get(), devPath);
+      // fmt::print(fmt("ADDED {:08X} {}\n"), obj.get(), devPath);
     }
   }
 
@@ -124,7 +124,7 @@ class HIDListenerIOKit : public IHIDListener {
       if (IORegistryEntryGetPath(obj.get(), kIOServicePlane, devPath) != 0)
         continue;
       listener->m_finder._removeToken(devPath);
-      // printf("REMOVED %08X %s\n", obj.get(), devPath);
+      // fmt::print(fmt("REMOVED {:08X} {}\n"), obj.get(), devPath);
     }
   }
 
@@ -191,7 +191,7 @@ class HIDListenerIOKit : public IHIDListener {
 
       listener->m_finder._insertToken(std::make_unique<DeviceToken>(DeviceType::HID, vidv, pidv, vstr, pstr, devPath));
 
-      // printf("ADDED %08X %s\n", obj, devPath);
+      // fmt::print(fmt("ADDED {:08X} {}\n"), obj, devPath);
     }
   }
 
@@ -207,7 +207,7 @@ class HIDListenerIOKit : public IHIDListener {
       if (IORegistryEntryGetPath(obj.get(), kIOServicePlane, devPath) != 0)
         continue;
       listener->m_finder._removeToken(devPath);
-      // printf("REMOVED %08X %s\n", obj, devPath);
+      // fmt::print(fmt("REMOVED {:08X} {}\n"), obj, devPath);
     }
   }
 

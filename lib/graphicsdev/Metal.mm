@@ -903,11 +903,13 @@ class MetalShaderStage : public GraphicsDataNode<IShaderStage> {
       shaderLib = [ctx->m_dev newLibraryWithSource:@((const char*) (data + 1))
                                            options:compOpts
                                              error:&err];
-      if (!shaderLib)
+      if (!shaderLib) {
         fmt::print(fmt("{}\n"), data + 1);
+      }
     }
-    if (!shaderLib)
-      Log.report(logvisor::Fatal, fmt("error creating library: %s"), [[err localizedDescription] UTF8String]);
+    if (!shaderLib) {
+      Log.report(logvisor::Fatal, fmt("error creating library: {}"), [[err localizedDescription] UTF8String]);
+    }
 
     NSString* funcName;
     switch (stage) {
@@ -1024,9 +1026,10 @@ protected:
     desc.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
     NSError* err = nullptr;
     m_state = [ctx->m_dev newRenderPipelineStateWithDescriptor:desc error:&err];
-    if (err)
-      Log.report(logvisor::Fatal, fmt("error making shader pipeline: %s"),
+    if (err) {
+      Log.report(logvisor::Fatal, fmt("error making shader pipeline: {}"),
                  [[err localizedDescription] UTF8String]);
+    }
 
     MTLDepthStencilDescriptor* dsDesc = [MTLDepthStencilDescriptor new];
     switch (info.depthTest) {
@@ -1098,9 +1101,10 @@ class MetalTessellationShaderPipeline : public MetalShaderPipeline {
     NSError* err = nullptr;
     m_computeState = [ctx->m_dev newComputePipelineStateWithDescriptor:compDesc options:MTLPipelineOptionNone
                                                             reflection:nil error:&err];
-    if (err)
-      Log.report(logvisor::Fatal, fmt("error making compute pipeline: %s"),
+    if (err) {
+      Log.report(logvisor::Fatal, fmt("error making compute pipeline: {}"),
                  [[err localizedDescription] UTF8String]);
+    }
   }
 
   void draw(MetalCommandQueue& q, size_t start, size_t count);
@@ -1202,9 +1206,10 @@ struct MetalShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
       m_ubufOffs.reserve(ubufCount);
       for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
-        if (ubufOffs[i] % 256)
-          Log.report(logvisor::Fatal, fmt("non-256-byte-aligned uniform-offset %d provided to newShaderDataBinding"),
-                     int(i));
+        if (ubufOffs[i] % 256) {
+          Log.report(logvisor::Fatal, fmt("non-256-byte-aligned uniform-offset {} provided to newShaderDataBinding"),
+                     i);
+        }
 #endif
         m_ubufOffs.push_back(ubufOffs[i]);
       }
@@ -1212,8 +1217,9 @@ struct MetalShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
     m_ubufs.reserve(ubufCount);
     for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
-      if (!ubufs[i])
-        Log.report(logvisor::Fatal, fmt("null uniform-buffer %d provided to newShaderDataBinding"), int(i));
+      if (!ubufs[i]) {
+        Log.report(logvisor::Fatal, fmt("null uniform-buffer {} provided to newShaderDataBinding"), i);
+      }
 #endif
       m_ubufs.push_back(ubufs[i]);
     }
@@ -2056,17 +2062,17 @@ void MetalDataFactoryImpl::SetupGammaResources() {
     ObjToken<ITexture> texs[] = {{}, m_gammaLUT.get()};
     m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVBO.get(), {}, {},
                                               0, nullptr, nullptr, 2, texs, nullptr, nullptr);
-    
+
     Vert flipverts[4] = {{{-1.f, 1.f, 0.f, 1.f}, {0.f, 1.f, 0.f, 0.f}},
       {{1.f, 1.f, 0.f, 1.f}, {1.f, 1.f, 0.f, 0.f}},
       {{-1.f, -1.f, 0.f, 1.f}, {0.f, 0.f, 0.f, 0.f}},
       {{1.f, -1.f, 0.f, 1.f}, {1.f, 0.f, 0.f, 0.f}}};
     m_cubeFlipVBO = ctx.newStaticBuffer(BufferUse::Vertex, flipverts, 32, 4);
-    
+
     {
       fragmentMetal = MetalDataFactory::CompileMetal(CubeFlipFS, PipelineStage::Fragment);
       fragmentShader = ctx.newShaderStage(fragmentMetal, PipelineStage::Fragment);
-      
+
       MTLRenderPipelineDescriptor* desc = [MTLRenderPipelineDescriptor new];
       desc.vertexFunction = vertexShader.cast<MetalShaderStage>()->shader();
       desc.fragmentFunction = fragmentShader.cast<MetalShaderStage>()->shader();
@@ -2078,11 +2084,12 @@ void MetalDataFactoryImpl::SetupGammaResources() {
       desc.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
       NSError* err = nullptr;
       m_cubeFlipShader = [m_ctx->m_dev newRenderPipelineStateWithDescriptor:desc error:&err];
-      if (err)
-        Log.report(logvisor::Fatal, fmt("error making shader pipeline: %s"),
+      if (err) {
+        Log.report(logvisor::Fatal, fmt("error making shader pipeline: {}"),
                    [[err localizedDescription] UTF8String]);
+      }
     }
-    
+
     return true;
   } BooTrace);
 }

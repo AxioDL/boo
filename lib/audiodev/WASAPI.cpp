@@ -121,7 +121,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 #if !WINDOWS_STORE
     if (!m_device) {
       if (FAILED(m_enumerator->GetDevice(MBSTWCS(m_sinkName.c_str()).c_str(), &m_device))) {
-        Log.report(logvisor::Error, fmt("unable to obtain audio device %s"), m_sinkName);
+        Log.report(logvisor::Error, fmt("unable to obtain audio device {}"), m_sinkName);
         m_device.Reset();
         return;
       }
@@ -204,7 +204,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
       chMapOut.m_channels[7] = AudioChannel::SideRight;
       break;
     default:
-      Log.report(logvisor::Warning, fmt("unknown channel layout %u; using stereo"), pwfx->Format.nChannels);
+      Log.report(logvisor::Warning, fmt("unknown channel layout {}; using stereo"), pwfx->Format.nChannels);
       chMapOut.m_channelCount = 2;
       chMapOut.m_channels[0] = AudioChannel::FrontLeft;
       chMapOut.m_channels[1] = AudioChannel::FrontRight;

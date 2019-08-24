@@ -2668,9 +2668,10 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
       m_ubufOffs.reserve(ubufCount);
       for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
-        if (ubufOffs[i] % 256)
+        if (ubufOffs[i] % 256) {
           Log.report(logvisor::Fatal, fmt("non-256-byte-aligned uniform-offset {} provided to newShaderDataBinding"),
-                     int(i));
+                     i);
+        }
 #endif
         std::array<VkDescriptorBufferInfo, 2> fillArr;
         fillArr.fill({VK_NULL_HANDLE, ubufOffs[i], (ubufSizes[i] + 255) & ~255});
@@ -2680,8 +2681,9 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
     m_ubufs.reserve(ubufCount);
     for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
-      if (!ubufs[i])
-        Log.report(logvisor::Fatal, fmt("null uniform-buffer {} provided to newShaderDataBinding"), int(i));
+      if (!ubufs[i]) {
+        Log.report(logvisor::Fatal, fmt("null uniform-buffer {} provided to newShaderDataBinding"), i);
+      }
 #endif
       m_ubufs.push_back(ubufs[i]);
     }
