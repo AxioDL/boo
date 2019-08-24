@@ -1045,30 +1045,33 @@ struct D3D11CommandQueue final : IGraphicsCommandQueue {
   }
 
   void setViewport(const SWindowRect& rect, float znear, float zfar) override {
-    if (m_boundTarget) {
-      int boundHeight = 0;
-      switch (m_boundTarget->type()) {
-      case TextureType::Render: {
-        D3D11TextureR* ctarget = m_boundTarget.cast<D3D11TextureR>();
-        boundHeight = ctarget->m_height;
-        break;
-      }
-      case TextureType::CubeRender: {
-        D3D11TextureCubeR* ctarget = m_boundTarget.cast<D3D11TextureCubeR>();
-        boundHeight = ctarget->m_width;
-        break;
-      }
-      default:
-        break;
-      }
-      D3D11_VIEWPORT vp = {FLOAT(rect.location[0]),
-                           FLOAT(boundHeight - rect.location[1] - rect.size[1]),
-                           FLOAT(rect.size[0]),
-                           FLOAT(rect.size[1]),
-                           1.f - zfar,
-                           1.f - znear};
-      m_deferredCtx->RSSetViewports(1, &vp);
+    if (!m_boundTarget) {
+      return;
     }
+
+    int boundHeight = 0;
+    switch (m_boundTarget->type()) {
+    case TextureType::Render: {
+      const auto* const ctarget = m_boundTarget.cast<D3D11TextureR>();
+      boundHeight = ctarget->m_height;
+      break;
+    }
+    case TextureType::CubeRender: {
+      const auto* const ctarget = m_boundTarget.cast<D3D11TextureCubeR>();
+      boundHeight = ctarget->m_width;
+      break;
+    }
+    default:
+      break;
+    }
+
+    const D3D11_VIEWPORT vp = {FLOAT(rect.location[0]),
+                               FLOAT(boundHeight - rect.location[1] - rect.size[1]),
+                               FLOAT(rect.size[0]),
+                               FLOAT(rect.size[1]),
+                               1.f - zfar,
+                               1.f - znear};
+    m_deferredCtx->RSSetViewports(1, &vp);
   }
 
   void setScissor(const SWindowRect& rect) override {
