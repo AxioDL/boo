@@ -1073,24 +1073,23 @@ struct D3D11CommandQueue final : IGraphicsCommandQueue {
 
   void setScissor(const SWindowRect& rect) override {
     if (m_boundTarget) {
-      D3D11TextureR* ctarget = m_boundTarget.cast<D3D11TextureR>();
       int boundHeight = 0;
       switch (m_boundTarget->type()) {
       case TextureType::Render: {
-        D3D11TextureR* ctarget = m_boundTarget.cast<D3D11TextureR>();
+        const auto* const ctarget = m_boundTarget.cast<D3D11TextureR>();
         boundHeight = ctarget->m_height;
         break;
       }
       case TextureType::CubeRender: {
-        D3D11TextureCubeR* ctarget = m_boundTarget.cast<D3D11TextureCubeR>();
+        const auto* const ctarget = m_boundTarget.cast<D3D11TextureCubeR>();
         boundHeight = ctarget->m_width;
         break;
       }
       default:
         break;
       }
-      D3D11_RECT d3drect = {LONG(rect.location[0]), LONG(boundHeight - rect.location[1] - rect.size[1]),
-                            LONG(rect.location[0] + rect.size[0]), LONG(boundHeight - rect.location[1])};
+      const D3D11_RECT d3drect = {LONG(rect.location[0]), LONG(boundHeight - rect.location[1] - rect.size[1]),
+                                  LONG(rect.location[0] + rect.size[0]), LONG(boundHeight - rect.location[1])};
       m_deferredCtx->RSSetScissorRects(1, &d3drect);
     }
   }
