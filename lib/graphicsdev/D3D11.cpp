@@ -1072,26 +1072,29 @@ struct D3D11CommandQueue final : IGraphicsCommandQueue {
   }
 
   void setScissor(const SWindowRect& rect) override {
-    if (m_boundTarget) {
-      int boundHeight = 0;
-      switch (m_boundTarget->type()) {
-      case TextureType::Render: {
-        const auto* const ctarget = m_boundTarget.cast<D3D11TextureR>();
-        boundHeight = ctarget->m_height;
-        break;
-      }
-      case TextureType::CubeRender: {
-        const auto* const ctarget = m_boundTarget.cast<D3D11TextureCubeR>();
-        boundHeight = ctarget->m_width;
-        break;
-      }
-      default:
-        break;
-      }
-      const D3D11_RECT d3drect = {LONG(rect.location[0]), LONG(boundHeight - rect.location[1] - rect.size[1]),
-                                  LONG(rect.location[0] + rect.size[0]), LONG(boundHeight - rect.location[1])};
-      m_deferredCtx->RSSetScissorRects(1, &d3drect);
+    if (!m_boundTarget) {
+      return;
     }
+
+    int boundHeight = 0;
+    switch (m_boundTarget->type()) {
+    case TextureType::Render: {
+      const auto* const ctarget = m_boundTarget.cast<D3D11TextureR>();
+      boundHeight = ctarget->m_height;
+      break;
+    }
+    case TextureType::CubeRender: {
+      const auto* const ctarget = m_boundTarget.cast<D3D11TextureCubeR>();
+      boundHeight = ctarget->m_width;
+      break;
+    }
+    default:
+      break;
+    }
+
+    const D3D11_RECT d3drect = {LONG(rect.location[0]), LONG(boundHeight - rect.location[1] - rect.size[1]),
+                                LONG(rect.location[0] + rect.size[0]), LONG(boundHeight - rect.location[1])};
+    m_deferredCtx->RSSetScissorRects(1, &d3drect);
   }
 
   std::unordered_map<D3D11TextureR*, std::pair<size_t, size_t>> m_texResizes;
