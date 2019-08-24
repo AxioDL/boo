@@ -24,7 +24,7 @@ extern pD3DCompile D3DCompilePROC;
 extern pD3DPERF_BeginEvent D3DPERF_BeginEventPROC;
 extern pD3DPERF_EndEvent D3DPERF_EndEventPROC;
 
-static const char* GammaVS =
+constexpr char GammaVS[] =
     "struct VertData\n"
     "{\n"
     "    float4 posIn : POSITION;\n"
@@ -45,7 +45,7 @@ static const char* GammaVS =
     "    return vtf;\n"
     "}\n";
 
-static const char* GammaFS =
+constexpr char GammaFS[] =
     "struct VertToFrag\n"
     "{\n"
     "    float4 pos : SV_Position;\n"
