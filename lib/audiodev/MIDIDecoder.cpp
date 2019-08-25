@@ -9,7 +9,7 @@
 
 namespace boo {
 namespace {
-constexpr uint8_t clamp7(uint8_t val) { return std::max(0, std::min(127, int(val))); }
+constexpr uint8_t clamp7(uint8_t val) { return std::clamp(val, uint8_t{0}, uint8_t{127}); }
 
 std::optional<uint32_t> readContinuedValue(std::vector<uint8_t>::const_iterator& it,
                                            std::vector<uint8_t>::const_iterator end) {
