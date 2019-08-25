@@ -7,11 +7,11 @@
 
 
 namespace boo {
-
+namespace {
 constexpr uint8_t clamp7(uint8_t val) { return std::max(0, std::min(127, int(val))); }
 
-bool MIDIDecoder::_readContinuedValue(std::vector<uint8_t>::const_iterator& it,
-                                      std::vector<uint8_t>::const_iterator end, uint32_t& valOut) {
+bool readContinuedValue(std::vector<uint8_t>::const_iterator& it, std::vector<uint8_t>::const_iterator end,
+                        uint32_t& valOut) {
   uint8_t a = *it++;
   valOut = a & 0x7f;
 
@@ -33,6 +33,7 @@ bool MIDIDecoder::_readContinuedValue(std::vector<uint8_t>::const_iterator& it,
 
   return true;
 }
+} // Anonymous namespace
 
 std::vector<uint8_t>::const_iterator MIDIDecoder::receiveBytes(std::vector<uint8_t>::const_iterator begin,
                                                                std::vector<uint8_t>::const_iterator end) {
@@ -52,7 +53,7 @@ std::vector<uint8_t>::const_iterator MIDIDecoder::receiveBytes(std::vector<uint8
       a = *it++;
 
       uint32_t length;
-      _readContinuedValue(it, end, length);
+      readContinuedValue(it, end, length);
       it += length;
     } else {
       uint8_t chan = m_status & 0xf;
@@ -125,7 +126,7 @@ std::vector<uint8_t>::const_iterator MIDIDecoder::receiveBytes(std::vector<uint8
         switch (Status(m_status & 0xff)) {
         case Status::SysEx: {
           uint32_t len;
-          if (!_readContinuedValue(it, end, len) || end - it < len)
+          if (!readContinuedValue(it, end, len) || end - it < len)
             return begin;
           m_out.sysex(&*it, len);
           break;
