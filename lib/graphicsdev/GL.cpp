@@ -91,8 +91,8 @@ class GLDataFactoryImpl final : public GLDataFactory, public GraphicsDataFactory
     glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 
     commitTransaction([this](IGraphicsDataFactory::Context& ctx) {
-      auto vertex = ctx.newShaderStage((uint8_t*)GammaVS, 0, PipelineStage::Vertex);
-      auto fragment = ctx.newShaderStage((uint8_t*)GammaFS, 0, PipelineStage::Fragment);
+      auto vertex = ctx.newShaderStage(reinterpret_cast<const uint8_t*>(GammaVS), 0, PipelineStage::Vertex);
+      auto fragment = ctx.newShaderStage(reinterpret_cast<const uint8_t*>(GammaFS), 0, PipelineStage::Fragment);
       const AdditionalPipelineInfo info = {
           BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None};
       const std::array<VertexElementDescriptor, 2> vfmt{{{VertexSemantic::Position4}, {VertexSemantic::UV4}}};
@@ -1006,7 +1006,7 @@ public:
 };
 
 ObjToken<IShaderStage> GLDataFactory::Context::newShaderStage(const uint8_t* data, size_t size, PipelineStage stage) {
-  GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
+  const auto& factory = static_cast<GLDataFactoryImpl&>(m_parent);
 
   if (stage == PipelineStage::Control || stage == PipelineStage::Evaluation) {
     if (!factory.m_hasTessellation)
@@ -1014,14 +1014,14 @@ ObjToken<IShaderStage> GLDataFactory::Context::newShaderStage(const uint8_t* dat
   }
 
   BOO_MSAN_NO_INTERCEPT
-  return {new GLShaderStage(m_data, (char*)data, stage)};
+  return {new GLShaderStage(m_data, reinterpret_cast<const char*>(data), stage)};
 }
 
 ObjToken<IShaderPipeline> GLDataFactory::Context::newShaderPipeline(
     ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment, ObjToken<IShaderStage> geometry,
     ObjToken<IShaderStage> control, ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
     const AdditionalPipelineInfo& additionalInfo, bool asynchronous) {
-  GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
+  const auto& factory = static_cast<GLDataFactoryImpl&>(m_parent);
 
   if (control || evaluation) {
     if (!factory.m_hasTessellation)
