@@ -734,6 +734,7 @@ public:
         m_gfxCtx.reset(new GraphicsContextXlibGLX(IGraphicsContext::EGraphicsAPI::OpenGL3_3, this, display,
                                                   defaultScreen, lastCtx, m_visualId, glCtx));
         m_openGL = true;
+        Log.report(logvisor::Warning, fmt("OPENGL HAS BEEN DEPRECATED, IT IS HIGHLY RECOMMENDED TO BUILD AND USE VULKAN INSTEAD"));
       }
 
       XVisualInfo visTemplate;
