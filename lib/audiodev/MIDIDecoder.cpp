@@ -40,7 +40,7 @@ std::optional<uint32_t> readContinuedValue(std::vector<uint8_t>::const_iterator&
 
 std::vector<uint8_t>::const_iterator MIDIDecoder::receiveBytes(std::vector<uint8_t>::const_iterator begin,
                                                                std::vector<uint8_t>::const_iterator end) {
-  std::vector<uint8_t>::const_iterator it = begin;
+  auto it = begin;
   while (it != end) {
     uint8_t a = *it++;
     uint8_t b;
