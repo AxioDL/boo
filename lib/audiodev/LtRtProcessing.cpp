@@ -9,9 +9,9 @@
 namespace boo {
 namespace {
 template <typename T>
-T ClampFull(float in) {
-  if (std::is_floating_point<T>()) {
-    return std::min<T>(std::max<T>(in, -1.f), 1.f);
+constexpr T ClampFull(float in) {
+  if constexpr (std::is_floating_point_v<T>) {
+    return std::clamp(in, -1.f, 1.f);
   } else {
     constexpr T MAX = std::numeric_limits<T>::max();
     constexpr T MIN = std::numeric_limits<T>::min();
