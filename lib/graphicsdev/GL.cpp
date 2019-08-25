@@ -96,7 +96,7 @@ class GLDataFactoryImpl final : public GLDataFactory, public GraphicsDataFactory
       const AdditionalPipelineInfo info = {
           BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None};
       const std::array<VertexElementDescriptor, 2> vfmt{{{VertexSemantic::Position4}, {VertexSemantic::UV4}}};
-      m_gammaShader = ctx.newShaderPipeline(vertex, fragment, vfmt.data(), info);
+      m_gammaShader = ctx.newShaderPipeline(std::move(vertex), std::move(fragment), vfmt.data(), info);
       m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
       struct Vert {
         std::array<float, 4> pos;
