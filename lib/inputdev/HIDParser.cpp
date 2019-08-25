@@ -461,17 +461,17 @@ HIDParser::ParserStatus HIDParser::Parse(const PHIDP_PREPARSED_DATA descriptorDa
     USHORT length = caps.NumberInputButtonCaps;
     std::vector<HIDP_BUTTON_CAPS> bCaps(caps.NumberInputButtonCaps, HIDP_BUTTON_CAPS());
     HidP_GetButtonCaps(HidP_Input, bCaps.data(), &length, descriptorData);
-    for (const HIDP_BUTTON_CAPS& caps : bCaps) {
-      if (caps.IsRange) {
-        int usage = caps.Range.UsageMin;
-        for (int i = caps.Range.DataIndexMin; i <= caps.Range.DataIndexMax; ++i, ++usage) {
-          inputItems.insert(std::make_pair(
-              i, HIDMainItem(caps.BitField, HIDUsagePage(caps.UsagePage), HIDUsage(usage), std::make_pair(0, 1), 1)));
+    for (const HIDP_BUTTON_CAPS& buttonCaps : bCaps) {
+      if (buttonCaps.IsRange) {
+        int usage = buttonCaps.Range.UsageMin;
+        for (int i = buttonCaps.Range.DataIndexMin; i <= buttonCaps.Range.DataIndexMax; ++i, ++usage) {
+          inputItems.insert(std::make_pair(i, HIDMainItem(buttonCaps.BitField, HIDUsagePage(buttonCaps.UsagePage),
+                                                          HIDUsage(usage), std::make_pair(0, 1), 1)));
         }
       } else {
-        inputItems.insert(std::make_pair(caps.NotRange.DataIndex,
-                                         HIDMainItem(caps.BitField, HIDUsagePage(caps.UsagePage),
-                                                     HIDUsage(caps.NotRange.Usage), std::make_pair(0, 1), 1)));
+        inputItems.insert(std::make_pair(buttonCaps.NotRange.DataIndex,
+                                         HIDMainItem(buttonCaps.BitField, HIDUsagePage(buttonCaps.UsagePage),
+                                                     HIDUsage(buttonCaps.NotRange.Usage), std::make_pair(0, 1), 1)));
       }
     }
   }
@@ -481,19 +481,19 @@ HIDParser::ParserStatus HIDParser::Parse(const PHIDP_PREPARSED_DATA descriptorDa
     USHORT length = caps.NumberInputValueCaps;
     std::vector<HIDP_VALUE_CAPS> vCaps(caps.NumberInputValueCaps, HIDP_VALUE_CAPS());
     HidP_GetValueCaps(HidP_Input, vCaps.data(), &length, descriptorData);
-    for (const HIDP_VALUE_CAPS& caps : vCaps) {
-      if (caps.IsRange) {
-        int usage = caps.Range.UsageMin;
-        for (int i = caps.Range.DataIndexMin; i <= caps.Range.DataIndexMax; ++i, ++usage) {
-          inputItems.insert(
-              std::make_pair(i, HIDMainItem(caps.BitField, HIDUsagePage(caps.UsagePage), HIDUsage(usage),
-                                            std::make_pair(caps.LogicalMin, caps.LogicalMax), caps.BitSize)));
+    for (const HIDP_VALUE_CAPS& valueCaps : vCaps) {
+      if (valueCaps.IsRange) {
+        int usage = valueCaps.Range.UsageMin;
+        for (int i = valueCaps.Range.DataIndexMin; i <= valueCaps.Range.DataIndexMax; ++i, ++usage) {
+          inputItems.insert(std::make_pair(
+              i, HIDMainItem(valueCaps.BitField, HIDUsagePage(valueCaps.UsagePage), HIDUsage(usage),
+                             std::make_pair(valueCaps.LogicalMin, valueCaps.LogicalMax), valueCaps.BitSize)));
         }
       } else {
-        inputItems.insert(
-            std::make_pair(caps.NotRange.DataIndex,
-                           HIDMainItem(caps.BitField, HIDUsagePage(caps.UsagePage), HIDUsage(caps.NotRange.Usage),
-                                       HIDRange(caps.LogicalMin, caps.LogicalMax), caps.BitSize)));
+        inputItems.insert(std::make_pair(
+            valueCaps.NotRange.DataIndex,
+            HIDMainItem(valueCaps.BitField, HIDUsagePage(valueCaps.UsagePage), HIDUsage(valueCaps.NotRange.Usage),
+                        HIDRange(valueCaps.LogicalMin, valueCaps.LogicalMax), valueCaps.BitSize)));
       }
     }
   }
@@ -822,9 +822,9 @@ void HIDParser::ScanValues(const std::function<bool(const HIDMainItem& item, int
       continue;
     int32_t value = 0;
     if (it != end) {
-      const HIDP_DATA& data = *it;
-      if (data.DataIndex == idx) {
-        value = data.RawValue;
+      const HIDP_DATA& hidData = *it;
+      if (hidData.DataIndex == idx) {
+        value = hidData.RawValue;
         ++it;
       }
     }
