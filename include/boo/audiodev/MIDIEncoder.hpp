@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <iterator>
+
 #include "boo/audiodev/IMIDIReader.hpp"
 
 namespace boo {
@@ -8,7 +11,14 @@ template <class Sender>
 class MIDIEncoder : public IMIDIReader {
   Sender& m_sender;
   uint8_t m_status = 0;
+
   void _sendMessage(const uint8_t* data, size_t len);
+
+  template <typename ContiguousContainer>
+  void _sendMessage(const ContiguousContainer& container) {
+    _sendMessage(std::data(container), std::size(container));
+  }
+
   void _sendContinuedValue(uint32_t val);
 
 public:
