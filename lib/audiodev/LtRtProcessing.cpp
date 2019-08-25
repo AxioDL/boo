@@ -1,16 +1,17 @@
-#include "LtRtProcessing.hpp"
-#include <cmath>
+#include "lib/audiodev/LtRtProcessing.hpp"
+
 #include <algorithm>
+#include <cmath>
 
 #undef min
 #undef max
 
 namespace boo {
-
+namespace {
 template <typename T>
-inline T ClampFull(float in) {
-  if (std::is_floating_point<T>()) {
-    return std::min<T>(std::max<T>(in, -1.f), 1.f);
+constexpr T ClampFull(float in) {
+  if constexpr (std::is_floating_point_v<T>) {
+    return std::clamp(in, -1.f, 1.f);
   } else {
     constexpr T MAX = std::numeric_limits<T>::max();
     constexpr T MIN = std::numeric_limits<T>::min();
@@ -23,6 +24,7 @@ inline T ClampFull(float in) {
       return in;
   }
 }
+} // Anonymous namespace
 
 #if INTEL_IPP
 
@@ -237,19 +239,16 @@ LtRtProcessing::LtRtProcessing(int _5msFrames, const AudioVoiceEngineMixInfo& mi
   m_inMixInfo.m_channelMap.m_channels[3] = AudioChannel::RearLeft;
   m_inMixInfo.m_channelMap.m_channels[4] = AudioChannel::RearRight;
 
-  int samples = m_windowFrames * (5 * 2 + 2 * 2);
+  const int samples = m_windowFrames * (5 * 2 + 2 * 2);
   switch (mixInfo.m_sampleFormat) {
   case SOXR_INT16_I:
-    m_16Buffer.reset(new int16_t[samples]);
-    memset(m_16Buffer.get(), 0, sizeof(int16_t) * samples);
+    m_16Buffer = std::make_unique<int16_t[]>(samples);
     break;
   case SOXR_INT32_I:
-    m_32Buffer.reset(new int32_t[samples]);
-    memset(m_32Buffer.get(), 0, sizeof(int32_t) * samples);
+    m_32Buffer = std::make_unique<int32_t[]>(samples);
     break;
   case SOXR_FLOAT32_I:
-    m_fltBuffer.reset(new float[samples]);
-    memset(m_fltBuffer.get(), 0, sizeof(float) * samples);
+    m_fltBuffer = std::make_unique<float[]>(samples);
     break;
   default:
     break;
@@ -259,7 +258,7 @@ LtRtProcessing::LtRtProcessing(int _5msFrames, const AudioVoiceEngineMixInfo& mi
 template <typename T>
 void LtRtProcessing::Process(const T* input, T* output, int frameCount) {
 #if 0
-  for (int i=0 ; i<frameCount ; ++i)
+  for (int i = 0; i < frameCount; ++i)
   {
     output[i * 2] = input[i * 5 + 3];
     output[i * 2 + 1] = input[i * 5 + 4];
