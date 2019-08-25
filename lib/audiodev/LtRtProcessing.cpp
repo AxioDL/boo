@@ -258,7 +258,7 @@ LtRtProcessing::LtRtProcessing(int _5msFrames, const AudioVoiceEngineMixInfo& mi
 template <typename T>
 void LtRtProcessing::Process(const T* input, T* output, int frameCount) {
 #if 0
-  for (int i=0 ; i<frameCount ; ++i)
+  for (int i = 0; i < frameCount; ++i)
   {
     output[i * 2] = input[i * 5 + 3];
     output[i * 2 + 1] = input[i * 5 + 4];
