@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -24,7 +25,7 @@ enum class AudioChannel {
 
 struct ChannelMap {
   unsigned m_channelCount = 0;
-  AudioChannel m_channels[8] = {};
+  std::array<AudioChannel, 8> m_channels{};
 };
 
 static inline unsigned ChannelCount(AudioChannelSet layout) {
