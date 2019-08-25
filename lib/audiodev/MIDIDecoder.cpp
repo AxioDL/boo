@@ -1,6 +1,7 @@
 #include "boo/audiodev/MIDIDecoder.hpp"
 
 #include <algorithm>
+#include <optional>
 
 #include "boo/audiodev/IMIDIReader.hpp"
 #include "lib/audiodev/MIDICommon.hpp"
@@ -10,28 +11,30 @@ namespace boo {
 namespace {
 constexpr uint8_t clamp7(uint8_t val) { return std::max(0, std::min(127, int(val))); }
 
-bool readContinuedValue(std::vector<uint8_t>::const_iterator& it, std::vector<uint8_t>::const_iterator end,
-                        uint32_t& valOut) {
+std::optional<uint32_t> readContinuedValue(std::vector<uint8_t>::const_iterator& it,
+                                           std::vector<uint8_t>::const_iterator end) {
   uint8_t a = *it++;
-  valOut = a & 0x7f;
+  uint32_t valOut = a & 0x7f;
 
-  if (a & 0x80) {
-    if (it == end)
-      return false;
+  if ((a & 0x80) != 0) {
+    if (it == end) {
+      return std::nullopt;
+    }
     valOut <<= 7;
     a = *it++;
     valOut |= a & 0x7f;
 
-    if (a & 0x80) {
-      if (it == end)
-        return false;
+    if ((a & 0x80) != 0) {
+      if (it == end) {
+        return std::nullopt;
+      }
       valOut <<= 7;
       a = *it++;
       valOut |= a & 0x7f;
     }
   }
 
-  return true;
+  return valOut;
 }
 } // Anonymous namespace
 
@@ -52,9 +55,8 @@ std::vector<uint8_t>::const_iterator MIDIDecoder::receiveBytes(std::vector<uint8
         return begin;
       a = *it++;
 
-      uint32_t length;
-      readContinuedValue(it, end, length);
-      it += length;
+      const auto length = readContinuedValue(it, end);
+      it += *length;
     } else {
       uint8_t chan = m_status & 0xf;
       switch (Status(m_status & 0xf0)) {
@@ -125,10 +127,11 @@ std::vector<uint8_t>::const_iterator MIDIDecoder::receiveBytes(std::vector<uint8
       case Status::SysEx: {
         switch (Status(m_status & 0xff)) {
         case Status::SysEx: {
-          uint32_t len;
-          if (!readContinuedValue(it, end, len) || end - it < len)
+          const auto len = readContinuedValue(it, end);
+          if (!len || end - it < *len) {
             return begin;
-          m_out.sysex(&*it, len);
+          }
+          m_out.sysex(&*it, *len);
           break;
         }
         case Status::TimecodeQuarterFrame: {
