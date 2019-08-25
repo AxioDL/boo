@@ -1652,35 +1652,35 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
 
   void setShaderDataBinding(const ObjToken<IShaderDataBinding>& binding) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::SetShaderDataBinding);
-    cmds.back().binding = binding;
+    auto& cmd = cmds.emplace_back(Command::Op::SetShaderDataBinding);
+    cmd.binding = binding;
   }
 
   void setRenderTarget(const ObjToken<ITextureR>& target) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::SetRenderTarget);
-    cmds.back().target = target.get();
+    auto& cmd = cmds.emplace_back(Command::Op::SetRenderTarget);
+    cmd.target = target.get();
   }
 
   void setRenderTarget(const ObjToken<ITextureCubeR>& target, int face) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::SetCubeRenderTarget);
-    cmds.back().target = target.get();
-    cmds.back().bindIdx = face;
+    auto& cmd = cmds.emplace_back(Command::Op::SetCubeRenderTarget);
+    cmd.target = target.get();
+    cmd.bindIdx = face;
   }
 
   void setViewport(const SWindowRect& rect, float znear, float zfar) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::SetViewport);
-    cmds.back().viewport.rect = rect;
-    cmds.back().viewport.znear = znear;
-    cmds.back().viewport.zfar = zfar;
+    auto& cmd = cmds.emplace_back(Command::Op::SetViewport);
+    cmd.viewport.rect = rect;
+    cmd.viewport.znear = znear;
+    cmd.viewport.zfar = zfar;
   }
 
   void setScissor(const SWindowRect& rect) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::SetScissor);
-    cmds.back().viewport.rect = rect;
+    auto& cmd = cmds.emplace_back(Command::Op::SetScissor);
+    cmd.viewport.rect = rect;
   }
 
   void resizeRenderTexture(const ObjToken<ITextureR>& tex, size_t width, size_t height) override {
@@ -1697,75 +1697,74 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
 
   void generateMipmaps(const ObjToken<ITextureCubeR>& tex) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::GenerateMips);
-    cmds.back().target = tex.get();
+    auto& cmd = cmds.emplace_back(Command::Op::GenerateMips);
+    cmd.target = tex.get();
   }
 
   void schedulePostFrameHandler(std::function<void()>&& func) override { m_pendingPosts1.push_back(std::move(func)); }
 
   void setClearColor(const float rgba[4]) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::SetClearColor);
-    cmds.back().rgba[0] = rgba[0];
-    cmds.back().rgba[1] = rgba[1];
-    cmds.back().rgba[2] = rgba[2];
-    cmds.back().rgba[3] = rgba[3];
+    auto& cmd = cmds.emplace_back(Command::Op::SetClearColor);
+    cmd.rgba = {rgba[0], rgba[1], rgba[2], rgba[3]};
   }
 
   void clearTarget(bool render = true, bool depth = true) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::ClearTarget);
-    cmds.back().flags = 0;
-    if (render)
-      cmds.back().flags |= GL_COLOR_BUFFER_BIT;
-    if (depth)
-      cmds.back().flags |= GL_DEPTH_BUFFER_BIT;
+    auto& cmd = cmds.emplace_back(Command::Op::ClearTarget);
+    cmd.flags = 0;
+    if (render) {
+      cmd.flags |= GL_COLOR_BUFFER_BIT;
+    }
+    if (depth) {
+      cmd.flags |= GL_DEPTH_BUFFER_BIT;
+    }
   }
 
   void draw(size_t start, size_t count) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::Draw);
-    cmds.back().start = start;
-    cmds.back().count = count;
+    auto& cmd = cmds.emplace_back(Command::Op::Draw);
+    cmd.start = start;
+    cmd.count = count;
   }
 
   void drawIndexed(size_t start, size_t count) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::DrawIndexed);
-    cmds.back().start = start;
-    cmds.back().count = count;
+    auto& cmd = cmds.emplace_back(Command::Op::DrawIndexed);
+    cmd.start = start;
+    cmd.count = count;
   }
 
   void drawInstances(size_t start, size_t count, size_t instCount, size_t startInst) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::DrawInstances);
-    cmds.back().start = start;
-    cmds.back().count = count;
-    cmds.back().instCount = instCount;
-    cmds.back().startInst = startInst;
+    auto& cmd = cmds.emplace_back(Command::Op::DrawInstances);
+    cmd.start = start;
+    cmd.count = count;
+    cmd.instCount = instCount;
+    cmd.startInst = startInst;
   }
 
   void drawInstancesIndexed(size_t start, size_t count, size_t instCount, size_t startInst) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::DrawInstancesIndexed);
-    cmds.back().start = start;
-    cmds.back().count = count;
-    cmds.back().instCount = instCount;
-    cmds.back().startInst = startInst;
+    auto& cmd = cmds.emplace_back(Command::Op::DrawInstancesIndexed);
+    cmd.start = start;
+    cmd.count = count;
+    cmd.instCount = instCount;
+    cmd.startInst = startInst;
   }
 
   void resolveBindTexture(const ObjToken<ITextureR>& texture, const SWindowRect& rect, bool tlOrigin, int bindIdx,
                           bool color, bool depth, bool clearDepth) override {
-    GLTextureR* tex = texture.cast<GLTextureR>();
+    const auto* const tex = texture.cast<GLTextureR>();
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::ResolveBindTexture);
-    cmds.back().resolveTex = texture;
-    cmds.back().bindIdx = bindIdx;
-    cmds.back().resolveColor = color;
-    cmds.back().resolveDepth = depth;
-    cmds.back().clearDepth = clearDepth;
-    SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, tex->m_width, tex->m_height));
-    SWindowRect& targetRect = cmds.back().viewport.rect;
+    auto& cmd = cmds.emplace_back(Command::Op::ResolveBindTexture);
+    cmd.resolveTex = texture;
+    cmd.bindIdx = bindIdx;
+    cmd.resolveColor = color;
+    cmd.resolveDepth = depth;
+    cmd.clearDepth = clearDepth;
+    const SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, tex->m_width, tex->m_height));
+    SWindowRect& targetRect = cmd.viewport.rect;
     targetRect.location[0] = intersectRect.location[0];
     if (tlOrigin)
       targetRect.location[1] = tex->m_height - intersectRect.location[1] - intersectRect.size[1];
@@ -1777,8 +1776,8 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
 
   void resolveDisplay(const ObjToken<ITextureR>& source) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::Present);
-    cmds.back().source = source;
+    auto& cmd = cmds.emplace_back(Command::Op::Present);
+    cmd.source = source;
   }
 
   void addVertexFormat(const ObjToken<IShaderDataBinding>& fmt) {
@@ -1849,8 +1848,8 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
   void pushDebugGroup(const char* name, const std::array<float, 4>& color) {
     if (GLEW_KHR_debug) {
       std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-      cmds.emplace_back(Command::Op::PushDebugGroup);
-      cmds.back().name = name;
+      auto& cmd = cmds.emplace_back(Command::Op::PushDebugGroup);
+      cmd.name = name;
     }
   }
 
