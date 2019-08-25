@@ -465,13 +465,13 @@ HIDParser::ParserStatus HIDParser::Parse(const PHIDP_PREPARSED_DATA descriptorDa
       if (buttonCaps.IsRange) {
         int usage = buttonCaps.Range.UsageMin;
         for (int i = buttonCaps.Range.DataIndexMin; i <= buttonCaps.Range.DataIndexMax; ++i, ++usage) {
-          inputItems.insert(std::make_pair(i, HIDMainItem(buttonCaps.BitField, HIDUsagePage(buttonCaps.UsagePage),
-                                                          HIDUsage(usage), std::make_pair(0, 1), 1)));
+          inputItems.emplace(i, HIDMainItem(buttonCaps.BitField, HIDUsagePage(buttonCaps.UsagePage), HIDUsage(usage),
+                                            std::make_pair(0, 1), 1));
         }
       } else {
-        inputItems.insert(std::make_pair(buttonCaps.NotRange.DataIndex,
-                                         HIDMainItem(buttonCaps.BitField, HIDUsagePage(buttonCaps.UsagePage),
-                                                     HIDUsage(buttonCaps.NotRange.Usage), std::make_pair(0, 1), 1)));
+        inputItems.emplace(buttonCaps.NotRange.DataIndex,
+                           HIDMainItem(buttonCaps.BitField, HIDUsagePage(buttonCaps.UsagePage),
+                                       HIDUsage(buttonCaps.NotRange.Usage), std::make_pair(0, 1), 1));
       }
     }
   }
@@ -485,15 +485,15 @@ HIDParser::ParserStatus HIDParser::Parse(const PHIDP_PREPARSED_DATA descriptorDa
       if (valueCaps.IsRange) {
         int usage = valueCaps.Range.UsageMin;
         for (int i = valueCaps.Range.DataIndexMin; i <= valueCaps.Range.DataIndexMax; ++i, ++usage) {
-          inputItems.insert(std::make_pair(
-              i, HIDMainItem(valueCaps.BitField, HIDUsagePage(valueCaps.UsagePage), HIDUsage(usage),
-                             std::make_pair(valueCaps.LogicalMin, valueCaps.LogicalMax), valueCaps.BitSize)));
+          inputItems.emplace(i, HIDMainItem(valueCaps.BitField, HIDUsagePage(valueCaps.UsagePage), HIDUsage(usage),
+                                            std::make_pair(valueCaps.LogicalMin, valueCaps.LogicalMax),
+                                            valueCaps.BitSize));
         }
       } else {
-        inputItems.insert(std::make_pair(
-            valueCaps.NotRange.DataIndex,
-            HIDMainItem(valueCaps.BitField, HIDUsagePage(valueCaps.UsagePage), HIDUsage(valueCaps.NotRange.Usage),
-                        HIDRange(valueCaps.LogicalMin, valueCaps.LogicalMax), valueCaps.BitSize)));
+        inputItems.emplace(valueCaps.NotRange.DataIndex,
+                           HIDMainItem(valueCaps.BitField, HIDUsagePage(valueCaps.UsagePage),
+                                       HIDUsage(valueCaps.NotRange.Usage),
+                                       HIDRange(valueCaps.LogicalMin, valueCaps.LogicalMax), valueCaps.BitSize));
       }
     }
   }
