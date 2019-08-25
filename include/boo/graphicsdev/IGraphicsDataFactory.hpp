@@ -251,7 +251,8 @@ struct IGraphicsDataFactory {
                                                 const VertexFormatInfo& vtxFmt,
                                                 const AdditionalPipelineInfo& additionalInfo,
                                                 bool asynchronous = true) {
-      return newShaderPipeline(vertex, fragment, {}, {}, {}, vtxFmt, additionalInfo, asynchronous);
+      return newShaderPipeline(std::move(vertex), std::move(fragment), {}, {}, {}, vtxFmt, additionalInfo,
+                               asynchronous);
     }
 
     virtual ObjToken<IShaderDataBinding> newShaderDataBinding(
