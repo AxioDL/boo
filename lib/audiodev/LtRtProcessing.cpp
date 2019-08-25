@@ -1,14 +1,15 @@
-#include "LtRtProcessing.hpp"
-#include <cmath>
+#include "lib/audiodev/LtRtProcessing.hpp"
+
 #include <algorithm>
+#include <cmath>
 
 #undef min
 #undef max
 
 namespace boo {
-
+namespace {
 template <typename T>
-inline T ClampFull(float in) {
+T ClampFull(float in) {
   if (std::is_floating_point<T>()) {
     return std::min<T>(std::max<T>(in, -1.f), 1.f);
   } else {
@@ -23,6 +24,7 @@ inline T ClampFull(float in) {
       return in;
   }
 }
+} // Anonymous namespace
 
 #if INTEL_IPP
 
