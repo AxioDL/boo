@@ -63,37 +63,6 @@ static const char* GammaFS =
   "    return colorOut;\n"
   "}\n";
 
-static const char* CubeFlipFS =
-  "#include <metal_stdlib>\n"
-  "using namespace metal;\n"
-  "struct VertToFrag\n"
-  "{\n"
-  "    float4 pos [[ position ]];\n"
-  "    float2 uv;\n"
-  "};\n"
-  "\n"
-  "struct Output {\n"
-  "    float4 color0 [[ color(0) ]];\n"
-  "    float4 color1 [[ color(1) ]];\n"
-  "    float4 color2 [[ color(2) ]];\n"
-  "    float4 color3 [[ color(3) ]];\n"
-  "    float4 color4 [[ color(4) ]];\n"
-  "    float4 color5 [[ color(5) ]];\n"
-  "};\n"
-  "fragment Output fmain(VertToFrag vtf [[ stage_in ]],\n"
-  "                      sampler clampSamp [[ sampler(3) ]],\n"
-  "                      texture2d_array<float> tex [[ texture(0) ]])\n"
-  "{\n"
-  "    Output out;\n"
-  "    out.color0 = tex.sample(clampSamp, vtf.uv, 0);\n"
-  "    out.color1 = tex.sample(clampSamp, vtf.uv, 1);\n"
-  "    out.color2 = tex.sample(clampSamp, vtf.uv, 2);\n"
-  "    out.color3 = tex.sample(clampSamp, vtf.uv, 3);\n"
-  "    out.color4 = tex.sample(clampSamp, vtf.uv, 4);\n"
-  "    out.color5 = tex.sample(clampSamp, vtf.uv, 5);\n"
-  "    return out;\n"
-  "}\n";
-
 namespace boo {
 static logvisor::Module Log("boo::Metal");
 struct MetalCommandQueue;
@@ -115,8 +84,6 @@ class MetalDataFactoryImpl : public MetalDataFactory, public GraphicsDataFactory
   ObjToken<ITextureD> m_gammaLUT;
   ObjToken<IGraphicsBufferS> m_gammaVBO;
   ObjToken<IShaderDataBinding> m_gammaBinding;
-  ObjToken<IGraphicsBufferS> m_cubeFlipVBO;
-  id<MTLRenderPipelineState> m_cubeFlipShader;
   
   void SetupGammaResources();
 
@@ -616,23 +583,16 @@ class MetalTextureCubeR : public GraphicsDataNode<ITextureCubeR> {
                                                              width:m_width height:m_width
                                                          mipmapped:NO];
       desc.storageMode = MTLStorageModePrivate;
-      desc.textureType = MTLTextureType2DArray;
+      desc.textureType = MTLTextureTypeCube;
       desc.sampleCount = 1;
-      desc.arrayLength = 6;
+      desc.mipmapLevelCount = m_numMips;
       desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
       m_colorTex = [ctx->m_dev newTextureWithDescriptor:desc];
 
+      desc.mipmapLevelCount = 1;
       desc.pixelFormat = MTLPixelFormatDepth32Float;
       desc.usage = MTLTextureUsageRenderTarget;
       m_depthTex = [ctx->m_dev newTextureWithDescriptor:desc];
-
-      desc.textureType = MTLTextureTypeCube;
-      desc.sampleCount = 1;
-      desc.arrayLength = 1;
-      desc.mipmapLevelCount = m_numMips;
-      desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
-      desc.pixelFormat = ctx->m_pixelFormat;
-      m_colorBindTex = [ctx->m_dev newTextureWithDescriptor:desc];
 
       for (NSUInteger i = 0; i < 6; ++i) {
         m_passDesc[i] = [MTLRenderPassDescriptor renderPassDescriptor];
@@ -695,18 +655,6 @@ class MetalTextureCubeR : public GraphicsDataNode<ITextureCubeR> {
         m_clearBothPassDesc[i].depthAttachment.storeAction = MTLStoreActionStore;
         m_clearBothPassDesc[i].depthAttachment.clearDepth = 0.f;
       }
-      
-      {
-        m_blitColor = [MTLRenderPassDescriptor renderPassDescriptor];
-        
-        for (NSUInteger i = 0; i < 6; ++i) {
-          m_blitColor.colorAttachments[i].texture = m_colorBindTex;
-          m_blitColor.colorAttachments[i].slice = i;
-          m_blitColor.colorAttachments[i].loadAction = MTLLoadActionDontCare;
-          m_blitColor.colorAttachments[i].storeAction = MTLStoreActionStore;
-          m_blitColor.colorAttachments[i].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0);
-        }
-      }
     }
   }
 
@@ -718,12 +666,10 @@ class MetalTextureCubeR : public GraphicsDataNode<ITextureCubeR> {
 public:
   id <MTLTexture> m_colorTex;
   id <MTLTexture> m_depthTex;
-  id <MTLTexture> m_colorBindTex;
   MTLRenderPassDescriptor* m_passDesc[6];
   MTLRenderPassDescriptor* m_clearDepthPassDesc[6];
   MTLRenderPassDescriptor* m_clearColorPassDesc[6];
   MTLRenderPassDescriptor* m_clearBothPassDesc[6];
-  MTLRenderPassDescriptor* m_blitColor;
 
   ~MetalTextureCubeR() = default;
 
@@ -1148,7 +1094,7 @@ static id <MTLTexture> GetTextureGPUResource(const ObjToken<ITexture>& tex, int 
   }
   case TextureType::CubeRender: {
     const MetalTextureCubeR* ctex = tex.cast<MetalTextureCubeR>();
-    return ctex->m_colorBindTex;
+    return ctex->m_colorTex;
   }
   default:
     break;
@@ -1382,9 +1328,12 @@ struct MetalCommandQueue : IGraphicsCommandQueue {
     _setRenderTarget(target, false, false);
   }
 
+  static constexpr int CubeFaceRemap[] = {0, 1, 3, 2, 4, 5};
   int m_boundFace = 0;
   void _setRenderTarget(const ObjToken<ITextureCubeR>& target, int face, bool clearColor, bool clearDepth) {
+    m_boundFace = face;
     @autoreleasepool {
+      face = CubeFaceRemap[face];
       MetalTextureCubeR* ctarget = target.cast<MetalTextureCubeR>();
       [m_enc endEncoding];
       if (clearColor && clearDepth)
@@ -1403,7 +1352,6 @@ struct MetalCommandQueue : IGraphicsCommandQueue {
           [m_enc setScissorRect:m_boundScissor];
       } else
         m_boundTarget = target.get();
-      m_boundFace = face;
     }
   }
 
@@ -1465,22 +1413,10 @@ struct MetalCommandQueue : IGraphicsCommandQueue {
       [m_enc endEncoding];
       m_enc = nil;
       m_boundTarget.reset();
-      
-      MetalDataFactoryImpl* dataFactory = static_cast<MetalDataFactoryImpl*>(m_parent->getDataFactory());
-      MetalTextureCubeR* ctex = tex.cast<MetalTextureCubeR>();
-      id <MTLRenderCommandEncoder> enc = [m_cmdBuf renderCommandEncoderWithDescriptor:ctex->m_blitColor];
-      [enc setFragmentSamplerStates:m_samplers withRange:NSMakeRange(0, 5)];
-      [enc setRenderPipelineState:dataFactory->m_cubeFlipShader];
-      
-      id <MTLBuffer> buf = dataFactory->m_cubeFlipVBO.cast<MetalGraphicsBufferS>()->m_buf;
-      [enc setVertexBuffer:buf offset:0 atIndex:0];
-      [enc setFragmentTexture:ctex->m_colorTex atIndex:0];
-      
-      [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
-      [enc endEncoding];
 
+      MetalTextureCubeR* ctex = tex.cast<MetalTextureCubeR>();
       id <MTLBlitCommandEncoder> blitEnc = [m_cmdBuf blitCommandEncoder];
-      [blitEnc generateMipmapsForTexture:ctex->m_colorBindTex];
+      [blitEnc generateMipmapsForTexture:ctex->m_colorTex];
       [blitEnc endEncoding];
     }
   }
@@ -1783,6 +1719,20 @@ struct MetalCommandQueue : IGraphicsCommandQueue {
       m_cmdBuf = [m_ctx->m_q commandBuffer];
     }
   }
+
+#ifdef BOO_GRAPHICS_DEBUG_GROUPS
+  void pushDebugGroup(const char* name, const std::array<float, 4>& color) {
+    @autoreleasepool {
+      [m_cmdBuf pushDebugGroup:[NSString stringWithUTF8String:name]];
+    }
+  }
+
+  void popDebugGroup() {
+    @autoreleasepool {
+      [m_cmdBuf popDebugGroup];
+    }
+  }
+#endif
 };
 
 void MetalShaderPipeline::draw(MetalCommandQueue& q, size_t start, size_t count) {
@@ -2055,33 +2005,7 @@ void MetalDataFactoryImpl::SetupGammaResources() {
     ObjToken<ITexture> texs[] = {{}, m_gammaLUT.get()};
     m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVBO.get(), {}, {},
                                               0, nullptr, nullptr, 2, texs, nullptr, nullptr);
-    
-    Vert flipverts[4] = {{{-1.f, 1.f, 0.f, 1.f}, {0.f, 1.f, 0.f, 0.f}},
-      {{1.f, 1.f, 0.f, 1.f}, {1.f, 1.f, 0.f, 0.f}},
-      {{-1.f, -1.f, 0.f, 1.f}, {0.f, 0.f, 0.f, 0.f}},
-      {{1.f, -1.f, 0.f, 1.f}, {1.f, 0.f, 0.f, 0.f}}};
-    m_cubeFlipVBO = ctx.newStaticBuffer(BufferUse::Vertex, flipverts, 32, 4);
-    
-    {
-      fragmentMetal = MetalDataFactory::CompileMetal(CubeFlipFS, PipelineStage::Fragment);
-      fragmentShader = ctx.newShaderStage(fragmentMetal, PipelineStage::Fragment);
-      
-      MTLRenderPipelineDescriptor* desc = [MTLRenderPipelineDescriptor new];
-      desc.vertexFunction = vertexShader.cast<MetalShaderStage>()->shader();
-      desc.fragmentFunction = fragmentShader.cast<MetalShaderStage>()->shader();
-      MetalVertexFormat cVtxFmt(vfmtInfo.elementCount, vfmtInfo.elements);
-      desc.vertexDescriptor = cVtxFmt.m_vdesc;
-      desc.sampleCount = 1;
-      for (NSUInteger i = 0; i < 6; ++i)
-        desc.colorAttachments[i].pixelFormat = m_ctx->m_pixelFormat;
-      desc.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
-      NSError* err = nullptr;
-      m_cubeFlipShader = [m_ctx->m_dev newRenderPipelineStateWithDescriptor:desc error:&err];
-      if (err)
-        Log.report(logvisor::Fatal, fmt("error making shader pipeline: %s"),
-                   [[err localizedDescription] UTF8String]);
-    }
-    
+
     return true;
   } BooTrace);
 }
