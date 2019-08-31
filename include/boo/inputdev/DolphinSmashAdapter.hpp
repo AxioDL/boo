@@ -1,8 +1,9 @@
 #pragma once
 
 #include <cstdint>
-#include "DeviceBase.hpp"
-#include "../System.hpp"
+
+#include "boo/System.hpp"
+#include "boo/inputdev/DeviceBase.hpp"
 
 namespace boo {
 
@@ -67,14 +68,14 @@ class DolphinSmashAdapter final : public TDeviceBase<IDolphinSmashAdapterCallbac
   uint8_t m_rumbleRequest = 0;
   bool m_hardStop[4] = {false};
   uint8_t m_rumbleState = 0xf; /* Force initial send of stop-rumble command */
-  void deviceDisconnected();
-  void initialCycle();
-  void transferCycle();
-  void finalCycle();
+  void deviceDisconnected() override;
+  void initialCycle() override;
+  void transferCycle() override;
+  void finalCycle() override;
 
 public:
   DolphinSmashAdapter(DeviceToken* token);
-  ~DolphinSmashAdapter();
+  ~DolphinSmashAdapter() override;
 
   void setCallback(IDolphinSmashAdapterCallback* cb) {
     TDeviceBase<IDolphinSmashAdapterCallback>::setCallback(cb);

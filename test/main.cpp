@@ -1,25 +1,26 @@
-#include <cstdio>
-#include <cmath>
 #include <boo/boo.hpp>
-#include <boo/graphicsdev/GL.hpp>
-#include <boo/graphicsdev/Vulkan.hpp>
 #include <boo/graphicsdev/D3D.hpp>
+#include <boo/graphicsdev/GL.hpp>
+#include <boo/graphicsdev/GLSLMacros.hpp>
 #include <boo/graphicsdev/Metal.hpp>
-#include <thread>
-#include <mutex>
+#include <boo/graphicsdev/Vulkan.hpp>
+
 #include <condition_variable>
-#include "logvisor/logvisor.hpp"
+#include <cstdio>
+#include <thread>
+
+#include <logvisor/logvisor.hpp>
 
 namespace boo {
 
 class DolphinSmashAdapterCallback : public IDolphinSmashAdapterCallback {
-  void controllerConnected(unsigned idx, EDolphinControllerType) {
+  void controllerConnected(unsigned idx, EDolphinControllerType) override {
     //        printf("CONTROLLER %u CONNECTED\n", idx);
   }
-  void controllerDisconnected(unsigned idx) {
+  void controllerDisconnected(unsigned idx) override {
     //        printf("CONTROLLER %u DISCONNECTED\n", idx);
   }
-  void controllerUpdate(unsigned idx, EDolphinControllerType, const DolphinControllerState& state) {
+  void controllerUpdate(unsigned idx, EDolphinControllerType, const DolphinControllerState& state) override {
     //        printf("CONTROLLER %u UPDATE %d %d\n", idx, state.m_leftStick[0], state.m_leftStick[1]);
     //        printf("                     %d %d\n", state.m_rightStick[0], state.m_rightStick[1]);
     //        printf("                     %d %d\n", state.m_analogTriggers[0], state.m_analogTriggers[1]);
@@ -27,8 +28,8 @@ class DolphinSmashAdapterCallback : public IDolphinSmashAdapterCallback {
 };
 
 class DualshockPadCallback : public IDualshockPadCallback {
-  void controllerDisconnected() { printf("CONTROLLER DISCONNECTED\n"); }
-  void controllerUpdate(DualshockPad& pad, const DualshockPadState& state) {
+  void controllerDisconnected() override { printf("CONTROLLER DISCONNECTED\n"); }
+  void controllerUpdate(DualshockPad& pad, const DualshockPadState& state) override {
     static time_t timeTotal;
     static time_t lastTime = 0;
     timeTotal = time(NULL);
@@ -63,9 +64,9 @@ class DualshockPadCallback : public IDualshockPadCallback {
 };
 
 class GenericPadCallback : public IGenericPadCallback {
-  void controllerConnected() { printf("CONTROLLER CONNECTED\n"); }
-  void controllerDisconnected() { printf("CONTROLLER DISCONNECTED\n"); }
-  void valueUpdate(const HIDMainItem& item, int32_t value) {
+  void controllerConnected() override { printf("CONTROLLER CONNECTED\n"); }
+  void controllerDisconnected() override { printf("CONTROLLER DISCONNECTED\n"); }
+  void valueUpdate(const HIDMainItem& item, int32_t value) override {
     const char* pageName = item.GetUsagePageName();
     const char* usageName = item.GetUsageName();
     if (pageName) {
@@ -83,8 +84,8 @@ class GenericPadCallback : public IGenericPadCallback {
 };
 
 class NintendoPowerACallback : public INintendoPowerACallback {
-  void controllerDisconnected() { fprintf(stderr, "CONTROLLER DISCONNECTED\n"); }
-  void controllerUpdate(const NintendoPowerAState& state) {
+  void controllerDisconnected() override { fprintf(stderr, "CONTROLLER DISCONNECTED\n"); }
+  void controllerUpdate(const NintendoPowerAState& state) override {
     fprintf(stderr,
             "%i %i\n"
             "%i %i\n",
@@ -105,7 +106,7 @@ class TestDeviceFinder : public DeviceFinder {
 public:
   TestDeviceFinder()
   : DeviceFinder({dev_typeid(DolphinSmashAdapter), dev_typeid(NintendoPowerA), dev_typeid(GenericPad)}) {}
-  void deviceConnected(DeviceToken& tok) {
+  void deviceConnected(DeviceToken& tok) override {
     auto dev = tok.openAndGetDevice();
     if (!dev)
       return;
@@ -125,7 +126,7 @@ public:
       m_generic->setCallback(&m_genericCb);
     }
   }
-  void deviceDisconnected(DeviceToken&, DeviceBase* device) {
+  void deviceDisconnected(DeviceToken&, DeviceBase* device) override {
     if (m_smashAdapter.get() == device)
       m_smashAdapter.reset();
     if (m_ds3.get() == device)
@@ -143,55 +144,55 @@ struct CTestWindowCallback : IWindowCallback {
   bool m_rectDirty = false;
   bool m_windowInvalid = false;
 
-  void resized(const SWindowRect& rect, bool sync) {
+  void resized(const SWindowRect& rect, bool sync) override {
     m_lastRect = rect;
     m_rectDirty = true;
     fprintf(stderr, "Resized %d, %d (%d, %d)\n", rect.size[0], rect.size[1], rect.location[0], rect.location[1]);
   }
 
-  void mouseDown(const SWindowCoord& coord, EMouseButton button, EModifierKey mods) {
+  void mouseDown(const SWindowCoord& coord, EMouseButton button, EModifierKey mods) override {
     fprintf(stderr, "Mouse Down %d (%f,%f)\n", int(button), coord.norm[0], coord.norm[1]);
   }
-  void mouseUp(const SWindowCoord& coord, EMouseButton button, EModifierKey mods) {
+  void mouseUp(const SWindowCoord& coord, EMouseButton button, EModifierKey mods) override {
     fprintf(stderr, "Mouse Up %d (%f,%f)\n", int(button), coord.norm[0], coord.norm[1]);
   }
-  void mouseMove(const SWindowCoord& coord) {
+  void mouseMove(const SWindowCoord& coord) override {
     // fprintf(stderr, "Mouse Move (%f,%f)\n", coord.norm[0], coord.norm[1]);
   }
-  void mouseEnter(const SWindowCoord& coord) {
+  void mouseEnter(const SWindowCoord& coord) override {
     fprintf(stderr, "Mouse entered (%f,%f)\n", coord.norm[0], coord.norm[1]);
   }
-  void mouseLeave(const SWindowCoord& coord) { fprintf(stderr, "Mouse left (%f,%f)\n", coord.norm[0], coord.norm[1]); }
-  void scroll(const SWindowCoord& coord, const SScrollDelta& scroll) {
+  void mouseLeave(const SWindowCoord& coord) override { fprintf(stderr, "Mouse left (%f,%f)\n", coord.norm[0], coord.norm[1]); }
+  void scroll(const SWindowCoord& coord, const SScrollDelta& scroll) override {
     // fprintf(stderr, "Mouse Scroll (%f,%f) (%f,%f)\n", coord.norm[0], coord.norm[1], scroll.delta[0],
     // scroll.delta[1]);
   }
 
-  void touchDown(const STouchCoord& coord, uintptr_t tid) {
+  void touchDown(const STouchCoord& coord, uintptr_t tid) override {
     // fprintf(stderr, "Touch Down %16lX (%f,%f)\n", tid, coord.coord[0], coord.coord[1]);
   }
-  void touchUp(const STouchCoord& coord, uintptr_t tid) {
+  void touchUp(const STouchCoord& coord, uintptr_t tid) override {
     // fprintf(stderr, "Touch Up %16lX (%f,%f)\n", tid, coord.coord[0], coord.coord[1]);
   }
-  void touchMove(const STouchCoord& coord, uintptr_t tid) {
+  void touchMove(const STouchCoord& coord, uintptr_t tid) override {
     // fprintf(stderr, "Touch Move %16lX (%f,%f)\n", tid, coord.coord[0], coord.coord[1]);
   }
 
-  void charKeyDown(unsigned long charCode, EModifierKey mods, bool isRepeat) {}
-  void charKeyUp(unsigned long charCode, EModifierKey mods) {}
-  void specialKeyDown(ESpecialKey key, EModifierKey mods, bool isRepeat) {
+  void charKeyDown(unsigned long charCode, EModifierKey mods, bool isRepeat) override {}
+  void charKeyUp(unsigned long charCode, EModifierKey mods) override {}
+  void specialKeyDown(ESpecialKey key, EModifierKey mods, bool isRepeat) override {
     if (key == ESpecialKey::Enter && True(mods & EModifierKey::Alt))
       m_fullscreenToggleRequested = true;
   }
-  void specialKeyUp(ESpecialKey key, EModifierKey mods) {}
-  void modKeyDown(EModifierKey mod, bool isRepeat) {}
-  void modKeyUp(EModifierKey mod) {}
+  void specialKeyUp(ESpecialKey key, EModifierKey mods) override {}
+  void modKeyDown(EModifierKey mod, bool isRepeat) override {}
+  void modKeyUp(EModifierKey mod) override {}
 
-  void windowMoved(const SWindowRect& rect) {
+  void windowMoved(const SWindowRect& rect) override {
     // fprintf(stderr, "Moved %d, %d (%d, %d)\n", rect.size[0], rect.size[1], rect.location[0], rect.location[1]);
   }
 
-  void destroyed() { m_windowInvalid = true; }
+  void destroyed() override { m_windowInvalid = true; }
 };
 
 struct TestApplicationCallback : IApplicationCallback {
@@ -389,7 +390,7 @@ struct TestApplicationCallback : IApplicationCallback {
     } BooTrace);
   }
 
-  int appMain(IApplication* app) {
+  int appMain(IApplication* app) override {
     mainWindow = app->newWindow(_SYS_STR("YAY!"));
     mainWindow->setCallback(&windowCallback);
     mainWindow->showWindow();
@@ -455,8 +456,8 @@ struct TestApplicationCallback : IApplicationCallback {
     m_binding.reset();
     return 0;
   }
-  void appQuitting(IApplication*) { running = false; }
-  void appFilesOpen(IApplication*, const std::vector<SystemString>& paths) {
+  void appQuitting(IApplication*) override { running = false; }
+  void appFilesOpen(IApplication*, const std::vector<SystemString>& paths) override {
     fprintf(stderr, "OPENING: ");
     for (const SystemString& path : paths) {
 #if _WIN32

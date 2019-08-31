@@ -1,12 +1,13 @@
 #pragma once
 
-#include <memory>
-#include <functional>
+#include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <initializer_list>
 #include <vector>
-#include "boo/System.hpp"
-#include "boo/ThreadLocalPtr.hpp"
+
 #include "boo/BooObject.hpp"
+#include "boo/System.hpp"
 
 #ifdef __SWITCH__
 #include <ctype.h>
@@ -118,7 +119,7 @@ ENABLE_BITWISE_ENUM(VertexSemantic)
 
 /** Used to create IVertexFormat */
 struct VertexElementDescriptor {
-  VertexSemantic semantic;
+  VertexSemantic semantic{};
   int semanticIdx = 0;
   VertexElementDescriptor() = default;
   VertexElementDescriptor(VertexSemantic s, int idx = 0) : semantic(s), semanticIdx(idx) {}
@@ -250,7 +251,8 @@ struct IGraphicsDataFactory {
                                                 const VertexFormatInfo& vtxFmt,
                                                 const AdditionalPipelineInfo& additionalInfo,
                                                 bool asynchronous = true) {
-      return newShaderPipeline(vertex, fragment, {}, {}, {}, vtxFmt, additionalInfo, asynchronous);
+      return newShaderPipeline(std::move(vertex), std::move(fragment), {}, {}, {}, vtxFmt, additionalInfo,
+                               asynchronous);
     }
 
     virtual ObjToken<IShaderDataBinding> newShaderDataBinding(

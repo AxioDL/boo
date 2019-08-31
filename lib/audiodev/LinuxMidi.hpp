@@ -1,11 +1,13 @@
 #pragma once
 
-#include "AudioVoiceEngine.hpp"
-#include "logvisor/logvisor.hpp"
+#include <csignal>
 #include <thread>
+#include <unordered_map>
+
+#include "lib/audiodev/AudioVoiceEngine.hpp"
 
 #include <alsa/asoundlib.h>
-#include <signal.h>
+#include <logvisor/logvisor.hpp>
 
 namespace boo {
 extern logvisor::Module ALSALog;
@@ -25,12 +27,12 @@ struct LinuxMidi : BaseAudioVoiceEngine {
     }
   }
 
-  ~LinuxMidi() {
+  ~LinuxMidi() override {
     for (auto& p : m_openHandles)
       p.second->_disown();
   }
 
-  std::vector<std::pair<std::string, std::string>> enumerateMIDIInputs() const {
+  std::vector<std::pair<std::string, std::string>> enumerateMIDIInputs() const override {
     std::vector<std::pair<std::string, std::string>> ret;
     int status;
     int card = -1; /* use -1 to prime the pump of iterating through card list */
@@ -83,7 +85,7 @@ struct LinuxMidi : BaseAudioVoiceEngine {
     return ret;
   }
 
-  bool supportsVirtualMIDIIn() const { return true; }
+  bool supportsVirtualMIDIIn() const override { return true; }
 
   static void MIDIFreeProc(void* midiStatus) { snd_rawmidi_status_free((snd_rawmidi_status_t*)midiStatus); }
 
@@ -126,7 +128,7 @@ struct LinuxMidi : BaseAudioVoiceEngine {
     , m_midi(midi)
     , m_midiThread(std::bind(MIDIReceiveProc, m_midi, m_receiver)) {}
 
-    ~MIDIIn() {
+    ~MIDIIn() override {
       if (m_parent)
         static_cast<LinuxMidi*>(m_parent)->_removeOpenHandle(this);
       pthread_cancel(m_midiThread.native_handle());
@@ -135,7 +137,7 @@ struct LinuxMidi : BaseAudioVoiceEngine {
       snd_rawmidi_close(m_midi);
     }
 
-    std::string description() const {
+    std::string description() const override {
       snd_rawmidi_info_t* info;
       snd_rawmidi_info_alloca(&info);
       snd_rawmidi_info(m_midi, info);
@@ -148,13 +150,13 @@ struct LinuxMidi : BaseAudioVoiceEngine {
     snd_rawmidi_t* m_midi;
     MIDIOut(LinuxMidi* parent, snd_rawmidi_t* midi, bool virt) : IMIDIOut(parent, virt), m_midi(midi) {}
 
-    ~MIDIOut() {
+    ~MIDIOut() override {
       if (m_parent)
         static_cast<LinuxMidi*>(m_parent)->_removeOpenHandle(this);
       snd_rawmidi_close(m_midi);
     }
 
-    std::string description() const {
+    std::string description() const override {
       snd_rawmidi_info_t* info;
       snd_rawmidi_info_alloca(&info);
       snd_rawmidi_info(m_midi, info);
@@ -162,7 +164,9 @@ struct LinuxMidi : BaseAudioVoiceEngine {
       return ret;
     }
 
-    size_t send(const void* buf, size_t len) const { return size_t(std::max(0l, snd_rawmidi_write(m_midi, buf, len))); }
+    size_t send(const void* buf, size_t len) const override {
+      return size_t(std::max(0l, snd_rawmidi_write(m_midi, buf, len)));
+    }
   };
 
   struct MIDIInOut : public IMIDIInOut {
@@ -176,7 +180,7 @@ struct LinuxMidi : BaseAudioVoiceEngine {
     , m_midiOut(midiOut)
     , m_midiThread(std::bind(MIDIReceiveProc, m_midiIn, m_receiver)) {}
 
-    ~MIDIInOut() {
+    ~MIDIInOut() override {
       if (m_parent)
         static_cast<LinuxMidi*>(m_parent)->_removeOpenHandle(this);
       pthread_cancel(m_midiThread.native_handle());
@@ -186,7 +190,7 @@ struct LinuxMidi : BaseAudioVoiceEngine {
       snd_rawmidi_close(m_midiOut);
     }
 
-    std::string description() const {
+    std::string description() const override {
       snd_rawmidi_info_t* info;
       snd_rawmidi_info_alloca(&info);
       snd_rawmidi_info(m_midiIn, info);
@@ -194,12 +198,12 @@ struct LinuxMidi : BaseAudioVoiceEngine {
       return ret;
     }
 
-    size_t send(const void* buf, size_t len) const {
+    size_t send(const void* buf, size_t len) const override {
       return size_t(std::max(0l, snd_rawmidi_write(m_midiOut, buf, len)));
     }
   };
 
-  std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver) {
+  std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver) override {
     int status;
     snd_rawmidi_t* midi;
     status = snd_rawmidi_open(&midi, nullptr, "virtual", 0);
@@ -208,7 +212,7 @@ struct LinuxMidi : BaseAudioVoiceEngine {
     return std::make_unique<MIDIIn>(nullptr, midi, true, std::move(receiver));
   }
 
-  std::unique_ptr<IMIDIOut> newVirtualMIDIOut() {
+  std::unique_ptr<IMIDIOut> newVirtualMIDIOut() override {
     int status;
     snd_rawmidi_t* midi;
     status = snd_rawmidi_open(nullptr, &midi, "virtual", 0);
@@ -217,7 +221,7 @@ struct LinuxMidi : BaseAudioVoiceEngine {
     return std::make_unique<MIDIOut>(nullptr, midi, true);
   }
 
-  std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver) {
+  std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver) override {
     int status;
     snd_rawmidi_t* midiIn;
     snd_rawmidi_t* midiOut;
@@ -227,7 +231,7 @@ struct LinuxMidi : BaseAudioVoiceEngine {
     return std::make_unique<MIDIInOut>(nullptr, midiIn, midiOut, true, std::move(receiver));
   }
 
-  std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver) {
+  std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver) override {
     snd_rawmidi_t* midi;
     int status = snd_rawmidi_open(&midi, nullptr, name, 0);
     if (status)
@@ -237,7 +241,7 @@ struct LinuxMidi : BaseAudioVoiceEngine {
     return ret;
   }
 
-  std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name) {
+  std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name) override {
     snd_rawmidi_t* midi;
     int status = snd_rawmidi_open(nullptr, &midi, name, 0);
     if (status)
@@ -247,7 +251,7 @@ struct LinuxMidi : BaseAudioVoiceEngine {
     return ret;
   }
 
-  std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver) {
+  std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver) override {
     snd_rawmidi_t* midiIn;
     snd_rawmidi_t* midiOut;
     int status = snd_rawmidi_open(&midiIn, &midiOut, name, 0);
@@ -258,7 +262,7 @@ struct LinuxMidi : BaseAudioVoiceEngine {
     return ret;
   }
 
-  bool useMIDILock() const { return true; }
+  bool useMIDILock() const override { return true; }
 };
 
 } // namespace boo

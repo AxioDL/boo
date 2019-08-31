@@ -1,10 +1,11 @@
 #pragma once
 #if BOO_HAS_GL
 
-#include "IGraphicsDataFactory.hpp"
-#include "IGraphicsCommandQueue.hpp"
-#include "boo/IGraphicsContext.hpp"
-#include "GLSLMacros.hpp"
+#include <cstdint>
+
+#include "boo/BooObject.hpp"
+#include "boo/graphicsdev/IGraphicsCommandQueue.hpp"
+#include "boo/graphicsdev/IGraphicsDataFactory.hpp"
 
 namespace boo {
 struct BaseGraphicsData;
@@ -25,35 +26,38 @@ public:
     ~Context();
 
   public:
-    Platform platform() const { return Platform::OpenGL; }
-    const SystemChar* platformName() const { return _SYS_STR("OpenGL"); }
+    Platform platform() const override { return Platform::OpenGL; }
+    const SystemChar* platformName() const override { return _SYS_STR("OpenGL"); }
 
-    ObjToken<IGraphicsBufferS> newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
-    ObjToken<IGraphicsBufferD> newDynamicBuffer(BufferUse use, size_t stride, size_t count);
+    ObjToken<IGraphicsBufferS> newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count) override;
+    ObjToken<IGraphicsBufferD> newDynamicBuffer(BufferUse use, size_t stride, size_t count) override;
 
     ObjToken<ITextureS> newStaticTexture(size_t width, size_t height, size_t mips, TextureFormat fmt,
-                                         TextureClampMode clampMode, const void* data, size_t sz);
+                                         TextureClampMode clampMode, const void* data, size_t sz) override;
     ObjToken<ITextureSA> newStaticArrayTexture(size_t width, size_t height, size_t layers, size_t mips,
                                                TextureFormat fmt, TextureClampMode clampMode, const void* data,
-                                               size_t sz);
-    ObjToken<ITextureD> newDynamicTexture(size_t width, size_t height, TextureFormat fmt, TextureClampMode clampMode);
+                                               size_t sz) override;
+    ObjToken<ITextureD> newDynamicTexture(size_t width, size_t height, TextureFormat fmt,
+                                          TextureClampMode clampMode) override;
     ObjToken<ITextureR> newRenderTexture(size_t width, size_t height, TextureClampMode clampMode,
-                                         size_t colorBindingCount, size_t depthBindingCount);
-    ObjToken<ITextureCubeR> newCubeRenderTexture(size_t width, size_t mips);
+                                         size_t colorBindingCount, size_t depthBindingCount) override;
+    ObjToken<ITextureCubeR> newCubeRenderTexture(size_t width, size_t mips) override;
 
-    ObjToken<IShaderStage> newShaderStage(const uint8_t* data, size_t size, PipelineStage stage);
+    ObjToken<IShaderStage> newShaderStage(const uint8_t* data, size_t size, PipelineStage stage) override;
 
     ObjToken<IShaderPipeline> newShaderPipeline(ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment,
                                                 ObjToken<IShaderStage> geometry, ObjToken<IShaderStage> control,
                                                 ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
-                                                const AdditionalPipelineInfo& additionalInfo, bool asynchronous = true);
+                                                const AdditionalPipelineInfo& additionalInfo,
+                                                bool asynchronous = true) override;
 
-    ObjToken<IShaderDataBinding> newShaderDataBinding(
-        const ObjToken<IShaderPipeline>& pipeline, const ObjToken<IGraphicsBuffer>& vbo,
-        const ObjToken<IGraphicsBuffer>& instVbo, const ObjToken<IGraphicsBuffer>& ibo, size_t ubufCount,
-        const ObjToken<IGraphicsBuffer>* ubufs, const PipelineStage* ubufStages, const size_t* ubufOffs,
-        const size_t* ubufSizes, size_t texCount, const ObjToken<ITexture>* texs, const int* texBindIdx,
-        const bool* depthBind, size_t baseVert = 0, size_t baseInst = 0);
+    ObjToken<IShaderDataBinding>
+    newShaderDataBinding(const ObjToken<IShaderPipeline>& pipeline, const ObjToken<IGraphicsBuffer>& vbo,
+                         const ObjToken<IGraphicsBuffer>& instVbo, const ObjToken<IGraphicsBuffer>& ibo,
+                         size_t ubufCount, const ObjToken<IGraphicsBuffer>* ubufs, const PipelineStage* ubufStages,
+                         const size_t* ubufOffs, const size_t* ubufSizes, size_t texCount,
+                         const ObjToken<ITexture>* texs, const int* texBindIdx, const bool* depthBind,
+                         size_t baseVert = 0, size_t baseInst = 0) override;
   };
 };
 

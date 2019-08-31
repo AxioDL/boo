@@ -23,8 +23,8 @@ struct NintendoPowerAState {
   uint8_t leftY;
   uint8_t rightX;
   uint8_t rightY;
-  bool operator==(const NintendoPowerAState& other);
-  bool operator!=(const NintendoPowerAState& other);
+  bool operator==(const NintendoPowerAState& other) const;
+  bool operator!=(const NintendoPowerAState& other) const;
 };
 
 class NintendoPowerA;
@@ -35,14 +35,14 @@ struct INintendoPowerACallback {
 
 class NintendoPowerA final : public TDeviceBase<INintendoPowerACallback> {
   NintendoPowerAState m_last;
-  void deviceDisconnected();
-  void initialCycle();
-  void transferCycle();
-  void finalCycle();
-  void receivedHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message);
+  void deviceDisconnected() override;
+  void initialCycle() override;
+  void transferCycle() override;
+  void finalCycle() override;
+  void receivedHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message) override;
 
 public:
   NintendoPowerA(DeviceToken*);
-  ~NintendoPowerA();
+  ~NintendoPowerA() override;
 };
 } // namespace boo

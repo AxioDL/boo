@@ -1,11 +1,15 @@
 #pragma once
 
-#include "IAudioVoice.hpp"
-#include "IAudioSubmix.hpp"
-#include "IMIDIPort.hpp"
-#include "boo/BooObject.hpp"
+#include <cstddef>
 #include <memory>
+#include <string>
+#include <utility>
 #include <vector>
+
+#include "boo/BooObject.hpp"
+#include "boo/audiodev/IAudioSubmix.hpp"
+#include "boo/audiodev/IAudioVoice.hpp"
+#include "boo/audiodev/IMIDIPort.hpp"
 
 namespace boo {
 struct IAudioVoiceEngine;

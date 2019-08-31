@@ -1,9 +1,13 @@
-#include "logvisor/logvisor.hpp"
 #include "boo/graphicsdev/NX.hpp"
+
+#include <algorithm>
+#include <cassert>
+#include <cstdio>
+#include <cstring>
+
 #include "boo/IGraphicsContext.hpp"
 #include "boo/graphicsdev/GLSLMacros.hpp"
-#include "../Common.hpp"
-#include "xxhash/xxhash.h"
+#include "lib/graphicsdev/Common.hpp"
 
 #include "main/shaderobj.h"
 #include "st_program.h"
@@ -18,6 +22,9 @@ extern "C" {
 #include "nvc0/nvc0_program.h"
 #include "gallium/winsys/nouveau/switch/nouveau_switch_public.h"
 }
+
+#include <logvisor/logvisor.hpp>
+#include <xxhash/xxhash.h>
 
 #include <switch.h>
 
@@ -1801,7 +1808,7 @@ bool NXContext::initialize() {
 
   gfxInitDefault();
   gfxSetMode(GfxMode_TiledDouble);
-  consoleInit(NULL);
+  consoleInit(nullptr);
   printf("Activated console\n\n");
   m_screen = nouveau_switch_screen_create();
   if (!m_screen) {

@@ -1,9 +1,13 @@
-#include "boo/IApplication.hpp"
-#include "logvisor/logvisor.hpp"
 #include "nxstl/thread"
 #include "nxstl/condition_variable"
+#include "nxstl/mutex"
+
+#include "boo/IApplication.hpp"
 #include "boo/graphicsdev/NX.hpp"
-#include <limits.h>
+
+#include <climits>
+
+#include <logvisor/logvisor.hpp>
 
 #include <switch.h>
 
@@ -21,7 +25,7 @@ class ApplicationNX : public IApplication {
 
   NXContext m_nxCtx;
 
-  void _deletedWindow(IWindow* window) {}
+  void _deletedWindow(IWindow* window) override {}
 
 public:
   ApplicationNX(IApplicationCallback& callback, std::string_view uniqueName, std::string_view friendlyName,
@@ -29,9 +33,9 @@ public:
                 uint32_t anisotropy, bool deepColor, bool singleInstance)
   : m_callback(callback), m_uniqueName(uniqueName), m_friendlyName(friendlyName), m_pname(pname), m_args(args) {}
 
-  EPlatformType getPlatformType() const { return EPlatformType::NX; }
+  EPlatformType getPlatformType() const override { return EPlatformType::NX; }
 
-  int run() {
+  int run() override {
     /* Spawn client thread */
     int clientReturn = INT_MIN;
     std::mutex initmt;
@@ -63,16 +67,16 @@ public:
     return 0;
   }
 
-  std::string_view getUniqueName() const { return m_uniqueName; }
+  std::string_view getUniqueName() const override { return m_uniqueName; }
 
-  std::string_view getFriendlyName() const { return m_friendlyName; }
+  std::string_view getFriendlyName() const override { return m_friendlyName; }
 
-  std::string_view getProcessName() const { return m_pname; }
+  std::string_view getProcessName() const override { return m_pname; }
 
-  const std::vector<std::string>& getArgs() const { return m_args; }
+  const std::vector<std::string>& getArgs() const override { return m_args; }
 
   std::shared_ptr<IWindow> m_window;
-  std::shared_ptr<IWindow> newWindow(std::string_view title) {
+  std::shared_ptr<IWindow> newWindow(std::string_view title) override {
     if (m_window)
       Log.report(logvisor::Fatal, fmt("Only 1 window allowed on NX"));
     m_window = _WindowNXNew(title, &m_nxCtx);

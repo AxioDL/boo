@@ -1,8 +1,9 @@
 #include "boo/IWindow.hpp"
+
 #include "boo/IGraphicsContext.hpp"
-#include "logvisor/logvisor.hpp"
 #include "boo/graphicsdev/NX.hpp"
 
+#include <logvisor/logvisor.hpp>
 #include <switch.h>
 
 namespace boo {
@@ -21,18 +22,18 @@ public:
     m_commandQueue = _NewNXCommandQueue(nxCtx, this);
   }
 
-  EGraphicsAPI getAPI() const { return EGraphicsAPI::NX; }
-  EPixelFormat getPixelFormat() const { return EPixelFormat::RGBA8; }
-  void setPixelFormat(EPixelFormat pf) {}
-  bool initializeContext(void* handle) { return m_nxCtx->initialize(); }
-  void makeCurrent() {}
-  void postInit() {}
-  void present() {}
+  EGraphicsAPI getAPI() const override { return EGraphicsAPI::NX; }
+  EPixelFormat getPixelFormat() const override { return EPixelFormat::RGBA8; }
+  void setPixelFormat(EPixelFormat pf) override {}
+  bool initializeContext(void* handle) override { return m_nxCtx->initialize(); }
+  void makeCurrent() override {}
+  void postInit() override {}
+  void present() override {}
 
-  IGraphicsCommandQueue* getCommandQueue() { return m_commandQueue.get(); }
-  IGraphicsDataFactory* getDataFactory() { return m_dataFactory.get(); }
-  IGraphicsDataFactory* getMainContextDataFactory() { return m_dataFactory.get(); }
-  IGraphicsDataFactory* getLoadContextDataFactory() { return m_dataFactory.get(); }
+  IGraphicsCommandQueue* getCommandQueue() override { return m_commandQueue.get(); }
+  IGraphicsDataFactory* getDataFactory() override { return m_dataFactory.get(); }
+  IGraphicsDataFactory* getMainContextDataFactory() override { return m_dataFactory.get(); }
+  IGraphicsDataFactory* getLoadContextDataFactory() override { return m_dataFactory.get(); }
 };
 
 class WindowNX : public IWindow {
@@ -45,20 +46,20 @@ public:
     m_gfxCtx->initializeContext(nullptr);
   }
 
-  void setCallback(IWindowCallback* cb) { m_callback = cb; }
+  void setCallback(IWindowCallback* cb) override { m_callback = cb; }
 
-  void closeWindow() {}
-  void showWindow() {}
-  void hideWindow() {}
+  void closeWindow() override {}
+  void showWindow() override {}
+  void hideWindow() override {}
 
-  SystemString getTitle() { return m_title; }
-  void setTitle(SystemStringView title) { m_title = title; }
+  SystemString getTitle() override { return m_title; }
+  void setTitle(SystemStringView title) override { m_title = title; }
 
-  void setCursor(EMouseCursor cursor) {}
-  void setWaitCursor(bool wait) {}
+  void setCursor(EMouseCursor cursor) override {}
+  void setWaitCursor(bool wait) override {}
 
-  void setWindowFrameDefault() {}
-  void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const {
+  void setWindowFrameDefault() override {}
+  void getWindowFrame(float& xOut, float& yOut, float& wOut, float& hOut) const override {
     u32 width, height;
     gfxGetFramebufferResolution(&width, &height);
     xOut = 0;
@@ -66,7 +67,7 @@ public:
     wOut = width;
     hOut = height;
   }
-  void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const {
+  void getWindowFrame(int& xOut, int& yOut, int& wOut, int& hOut) const override {
     u32 width, height;
     gfxGetFramebufferResolution(&width, &height);
     xOut = 0;
@@ -74,37 +75,37 @@ public:
     wOut = width;
     hOut = height;
   }
-  void setWindowFrame(float x, float y, float w, float h) {}
-  void setWindowFrame(int x, int y, int w, int h) {}
-  float getVirtualPixelFactor() const { return 1.f; }
+  void setWindowFrame(float x, float y, float w, float h) override {}
+  void setWindowFrame(int x, int y, int w, int h) override {}
+  float getVirtualPixelFactor() const override { return 1.f; }
 
-  bool isFullscreen() const { return true; }
-  void setFullscreen(bool fs) {}
+  bool isFullscreen() const override { return true; }
+  void setFullscreen(bool fs) override {}
 
-  void claimKeyboardFocus(const int coord[2]) {}
-  bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz) { return false; }
-  std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz) { return {}; }
+  void claimKeyboardFocus(const int coord[2]) override {}
+  bool clipboardCopy(EClipboardType type, const uint8_t* data, size_t sz) override { return false; }
+  std::unique_ptr<uint8_t[]> clipboardPaste(EClipboardType type, size_t& sz) override { return {}; }
 
-  void waitForRetrace() {}
+  void waitForRetrace() override {}
 
-  uintptr_t getPlatformHandle() const { return 0; }
-  bool _incomingEvent(void* event) {
+  uintptr_t getPlatformHandle() const override { return 0; }
+  bool _incomingEvent(void* event) override {
     (void)event;
     return false;
   }
-  void _cleanup() {}
+  void _cleanup() override {}
 
-  ETouchType getTouchType() const { return ETouchType::Display; }
+  ETouchType getTouchType() const override { return ETouchType::Display; }
 
-  void setStyle(EWindowStyle style) {}
-  EWindowStyle getStyle() const { return EWindowStyle::None; }
+  void setStyle(EWindowStyle style) override {}
+  EWindowStyle getStyle() const override { return EWindowStyle::None; }
 
-  void setTouchBarProvider(void*) {}
+  void setTouchBarProvider(void*) override {}
 
-  IGraphicsCommandQueue* getCommandQueue() { return m_gfxCtx->getCommandQueue(); }
-  IGraphicsDataFactory* getDataFactory() { return m_gfxCtx->getDataFactory(); }
-  IGraphicsDataFactory* getMainContextDataFactory() { return m_gfxCtx->getMainContextDataFactory(); }
-  IGraphicsDataFactory* getLoadContextDataFactory() { return m_gfxCtx->getLoadContextDataFactory(); }
+  IGraphicsCommandQueue* getCommandQueue() override { return m_gfxCtx->getCommandQueue(); }
+  IGraphicsDataFactory* getDataFactory() override { return m_gfxCtx->getDataFactory(); }
+  IGraphicsDataFactory* getMainContextDataFactory() override { return m_gfxCtx->getMainContextDataFactory(); }
+  IGraphicsDataFactory* getLoadContextDataFactory() override { return m_gfxCtx->getLoadContextDataFactory(); }
 };
 
 std::shared_ptr<IWindow> _WindowNXNew(std::string_view title, NXContext* nxCtx) {

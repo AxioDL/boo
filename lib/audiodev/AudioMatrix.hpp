@@ -1,10 +1,11 @@
 #pragma once
 
-#include "boo/audiodev/IAudioVoice.hpp"
-#include <vector>
-#include <cstdint>
-#include <limits.h>
 #include <cfloat>
+#include <climits>
+#include <cstddef>
+#include <cstdint>
+
+#include "boo/audiodev/IAudioVoice.hpp"
 
 #if __SSE__
 #include <immintrin.h>

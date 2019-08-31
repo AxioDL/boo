@@ -1,11 +1,12 @@
 #pragma once
 
-#include <cstdint>
-#include <cstdlib>
+#include <cstddef>
 #include <cstdio>
+#include <cstdint>
 #include <memory>
-#include <vector>
 #include <mutex>
+#include <vector>
+
 #include "nxstl/mutex"
 #include "boo/System.hpp"
 
@@ -54,18 +55,18 @@ public:
   bool sendUSBInterruptTransfer(const uint8_t* data, size_t length);
   size_t receiveUSBInterruptTransfer(uint8_t* data, size_t length);
 
-  inline unsigned getVendorId();
-  inline unsigned getProductId();
-  inline std::string_view getVendorName();
-  inline std::string_view getProductName();
+  inline unsigned getVendorId() const;
+  inline unsigned getProductId() const;
+  inline std::string_view getVendorName() const;
+  inline std::string_view getProductName() const;
 
   /* High-Level API */
 #if _WIN32
 #if !WINDOWS_STORE
-  const PHIDP_PREPARSED_DATA getReportDescriptor();
+  PHIDP_PREPARSED_DATA getReportDescriptor() const;
 #endif
 #else
-  std::vector<uint8_t> getReportDescriptor();
+  std::vector<uint8_t> getReportDescriptor() const;
 #endif
   bool sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message = 0);
   size_t receiveHIDReport(uint8_t* data, size_t length, HIDReportType tp,

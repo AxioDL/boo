@@ -1,7 +1,7 @@
 #include "boo/inputdev/DeviceSignature.hpp"
 #include "boo/inputdev/DeviceToken.hpp"
 #include "boo/inputdev/GenericPad.hpp"
-#include "IHIDDevice.hpp"
+#include "lib/inputdev/IHIDDevice.hpp"
 
 namespace boo {
 

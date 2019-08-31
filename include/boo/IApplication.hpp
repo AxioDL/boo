@@ -1,11 +1,12 @@
 #pragma once
 
 #include <memory>
-#include <string>
+#include <string_view>
 #include <vector>
 
-#include "IWindow.hpp"
-#include "inputdev/DeviceFinder.hpp"
+#include "boo/IWindow.hpp"
+#include "boo/System.hpp"
+#include "boo/inputdev/DeviceFinder.hpp"
 
 namespace boo {
 class IApplication;

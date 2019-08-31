@@ -1,9 +1,12 @@
 #pragma once
 
-#include "IGraphicsDataFactory.hpp"
-#include "boo/IWindow.hpp"
-#include <functional>
 #include <array>
+#include <cstddef>
+#include <functional>
+
+#include "boo/BooObject.hpp"
+#include "boo/IWindow.hpp"
+#include "boo/graphicsdev/IGraphicsDataFactory.hpp"
 
 namespace boo {
 

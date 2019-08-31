@@ -1,13 +1,15 @@
 #define _CRT_SECURE_NO_WARNINGS 1 /* STFU MSVC */
-#include "IHIDDevice.hpp"
+#include "lib/inputdev/IHIDDevice.hpp"
+
 #include "boo/inputdev/DeviceToken.hpp"
 #include "boo/inputdev/DeviceBase.hpp"
-#include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <cstring>
-#include <cstdio>
+
 #include <algorithm>
+#include <condition_variable>
+#include <cstdio>
+#include <cstring>
+#include <mutex>
+#include <thread>
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN 1
@@ -27,8 +29,8 @@ class HIDDeviceWinUSB final : public IHIDDevice {
   DeviceToken& m_token;
   std::shared_ptr<DeviceBase> m_devImp;
 
-  HANDLE m_devHandle = 0;
-  HANDLE m_hidHandle = 0;
+  HANDLE m_devHandle = nullptr;
+  HANDLE m_hidHandle = nullptr;
   WINUSB_INTERFACE_HANDLE m_usbHandle = nullptr;
   unsigned m_usbIntfInPipe = 0;
   unsigned m_usbIntfOutPipe = 0;
@@ -39,21 +41,22 @@ class HIDDeviceWinUSB final : public IHIDDevice {
   std::condition_variable m_initCond;
   std::thread m_thread;
 
-  bool _sendUSBInterruptTransfer(const uint8_t* data, size_t length) {
+  bool _sendUSBInterruptTransfer(const uint8_t* data, size_t length) override {
     if (m_usbHandle) {
       ULONG lengthTransferred = 0;
-      if (!WinUsb_WritePipe(m_usbHandle, m_usbIntfOutPipe, (PUCHAR)data, (ULONG)length, &lengthTransferred, NULL) ||
-          lengthTransferred != length)
+      if (!WinUsb_WritePipe(m_usbHandle, m_usbIntfOutPipe, (PUCHAR)data, (ULONG)length, &lengthTransferred, nullptr) ||
+          lengthTransferred != length) {
         return false;
+      }
       return true;
     }
     return false;
   }
 
-  size_t _receiveUSBInterruptTransfer(uint8_t* data, size_t length) {
+  size_t _receiveUSBInterruptTransfer(uint8_t* data, size_t length) override {
     if (m_usbHandle) {
       ULONG lengthTransferred = 0;
-      if (!WinUsb_ReadPipe(m_usbHandle, m_usbIntfInPipe, (PUCHAR)data, (ULONG)length, &lengthTransferred, NULL))
+      if (!WinUsb_ReadPipe(m_usbHandle, m_usbIntfInPipe, (PUCHAR)data, (ULONG)length, &lengthTransferred, nullptr))
         return 0;
       return lengthTransferred;
     }
@@ -66,8 +69,8 @@ class HIDDeviceWinUSB final : public IHIDDevice {
 
     /* POSIX.. who needs it?? -MS */
     device->m_devHandle =
-        CreateFileA(device->m_devPath.data(), GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, NULL,
-                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, NULL);
+        CreateFileA(device->m_devPath.data(), GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, nullptr,
+                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, nullptr);
     if (INVALID_HANDLE_VALUE == device->m_devHandle) {
       device->m_devImp->deviceError(fmt("Unable to open {}@{}: {}\n"),
         device->m_token.getProductName(), device->m_devPath, GetLastError());
@@ -150,8 +153,8 @@ class HIDDeviceWinUSB final : public IHIDDevice {
     /* POSIX.. who needs it?? -MS */
     device->m_overlapped.hEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     device->m_hidHandle =
-        CreateFileA(device->m_devPath.data(), GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, NULL,
-                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, NULL);
+        CreateFileA(device->m_devPath.data(), GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, nullptr,
+                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, nullptr);
     if (INVALID_HANDLE_VALUE == device->m_hidHandle) {
       device->m_devImp->deviceError(fmt("Unable to open {}@{}: {}\n"),
         device->m_token.getProductName(), device->m_devPath, GetLastError());
@@ -199,14 +202,14 @@ class HIDDeviceWinUSB final : public IHIDDevice {
     device->m_hidHandle = nullptr;
   }
 
-  void _deviceDisconnected() { m_runningTransferLoop = false; }
+  void _deviceDisconnected() override { m_runningTransferLoop = false; }
 
   std::vector<uint8_t> m_sendBuf;
   std::vector<uint8_t> m_recvBuf;
 
-  const PHIDP_PREPARSED_DATA _getReportDescriptor() { return m_preparsedData; }
+  const PHIDP_PREPARSED_DATA _getReportDescriptor() override { return m_preparsedData; }
 
-  bool _sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message) {
+  bool _sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message) override {
     size_t maxOut = std::max(m_minFeatureSz, std::max(m_minOutputSz, length));
     if (m_sendBuf.size() < maxOut)
       m_sendBuf.resize(maxOut);
@@ -250,7 +253,7 @@ class HIDDeviceWinUSB final : public IHIDDevice {
     return true;
   }
 
-  size_t _receiveHIDReport(uint8_t* data, size_t length, HIDReportType tp, uint32_t message) {
+  size_t _receiveHIDReport(uint8_t* data, size_t length, HIDReportType tp, uint32_t message) override {
     size_t maxIn = std::max(m_minFeatureSz, std::max(m_minInputSz, length));
     if (m_recvBuf.size() < maxIn)
       m_recvBuf.resize(maxIn);
@@ -273,7 +276,7 @@ public:
   HIDDeviceWinUSB(DeviceToken& token, const std::shared_ptr<DeviceBase>& devImp)
   : m_token(token), m_devImp(devImp), m_devPath(token.getDevicePath()) {}
 
-  void _startThread() {
+  void _startThread() override {
     std::unique_lock<std::mutex> lk(m_initMutex);
     DeviceType dType = m_token.getDeviceType();
     if (dType == DeviceType::USB)
@@ -287,7 +290,7 @@ public:
     m_initCond.wait(lk);
   }
 
-  ~HIDDeviceWinUSB() {
+  ~HIDDeviceWinUSB() override {
     m_runningTransferLoop = false;
     if (m_thread.joinable())
       m_thread.detach();

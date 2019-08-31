@@ -1,9 +1,10 @@
 #pragma once
 
-#include <string>
-#include <functional>
-#include <vector>
+#include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <string>
+#include <vector>
 
 namespace boo {
 struct IAudioVoiceEngine;
@@ -35,7 +36,7 @@ protected:
   : IMIDIPort(parent, virt), IMIDIReceiver(std::move(receiver)) {}
 
 public:
-  virtual ~IMIDIIn();
+  ~IMIDIIn() override;
 };
 
 class IMIDIOut : public IMIDIPort {
@@ -43,7 +44,7 @@ protected:
   IMIDIOut(IAudioVoiceEngine* parent, bool virt) : IMIDIPort(parent, virt) {}
 
 public:
-  virtual ~IMIDIOut();
+  ~IMIDIOut() override;
   virtual size_t send(const void* buf, size_t len) const = 0;
 };
 
@@ -53,7 +54,7 @@ protected:
   : IMIDIPort(parent, virt), IMIDIReceiver(std::move(receiver)) {}
 
 public:
-  virtual ~IMIDIInOut();
+  ~IMIDIInOut() override;
   virtual size_t send(const void* buf, size_t len) const = 0;
 };
 

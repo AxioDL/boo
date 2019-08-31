@@ -1,22 +1,24 @@
-#include "IHIDDevice.hpp"
+#include "lib/inputdev/IHIDDevice.hpp"
+
+#include <condition_variable>
+#include <cstdio>
+#include <cstring>
+#include <mutex>
+#include <thread>
+
 #include "boo/inputdev/DeviceToken.hpp"
 #include "boo/inputdev/DeviceBase.hpp"
-#include <thread>
-#include <mutex>
-#include <condition_variable>
+#include "boo/inputdev/HIDParser.hpp"
 
-#include <cstdio>
+#include <fcntl.h>
 #include <libudev.h>
-#include <stropts.h>
 #include <linux/usb/ch9.h>
 #include <linux/usbdevice_fs.h>
 #include <linux/input.h>
 #include <linux/hidraw.h>
-#include <fcntl.h>
+#include <stropts.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
-#include <cstring>
-#include "boo/inputdev/HIDParser.hpp"
 
 namespace boo {
 
@@ -40,7 +42,7 @@ class HIDDeviceUdev final : public IHIDDevice {
   std::condition_variable m_initCond;
   std::thread m_thread;
 
-  bool _sendUSBInterruptTransfer(const uint8_t* data, size_t length) {
+  bool _sendUSBInterruptTransfer(const uint8_t* data, size_t length) override {
     if (m_devFd) {
       usbdevfs_bulktransfer xfer = {m_usbIntfOutPipe | USB_DIR_OUT, (unsigned)length, 30, (void*)data};
       int ret = ioctl(m_devFd, USBDEVFS_BULK, &xfer);
@@ -51,7 +53,7 @@ class HIDDeviceUdev final : public IHIDDevice {
     return false;
   }
 
-  size_t _receiveUSBInterruptTransfer(uint8_t* data, size_t length) {
+  size_t _receiveUSBInterruptTransfer(uint8_t* data, size_t length) override {
     if (m_devFd) {
       usbdevfs_bulktransfer xfer = {m_usbIntfInPipe | USB_DIR_IN, (unsigned)length, 30, data};
       return ioctl(m_devFd, USBDEVFS_BULK, &xfer);
@@ -102,7 +104,7 @@ class HIDDeviceUdev final : public IHIDDevice {
     }
 
     /* Request that kernel disconnects existing driver */
-    usbdevfs_ioctl disconnectReq = {0, USBDEVFS_DISCONNECT, NULL};
+    usbdevfs_ioctl disconnectReq = {0, USBDEVFS_DISCONNECT, nullptr};
     ioctl(fd, USBDEVFS_IOCTL, &disconnectReq);
 
     /* Return control to main thread */
@@ -209,9 +211,9 @@ class HIDDeviceUdev final : public IHIDDevice {
     udev_device_unref(udevDev);
   }
 
-  void _deviceDisconnected() { m_runningTransferLoop = false; }
+  void _deviceDisconnected() override { m_runningTransferLoop = false; }
 
-  std::vector<uint8_t> _getReportDescriptor() {
+  std::vector<uint8_t> _getReportDescriptor() override {
     /* Report descriptor size */
     int reportDescSize;
     if (ioctl(m_devFd, HIDIOCGRDESCSIZE, &reportDescSize) == -1)
@@ -227,7 +229,7 @@ class HIDDeviceUdev final : public IHIDDevice {
     return ret;
   }
 
-  bool _sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message) {
+  bool _sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message) override {
     if (m_devFd) {
       if (tp == HIDReportType::Feature) {
         int ret = ioctl(m_devFd, HIDIOCSFEATURE(length), data);
@@ -244,7 +246,7 @@ class HIDDeviceUdev final : public IHIDDevice {
     return false;
   }
 
-  size_t _receiveHIDReport(uint8_t* data, size_t length, HIDReportType tp, uint32_t message) {
+  size_t _receiveHIDReport(uint8_t* data, size_t length, HIDReportType tp, uint32_t message) override {
     if (m_devFd) {
       if (tp == HIDReportType::Feature) {
         data[0] = message;
@@ -261,7 +263,7 @@ public:
   HIDDeviceUdev(DeviceToken& token, const std::shared_ptr<DeviceBase>& devImp)
   : m_token(token), m_devImp(devImp), m_devPath(token.getDevicePath()) {}
 
-  void _startThread() {
+  void _startThread() override {
     std::unique_lock<std::mutex> lk(m_initMutex);
     DeviceType dType = m_token.getDeviceType();
     if (dType == DeviceType::USB)
@@ -277,7 +279,7 @@ public:
     m_initCond.wait(lk);
   }
 
-  ~HIDDeviceUdev() {
+  ~HIDDeviceUdev() override {
     m_runningTransferLoop = false;
     if (m_thread.joinable())
       m_thread.detach();

@@ -1,11 +1,15 @@
 #pragma once
 
-#include "boo/audiodev/IAudioSubmix.hpp"
-#include <list>
-#include <vector>
 #include <array>
+#include <cstddef>
+#include <cstdint>
+#include <list>
+#include <mutex>
 #include <unordered_map>
-#include "Common.hpp"
+#include <vector>
+
+#include "boo/audiodev/IAudioSubmix.hpp"
+#include "lib/audiodev/Common.hpp"
 
 #if __SSE__
 #include <immintrin.h>
@@ -80,16 +84,15 @@ class AudioSubmix : public ListNode<AudioSubmix, BaseAudioVoiceEngine*, IAudioSu
 public:
   static AudioSubmix*& _getHeadPtr(BaseAudioVoiceEngine* head);
   static std::unique_lock<std::recursive_mutex> _getHeadLock(BaseAudioVoiceEngine* head);
-  std::unique_lock<std::recursive_mutex> destructorLock();
 
   AudioSubmix(BaseAudioVoiceEngine& root, IAudioSubmixCallback* cb, int busId, bool mainOut);
-  ~AudioSubmix();
+  ~AudioSubmix() override;
 
-  void resetSendLevels();
-  void setSendLevel(IAudioSubmix* submix, float level, bool slew);
+  void resetSendLevels() override;
+  void setSendLevel(IAudioSubmix* submix, float level, bool slew) override;
   const AudioVoiceEngineMixInfo& mixInfo() const;
-  double getSampleRate() const;
-  SubmixFormat getSampleFormat() const;
+  double getSampleRate() const override;
+  SubmixFormat getSampleFormat() const override;
 };
 
 template <>

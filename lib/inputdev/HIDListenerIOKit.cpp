@@ -108,7 +108,7 @@ class HIDListenerIOKit : public IHIDListener {
 
       listener->m_finder._insertToken(std::make_unique<DeviceToken>(DeviceType::USB, vid, pid, vstr, pstr, devPath));
 
-      // printf("ADDED %08X %s\n", obj.get(), devPath);
+      // fmt::print(fmt("ADDED {:08X} {}\n"), obj.get(), devPath);
     }
   }
 
@@ -124,7 +124,7 @@ class HIDListenerIOKit : public IHIDListener {
       if (IORegistryEntryGetPath(obj.get(), kIOServicePlane, devPath) != 0)
         continue;
       listener->m_finder._removeToken(devPath);
-      // printf("REMOVED %08X %s\n", obj.get(), devPath);
+      // fmt::print(fmt("REMOVED {:08X} {}\n"), obj.get(), devPath);
     }
   }
 
@@ -191,7 +191,7 @@ class HIDListenerIOKit : public IHIDListener {
 
       listener->m_finder._insertToken(std::make_unique<DeviceToken>(DeviceType::HID, vidv, pidv, vstr, pstr, devPath));
 
-      // printf("ADDED %08X %s\n", obj, devPath);
+      // fmt::print(fmt("ADDED {:08X} {}\n"), obj, devPath);
     }
   }
 
@@ -207,7 +207,7 @@ class HIDListenerIOKit : public IHIDListener {
       if (IORegistryEntryGetPath(obj.get(), kIOServicePlane, devPath) != 0)
         continue;
       listener->m_finder._removeToken(devPath);
-      // printf("REMOVED %08X %s\n", obj, devPath);
+      // fmt::print(fmt("REMOVED {:08X} {}\n"), obj, devPath);
     }
   }
 
@@ -263,23 +263,23 @@ public:
     m_scanningEnabled = false;
   }
 
-  ~HIDListenerIOKit() {
+  ~HIDListenerIOKit() override {
     // CFRunLoopRemoveSource(m_listenerRunLoop, IONotificationPortGetRunLoopSource(m_llPort), kCFRunLoopDefaultMode);
     IONotificationPortDestroy(m_llPort);
   }
 
   /* Automatic device scanning */
-  bool startScanning() {
+  bool startScanning() override {
     m_scanningEnabled = true;
     return true;
   }
-  bool stopScanning() {
+  bool stopScanning() override {
     m_scanningEnabled = false;
     return true;
   }
 
   /* Manual device scanning */
-  bool scanNow() {
+  bool scanNow() override {
     IOObjectPointer<io_iterator_t> iter;
     if (IOServiceGetMatchingServices(kIOMasterPortDefault, IOServiceMatching(m_usbClass), &iter) == kIOReturnSuccess) {
       devicesConnectedUSBLL(this, iter.get());

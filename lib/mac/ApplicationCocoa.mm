@@ -1,12 +1,13 @@
 #include <AppKit/AppKit.h>
+
 #include <thread>
 
 #include "boo/IApplication.hpp"
 #include "boo/graphicsdev/Metal.hpp"
-#include "CocoaCommon.hpp"
-#include "../Common.hpp"
+#include "lib/Common.hpp"
+#include "lib/mac/CocoaCommon.hpp"
 
-#include "logvisor/logvisor.hpp"
+#include <logvisor/logvisor.hpp>
 
 #if !__has_feature(objc_arc)
 #error ARC Required
@@ -110,7 +111,7 @@ public:
     Log.report(logvisor::Info, fmt("using Metal renderer"));
   }
 
-  EPlatformType getPlatformType() const {
+  EPlatformType getPlatformType() const override {
     return EPlatformType::Cocoa;
   }
 
@@ -118,7 +119,7 @@ public:
   int m_clientReturn = 0;
   bool m_terminateNow = false;
 
-  int run() {
+  int run() override {
     /* Spawn client thread */
     m_clientThread = std::thread([&]() {
       std::string thrName = std::string(getFriendlyName()) + " Client Thread";
@@ -161,23 +162,23 @@ public:
     [NSApp terminate:nil];
   }
 
-  SystemStringView getUniqueName() const {
+  SystemStringView getUniqueName() const override {
     return m_uniqueName;
   }
 
-  SystemStringView getFriendlyName() const {
+  SystemStringView getFriendlyName() const override {
     return m_friendlyName;
   }
 
-  SystemStringView getProcessName() const {
+  SystemStringView getProcessName() const override {
     return m_pname;
   }
 
-  const std::vector<SystemString>& getArgs() const {
+  const std::vector<SystemString>& getArgs() const override {
     return m_args;
   }
 
-  std::shared_ptr<IWindow> newWindow(std::string_view title) {
+  std::shared_ptr<IWindow> newWindow(std::string_view title) override {
     auto newWindow = _WindowCocoaNew(title, &m_metalCtx);
     m_windows[newWindow->getPlatformHandle()] = newWindow;
     return newWindow;

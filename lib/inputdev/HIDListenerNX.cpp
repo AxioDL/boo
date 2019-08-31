@@ -8,9 +8,9 @@ class HIDListenerNX : public IHIDListener {
 public:
   HIDListenerNX(DeviceFinder& finder) : m_finder(finder) {}
 
-  bool startScanning() { return false; }
-  bool stopScanning() { return false; }
-  bool scanNow() { return false; }
+  bool startScanning() override { return false; }
+  bool stopScanning() override { return false; }
+  bool scanNow() override { return false; }
 };
 
 std::unique_ptr<IHIDListener> IHIDListenerNew(DeviceFinder& finder) { return std::make_unique<HIDListenerNX>(finder); }

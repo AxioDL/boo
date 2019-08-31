@@ -1,8 +1,11 @@
 #pragma once
 
-#include <boo/boo.hpp>
-#include <mutex>
+#include <chrono>
 #include <condition_variable>
+#include <mutex>
+#include <vector>
+
+#include "boo/IWindow.hpp"
 #include "nxstl/condition_variable"
 
 namespace boo {
@@ -15,11 +18,11 @@ struct DeferredWindowEvents : public IWindowCallback {
   DeferredWindowEvents(Receiver& rec) : m_rec(rec) {}
 
   bool m_destroyed = false;
-  void destroyed() { m_destroyed = true; }
+  void destroyed() override { m_destroyed = true; }
 
   bool m_hasResize = false;
   SWindowRect m_latestResize;
-  void resized(const SWindowRect& rect, bool sync) {
+  void resized(const SWindowRect& rect, bool sync) override {
     std::unique_lock<std::mutex> lk(m_mt);
     m_latestResize = rect;
     m_hasResize = true;
@@ -112,7 +115,7 @@ struct DeferredWindowEvents : public IWindowCallback {
   };
   std::vector<Command> m_cmds;
 
-  void mouseDown(const SWindowCoord& coord, EMouseButton button, EModifierKey mods) {
+  void mouseDown(const SWindowCoord& coord, EMouseButton button, EModifierKey mods) override {
     std::unique_lock<std::mutex> lk(m_mt);
     m_cmds.emplace_back(Command::Type::MouseDown);
     m_cmds.back().m_coord = coord;
@@ -120,7 +123,7 @@ struct DeferredWindowEvents : public IWindowCallback {
     m_cmds.back().m_mods = mods;
   }
 
-  void mouseUp(const SWindowCoord& coord, EMouseButton button, EModifierKey mods) {
+  void mouseUp(const SWindowCoord& coord, EMouseButton button, EModifierKey mods) override {
     std::unique_lock<std::mutex> lk(m_mt);
     m_cmds.emplace_back(Command::Type::MouseUp);
     m_cmds.back().m_coord = coord;
@@ -128,53 +131,53 @@ struct DeferredWindowEvents : public IWindowCallback {
     m_cmds.back().m_mods = mods;
   }
 
-  void mouseMove(const SWindowCoord& coord) {
+  void mouseMove(const SWindowCoord& coord) override {
     std::unique_lock<std::mutex> lk(m_mt);
     m_cmds.emplace_back(Command::Type::MouseMove);
     m_cmds.back().m_coord = coord;
   }
 
-  void mouseEnter(const SWindowCoord& coord) {
+  void mouseEnter(const SWindowCoord& coord) override {
     std::unique_lock<std::mutex> lk(m_mt);
     m_cmds.emplace_back(Command::Type::MouseEnter);
     m_cmds.back().m_coord = coord;
   }
 
-  void mouseLeave(const SWindowCoord& coord) {
+  void mouseLeave(const SWindowCoord& coord) override {
     std::unique_lock<std::mutex> lk(m_mt);
     m_cmds.emplace_back(Command::Type::MouseLeave);
     m_cmds.back().m_coord = coord;
   }
 
-  void scroll(const SWindowCoord& coord, const SScrollDelta& scroll) {
+  void scroll(const SWindowCoord& coord, const SScrollDelta& scroll) override {
     std::unique_lock<std::mutex> lk(m_mt);
     m_cmds.emplace_back(Command::Type::Scroll);
     m_cmds.back().m_coord = coord;
     m_cmds.back().m_scroll = scroll;
   }
 
-  void touchDown(const STouchCoord& coord, uintptr_t tid) {
+  void touchDown(const STouchCoord& coord, uintptr_t tid) override {
     std::unique_lock<std::mutex> lk(m_mt);
     m_cmds.emplace_back(Command::Type::TouchDown);
     m_cmds.back().m_tCoord = coord;
     m_cmds.back().m_tid = tid;
   }
 
-  void touchUp(const STouchCoord& coord, uintptr_t tid) {
+  void touchUp(const STouchCoord& coord, uintptr_t tid) override {
     std::unique_lock<std::mutex> lk(m_mt);
     m_cmds.emplace_back(Command::Type::TouchUp);
     m_cmds.back().m_tCoord = coord;
     m_cmds.back().m_tid = tid;
   }
 
-  void touchMove(const STouchCoord& coord, uintptr_t tid) {
+  void touchMove(const STouchCoord& coord, uintptr_t tid) override {
     std::unique_lock<std::mutex> lk(m_mt);
     m_cmds.emplace_back(Command::Type::TouchMove);
     m_cmds.back().m_tCoord = coord;
     m_cmds.back().m_tid = tid;
   }
 
-  void charKeyDown(unsigned long charCode, EModifierKey mods, bool isRepeat) {
+  void charKeyDown(unsigned long charCode, EModifierKey mods, bool isRepeat) override {
     std::unique_lock<std::mutex> lk(m_mt);
     m_cmds.emplace_back(Command::Type::CharKeyDown);
     m_cmds.back().m_charcode = charCode;
@@ -182,14 +185,14 @@ struct DeferredWindowEvents : public IWindowCallback {
     m_cmds.back().m_isRepeat = isRepeat;
   }
 
-  void charKeyUp(unsigned long charCode, EModifierKey mods) {
+  void charKeyUp(unsigned long charCode, EModifierKey mods) override {
     std::unique_lock<std::mutex> lk(m_mt);
     m_cmds.emplace_back(Command::Type::CharKeyUp);
     m_cmds.back().m_charcode = charCode;
     m_cmds.back().m_mods = mods;
   }
 
-  void specialKeyDown(ESpecialKey key, EModifierKey mods, bool isRepeat) {
+  void specialKeyDown(ESpecialKey key, EModifierKey mods, bool isRepeat) override {
     std::unique_lock<std::mutex> lk(m_mt);
     m_cmds.emplace_back(Command::Type::SpecialKeyDown);
     m_cmds.back().m_special = key;
@@ -197,27 +200,27 @@ struct DeferredWindowEvents : public IWindowCallback {
     m_cmds.back().m_isRepeat = isRepeat;
   }
 
-  void specialKeyUp(ESpecialKey key, EModifierKey mods) {
+  void specialKeyUp(ESpecialKey key, EModifierKey mods) override {
     std::unique_lock<std::mutex> lk(m_mt);
     m_cmds.emplace_back(Command::Type::SpecialKeyUp);
     m_cmds.back().m_special = key;
     m_cmds.back().m_mods = mods;
   }
 
-  void modKeyDown(EModifierKey mod, bool isRepeat) {
+  void modKeyDown(EModifierKey mod, bool isRepeat) override {
     std::unique_lock<std::mutex> lk(m_mt);
     m_cmds.emplace_back(Command::Type::ModKeyDown);
     m_cmds.back().m_mods = mod;
     m_cmds.back().m_isRepeat = isRepeat;
   }
 
-  void modKeyUp(EModifierKey mod) {
+  void modKeyUp(EModifierKey mod) override {
     std::unique_lock<std::mutex> lk(m_mt);
     m_cmds.emplace_back(Command::Type::ModKeyUp);
     m_cmds.back().m_mods = mod;
   }
 
-  ITextInputCallback* getTextInputCallback() { return m_rec.getTextInputCallback(); }
+  ITextInputCallback* getTextInputCallback() override { return m_rec.getTextInputCallback(); }
 
   void dispatchEvents() {
     std::unique_lock<std::mutex> lk(m_mt);

@@ -1,4 +1,5 @@
-#include "Win32Common.hpp"
+#include "lib/win/Win32Common.hpp"
+
 #include <shellapi.h>
 #include <initguid.h>
 #include <Usbiodef.h>
@@ -15,11 +16,16 @@ PFN_GetScaleFactorForMonitor MyGetScaleFactorForMonitor = nullptr;
 #define D3D11_CREATE_DEVICE_FLAGS 0
 #endif
 
-#include "boo/System.hpp"
+#include <condition_variable>
+#include <cstdlib>
+#include <mutex>
+
 #include "boo/IApplication.hpp"
-#include "boo/inputdev/DeviceFinder.hpp"
+#include "boo/System.hpp"
 #include "boo/graphicsdev/D3D.hpp"
-#include "logvisor/logvisor.hpp"
+#include "boo/inputdev/DeviceFinder.hpp"
+
+#include <logvisor/logvisor.hpp>
 
 #if BOO_HAS_VULKAN
 #include "boo/graphicsdev/Vulkan.hpp"
@@ -86,7 +92,7 @@ class ApplicationWin32 final : public IApplication {
   PFN_vkGetInstanceProcAddr m_getVkProc = nullptr;
 #endif
 
-  void _deletedWindow(IWindow* window) { m_allWindows.erase(HWND(window->getPlatformHandle())); }
+  void _deletedWindow(IWindow* window) override { m_allWindows.erase(HWND(window->getPlatformHandle())); }
 
 public:
   ApplicationWin32(IApplicationCallback& callback, SystemStringView uniqueName, SystemStringView friendlyName,
@@ -110,8 +116,8 @@ public:
     if (!dxgilib)
       Log.report(logvisor::Fatal, fmt("unable to load dxgi.dll"));
 
-    typedef HRESULT(WINAPI * CreateDXGIFactory1PROC)(REFIID riid, _COM_Outptr_ void** ppFactory);
-    CreateDXGIFactory1PROC MyCreateDXGIFactory1 = (CreateDXGIFactory1PROC)GetProcAddress(dxgilib, "CreateDXGIFactory1");
+    using CreateDXGIFactory1PROC =  HRESULT(WINAPI*)(REFIID riid, _COM_Outptr_ void** ppFactory);
+    auto MyCreateDXGIFactory1 = (CreateDXGIFactory1PROC)GetProcAddress(dxgilib, "CreateDXGIFactory1");
     if (!MyCreateDXGIFactory1)
       Log.report(logvisor::Fatal, fmt("unable to find CreateDXGIFactory1 in DXGI.dll\n"));
 
@@ -272,7 +278,7 @@ public:
     Log.report(logvisor::Fatal, fmt("system doesn't support Vulkan, D3D11, or OpenGL"));
   }
 
-  EPlatformType getPlatformType() const { return EPlatformType::Win32; }
+  EPlatformType getPlatformType() const override { return EPlatformType::Win32; }
 
   LRESULT winHwndHandler(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     /* Lookup boo window instance */
@@ -340,7 +346,7 @@ public:
       MONITORINFO monitor_info;
       monitor_info.cbSize = sizeof(monitor_info);
       GetMonitorInfo(MonitorFromWindow(win.m_hwnd, MONITOR_DEFAULTTONEAREST), &monitor_info);
-      SetWindowPos(win.m_hwnd, NULL, monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
+      SetWindowPos(win.m_hwnd, nullptr, monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
                    monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
                    monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
                    SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
@@ -350,7 +356,7 @@ public:
       SetWindowLong(win.m_hwnd, GWL_STYLE, win.m_fsStyle);
       SetWindowLong(win.m_hwnd, GWL_EXSTYLE, win.m_fsExStyle);
 
-      SetWindowPos(win.m_hwnd, NULL, win.m_fsRect.left, win.m_fsRect.top, win.m_fsRect.right - win.m_fsRect.left,
+      SetWindowPos(win.m_hwnd, nullptr, win.m_fsRect.left, win.m_fsRect.top, win.m_fsRect.right - win.m_fsRect.left,
                    win.m_fsRect.bottom - win.m_fsRect.top, SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
       win.m_fs = false;
@@ -358,7 +364,7 @@ public:
     g_nwcv.notify_one();
   }
 
-  int run() {
+  int run() override {
     g_mainThreadId = GetCurrentThreadId();
 
     /* Spawn client thread */
@@ -372,8 +378,8 @@ public:
     });
 
     /* Pump messages */
-    MSG msg = {0};
-    while (GetMessage(&msg, NULL, 0, 0)) {
+    MSG msg = {};
+    while (GetMessage(&msg, nullptr, 0, 0)) {
       if (!msg.hwnd) {
         /* PostThreadMessage events */
         switch (msg.message) {
@@ -424,22 +430,22 @@ public:
     return clientReturn;
   }
 
-  ~ApplicationWin32() {
+  ~ApplicationWin32() override {
     for (auto& p : m_allWindows)
       if (auto w = p.second.lock())
         w->_cleanup();
   }
 
-  SystemStringView getUniqueName() const { return m_uniqueName; }
+  SystemStringView getUniqueName() const override { return m_uniqueName; }
 
-  SystemStringView getFriendlyName() const { return m_friendlyName; }
+  SystemStringView getFriendlyName() const override { return m_friendlyName; }
 
-  SystemStringView getProcessName() const { return m_pname; }
+  SystemStringView getProcessName() const override { return m_pname; }
 
-  const std::vector<SystemString>& getArgs() const { return m_args; }
+  const std::vector<SystemString>& getArgs() const override { return m_args; }
 
   std::shared_ptr<IWindow> m_mwret;
-  std::shared_ptr<IWindow> newWindow(SystemStringView title) {
+  std::shared_ptr<IWindow> newWindow(SystemStringView title) override {
     if (GetCurrentThreadId() != g_mainThreadId) {
       std::unique_lock<std::mutex> lk(g_nwmt);
       if (!PostThreadMessageW(g_mainThreadId, WM_USER, WPARAM(&title), 0))
@@ -457,7 +463,7 @@ public:
   }
 };
 
-IApplication* APP = NULL;
+IApplication* APP = nullptr;
 int ApplicationRun(IApplication::EPlatformType platform, IApplicationCallback& cb, SystemStringView uniqueName,
                    SystemStringView friendlyName, SystemStringView pname, const std::vector<SystemString>& args,
                    std::string_view gfxApi, uint32_t samples, uint32_t anisotropy, bool deepColor,
@@ -484,7 +490,7 @@ int ApplicationRun(IApplication::EPlatformType platform, IApplicationCallback& c
   WIN32_CURSORS.m_wait = LoadCursor(nullptr, IDC_WAIT);
 
   /* One class for *all* boo windows */
-  WNDCLASS wndClass = {0, WindowProc, 0, 0, GetModuleHandle(nullptr), 0, 0, 0, 0, L"BooWindow"};
+  WNDCLASS wndClass = {0, WindowProc, 0, 0, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"BooWindow"};
   wndClass.hIcon = LoadIconW(wndClass.hInstance, MAKEINTRESOURCEW(101));
   wndClass.hCursor = WIN32_CURSORS.m_arrow;
   RegisterClassW(&wndClass);

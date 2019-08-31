@@ -1,23 +1,25 @@
-#include "../win/Win32Common.hpp"
-#include "AudioVoiceEngine.hpp"
-#include "logvisor/logvisor.hpp"
+#include "lib/win/Win32Common.hpp"
+
+#include <iterator>
+
 #include "boo/IApplication.hpp"
+#include "lib/audiodev/AudioVoiceEngine.hpp"
 
 #include <Mmdeviceapi.h>
 #include <Audioclient.h>
 #include <mmsystem.h>
 #include <Functiondiscoverykeys_devpkey.h>
 
-#include <iterator>
+#include <logvisor/logvisor.hpp>
 
 #ifdef TE_VIRTUAL_MIDI
 #include <teVirtualMIDI.h>
-typedef LPVM_MIDI_PORT(CALLBACK* pfnvirtualMIDICreatePortEx2)(LPCWSTR portName, LPVM_MIDI_DATA_CB callback,
+using pfnvirtualMIDICreatePortEx2 = LPVM_MIDI_PORT(CALLBACK*)(LPCWSTR portName, LPVM_MIDI_DATA_CB callback,
                                                               DWORD_PTR dwCallbackInstance, DWORD maxSysexLength,
                                                               DWORD flags);
-typedef void(CALLBACK* pfnvirtualMIDIClosePort)(LPVM_MIDI_PORT midiPort);
-typedef BOOL(CALLBACK* pfnvirtualMIDISendData)(LPVM_MIDI_PORT midiPort, LPBYTE midiDataBytes, DWORD length);
-typedef LPCWSTR(CALLBACK* pfnvirtualMIDIGetDriverVersion)(PWORD major, PWORD minor, PWORD release, PWORD build);
+using pfnvirtualMIDIClosePort = void(CALLBACK*)(LPVM_MIDI_PORT midiPort);
+using pfnvirtualMIDISendData = BOOL(CALLBACK*)(LPVM_MIDI_PORT midiPort, LPBYTE midiDataBytes, DWORD length);
+using pfnvirtualMIDIGetDriverVersion = LPCWSTR(CALLBACK*)(PWORD major, PWORD minor, PWORD release, PWORD build);
 static pfnvirtualMIDICreatePortEx2 virtualMIDICreatePortEx2PROC = nullptr;
 static pfnvirtualMIDIClosePort virtualMIDIClosePortPROC = nullptr;
 static pfnvirtualMIDISendData virtualMIDISendDataPROC = nullptr;
@@ -38,9 +40,9 @@ namespace boo {
 static logvisor::Module Log("boo::WASAPI");
 
 #define SAFE_RELEASE(punk)                                                                                             \
-  if ((punk) != NULL) {                                                                                                \
+  if ((punk) != nullptr) {                                                                                             \
     (punk)->Release();                                                                                                 \
-    (punk) = NULL;                                                                                                     \
+    (punk) = nullptr;                                                                                                  \
   }
 
 struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
@@ -70,11 +72,11 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 
     // IUnknown methods -- AddRef, Release, and QueryInterface
 
-    ULONG STDMETHODCALLTYPE AddRef() {
+    ULONG STDMETHODCALLTYPE AddRef() override {
       return InterlockedIncrement(&_cRef);
     }
 
-    ULONG STDMETHODCALLTYPE Release() {
+    ULONG STDMETHODCALLTYPE Release() override {
       ULONG ulRef = InterlockedDecrement(&_cRef);
       if (0 == ulRef) {
         delete this;
@@ -82,7 +84,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
       return ulRef;
     }
 
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, VOID** ppvInterface) {
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, VOID** ppvInterface) override {
       if (IID_IUnknown == riid) {
         AddRef();
         *ppvInterface = (IUnknown*)this;
@@ -90,7 +92,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
         AddRef();
         *ppvInterface = (IMMNotificationClient*)this;
       } else {
-        *ppvInterface = NULL;
+        *ppvInterface = nullptr;
         return E_NOINTERFACE;
       }
       return S_OK;
@@ -98,18 +100,20 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 
     // Callback methods for device-event notifications.
 
-    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDeviceId) {
+    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDeviceId) override {
       m_parent.m_rebuild = true;
       return S_OK;
     }
 
-    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR pwstrDeviceId) { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR pwstrDeviceId) override { return S_OK; }
 
-    HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR pwstrDeviceId) { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR pwstrDeviceId) override { return S_OK; }
 
-    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD dwNewState) { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD dwNewState) override { return S_OK; }
 
-    HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR pwstrDeviceId, const PROPERTYKEY key) { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR pwstrDeviceId, const PROPERTYKEY key) override {
+      return S_OK;
+    }
   } m_notificationClient;
 #endif
 
@@ -117,7 +121,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 #if !WINDOWS_STORE
     if (!m_device) {
       if (FAILED(m_enumerator->GetDevice(MBSTWCS(m_sinkName.c_str()).c_str(), &m_device))) {
-        Log.report(logvisor::Error, fmt("unable to obtain audio device %s"), m_sinkName);
+        Log.report(logvisor::Error, fmt("unable to obtain audio device {}"), m_sinkName);
         m_device.Reset();
         return;
       }
@@ -200,7 +204,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
       chMapOut.m_channels[7] = AudioChannel::SideRight;
       break;
     default:
-      Log.report(logvisor::Warning, fmt("unknown channel layout %u; using stereo"), pwfx->Format.nChannels);
+      Log.report(logvisor::Warning, fmt("unknown channel layout {}; using stereo"), pwfx->Format.nChannels);
       chMapOut.m_channelCount = 2;
       chMapOut.m_channels[0] = AudioChannel::FrontLeft;
       chMapOut.m_channels[1] = AudioChannel::FrontRight;
@@ -301,7 +305,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
         AddRef();
         *ppvInterface = (IActivateAudioInterfaceCompletionHandler*)this;
       } else {
-        *ppvInterface = NULL;
+        *ppvInterface = nullptr;
         return E_NOINTERFACE;
       }
       return S_OK;
@@ -386,7 +390,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     _resetSampleRate();
   }
 
-  void pumpAndMixVoices() {
+  void pumpAndMixVoices() override {
 #if WINDOWS_STORE
     if (!m_ready)
       return;
@@ -463,9 +467,9 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     }
   }
 
-  std::string getCurrentAudioOutput() const { return m_sinkName; }
+  std::string getCurrentAudioOutput() const override { return m_sinkName; }
 
-  bool setCurrentAudioOutput(const char* name) {
+  bool setCurrentAudioOutput(const char* name) override {
     ComPtr<IMMDevice> newDevice;
     if (FAILED(m_enumerator->GetDevice(MBSTWCS(name).c_str(), &newDevice))) {
       Log.report(logvisor::Error, fmt("unable to obtain audio device {}"), name);
@@ -477,7 +481,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     return true;
   }
 
-  std::vector<std::pair<std::string, std::string>> enumerateAudioOutputs() const {
+  std::vector<std::pair<std::string, std::string>> enumerateAudioOutputs() const override {
     std::vector<std::pair<std::string, std::string>> ret;
 
     ComPtr<IMMDeviceCollection> collection;
@@ -507,7 +511,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
   }
 
 #if !WINDOWS_STORE
-  std::vector<std::pair<std::string, std::string>> enumerateMIDIInputs() const {
+  std::vector<std::pair<std::string, std::string>> enumerateMIDIInputs() const override {
     std::vector<std::pair<std::string, std::string>> ret;
 
     UINT numInDevices = midiInGetNumDevs();
@@ -547,7 +551,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     return ret;
   }
 
-  bool supportsVirtualMIDIIn() const {
+  bool supportsVirtualMIDIIn() const override {
 #ifdef TE_VIRTUAL_MIDI
     WORD major, minor, release, build;
     return virtualMIDIGetDriverVersionPROC &&
@@ -588,9 +592,9 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 
     VMIDIIn(WASAPIAudioVoiceEngine* parent, ReceiveFunctor&& receiver) : IMIDIIn(parent, true, std::move(receiver)) {}
 
-    ~VMIDIIn() { virtualMIDIClosePortPROC(m_midi); }
+    ~VMIDIIn() override { virtualMIDIClosePortPROC(m_midi); }
 
-    std::string description() const { return "Virtual MIDI-In"; }
+    std::string description() const override { return "Virtual MIDI-In"; }
   };
 
   struct VMIDIOut : public IMIDIOut {
@@ -598,11 +602,11 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 
     VMIDIOut(WASAPIAudioVoiceEngine* parent) : IMIDIOut(parent, true) {}
 
-    ~VMIDIOut() { virtualMIDIClosePortPROC(m_midi); }
+    ~VMIDIOut() override { virtualMIDIClosePortPROC(m_midi); }
 
-    std::string description() const { return "Virtual MIDI-Out"; }
+    std::string description() const override { return "Virtual MIDI-Out"; }
 
-    size_t send(const void* buf, size_t len) const {
+    size_t send(const void* buf, size_t len) const override {
       return virtualMIDISendDataPROC(m_midi, (LPBYTE)buf, len) ? len : 0;
     }
   };
@@ -613,11 +617,11 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     VMIDIInOut(WASAPIAudioVoiceEngine* parent, ReceiveFunctor&& receiver)
     : IMIDIInOut(parent, true, std::move(receiver)) {}
 
-    ~VMIDIInOut() { virtualMIDIClosePortPROC(m_midi); }
+    ~VMIDIInOut() override { virtualMIDIClosePortPROC(m_midi); }
 
-    std::string description() const { return "Virtual MIDI-In/Out"; }
+    std::string description() const override { return "Virtual MIDI-In/Out"; }
 
-    size_t send(const void* buf, size_t len) const {
+    size_t send(const void* buf, size_t len) const override {
       return virtualMIDISendDataPROC(m_midi, (LPBYTE)buf, len) ? len : 0;
     }
   };
@@ -628,9 +632,9 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 
     MIDIIn(WASAPIAudioVoiceEngine* parent, ReceiveFunctor&& receiver) : IMIDIIn(parent, false, std::move(receiver)) {}
 
-    ~MIDIIn() { midiInClose(m_midi); }
+    ~MIDIIn() override { midiInClose(m_midi); }
 
-    std::string description() const {
+    std::string description() const override {
       UINT id = 0;
       midiInGetID(m_midi, &id);
       MIDIINCAPS caps;
@@ -661,16 +665,16 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
       m_hdr.dwBufferLength = 512;
       m_hdr.dwFlags = MHDR_ISSTRM;
       midiOutPrepareHeader(m_midi, &m_hdr, sizeof(m_hdr));
-      midiStreamOpen(&m_strm, &id, 1, NULL, NULL, CALLBACK_NULL);
+      midiStreamOpen(&m_strm, &id, 1, 0, 0, CALLBACK_NULL);
     }
 
-    ~MIDIOut() {
+    ~MIDIOut() override {
       midiStreamClose(m_strm);
       midiOutUnprepareHeader(m_midi, &m_hdr, sizeof(m_hdr));
       midiOutClose(m_midi);
     }
 
-    std::string description() const {
+    std::string description() const override {
       UINT id = 0;
       midiOutGetID(m_midi, &id);
       MIDIOUTCAPS caps;
@@ -684,7 +688,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 #endif
     }
 
-    size_t send(const void* buf, size_t len) const {
+    size_t send(const void* buf, size_t len) const override {
       memcpy(const_cast<MIDIOut*>(this)->m_buf, buf, std::min(len, size_t(512)));
       const_cast<MIDIOut*>(this)->m_hdr.dwBytesRecorded = len;
       midiStreamOut(m_strm, LPMIDIHDR(&m_hdr), sizeof(m_hdr));
@@ -710,17 +714,17 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
       m_hdr.dwBufferLength = 512;
       m_hdr.dwFlags = MHDR_ISSTRM;
       midiOutPrepareHeader(m_midiOut, &m_hdr, sizeof(m_hdr));
-      midiStreamOpen(&m_strm, &id, 1, NULL, NULL, CALLBACK_NULL);
+      midiStreamOpen(&m_strm, &id, 1, 0, 0, CALLBACK_NULL);
     }
 
-    ~MIDIInOut() {
+    ~MIDIInOut() override {
       midiInClose(m_midiIn);
       midiStreamClose(m_strm);
       midiOutUnprepareHeader(m_midiOut, &m_hdr, sizeof(m_hdr));
       midiOutClose(m_midiOut);
     }
 
-    std::string description() const {
+    std::string description() const override {
       UINT id = 0;
       midiOutGetID(m_midiOut, &id);
       MIDIOUTCAPS caps;
@@ -734,7 +738,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 #endif
     }
 
-    size_t send(const void* buf, size_t len) const {
+    size_t send(const void* buf, size_t len) const override {
       memcpy(const_cast<uint8_t*>(m_buf), buf, std::min(len, size_t(512)));
       const_cast<MIDIHDR&>(m_hdr).dwBytesRecorded = len;
       midiStreamOut(m_strm, LPMIDIHDR(&m_hdr), sizeof(m_hdr));
@@ -742,7 +746,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     }
   };
 
-  std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver) {
+  std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver) override {
 #ifdef TE_VIRTUAL_MIDI
     if (!virtualMIDICreatePortEx2PROC)
       return {};
@@ -764,7 +768,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 #endif
   }
 
-  std::unique_ptr<IMIDIOut> newVirtualMIDIOut() {
+  std::unique_ptr<IMIDIOut> newVirtualMIDIOut() override {
 #ifdef TE_VIRTUAL_MIDI
     if (!virtualMIDICreatePortEx2PROC)
       return {};
@@ -785,7 +789,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 #endif
   }
 
-  std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver) {
+  std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver) override {
 #ifdef TE_VIRTUAL_MIDI
     if (!virtualMIDICreatePortEx2PROC)
       return {};
@@ -807,7 +811,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 #endif
   }
 
-  std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver) {
+  std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver) override {
     if (strncmp(name, "in", 2))
       return {};
     long id = strtol(name + 2, nullptr, 10);
@@ -824,7 +828,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     return ret;
   }
 
-  std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name) {
+  std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name) override {
     if (strncmp(name, "out", 3))
       return {};
     long id = strtol(name + 3, nullptr, 10);
@@ -833,14 +837,14 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     if (!ret)
       return {};
 
-    if (FAILED(midiOutOpen(&static_cast<MIDIOut&>(*ret).m_midi, id, NULL, NULL, CALLBACK_NULL)))
+    if (FAILED(midiOutOpen(&static_cast<MIDIOut&>(*ret).m_midi, id, 0, 0, CALLBACK_NULL)))
       return {};
 
     static_cast<MIDIOut&>(*ret).prepare();
     return ret;
   }
 
-  std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver) {
+  std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver) override {
     const char* in = strstr(name, "in");
     const char* out = strstr(name, "out");
 
@@ -859,28 +863,28 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
       return {};
     midiInStart(static_cast<MIDIInOut&>(*ret).m_midiIn);
 
-    if (FAILED(midiOutOpen(&static_cast<MIDIInOut&>(*ret).m_midiOut, outId, NULL, NULL, CALLBACK_NULL)))
+    if (FAILED(midiOutOpen(&static_cast<MIDIInOut&>(*ret).m_midiOut, outId, 0, 0, CALLBACK_NULL)))
       return {};
 
     static_cast<MIDIInOut&>(*ret).prepare();
     return ret;
   }
 
-  bool useMIDILock() const { return true; }
+  bool useMIDILock() const override { return true; }
 #else
-  std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const { return {}; }
+  std::vector<std::pair<std::string, std::string>> enumerateMIDIDevices() const override { return {}; }
 
-  std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver) { return {}; }
+  std::unique_ptr<IMIDIIn> newVirtualMIDIIn(ReceiveFunctor&& receiver) override { return {}; }
 
-  std::unique_ptr<IMIDIOut> newVirtualMIDIOut() { return {}; }
+  std::unique_ptr<IMIDIOut> newVirtualMIDIOut() override { return {}; }
 
-  std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver) { return {}; }
+  std::unique_ptr<IMIDIInOut> newVirtualMIDIInOut(ReceiveFunctor&& receiver) override { return {}; }
 
-  std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver) { return {}; }
+  std::unique_ptr<IMIDIIn> newRealMIDIIn(const char* name, ReceiveFunctor&& receiver) override { return {}; }
 
-  std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name) { return {}; }
+  std::unique_ptr<IMIDIOut> newRealMIDIOut(const char* name) override { return {}; }
 
-  std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver) { return {}; }
+  std::unique_ptr<IMIDIInOut> newRealMIDIInOut(const char* name, ReceiveFunctor&& receiver) override { return {}; }
 
   bool useMIDILock() const { return false; }
 #endif

@@ -1,58 +1,61 @@
 #include "boo/graphicsdev/GL.hpp"
 #include "boo/graphicsdev/glew.h"
+#include "boo/graphicsdev/GLSLMacros.hpp"
+
 #include "boo/IApplication.hpp"
-#include "Common.hpp"
-#include <thread>
-#include <condition_variable>
+#include "boo/IGraphicsContext.hpp"
+#include "lib/graphicsdev/Common.hpp"
+
 #include <array>
-#include <unordered_map>
-#include <unordered_set>
-#include "xxhash/xxhash.h"
-#include "glslang/Public/ShaderLang.h"
-#include "glslang/Include/Types.h"
-#include "StandAlone/ResourceLimits.h"
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+
+#include <glslang/Public/ShaderLang.h>
+#include <glslang/Include/Types.h>
+#include <StandAlone/ResourceLimits.h>
+
+#include <logvisor/logvisor.hpp>
 
 #if _WIN32
-#include "../win/WinCommon.hpp"
+#include "lib/win/WinCommon.hpp"
 #endif
-
-#include "logvisor/logvisor.hpp"
 
 #undef min
 #undef max
 
-static const char* GammaVS = "#version 330\n" BOO_GLSL_BINDING_HEAD
-                             "layout(location=0) in vec4 posIn;\n"
-                             "layout(location=1) in vec4 uvIn;\n"
-                             "\n"
-                             "struct VertToFrag\n"
-                             "{\n"
-                             "    vec2 uv;\n"
-                             "};\n"
-                             "\n"
-                             "SBINDING(0) out VertToFrag vtf;\n"
-                             "void main()\n"
-                             "{\n"
-                             "    vtf.uv = uvIn.xy;\n"
-                             "    gl_Position = posIn;\n"
-                             "}\n";
+constexpr char GammaVS[] = "#version 330\n" BOO_GLSL_BINDING_HEAD
+                           "layout(location=0) in vec4 posIn;\n"
+                           "layout(location=1) in vec4 uvIn;\n"
+                           "\n"
+                           "struct VertToFrag\n"
+                           "{\n"
+                           "    vec2 uv;\n"
+                           "};\n"
+                           "\n"
+                           "SBINDING(0) out VertToFrag vtf;\n"
+                           "void main()\n"
+                           "{\n"
+                           "    vtf.uv = uvIn.xy;\n"
+                           "    gl_Position = posIn;\n"
+                           "}\n";
 
-static const char* GammaFS = "#version 330\n" BOO_GLSL_BINDING_HEAD
-                             "struct VertToFrag\n"
-                             "{\n"
-                             "    vec2 uv;\n"
-                             "};\n"
-                             "\n"
-                             "SBINDING(0) in VertToFrag vtf;\n"
-                             "layout(location=0) out vec4 colorOut;\n"
-                             "TBINDING0 uniform sampler2D screenTex;\n"
-                             "TBINDING1 uniform sampler2D gammaLUT;\n"
-                             "void main()\n"
-                             "{\n"
-                             "    ivec4 tex = ivec4(texture(screenTex, vtf.uv) * 65535.0);\n"
-                             "    for (int i=0 ; i<3 ; ++i)\n"
-                             "        colorOut[i] = texelFetch(gammaLUT, ivec2(tex[i] % 256, tex[i] / 256), 0).r;\n"
-                             "}\n";
+constexpr char GammaFS[] = "#version 330\n" BOO_GLSL_BINDING_HEAD
+                           "struct VertToFrag\n"
+                           "{\n"
+                           "    vec2 uv;\n"
+                           "};\n"
+                           "\n"
+                           "SBINDING(0) in VertToFrag vtf;\n"
+                           "layout(location=0) out vec4 colorOut;\n"
+                           "TBINDING0 uniform sampler2D screenTex;\n"
+                           "TBINDING1 uniform sampler2D gammaLUT;\n"
+                           "void main()\n"
+                           "{\n"
+                           "    ivec4 tex = ivec4(texture(screenTex, vtf.uv) * 65535.0);\n"
+                           "    for (int i=0 ; i<3 ; ++i)\n"
+                           "        colorOut[i] = texelFetch(gammaLUT, ivec2(tex[i] % 256, tex[i] / 256), 0).r;\n"
+                           "}\n";
 
 namespace boo {
 static logvisor::Module Log("boo::GL");
@@ -88,24 +91,31 @@ class GLDataFactoryImpl final : public GLDataFactory, public GraphicsDataFactory
     glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 
     commitTransaction([this](IGraphicsDataFactory::Context& ctx) {
-      auto vertex = ctx.newShaderStage((uint8_t*)GammaVS, 0, PipelineStage::Vertex);
-      auto fragment = ctx.newShaderStage((uint8_t*)GammaFS, 0, PipelineStage::Fragment);
-      AdditionalPipelineInfo info = {
+      auto vertex = ctx.newShaderStage(reinterpret_cast<const uint8_t*>(GammaVS), 0, PipelineStage::Vertex);
+      auto fragment = ctx.newShaderStage(reinterpret_cast<const uint8_t*>(GammaFS), 0, PipelineStage::Fragment);
+      const AdditionalPipelineInfo info = {
           BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None};
-      const VertexElementDescriptor vfmt[] = {{VertexSemantic::Position4}, {VertexSemantic::UV4}};
-      m_gammaShader = ctx.newShaderPipeline(vertex, fragment, vfmt, info);
+      const std::array<VertexElementDescriptor, 2> vfmt{{{VertexSemantic::Position4}, {VertexSemantic::UV4}}};
+      m_gammaShader = ctx.newShaderPipeline(std::move(vertex), std::move(fragment), vfmt.data(), info);
       m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
-      const struct Vert {
-        float pos[4];
-        float uv[4];
-      } verts[4] = {{{-1.f, -1.f, 0.f, 1.f}, {0.f, 0.f, 0.f, 0.f}},
-                    {{1.f, -1.f, 0.f, 1.f}, {1.f, 0.f, 0.f, 0.f}},
-                    {{-1.f, 1.f, 0.f, 1.f}, {0.f, 1.f, 0.f, 0.f}},
-                    {{1.f, 1.f, 0.f, 1.f}, {1.f, 1.f, 0.f, 0.f}}};
-      m_gammaVBO = ctx.newStaticBuffer(BufferUse::Vertex, verts, 32, 4);
-      ObjToken<ITexture> texs[] = {{}, m_gammaLUT.get()};
-      m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVBO.get(), {}, {}, 0, nullptr, nullptr, 2, texs,
-                                                nullptr, nullptr);
+      struct Vert {
+        std::array<float, 4> pos;
+        std::array<float, 4> uv;
+      };
+      constexpr std::array<Vert, 4> verts{{
+          {{-1.f, -1.f, 0.f, 1.f}, {0.f, 0.f, 0.f, 0.f}},
+          {{1.f, -1.f, 0.f, 1.f}, {1.f, 0.f, 0.f, 0.f}},
+          {{-1.f, 1.f, 0.f, 1.f}, {0.f, 1.f, 0.f, 0.f}},
+          {{1.f, 1.f, 0.f, 1.f}, {1.f, 1.f, 0.f, 0.f}},
+      }};
+      m_gammaVBO = ctx.newStaticBuffer(BufferUse::Vertex, verts.data(), sizeof(Vert), verts.size());
+
+      const std::array<ObjToken<ITexture>, 2> texs{{
+          {},
+          m_gammaLUT.get(),
+      }};
+      m_gammaBinding = ctx.newShaderDataBinding(m_gammaShader, m_gammaVBO.get(), {}, {}, 0, nullptr, nullptr,
+                                                texs.size(), texs.data(), nullptr, nullptr);
       return true;
     } BooTrace);
   }
@@ -119,28 +129,33 @@ class GLDataFactoryImpl final : public GLDataFactory, public GraphicsDataFactory
 public:
   GLDataFactoryImpl(IGraphicsContext* parent, GLContext* glCtx) : m_parent(parent), m_glCtx(glCtx) {}
 
-  Platform platform() const { return Platform::OpenGL; }
-  const SystemChar* platformName() const { return _SYS_STR("OpenGL"); }
-  void commitTransaction(const FactoryCommitFunc& trans __BooTraceArgs);
-  ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs);
+  Platform platform() const override { return Platform::OpenGL; }
+  const SystemChar* platformName() const override { return _SYS_STR("OpenGL"); }
+  void commitTransaction(const FactoryCommitFunc& trans __BooTraceArgs) override;
+  ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs) override;
 
-  void setDisplayGamma(float gamma) {
+  void setDisplayGamma(float gamma) override {
     m_gamma = gamma;
     if (gamma != 1.f)
       UpdateGammaLUT(m_gammaLUT.get(), gamma);
   }
 
-  bool isTessellationSupported(uint32_t& maxPatchSizeOut) {
+  bool isTessellationSupported(uint32_t& maxPatchSizeOut) override {
     maxPatchSizeOut = m_maxPatchSize;
     return m_hasTessellation;
   }
 
-  void waitUntilShadersReady() {}
+  void waitUntilShadersReady() override {}
 
-  bool areShadersReady() { return true; }
+  bool areShadersReady() override { return true; }
 };
 
-static const GLenum USE_TABLE[] = {GL_INVALID_ENUM, GL_ARRAY_BUFFER, GL_ELEMENT_ARRAY_BUFFER, GL_UNIFORM_BUFFER};
+constexpr std::array<GLenum, 4> USE_TABLE{
+    GL_INVALID_ENUM,
+    GL_ARRAY_BUFFER,
+    GL_ELEMENT_ARRAY_BUFFER,
+    GL_UNIFORM_BUFFER,
+};
 
 class GLGraphicsBufferS : public GraphicsDataNode<IGraphicsBufferS> {
   friend class GLDataFactory;
@@ -156,7 +171,7 @@ class GLGraphicsBufferS : public GraphicsDataNode<IGraphicsBufferS> {
   }
 
 public:
-  ~GLGraphicsBufferS() { glDeleteBuffers(1, &m_buf); }
+  ~GLGraphicsBufferS() override { glDeleteBuffers(1, &m_buf); }
 
   void bindVertex() const { glBindBuffer(GL_ARRAY_BUFFER, m_buf); }
   void bindIndex() const { glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_buf); }
@@ -171,25 +186,26 @@ class GLGraphicsBufferD : public GraphicsDataNode<IGraphicsBufferD, DataCls> {
   friend class GLDataFactory;
   friend class GLDataFactoryImpl;
   friend struct GLCommandQueue;
-  GLuint m_bufs[3];
+  std::array<GLuint, 3> m_bufs{};
   GLenum m_target;
   std::unique_ptr<uint8_t[]> m_cpuBuf;
   size_t m_cpuSz = 0;
   int m_validMask = 0;
+
   GLGraphicsBufferD(const ObjToken<DataCls>& parent, BufferUse use, size_t sz)
   : GraphicsDataNode<IGraphicsBufferD, DataCls>(parent)
   , m_target(USE_TABLE[int(use)])
   , m_cpuBuf(new uint8_t[sz])
   , m_cpuSz(sz) {
-    glGenBuffers(3, m_bufs);
-    for (int i = 0; i < 3; ++i) {
-      glBindBuffer(m_target, m_bufs[i]);
+    glGenBuffers(GLsizei(m_bufs.size()), m_bufs.data());
+    for (const GLuint buf : m_bufs) {
+      glBindBuffer(m_target, buf);
       glBufferData(m_target, m_cpuSz, nullptr, GL_STREAM_DRAW);
     }
   }
 
 public:
-  ~GLGraphicsBufferD() { glDeleteBuffers(3, m_bufs); }
+  ~GLGraphicsBufferD() override { glDeleteBuffers(GLsizei(m_bufs.size()), m_bufs.data()); }
 
   void update(int b) {
     int slot = 1 << b;
@@ -200,17 +216,17 @@ public:
     }
   }
 
-  void load(const void* data, size_t sz) {
+  void load(const void* data, size_t sz) override {
     size_t bufSz = std::min(sz, m_cpuSz);
     memcpy(m_cpuBuf.get(), data, bufSz);
     m_validMask = 0;
   }
-  void* map(size_t sz) {
+  void* map(size_t sz) override {
     if (sz > m_cpuSz)
       return nullptr;
     return m_cpuBuf.get();
   }
-  void unmap() { m_validMask = 0; }
+  void unmap() override { m_validMask = 0; }
   void bindVertex(int b) { glBindBuffer(GL_ARRAY_BUFFER, m_bufs[b]); }
   void bindIndex(int b) { glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_bufs[b]); }
   void bindUniform(size_t idx, int b) { glBindBufferBase(GL_UNIFORM_BUFFER, idx, m_bufs[b]); }
@@ -237,16 +253,16 @@ static void SetClampMode(GLenum target, TextureClampMode clampMode) {
     glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
     glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
     glTexParameteri(target, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
-    GLfloat color[] = {1.f, 1.f, 1.f, 1.f};
-    glTexParameterfv(target, GL_TEXTURE_BORDER_COLOR, color);
+    constexpr std::array<GLfloat, 4> color{1.f, 1.f, 1.f, 1.f};
+    glTexParameterfv(target, GL_TEXTURE_BORDER_COLOR, color.data());
     break;
   }
   case TextureClampMode::ClampToBlack: {
     glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
     glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
     glTexParameteri(target, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
-    GLfloat color[] = {0.f, 0.f, 0.f, 1.f};
-    glTexParameterfv(target, GL_TEXTURE_BORDER_COLOR, color);
+    constexpr std::array<GLfloat, 4> color{0.f, 0.f, 0.f, 1.f};
+    glTexParameterfv(target, GL_TEXTURE_BORDER_COLOR, color.data());
     break;
   }
   case TextureClampMode::ClampToEdge: {
@@ -347,9 +363,9 @@ class GLTextureS : public GraphicsDataNode<ITextureS> {
   }
 
 public:
-  ~GLTextureS() { glDeleteTextures(1, &m_tex); }
+  ~GLTextureS() override { glDeleteTextures(1, &m_tex); }
 
-  void setClampMode(TextureClampMode mode) {
+  void setClampMode(TextureClampMode mode) override {
     if (m_clampMode == mode)
       return;
     m_clampMode = mode;
@@ -419,9 +435,9 @@ class GLTextureSA : public GraphicsDataNode<ITextureSA> {
   }
 
 public:
-  ~GLTextureSA() { glDeleteTextures(1, &m_tex); }
+  ~GLTextureSA() override { glDeleteTextures(1, &m_tex); }
 
-  void setClampMode(TextureClampMode mode) {
+  void setClampMode(TextureClampMode mode) override {
     if (m_clampMode == mode)
       return;
     m_clampMode = mode;
@@ -438,7 +454,7 @@ public:
 class GLTextureD : public GraphicsDataNode<ITextureD> {
   friend class GLDataFactory;
   friend struct GLCommandQueue;
-  GLuint m_texs[3];
+  std::array<GLuint, 3> m_texs{};
   std::unique_ptr<uint8_t[]> m_cpuBuf;
   size_t m_cpuSz = 0;
   GLenum m_intFormat, m_format;
@@ -472,10 +488,10 @@ class GLTextureD : public GraphicsDataNode<ITextureD> {
     m_cpuSz = width * height * pxPitch;
     m_cpuBuf.reset(new uint8_t[m_cpuSz]);
 
-    GLenum compType = m_intFormat == GL_R16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
-    glGenTextures(3, m_texs);
-    for (int i = 0; i < 3; ++i) {
-      glBindTexture(GL_TEXTURE_2D, m_texs[i]);
+    const GLenum compType = m_intFormat == GL_R16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
+    glGenTextures(GLsizei(m_texs.size()), m_texs.data());
+    for (const GLuint tex : m_texs) {
+      glBindTexture(GL_TEXTURE_2D, tex);
       glTexImage2D(GL_TEXTURE_2D, 0, m_intFormat, width, height, 0, m_format, compType, nullptr);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -484,7 +500,7 @@ class GLTextureD : public GraphicsDataNode<ITextureD> {
   }
 
 public:
-  ~GLTextureD() { glDeleteTextures(3, m_texs); }
+  ~GLTextureD() override { glDeleteTextures(GLsizei(m_texs.size()), m_texs.data()); }
 
   void update(int b) {
     int slot = 1 << b;
@@ -496,24 +512,26 @@ public:
     }
   }
 
-  void load(const void* data, size_t sz) {
+  void load(const void* data, size_t sz) override {
     size_t bufSz = std::min(sz, m_cpuSz);
     memcpy(m_cpuBuf.get(), data, bufSz);
     m_validMask = 0;
   }
-  void* map(size_t sz) {
+  void* map(size_t sz) override {
     if (sz > m_cpuSz)
       return nullptr;
     return m_cpuBuf.get();
   }
-  void unmap() { m_validMask = 0; }
+  void unmap() override { m_validMask = 0; }
 
-  void setClampMode(TextureClampMode mode) {
-    if (m_clampMode == mode)
+  void setClampMode(TextureClampMode mode) override {
+    if (m_clampMode == mode) {
       return;
+    }
+
     m_clampMode = mode;
-    for (int i = 0; i < 3; ++i) {
-      glBindTexture(GL_TEXTURE_2D, m_texs[i]);
+    for (const GLuint tex : m_texs) {
+      glBindTexture(GL_TEXTURE_2D, tex);
       SetClampMode(GL_TEXTURE_2D, mode);
     }
   }
@@ -530,9 +548,9 @@ class GLTextureR : public GraphicsDataNode<ITextureR> {
   friend class GLDataFactory;
   friend struct GLCommandQueue;
   struct GLCommandQueue* m_q;
-  GLuint m_texs[2] = {};
-  GLuint m_bindTexs[2][MAX_BIND_TEXS] = {};
-  GLuint m_bindFBOs[2][MAX_BIND_TEXS] = {};
+  std::array<GLuint, 2> m_texs{};
+  std::array<std::array<GLuint, MAX_BIND_TEXS>, 2> m_bindTexs{};
+  std::array<std::array<GLuint, MAX_BIND_TEXS>, 2> m_bindFBOs{};
   GLuint m_fbo = 0;
   size_t m_width = 0;
   size_t m_height = 0;
@@ -544,15 +562,15 @@ class GLTextureR : public GraphicsDataNode<ITextureR> {
              GLenum colorFormat, TextureClampMode clampMode, size_t colorBindCount, size_t depthBindCount);
 
 public:
-  ~GLTextureR() {
-    glDeleteTextures(2, m_texs);
-    glDeleteTextures(MAX_BIND_TEXS * 2, m_bindTexs[0]);
+  ~GLTextureR() override {
+    glDeleteTextures(GLsizei(m_texs.size()), m_texs.data());
+    glDeleteTextures(MAX_BIND_TEXS * 2, m_bindTexs[0].data());
     if (m_samples > 1)
-      glDeleteFramebuffers(MAX_BIND_TEXS * 2, m_bindFBOs[0]);
+      glDeleteFramebuffers(MAX_BIND_TEXS * 2, m_bindFBOs[0].data());
     glDeleteFramebuffers(1, &m_fbo);
   }
 
-  void setClampMode(TextureClampMode mode) {
+  void setClampMode(TextureClampMode mode) override {
     for (size_t i = 0; i < m_colorBindCount; ++i) {
       glBindTexture(GL_TEXTURE_2D, m_bindTexs[0][i]);
       SetClampMode(GL_TEXTURE_2D, mode);
@@ -590,19 +608,23 @@ public:
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
-    for (int i = 0; i < MAX_BIND_TEXS; ++i) {
-      if (m_bindTexs[0][i]) {
-        glBindTexture(GL_TEXTURE_2D, m_bindTexs[0][i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, m_colorFormat, width, height, 0, GL_RGBA, compType, nullptr);
+    for (const GLuint bindTex : m_bindTexs[0]) {
+      if (bindTex == 0) {
+        continue;
       }
+
+      glBindTexture(GL_TEXTURE_2D, bindTex);
+      glTexImage2D(GL_TEXTURE_2D, 0, m_colorFormat, width, height, 0, GL_RGBA, compType, nullptr);
     }
 
-    for (int i = 0; i < MAX_BIND_TEXS; ++i) {
-      if (m_bindTexs[1][i]) {
-        glBindTexture(GL_TEXTURE_2D, m_bindTexs[1][i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT,
-                     nullptr);
+    for (const GLuint bindTex : m_bindTexs[1]) {
+      if (bindTex == 0) {
+        continue;
       }
+
+      glBindTexture(GL_TEXTURE_2D, bindTex);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT,
+                   nullptr);
     }
   }
 };
@@ -611,20 +633,20 @@ class GLTextureCubeR : public GraphicsDataNode<ITextureCubeR> {
   friend class GLDataFactory;
   friend struct GLCommandQueue;
   struct GLCommandQueue* m_q;
-  GLuint m_texs[2] = {};
-  GLuint m_fbos[6] = {};
+  std::array<GLuint, 2> m_texs{};
+  std::array<GLuint, 6> m_fbos{};
   size_t m_width = 0;
   size_t m_mipCount = 0;
   GLenum m_colorFormat;
   GLTextureCubeR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue* q, size_t width, size_t mips, GLenum colorFormat);
 
 public:
-  ~GLTextureCubeR() {
-    glDeleteTextures(2, m_texs);
-    glDeleteFramebuffers(6, m_fbos);
+  ~GLTextureCubeR() override {
+    glDeleteTextures(GLsizei(m_texs.size()), m_texs.data());
+    glDeleteFramebuffers(GLsizei(m_fbos.size()), m_fbos.data());
   }
 
-  void setClampMode(TextureClampMode mode) {}
+  void setClampMode(TextureClampMode mode) override {}
 
   void bind(size_t idx) const {
     glActiveTexture(GL_TEXTURE0 + idx);
@@ -636,27 +658,29 @@ public:
 
     glBindTexture(GL_TEXTURE_CUBE_MAP, m_texs[0]);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, m_mipCount - 1);
-    for (int f = 0; f < 6; ++f) {
+    for (size_t f = 0; f < m_fbos.size(); ++f) {
       size_t tmpWidth = m_width;
       for (size_t m = 0; m < m_mipCount; ++m) {
-        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + f, m, m_colorFormat, tmpWidth, tmpWidth,
+        glTexImage2D(GLenum(GL_TEXTURE_CUBE_MAP_POSITIVE_X + f), m, m_colorFormat, tmpWidth, tmpWidth,
                      0, GL_RGBA, compType, nullptr);
         tmpWidth >>= 1;
       }
     }
 
     glBindTexture(GL_TEXTURE_CUBE_MAP, m_texs[1]);
-    for (int f = 0; f < 6; ++f)
-      glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + f, 0, GL_DEPTH_COMPONENT32F, m_width, m_width, 0, GL_DEPTH_COMPONENT,
-                   GL_UNSIGNED_INT, nullptr);
+    for (size_t f = 0; f < m_fbos.size(); ++f) {
+      glTexImage2D(GLenum(GL_TEXTURE_CUBE_MAP_POSITIVE_X + f), 0, GL_DEPTH_COMPONENT32F, m_width, m_width, 0,
+                   GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+    }
   }
 
   void resize(size_t width, size_t mips) {
     m_width = width;
     m_mipCount = mips;
     _allocateTextures();
-    for (int f = 0; f < 6; ++f) {
-      glBindFramebuffer(GL_FRAMEBUFFER, m_fbos[f]);
+
+    for (const GLuint fbo : m_fbos) {
+      glBindFramebuffer(GL_FRAMEBUFFER, fbo);
       glDepthMask(GL_TRUE);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
@@ -681,17 +705,24 @@ ObjToken<ITextureSA> GLDataFactory::Context::newStaticArrayTexture(size_t width,
       new GLTextureSA(m_data, width, height, layers, mips, fmt, clampMode, factory.m_glCtx->m_anisotropy, data, sz)};
 }
 
-static const GLenum PRIMITIVE_TABLE[] = {GL_TRIANGLES, GL_TRIANGLE_STRIP, GL_PATCHES};
+constexpr std::array<GLenum, 3> PRIMITIVE_TABLE{
+    GL_TRIANGLES,
+    GL_TRIANGLE_STRIP,
+    GL_PATCHES,
+};
 
-static const GLenum BLEND_FACTOR_TABLE[] = {GL_ZERO,       GL_ONE,
-                                            GL_SRC_COLOR,  GL_ONE_MINUS_SRC_COLOR,
-                                            GL_DST_COLOR,  GL_ONE_MINUS_DST_COLOR,
-                                            GL_SRC_ALPHA,  GL_ONE_MINUS_SRC_ALPHA,
-                                            GL_DST_ALPHA,  GL_ONE_MINUS_DST_ALPHA,
-                                            GL_SRC1_COLOR, GL_ONE_MINUS_SRC1_COLOR};
+constexpr std::array<GLenum, 12> BLEND_FACTOR_TABLE{
+    GL_ZERO,       GL_ONE,
+    GL_SRC_COLOR,  GL_ONE_MINUS_SRC_COLOR,
+    GL_DST_COLOR,  GL_ONE_MINUS_DST_COLOR,
+    GL_SRC_ALPHA,  GL_ONE_MINUS_SRC_ALPHA,
+    GL_DST_ALPHA,  GL_ONE_MINUS_DST_ALPHA,
+    GL_SRC1_COLOR, GL_ONE_MINUS_SRC1_COLOR,
+};
 
-static const GLenum SHADER_STAGE_TABLE[] = {
-    0, GL_VERTEX_SHADER, GL_FRAGMENT_SHADER, GL_GEOMETRY_SHADER, GL_TESS_CONTROL_SHADER, GL_TESS_EVALUATION_SHADER};
+constexpr std::array<GLenum, 6> SHADER_STAGE_TABLE{
+    0, GL_VERTEX_SHADER, GL_FRAGMENT_SHADER, GL_GEOMETRY_SHADER, GL_TESS_CONTROL_SHADER, GL_TESS_EVALUATION_SHADER,
+};
 
 class GLShaderStage : public GraphicsDataNode<IShaderStage> {
   friend class GLDataFactory;
@@ -699,8 +730,9 @@ class GLShaderStage : public GraphicsDataNode<IShaderStage> {
   std::vector<std::pair<std::string, int>> m_texNames;
   std::vector<std::pair<std::string, int>> m_blockNames;
 
-  static constexpr EShLanguage ShaderTypes[] = {EShLangVertex,   EShLangVertex,      EShLangFragment,
-                                                EShLangGeometry, EShLangTessControl, EShLangTessEvaluation};
+  static constexpr std::array<EShLanguage, 6> ShaderTypes{
+      EShLangVertex, EShLangVertex, EShLangFragment, EShLangGeometry, EShLangTessControl, EShLangTessEvaluation,
+  };
 
   /* Use glslang's reflection API to pull out uniform indices from Vulkan
    * version of shader. Aids in glGetUniformBlockIndex and glGetUniformLocation calls */
@@ -768,7 +800,7 @@ class GLShaderStage : public GraphicsDataNode<IShaderStage> {
   }
 
 public:
-  ~GLShaderStage() {
+  ~GLShaderStage() override {
     if (m_shad)
       glDeleteShader(m_shad);
   }
@@ -800,15 +832,15 @@ protected:
   bool m_alphaWrite = true;
   bool m_subtractBlend = false;
   bool m_overwriteAlpha = false;
-  CullMode m_culling;
+  CullMode m_culling{};
   uint32_t m_patchSize = 0;
-  mutable GLint m_uniLocs[BOO_GLSL_MAX_UNIFORM_COUNT];
+  mutable std::array<GLint, BOO_GLSL_MAX_UNIFORM_COUNT> m_uniLocs{};
   GLShaderPipeline(const ObjToken<BaseGraphicsData>& parent, ObjToken<IShaderStage> vertex,
                    ObjToken<IShaderStage> fragment, ObjToken<IShaderStage> geometry, ObjToken<IShaderStage> control,
                    ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
                    const AdditionalPipelineInfo& info)
   : GraphicsDataNode<IShaderPipeline>(parent) {
-    std::fill(std::begin(m_uniLocs), std::end(m_uniLocs), -1);
+    m_uniLocs.fill(-1);
 
     if (info.srcFac == BlendFactor::Subtract || info.dstFac == BlendFactor::Subtract) {
       m_sfactor = GL_SRC_ALPHA;
@@ -844,7 +876,7 @@ protected:
   }
 
 public:
-  ~GLShaderPipeline() {
+  ~GLShaderPipeline() override {
     if (m_prog)
       glDeleteProgram(m_prog);
   }
@@ -898,15 +930,18 @@ public:
         if (const GLShaderStage* stage = shader.cast<GLShaderStage>()) {
           for (const auto& name : stage->getBlockNames()) {
             GLint uniLoc = glGetUniformBlockIndex(m_prog, name.first.c_str());
-            // if (uniLoc < 0)
-            //    Log.report(logvisor::Warning, fmt("unable to find uniform block '%s'"), uniformBlockNames[i]);
+            // if (uniLoc < 0) {
+            //    Log.report(logvisor::Warning, fmt("unable to find uniform block '{}'"), uniformBlockNames[i]);
+            // }
             m_uniLocs[name.second] = uniLoc;
           }
           for (const auto& name : stage->getTexNames()) {
             GLint texLoc = glGetUniformLocation(m_prog, name.first.c_str());
-            if (texLoc < 0) { /* Log.report(logvisor::Warning, fmt("unable to find sampler variable '%s'"), texNames[i]); */
-            } else
+            if (texLoc < 0) {
+              // Log.report(logvisor::Warning, fmt("unable to find sampler variable '{}'"), texNames[i]);
+            } else {
               glUniform1i(texLoc, name.second);
+            }
           }
         }
       }
@@ -967,11 +1002,11 @@ public:
     return m_prog;
   }
 
-  bool isReady() const { return true; }
+  bool isReady() const override { return true; }
 };
 
 ObjToken<IShaderStage> GLDataFactory::Context::newShaderStage(const uint8_t* data, size_t size, PipelineStage stage) {
-  GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
+  const auto& factory = static_cast<GLDataFactoryImpl&>(m_parent);
 
   if (stage == PipelineStage::Control || stage == PipelineStage::Evaluation) {
     if (!factory.m_hasTessellation)
@@ -979,14 +1014,14 @@ ObjToken<IShaderStage> GLDataFactory::Context::newShaderStage(const uint8_t* dat
   }
 
   BOO_MSAN_NO_INTERCEPT
-  return {new GLShaderStage(m_data, (char*)data, stage)};
+  return {new GLShaderStage(m_data, reinterpret_cast<const char*>(data), stage)};
 }
 
 ObjToken<IShaderPipeline> GLDataFactory::Context::newShaderPipeline(
     ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment, ObjToken<IShaderStage> geometry,
     ObjToken<IShaderStage> control, ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
     const AdditionalPipelineInfo& additionalInfo, bool asynchronous) {
-  GLDataFactoryImpl& factory = static_cast<GLDataFactoryImpl&>(m_parent);
+  const auto& factory = static_cast<GLDataFactoryImpl&>(m_parent);
 
   if (control || evaluation) {
     if (!factory.m_hasTessellation)
@@ -1025,7 +1060,7 @@ struct GLShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
                       const int* bindTexIdx, const bool* depthBind, size_t baseVert, size_t baseInst,
                       GLCommandQueue* q);
 
-  ~GLShaderDataBinding();
+  ~GLShaderDataBinding() override;
 
   void bind(int b) const {
     GLShaderPipeline& pipeline = *m_pipeline.cast<GLShaderPipeline>();
@@ -1106,16 +1141,22 @@ ObjToken<IGraphicsBufferD> GLDataFactoryImpl::newPoolBuffer(BufferUse use, size_
   return {new GLGraphicsBufferD<BaseGraphicsPool>(pool, use, stride * count)};
 }
 
-static const GLint SEMANTIC_COUNT_TABLE[] = {0, 3, 4, 3, 4, 4, 4, 2, 4, 4, 4};
+constexpr std::array<GLint, 11> SEMANTIC_COUNT_TABLE{
+    0, 3, 4, 3, 4, 4, 4, 2, 4, 4, 4,
+};
 
-static const size_t SEMANTIC_SIZE_TABLE[] = {0, 12, 16, 12, 16, 16, 4, 8, 16, 16, 16};
+constexpr std::array<size_t, 11> SEMANTIC_SIZE_TABLE{
+    0, 12, 16, 12, 16, 16, 4, 8, 16, 16, 16,
+};
 
-static const GLenum SEMANTIC_TYPE_TABLE[] = {GL_INVALID_ENUM,  GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FLOAT,
-                                             GL_UNSIGNED_BYTE, GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FLOAT};
+constexpr std::array<GLenum, 11> SEMANTIC_TYPE_TABLE{
+    GL_INVALID_ENUM,  GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FLOAT,
+    GL_UNSIGNED_BYTE, GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FLOAT,
+};
 
 struct GLCommandQueue final : IGraphicsCommandQueue {
-  Platform platform() const { return IGraphicsDataFactory::Platform::OpenGL; }
-  const SystemChar* platformName() const { return _SYS_STR("OpenGL"); }
+  Platform platform() const override { return IGraphicsDataFactory::Platform::OpenGL; }
+  const SystemChar* platformName() const override { return _SYS_STR("OpenGL"); }
   IGraphicsContext* m_parent = nullptr;
   GLContext* m_glCtx = nullptr;
 
@@ -1152,7 +1193,7 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
         SWindowRect rect;
         float znear, zfar;
       } viewport;
-      float rgba[4];
+      std::array<float, 4> rgba;
       GLbitfield flags;
       struct {
         size_t start;
@@ -1178,7 +1219,7 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
     Command(Command&&) = default;
     Command& operator=(Command&&) = default;
   };
-  std::vector<Command> m_cmdBufs[3];
+  std::array<std::vector<Command>, 3> m_cmdBufs;
   int m_fillBuf = 0;
   int m_completeBuf = 0;
   int m_drawBuf = 0;
@@ -1206,20 +1247,22 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
   std::vector<ObjToken<ITextureCubeR>> m_pendingCubeFboAdds;
 
   static void ConfigureVertexFormat(GLShaderDataBinding* fmt) {
-    glGenVertexArrays(3, fmt->m_vao.data());
+    glGenVertexArrays(GLsizei(fmt->m_vao.size()), fmt->m_vao.data());
 
     size_t stride = 0;
     size_t instStride = 0;
-    auto pipeline = fmt->m_pipeline.cast<GLShaderPipeline>();
-    for (size_t i = 0; i < pipeline->m_elements.size(); ++i) {
-      const VertexElementDescriptor& desc = pipeline->m_elements[i];
-      if (True(desc.semantic & VertexSemantic::Instanced))
-        instStride += SEMANTIC_SIZE_TABLE[int(desc.semantic & VertexSemantic::SemanticMask)];
-      else
-        stride += SEMANTIC_SIZE_TABLE[int(desc.semantic & VertexSemantic::SemanticMask)];
+    const auto* const pipeline = fmt->m_pipeline.cast<GLShaderPipeline>();
+    for (const auto desc : pipeline->m_elements) {
+      const size_t size = SEMANTIC_SIZE_TABLE[int(desc.semantic & VertexSemantic::SemanticMask)];
+
+      if (True(desc.semantic & VertexSemantic::Instanced)) {
+        instStride += size;
+      } else {
+        stride += size;
+      }
     }
 
-    for (int b = 0; b < 3; ++b) {
+    for (size_t b = 0; b < fmt->m_vao.size(); ++b) {
       size_t offset = fmt->m_baseVert * stride;
       size_t instOffset = fmt->m_baseInst * instStride;
       glBindVertexArray(fmt->m_vao[b]);
@@ -1234,28 +1277,31 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
         if (vbo != lastVBO) {
           lastVBO = vbo;
           if (lastVBO->dynamic())
-            static_cast<GLGraphicsBufferD<BaseGraphicsData>*>(lastVBO)->bindVertex(b);
+            static_cast<GLGraphicsBufferD<BaseGraphicsData>*>(lastVBO)->bindVertex(int(b));
           else
             static_cast<GLGraphicsBufferS*>(lastVBO)->bindVertex();
         }
         if (ebo != lastEBO) {
           lastEBO = ebo;
           if (lastEBO->dynamic())
-            static_cast<GLGraphicsBufferD<BaseGraphicsData>*>(lastEBO)->bindIndex(b);
+            static_cast<GLGraphicsBufferD<BaseGraphicsData>*>(lastEBO)->bindIndex(int(b));
           else
             static_cast<GLGraphicsBufferS*>(lastEBO)->bindIndex();
         }
+
         glEnableVertexAttribArray(i);
-        int maskedSem = int(desc.semantic & VertexSemantic::SemanticMask);
+        const int maskedSem = int(desc.semantic & VertexSemantic::SemanticMask);
+        const auto semanticCount = SEMANTIC_COUNT_TABLE[maskedSem];
+        const auto semanticType = SEMANTIC_TYPE_TABLE[maskedSem];
+        const auto semanticSize = SEMANTIC_SIZE_TABLE[maskedSem];
+
         if (True(desc.semantic & VertexSemantic::Instanced)) {
-          glVertexAttribPointer(i, SEMANTIC_COUNT_TABLE[maskedSem], SEMANTIC_TYPE_TABLE[maskedSem], GL_TRUE, instStride,
-                                (void*)instOffset);
+          glVertexAttribPointer(i, semanticCount, semanticType, GL_TRUE, instStride, (void*)instOffset);
           glVertexAttribDivisor(i, 1);
-          instOffset += SEMANTIC_SIZE_TABLE[maskedSem];
+          instOffset += semanticSize;
         } else {
-          glVertexAttribPointer(i, SEMANTIC_COUNT_TABLE[maskedSem], SEMANTIC_TYPE_TABLE[maskedSem], GL_TRUE, stride,
-                                (void*)offset);
-          offset += SEMANTIC_SIZE_TABLE[maskedSem];
+          glVertexAttribPointer(i, semanticCount, semanticType, GL_TRUE, stride, (void*)offset);
+          offset += semanticSize;
         }
       }
     }
@@ -1270,14 +1316,14 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
 
     if (tex->m_samples > 1) {
       if (tex->m_colorBindCount) {
-        glGenFramebuffers(tex->m_colorBindCount, tex->m_bindFBOs[0]);
+        glGenFramebuffers(tex->m_colorBindCount, tex->m_bindFBOs[0].data());
         for (size_t i = 0; i < tex->m_colorBindCount; ++i) {
           glBindFramebuffer(GL_FRAMEBUFFER, tex->m_bindFBOs[0][i]);
           glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex->m_bindTexs[0][i], 0);
         }
       }
       if (tex->m_depthBindCount) {
-        glGenFramebuffers(tex->m_depthBindCount, tex->m_bindFBOs[1]);
+        glGenFramebuffers(tex->m_depthBindCount, tex->m_bindFBOs[1].data());
         for (size_t i = 0; i < tex->m_depthBindCount; ++i) {
           glBindFramebuffer(GL_FRAMEBUFFER, tex->m_bindFBOs[1][i]);
           glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex->m_bindTexs[1][i], 0);
@@ -1287,11 +1333,14 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
   }
 
   static void ConfigureFBO(GLTextureCubeR* tex) {
-    glGenFramebuffers(6, tex->m_fbos);
-    for (int i = 0; i < 6; ++i) {
+    glGenFramebuffers(GLsizei(tex->m_fbos.size()), tex->m_fbos.data());
+
+    for (size_t i = 0; i < tex->m_fbos.size(); ++i) {
       glBindFramebuffer(GL_FRAMEBUFFER, tex->m_fbos[i]);
-      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, tex->m_texs[0], 0);
-      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, tex->m_texs[1], 0);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GLenum(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i),
+                             tex->m_texs[0], 0);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GLenum(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i),
+                             tex->m_texs[1], 0);
     }
   }
 
@@ -1530,7 +1579,7 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
               int voffset = 0;
               for (BaseGraphicsData& data : *dataFactory->m_dataHead) {
                 if (GLTextureCubeR* cube = static_cast<GLTextureCubeR*>(data.getHead<ITextureCubeR>())) {
-                  for (int i = 0; i < 6; ++i) {
+                  for (size_t i = 0; i < cube->m_fbos.size(); ++i) {
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, cube->m_fbos[i]);
                     glBlitFramebuffer(0, 0, cube->m_width, cube->m_width, offset, voffset,
                                       cube->m_width + offset, cube->m_width + voffset,
@@ -1571,149 +1620,151 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
     dataFactory->DestroyGammaResources();
     std::lock_guard<std::recursive_mutex> fmtLk(self->m_fmtMt);
     if (self->m_pendingFmtDels.size()) {
-      for (const auto& v : self->m_pendingFmtDels)
-        glDeleteVertexArrays(3, v.data());
+      for (const auto& v : self->m_pendingFmtDels) {
+        glDeleteVertexArrays(GLsizei(v.size()), v.data());
+      }
       self->m_pendingFmtDels.clear();
     }
   }
 
   GLCommandQueue(IGraphicsContext* parent, GLContext* glCtx) : m_parent(parent), m_glCtx(glCtx) {}
 
-  void startRenderer() {
+  void startRenderer() override {
     std::unique_lock<std::mutex> lk(m_initmt);
     m_thr = std::thread(RenderingWorker, this);
     m_initcv.wait(lk);
   }
 
-  void stopRenderer() {
+  void stopRenderer() override {
     if (m_running) {
       m_running = false;
       m_cv.notify_one();
-      if (m_thr.joinable())
+      if (m_thr.joinable()) {
         m_thr.join();
-      for (int i = 0; i < 3; ++i)
-        m_cmdBufs[i].clear();
+      }
+      for (auto& cmdBuf : m_cmdBufs) {
+        cmdBuf.clear();
+      }
     }
   }
 
-  ~GLCommandQueue() { stopRenderer(); }
+  ~GLCommandQueue() override { stopRenderer(); }
 
-  void setShaderDataBinding(const ObjToken<IShaderDataBinding>& binding) {
+  void setShaderDataBinding(const ObjToken<IShaderDataBinding>& binding) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::SetShaderDataBinding);
-    cmds.back().binding = binding;
+    auto& cmd = cmds.emplace_back(Command::Op::SetShaderDataBinding);
+    cmd.binding = binding;
   }
 
-  void setRenderTarget(const ObjToken<ITextureR>& target) {
+  void setRenderTarget(const ObjToken<ITextureR>& target) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::SetRenderTarget);
-    cmds.back().target = target.get();
+    auto& cmd = cmds.emplace_back(Command::Op::SetRenderTarget);
+    cmd.target = target.get();
   }
 
-  void setRenderTarget(const ObjToken<ITextureCubeR>& target, int face) {
+  void setRenderTarget(const ObjToken<ITextureCubeR>& target, int face) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::SetCubeRenderTarget);
-    cmds.back().target = target.get();
-    cmds.back().bindIdx = face;
+    auto& cmd = cmds.emplace_back(Command::Op::SetCubeRenderTarget);
+    cmd.target = target.get();
+    cmd.bindIdx = face;
   }
 
-  void setViewport(const SWindowRect& rect, float znear, float zfar) {
+  void setViewport(const SWindowRect& rect, float znear, float zfar) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::SetViewport);
-    cmds.back().viewport.rect = rect;
-    cmds.back().viewport.znear = znear;
-    cmds.back().viewport.zfar = zfar;
+    auto& cmd = cmds.emplace_back(Command::Op::SetViewport);
+    cmd.viewport.rect = rect;
+    cmd.viewport.znear = znear;
+    cmd.viewport.zfar = zfar;
   }
 
-  void setScissor(const SWindowRect& rect) {
+  void setScissor(const SWindowRect& rect) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::SetScissor);
-    cmds.back().viewport.rect = rect;
+    auto& cmd = cmds.emplace_back(Command::Op::SetScissor);
+    cmd.viewport.rect = rect;
   }
 
-  void resizeRenderTexture(const ObjToken<ITextureR>& tex, size_t width, size_t height) {
+  void resizeRenderTexture(const ObjToken<ITextureR>& tex, size_t width, size_t height) override {
     std::unique_lock<std::mutex> lk(m_mt);
     GLTextureR* texgl = tex.cast<GLTextureR>();
     m_pendingResizes.push_back({texgl, width, height});
   }
 
-  void resizeRenderTexture(const ObjToken<ITextureCubeR>& tex, size_t width, size_t mips) {
+  void resizeRenderTexture(const ObjToken<ITextureCubeR>& tex, size_t width, size_t mips) override {
     std::unique_lock<std::mutex> lk(m_mt);
     GLTextureCubeR* texgl = tex.cast<GLTextureCubeR>();
     m_pendingCubeResizes.push_back({texgl, width, mips});
   }
 
-  void generateMipmaps(const ObjToken<ITextureCubeR>& tex) {
+  void generateMipmaps(const ObjToken<ITextureCubeR>& tex) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::GenerateMips);
-    cmds.back().target = tex.get();
+    auto& cmd = cmds.emplace_back(Command::Op::GenerateMips);
+    cmd.target = tex.get();
   }
 
-  void schedulePostFrameHandler(std::function<void(void)>&& func) { m_pendingPosts1.push_back(std::move(func)); }
+  void schedulePostFrameHandler(std::function<void()>&& func) override { m_pendingPosts1.push_back(std::move(func)); }
 
-  void setClearColor(const float rgba[4]) {
+  void setClearColor(const float rgba[4]) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::SetClearColor);
-    cmds.back().rgba[0] = rgba[0];
-    cmds.back().rgba[1] = rgba[1];
-    cmds.back().rgba[2] = rgba[2];
-    cmds.back().rgba[3] = rgba[3];
+    auto& cmd = cmds.emplace_back(Command::Op::SetClearColor);
+    cmd.rgba = {rgba[0], rgba[1], rgba[2], rgba[3]};
   }
 
-  void clearTarget(bool render = true, bool depth = true) {
+  void clearTarget(bool render = true, bool depth = true) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::ClearTarget);
-    cmds.back().flags = 0;
-    if (render)
-      cmds.back().flags |= GL_COLOR_BUFFER_BIT;
-    if (depth)
-      cmds.back().flags |= GL_DEPTH_BUFFER_BIT;
+    auto& cmd = cmds.emplace_back(Command::Op::ClearTarget);
+    cmd.flags = 0;
+    if (render) {
+      cmd.flags |= GL_COLOR_BUFFER_BIT;
+    }
+    if (depth) {
+      cmd.flags |= GL_DEPTH_BUFFER_BIT;
+    }
   }
 
-  void draw(size_t start, size_t count) {
+  void draw(size_t start, size_t count) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::Draw);
-    cmds.back().start = start;
-    cmds.back().count = count;
+    auto& cmd = cmds.emplace_back(Command::Op::Draw);
+    cmd.start = start;
+    cmd.count = count;
   }
 
-  void drawIndexed(size_t start, size_t count) {
+  void drawIndexed(size_t start, size_t count) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::DrawIndexed);
-    cmds.back().start = start;
-    cmds.back().count = count;
+    auto& cmd = cmds.emplace_back(Command::Op::DrawIndexed);
+    cmd.start = start;
+    cmd.count = count;
   }
 
-  void drawInstances(size_t start, size_t count, size_t instCount, size_t startInst) {
+  void drawInstances(size_t start, size_t count, size_t instCount, size_t startInst) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::DrawInstances);
-    cmds.back().start = start;
-    cmds.back().count = count;
-    cmds.back().instCount = instCount;
-    cmds.back().startInst = startInst;
+    auto& cmd = cmds.emplace_back(Command::Op::DrawInstances);
+    cmd.start = start;
+    cmd.count = count;
+    cmd.instCount = instCount;
+    cmd.startInst = startInst;
   }
 
-  void drawInstancesIndexed(size_t start, size_t count, size_t instCount, size_t startInst) {
+  void drawInstancesIndexed(size_t start, size_t count, size_t instCount, size_t startInst) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::DrawInstancesIndexed);
-    cmds.back().start = start;
-    cmds.back().count = count;
-    cmds.back().instCount = instCount;
-    cmds.back().startInst = startInst;
+    auto& cmd = cmds.emplace_back(Command::Op::DrawInstancesIndexed);
+    cmd.start = start;
+    cmd.count = count;
+    cmd.instCount = instCount;
+    cmd.startInst = startInst;
   }
 
   void resolveBindTexture(const ObjToken<ITextureR>& texture, const SWindowRect& rect, bool tlOrigin, int bindIdx,
-                          bool color, bool depth, bool clearDepth) {
-    GLTextureR* tex = texture.cast<GLTextureR>();
+                          bool color, bool depth, bool clearDepth) override {
+    const auto* const tex = texture.cast<GLTextureR>();
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::ResolveBindTexture);
-    cmds.back().resolveTex = texture;
-    cmds.back().bindIdx = bindIdx;
-    cmds.back().resolveColor = color;
-    cmds.back().resolveDepth = depth;
-    cmds.back().clearDepth = clearDepth;
-    SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, tex->m_width, tex->m_height));
-    SWindowRect& targetRect = cmds.back().viewport.rect;
+    auto& cmd = cmds.emplace_back(Command::Op::ResolveBindTexture);
+    cmd.resolveTex = texture;
+    cmd.bindIdx = bindIdx;
+    cmd.resolveColor = color;
+    cmd.resolveDepth = depth;
+    cmd.clearDepth = clearDepth;
+    const SWindowRect intersectRect = rect.intersect(SWindowRect(0, 0, tex->m_width, tex->m_height));
+    SWindowRect& targetRect = cmd.viewport.rect;
     targetRect.location[0] = intersectRect.location[0];
     if (tlOrigin)
       targetRect.location[1] = tex->m_height - intersectRect.location[1] - intersectRect.size[1];
@@ -1723,10 +1774,10 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
     targetRect.size[1] = intersectRect.size[1];
   }
 
-  void resolveDisplay(const ObjToken<ITextureR>& source) {
+  void resolveDisplay(const ObjToken<ITextureR>& source) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-    cmds.emplace_back(Command::Op::Present);
-    cmds.back().source = source;
+    auto& cmd = cmds.emplace_back(Command::Op::Present);
+    cmd.source = source;
   }
 
   void addVertexFormat(const ObjToken<IShaderDataBinding>& fmt) {
@@ -1749,15 +1800,15 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
     m_pendingCubeFboAdds.push_back(tex);
   }
 
-  void execute() {
+  void execute() override {
     BOO_MSAN_NO_INTERCEPT
     SCOPED_GRAPHICS_DEBUG_GROUP(this, "GLCommandQueue::execute", {1.f, 0.f, 0.f, 1.f});
     std::unique_lock<std::mutex> lk(m_mt);
     m_completeBuf = m_fillBuf;
-    for (int i = 0; i < 3; ++i) {
-      if (i == m_completeBuf || i == m_drawBuf)
+    for (size_t i = 0; i < m_cmdBufs.size(); ++i) {
+      if (int(i) == m_completeBuf || int(i) == m_drawBuf)
         continue;
-      m_fillBuf = i;
+      m_fillBuf = int(i);
       break;
     }
 
@@ -1797,8 +1848,8 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
   void pushDebugGroup(const char* name, const std::array<float, 4>& color) {
     if (GLEW_KHR_debug) {
       std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
-      cmds.emplace_back(Command::Op::PushDebugGroup);
-      cmds.back().name = name;
+      auto& cmd = cmds.emplace_back(Command::Op::PushDebugGroup);
+      cmd.name = name;
     }
   }
 
@@ -1833,16 +1884,18 @@ GLTextureR::GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue*
 , m_colorFormat(colorFormat)
 , m_colorBindCount(colorBindingCount)
 , m_depthBindCount(depthBindingCount) {
-  glGenTextures(2, m_texs);
+  glGenTextures(GLsizei(m_texs.size()), m_texs.data());
   if (colorBindingCount) {
-    if (colorBindingCount > MAX_BIND_TEXS)
+    if (colorBindingCount > MAX_BIND_TEXS) {
       Log.report(logvisor::Fatal, fmt("too many color bindings for render texture"));
-    glGenTextures(colorBindingCount, m_bindTexs[0]);
+    }
+    glGenTextures(colorBindingCount, m_bindTexs[0].data());
   }
   if (depthBindingCount) {
-    if (depthBindingCount > MAX_BIND_TEXS)
+    if (depthBindingCount > MAX_BIND_TEXS) {
       Log.report(logvisor::Fatal, fmt("too many depth bindings for render texture"));
-    glGenTextures(depthBindingCount, m_bindTexs[1]);
+    }
+    glGenTextures(depthBindingCount, m_bindTexs[1].data());
   }
 
   GLenum compType = colorFormat == GL_RGBA16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
@@ -1900,7 +1953,7 @@ GLTextureCubeR::GLTextureCubeR(const ObjToken<BaseGraphicsData>& parent, GLComma
 , m_width(width)
 , m_mipCount(mips)
 , m_colorFormat(colorFormat) {
-  glGenTextures(2, m_texs);
+  glGenTextures(GLsizei(m_texs.size()), m_texs.data());
 
   _allocateTextures();
 
@@ -1954,8 +2007,9 @@ GLShaderDataBinding(const ObjToken<BaseGraphicsData>& d, const ObjToken<IShaderP
     m_ubufOffs.reserve(ubufCount);
     for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
-      if (ubufOffs[i] % 256)
-        Log.report(logvisor::Fatal, fmt("non-256-byte-aligned uniform-offset {} provided to newShaderDataBinding"), int(i));
+      if (ubufOffs[i] % 256) {
+        Log.report(logvisor::Fatal, fmt("non-256-byte-aligned uniform-offset {} provided to newShaderDataBinding"), i);
+      }
 #endif
       m_ubufOffs.emplace_back(ubufOffs[i], (ubufSizes[i] + 255) & ~255);
     }
@@ -1963,8 +2017,9 @@ GLShaderDataBinding(const ObjToken<BaseGraphicsData>& d, const ObjToken<IShaderP
   m_ubufs.reserve(ubufCount);
   for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
-    if (!ubufs[i])
-      Log.report(logvisor::Fatal, fmt("null uniform-buffer {} provided to newShaderDataBinding"), int(i));
+    if (!ubufs[i]) {
+      Log.report(logvisor::Fatal, fmt("null uniform-buffer {} provided to newShaderDataBinding"), i);
+    }
 #endif
     m_ubufs.push_back(ubufs[i]);
   }

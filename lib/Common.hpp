@@ -1,7 +1,9 @@
 #pragma once
 
-#include "boo/BooObject.hpp"
+#include <cstddef>
 #include <iterator>
+
+#include "boo/BooObject.hpp"
 
 namespace boo {
 

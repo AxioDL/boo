@@ -1,7 +1,7 @@
-#include "AudioSubmix.hpp"
-#include "AudioVoiceEngine.hpp"
-#include "AudioVoice.hpp"
-#include <cstring>
+#include "lib/audiodev/AudioSubmix.hpp"
+#include "lib/audiodev/AudioVoice.hpp"
+#include "lib/audiodev/AudioVoiceEngine.hpp"
+
 #include <algorithm>
 
 #undef min
@@ -20,9 +20,6 @@ AudioSubmix::~AudioSubmix() { m_head->m_submixesDirty = true; }
 AudioSubmix*& AudioSubmix::_getHeadPtr(BaseAudioVoiceEngine* head) { return head->m_submixHead; }
 std::unique_lock<std::recursive_mutex> AudioSubmix::_getHeadLock(BaseAudioVoiceEngine* head) {
   return std::unique_lock<std::recursive_mutex>{head->m_dataMutex};
-}
-std::unique_lock<std::recursive_mutex> AudioSubmix::destructorLock() {
-  return std::unique_lock<std::recursive_mutex>{m_head->m_dataMutex};
 }
 
 bool AudioSubmix::_isDirectDependencyOf(AudioSubmix* send) { return m_sendGains.find(send) != m_sendGains.cend(); }

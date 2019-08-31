@@ -4,11 +4,14 @@
 
 #define APPLICATION_UNIX_CPP
 
-#include <dbus/dbus.h>
 #include <cstdint>
-#include <unistd.h>
-#include "logvisor/logvisor.hpp"
+#include <cstdlib>
+
 #include "boo/IApplication.hpp"
+
+#include <dbus/dbus.h>
+#include <logvisor/logvisor.hpp>
+#include <unistd.h>
 
 namespace boo {
 static logvisor::Module Log("boo::ApplicationUnix");
@@ -99,8 +102,8 @@ DBusConnection* RegisterDBus(const char* appName, bool& isFirst) {
     fmt::print(stderr, fmt("DBus Connection Error ({})\n"), err.message);
     dbus_error_free(&err);
   }
-  if (NULL == conn)
-    return NULL;
+  if (conn == nullptr)
+    return nullptr;
 
   /* request our name on the bus and check for errors */
   int ret = dbus_bus_request_name(conn, fmt::format(fmt("boo.{}.unique"), appName).c_str(),
@@ -109,7 +112,7 @@ DBusConnection* RegisterDBus(const char* appName, bool& isFirst) {
     fmt::print(stderr, fmt("DBus Name Error ({})\n"), err.message);
     dbus_error_free(&err);
     dbus_connection_close(conn);
-    return NULL;
+    return nullptr;
   }
   if (DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER != ret)
     isFirst = false;

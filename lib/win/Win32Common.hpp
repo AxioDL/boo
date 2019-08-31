@@ -14,19 +14,22 @@
 #endif
 #include "boo/graphicsdev/GL.hpp"
 
+#include <condition_variable>
+#include <mutex>
+
 extern DWORD g_mainThreadId;
 extern std::mutex g_nwmt;
 extern std::condition_variable g_nwcv;
 
 #if _WIN32_WINNT_WINBLUE && !WINDOWS_STORE
 #include <ShellScalingApi.h>
-typedef HRESULT(WINAPI* PFN_GetScaleFactorForMonitor)(_In_ HMONITOR, _Out_ DEVICE_SCALE_FACTOR*);
+using PFN_GetScaleFactorForMonitor = HRESULT(WINAPI*)(_In_ HMONITOR, _Out_ DEVICE_SCALE_FACTOR*);
 extern PFN_GetScaleFactorForMonitor MyGetScaleFactorForMonitor;
 #endif
 
 struct OGLContext {
   ComPtr<IDXGIFactory1> m_dxFactory;
-  HGLRC m_lastContext = 0;
+  HGLRC m_lastContext = nullptr;
   struct Window {
     HWND m_hwnd;
     HDC m_deviceContext;

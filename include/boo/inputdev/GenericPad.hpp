@@ -1,9 +1,9 @@
 #pragma once
 
-#include "DeviceBase.hpp"
-#include "HIDParser.hpp"
-#include <map>
-#include <mutex>
+#include <functional>
+
+#include "boo/inputdev/DeviceBase.hpp"
+#include "boo/inputdev/HIDParser.hpp"
 
 namespace boo {
 
@@ -18,11 +18,11 @@ class GenericPad final : public TDeviceBase<IGenericPadCallback> {
 
 public:
   GenericPad(DeviceToken* token);
-  ~GenericPad();
+  ~GenericPad() override;
 
-  void deviceDisconnected();
-  void initialCycle();
-  void receivedHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message);
+  void deviceDisconnected() override;
+  void initialCycle() override;
+  void receivedHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message) override;
 
   void enumerateValues(const std::function<bool(const HIDMainItem& item)>& valueCB) const;
 };

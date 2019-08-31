@@ -1,14 +1,17 @@
 #pragma once
 
-#include <unordered_map>
+#include <memory>
 #include <mutex>
-#include "DeviceToken.hpp"
+#include <unordered_map>
+#include <utility>
+
+#include "boo/inputdev/DeviceToken.hpp"
 
 namespace boo {
-
-typedef std::unordered_map<std::string, std::unique_ptr<DeviceToken>> TDeviceTokens;
-typedef std::pair<TDeviceTokens::iterator, bool> TInsertedDeviceToken;
 class DeviceFinder;
+
+using TDeviceTokens = std::unordered_map<std::string, std::unique_ptr<DeviceToken>>;
+using TInsertedDeviceToken = std::pair<TDeviceTokens::iterator, bool>;
 
 class IHIDListener {
 public:

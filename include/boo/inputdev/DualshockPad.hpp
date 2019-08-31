@@ -1,8 +1,9 @@
 #pragma once
+
 #include <cstdint>
-#include <type_traits>
-#include "DeviceBase.hpp"
+
 #include "boo/System.hpp"
+#include "boo/inputdev/DeviceBase.hpp"
 
 namespace boo {
 
@@ -112,15 +113,15 @@ class DualshockPad final : public TDeviceBase<IDualshockPadCallback> {
   uint8_t m_rumbleIntensity[2];
   EDualshockLED m_led;
   DualshockOutReport m_report;
-  void deviceDisconnected();
-  void initialCycle();
-  void transferCycle();
-  void finalCycle();
-  void receivedHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message);
+  void deviceDisconnected() override;
+  void initialCycle() override;
+  void transferCycle() override;
+  void finalCycle() override;
+  void receivedHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message) override;
 
 public:
   DualshockPad(DeviceToken* token);
-  ~DualshockPad();
+  ~DualshockPad() override;
 
   void startRumble(EDualshockMotor motor, uint8_t duration = 254, uint8_t intensity = 255) {
     m_rumbleRequest |= motor;
@@ -136,7 +137,7 @@ public:
 
   void stopRumble(int motor) { m_rumbleRequest &= ~EDualshockMotor(motor); }
 
-  EDualshockLED getLED() { return m_led; }
+  EDualshockLED getLED() const { return m_led; }
 
   void setLED(EDualshockLED led, bool on = true) {
     if (on)

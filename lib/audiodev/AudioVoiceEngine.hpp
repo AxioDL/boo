@@ -1,12 +1,18 @@
 #pragma once
 
-#include "boo/audiodev/IAudioVoiceEngine.hpp"
-#include "LtRtProcessing.hpp"
-#include "Common.hpp"
-#include "AudioVoice.hpp"
-#include "AudioSubmix.hpp"
-#include <functional>
+#include <cstddef>
+#include <cstdint>
+#include <list>
+#include <memory>
 #include <mutex>
+#include <vector>
+
+#include "boo/BooObject.hpp"
+#include "boo/audiodev/IAudioVoiceEngine.hpp"
+#include "lib/audiodev/AudioSubmix.hpp"
+#include "lib/audiodev/AudioVoice.hpp"
+#include "lib/audiodev/Common.hpp"
+#include "lib/audiodev/LtRtProcessing.hpp"
 
 namespace boo {
 
@@ -57,22 +63,24 @@ protected:
 
 public:
   BaseAudioVoiceEngine() : m_mainSubmix(std::make_unique<AudioSubmix>(*this, nullptr, -1, false)) {}
-  ~BaseAudioVoiceEngine();
-  ObjToken<IAudioVoice> allocateNewMonoVoice(double sampleRate, IAudioVoiceCallback* cb, bool dynamicPitch = false);
+  ~BaseAudioVoiceEngine() override;
+  ObjToken<IAudioVoice> allocateNewMonoVoice(double sampleRate, IAudioVoiceCallback* cb,
+                                             bool dynamicPitch = false) override;
 
-  ObjToken<IAudioVoice> allocateNewStereoVoice(double sampleRate, IAudioVoiceCallback* cb, bool dynamicPitch = false);
+  ObjToken<IAudioVoice> allocateNewStereoVoice(double sampleRate, IAudioVoiceCallback* cb,
+                                               bool dynamicPitch = false) override;
 
-  ObjToken<IAudioSubmix> allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb, int busId);
+  ObjToken<IAudioSubmix> allocateNewSubmix(bool mainOut, IAudioSubmixCallback* cb, int busId) override;
 
-  void setCallbackInterface(IAudioVoiceEngineCallback* cb);
+  void setCallbackInterface(IAudioVoiceEngineCallback* cb) override;
 
-  void setVolume(float vol);
-  bool enableLtRt(bool enable);
+  void setVolume(float vol) override;
+  bool enableLtRt(bool enable) override;
   const AudioVoiceEngineMixInfo& mixInfo() const;
   const AudioVoiceEngineMixInfo& clientMixInfo() const;
-  AudioChannelSet getAvailableSet() { return clientMixInfo().m_channels; }
-  void pumpAndMixVoices() {}
-  size_t get5MsFrames() const { return m_5msFrames; }
+  AudioChannelSet getAvailableSet() override { return clientMixInfo().m_channels; }
+  void pumpAndMixVoices() override {}
+  size_t get5MsFrames() const override { return m_5msFrames; }
 };
 
 template <>

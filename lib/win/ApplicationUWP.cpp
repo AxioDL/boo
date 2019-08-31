@@ -1,4 +1,4 @@
-#include "UWPCommon.hpp"
+#include "lib/win/UWPCommon.hpp"
 
 using namespace Windows::Foundation;
 using namespace Windows::UI::Core;
@@ -12,12 +12,15 @@ using namespace Platform;
 #define D3D11_CREATE_DEVICE_FLAGS 0
 #endif
 
-#include "boo/System.hpp"
+#include <cstdlib>
+
 #include "boo/IApplication.hpp"
-#include "boo/inputdev/DeviceFinder.hpp"
-#include "boo/graphicsdev/D3D.hpp"
-#include "logvisor/logvisor.hpp"
+#include "boo/System.hpp"
 #include "boo/UWPViewProvider.hpp"
+#include "boo/graphicsdev/D3D.hpp"
+#include "boo/inputdev/DeviceFinder.hpp"
+
+#include <logvisor/logvisor.hpp>
 
 #if _WIN32_WINNT_WIN10
 PFN_D3D12_SERIALIZE_ROOT_SIGNATURE D3D12SerializeRootSignaturePROC = nullptr;
@@ -49,7 +52,7 @@ class ApplicationUWP final : public IApplication {
 
   Boo3DAppContextUWP m_3dCtx;
 
-  void _deletedWindow(IWindow* window) {}
+  void _deletedWindow(IWindow* window) override {}
 
 public:
   ApplicationUWP(IApplicationCallback& callback, SystemStringView uniqueName, SystemStringView friendlyName,
@@ -60,7 +63,7 @@ public:
   , m_pname(pname)
   , m_args(args)
   , m_singleInstance(singleInstance) {
-    typedef HRESULT(WINAPI * CreateDXGIFactory1PROC)(REFIID riid, _COM_Outptr_ void** ppFactory);
+    using CreateDXGIFactory1PROC = HRESULT (WINAPI *)(REFIID riid, _COM_Outptr_ void** ppFactory);
     CreateDXGIFactory1PROC MyCreateDXGIFactory1 = CreateDXGIFactory1;
 
     bool no12 = true;
@@ -180,10 +183,10 @@ public:
     Log.report(logvisor::Fatal, fmt("system doesn't support D3D11 or D3D12"));
   }
 
-  EPlatformType getPlatformType() const { return EPlatformType::UWP; }
+  EPlatformType getPlatformType() const override { return EPlatformType::UWP; }
 
   std::thread m_clientThread;
-  int run() {
+  int run() override {
     /* Spawn client thread */
     int clientReturn = 0;
     m_clientThread = std::thread([&]() {
@@ -203,15 +206,15 @@ public:
       m_clientThread.join();
   }
 
-  SystemStringView getUniqueName() const { return m_uniqueName; }
+  SystemStringView getUniqueName() const override { return m_uniqueName; }
 
-  SystemStringView getFriendlyName() const { return m_friendlyName; }
+  SystemStringView getFriendlyName() const override { return m_friendlyName; }
 
-  SystemStringView getProcessName() const { return m_pname; }
+  SystemStringView getProcessName() const override { return m_pname; }
 
-  const std::vector<SystemString>& getArgs() const { return m_args; }
+  const std::vector<SystemString>& getArgs() const override { return m_args; }
 
-  std::shared_ptr<IWindow> newWindow(SystemStringView title, uint32_t sampleCount) {
+  std::shared_ptr<IWindow> newWindow(SystemStringView title, uint32_t sampleCount) override {
     if (!m_issuedWindow) {
       m_issuedWindow = true;
       return m_window;
@@ -222,7 +225,7 @@ public:
   void _setWindow(CoreWindow ^ window) { m_window = _WindowUWPNew(m_friendlyName, m_3dCtx); }
 };
 
-IApplication* APP = NULL;
+IApplication* APP = nullptr;
 ref class AppView sealed : public IFrameworkView {
   ApplicationUWP m_app;
 

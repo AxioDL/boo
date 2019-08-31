@@ -1,5 +1,5 @@
 #include "boo/graphicsdev/glxew.h"
-#include "logvisor/logvisor.hpp"
+#include <logvisor/logvisor.hpp>
 
 namespace boo {
 static logvisor::Module Log("boo::GLX");

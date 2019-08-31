@@ -1,9 +1,12 @@
-#include "IHIDDevice.hpp"
+#include "lib/inputdev/IHIDDevice.hpp"
+
+#include <thread>
+
+#include "lib/inputdev/IOKitPointer.hpp"
+
 #include <IOKit/hid/IOHIDLib.h>
 #include <IOKit/hid/IOHIDDevicePlugin.h>
 #include <IOKit/usb/IOUSBLib.h>
-#include "IOKitPointer.hpp"
-#include <thread>
 
 namespace boo {
 
@@ -23,7 +26,7 @@ class HIDDeviceIOKit : public IHIDDevice {
   std::condition_variable m_initCond;
   std::thread m_thread;
 
-  bool _sendUSBInterruptTransfer(const uint8_t* data, size_t length) {
+  bool _sendUSBInterruptTransfer(const uint8_t* data, size_t length) override {
     if (m_usbIntf) {
       IOReturn res = m_usbIntf->WritePipe(m_usbIntf.storage(), m_usbIntfOutPipe, (void*)data, length);
       return res == kIOReturnSuccess;
@@ -31,7 +34,7 @@ class HIDDeviceIOKit : public IHIDDevice {
     return false;
   }
 
-  size_t _receiveUSBInterruptTransfer(uint8_t* data, size_t length) {
+  size_t _receiveUSBInterruptTransfer(uint8_t* data, size_t length) override {
     if (m_usbIntf) {
       UInt32 readSize = length;
       IOReturn res = m_usbIntf->ReadPipe(m_usbIntf.storage(), m_usbIntfInPipe, data, &readSize);
@@ -42,7 +45,7 @@ class HIDDeviceIOKit : public IHIDDevice {
     return 0;
   }
 
-  std::vector<uint8_t> _getReportDescriptor() {
+  std::vector<uint8_t> _getReportDescriptor() override {
     if (m_hidIntf) {
       if (CFTypeRef desc = IOHIDDeviceGetProperty(m_hidIntf.get(), CFSTR(kIOHIDReportDescriptorKey))) {
         CFIndex len = CFDataGetLength(CFDataRef(desc));
@@ -54,7 +57,7 @@ class HIDDeviceIOKit : public IHIDDevice {
     return {};
   }
 
-  bool _sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message) {
+  bool _sendHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message) override {
     /* HACK: A bug in IOBluetoothGamepadHIDDriver prevents raw output report transmission
      * USB driver appears to work correctly */
     if (m_hidIntf && !m_isBt) {
@@ -64,7 +67,7 @@ class HIDDeviceIOKit : public IHIDDevice {
     return false;
   }
 
-  size_t _receiveHIDReport(uint8_t* data, size_t length, HIDReportType tp, uint32_t message) {
+  size_t _receiveHIDReport(uint8_t* data, size_t length, HIDReportType tp, uint32_t message) override {
     if (m_hidIntf) {
       CFIndex readSize = length;
       IOReturn res = IOHIDDeviceGetReport(m_hidIntf.get(), IOHIDReportType(tp), message, data, &readSize);
@@ -273,13 +276,13 @@ class HIDDeviceIOKit : public IHIDDevice {
     device->m_hidIntf.reset();
   }
 
-  void _deviceDisconnected() { m_runningTransferLoop = false; }
+  void _deviceDisconnected() override { m_runningTransferLoop = false; }
 
 public:
   HIDDeviceIOKit(DeviceToken& token, const std::shared_ptr<DeviceBase>& devImp)
   : m_token(token), m_devImp(devImp), m_devPath(token.getDevicePath()) {}
 
-  void _startThread() {
+  void _startThread() override {
     std::unique_lock<std::mutex> lk(m_initMutex);
     DeviceType dType = m_token.getDeviceType();
     if (dType == DeviceType::USB)
@@ -295,7 +298,7 @@ public:
     m_initCond.wait(lk);
   }
 
-  ~HIDDeviceIOKit() {
+  ~HIDDeviceIOKit() override {
     m_runningTransferLoop = false;
     if (m_thread.joinable())
       m_thread.detach();

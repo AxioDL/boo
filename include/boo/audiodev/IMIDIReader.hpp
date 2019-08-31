@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdlib>
+#include <cstddef>
 #include <cstdint>
 
 namespace boo {

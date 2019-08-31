@@ -1,15 +1,18 @@
 #include "boo/graphicsdev/Vulkan.hpp"
-#include "boo/IGraphicsContext.hpp"
-#include <vector>
+
 #include <array>
 #include <cmath>
+#include <vector>
+
 #include <glslang/Public/ShaderLang.h>
 #include <StandAlone/ResourceLimits.h>
 #include <SPIRV/GlslangToSpv.h>
 #include <SPIRV/disassemble.h>
+
+#include "boo/IGraphicsContext.hpp"
 #include "boo/graphicsdev/GLSLMacros.hpp"
-#include "Common.hpp"
-#include "xxhash/xxhash.h"
+#include "boo/graphicsdev/IGraphicsCommandQueue.hpp"
+#include "lib/graphicsdev/Common.hpp"
 
 #define AMD_PAL_HACK 1
 
@@ -17,7 +20,7 @@
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
 #include "vk_mem_alloc.h"
 
-#include "logvisor/logvisor.hpp"
+#include <logvisor/logvisor.hpp>
 
 #define BOO_VK_MAX_DESCRIPTOR_SETS 65536
 
@@ -188,7 +191,7 @@ static void SetImageLayout(VkCommandBuffer cmd, VkImage image, VkImageAspectFlag
                            uint32_t layerCount, uint32_t baseMipLevel = 0) {
   VkImageMemoryBarrier imageMemoryBarrier = {};
   imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  imageMemoryBarrier.pNext = NULL;
+  imageMemoryBarrier.pNext = nullptr;
   imageMemoryBarrier.srcAccessMask = 0;
   imageMemoryBarrier.dstAccessMask = 0;
   imageMemoryBarrier.oldLayout = old_image_layout;
@@ -261,7 +264,7 @@ static void SetImageLayout(VkCommandBuffer cmd, VkImage image, VkImageAspectFlag
     break;
   }
 
-  vk::CmdPipelineBarrier(cmd, src_stages, dest_stages, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier);
+  vk::CmdPipelineBarrier(cmd, src_stages, dest_stages, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
 }
 
 static VkResult InitGlobalExtensionProperties(VulkanContext::LayerProperties& layerProps) {
@@ -1060,9 +1063,6 @@ struct VulkanDescriptorPool : ListNode<VulkanDescriptorPool, VulkanDataFactoryIm
 
   ~VulkanDescriptorPool() { vk::DestroyDescriptorPool(m_head->m_ctx->m_dev, m_descPool, nullptr); }
 
-  std::unique_lock<std::recursive_mutex> destructorLock() override {
-    return std::unique_lock<std::recursive_mutex>{m_head->m_dataMutex};
-  }
   static std::unique_lock<std::recursive_mutex> _getHeadLock(VulkanDataFactoryImpl* factory) {
     return std::unique_lock<std::recursive_mutex>{factory->m_dataMutex};
   }
@@ -2668,9 +2668,10 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
       m_ubufOffs.reserve(ubufCount);
       for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
-        if (ubufOffs[i] % 256)
+        if (ubufOffs[i] % 256) {
           Log.report(logvisor::Fatal, fmt("non-256-byte-aligned uniform-offset {} provided to newShaderDataBinding"),
-                     int(i));
+                     i);
+        }
 #endif
         std::array<VkDescriptorBufferInfo, 2> fillArr;
         fillArr.fill({VK_NULL_HANDLE, ubufOffs[i], (ubufSizes[i] + 255) & ~255});
@@ -2680,8 +2681,9 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
     m_ubufs.reserve(ubufCount);
     for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
-      if (!ubufs[i])
-        Log.report(logvisor::Fatal, fmt("null uniform-buffer {} provided to newShaderDataBinding"), int(i));
+      if (!ubufs[i]) {
+        Log.report(logvisor::Fatal, fmt("null uniform-buffer {} provided to newShaderDataBinding"), i);
+      }
 #endif
       m_ubufs.push_back(ubufs[i]);
     }

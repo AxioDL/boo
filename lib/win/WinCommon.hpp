@@ -1,6 +1,10 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <string>
 #include <unordered_map>
+
 #include "boo/IWindow.hpp"
 
 namespace boo {
@@ -25,8 +29,8 @@ class IWindow;
 
 #include <d3d9.h>
 
-typedef int (WINAPI *pD3DPERF_BeginEvent)(D3DCOLOR col, LPCWSTR wszName);
-typedef int (WINAPI *pD3DPERF_EndEvent)();
+using pD3DPERF_BeginEvent = int (WINAPI*)(D3DCOLOR col, LPCWSTR wszName);
+using pD3DPERF_EndEvent = int (WINAPI*)();
 
 struct D3D12Context {
   ComPtr<IDXGIFactory2> m_dxFactory;
