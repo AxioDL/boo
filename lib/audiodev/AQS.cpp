@@ -140,7 +140,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
   /*
    * https://stackoverflow.com/questions/1983984/how-to-get-audio-device-uid-to-pass-into-nssounds-setplaybackdeviceidentifier
    */
-  std::vector<std::pair<std::string, std::string>> enumerateAudioOutputs() const {
+  std::vector<std::pair<std::string, std::string>> enumerateAudioOutputs() const override {
     std::vector<std::pair<std::string, std::string>> ret;
 
     AudioObjectPropertyAddress propertyAddress;
@@ -209,7 +209,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     return ret;
   }
 
-  std::vector<std::pair<std::string, std::string>> enumerateMIDIInputs() const {
+  std::vector<std::pair<std::string, std::string>> enumerateMIDIInputs() const override {
     if (!m_midiClient)
       return {};
 
@@ -255,7 +255,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     return ret;
   }
 
-  bool supportsVirtualMIDIIn() const { return true; }
+  bool supportsVirtualMIDIIn() const override { return true; }
 
   static MIDIDeviceRef LookupMIDIDevice(const char* name) {
     ItemCount numDevices = MIDIGetNumberOfDevices();

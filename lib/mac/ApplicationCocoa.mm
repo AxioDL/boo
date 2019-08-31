@@ -52,7 +52,7 @@ private:
   GLContext m_glCtx;
 #endif
 
-  void _deletedWindow(IWindow* window) {
+  void _deletedWindow(IWindow* window) override {
     m_windows.erase(window->getPlatformHandle());
   }
 
