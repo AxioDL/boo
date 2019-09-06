@@ -11,9 +11,10 @@ NintendoPowerA::NintendoPowerA(DeviceToken* token)
 NintendoPowerA::~NintendoPowerA() = default;
 
 void NintendoPowerA::deviceDisconnected() {
-  std::lock_guard<std::mutex> lk(m_callbackLock);
-  if (m_callback)
+  std::lock_guard lk{m_callbackLock};
+  if (m_callback != nullptr) {
     m_callback->controllerDisconnected();
+  }
 }
 
 void NintendoPowerA::initialCycle() {}
@@ -21,14 +22,16 @@ void NintendoPowerA::initialCycle() {}
 void NintendoPowerA::transferCycle() {
   uint8_t payload[8];
   size_t recvSz = receiveUSBInterruptTransfer(payload, sizeof(payload));
-  if (recvSz != 8)
+  if (recvSz != 8) {
     return;
+  }
 
   NintendoPowerAState state = *reinterpret_cast<NintendoPowerAState*>(&payload);
 
-  std::lock_guard<std::mutex> lk(m_callbackLock);
-  if (state != m_last && m_callback)
+  std::lock_guard lk{m_callbackLock};
+  if (state != m_last && m_callback != nullptr) {
     m_callback->controllerUpdate(state);
+  }
   m_last = state;
 }
 
