@@ -1300,35 +1300,43 @@ public:
   ETouchType getTouchType() const override { return ETouchType::None; }
 
   void setStyle(EWindowStyle style) override {
-    LONG sty = GetWindowLong(m_hwnd, GWL_STYLE);
+    LONG_PTR sty = GetWindowLongPtr(m_hwnd, GWL_STYLE);
 
-    if ((style & EWindowStyle::Titlebar) != EWindowStyle::None)
+    if ((style & EWindowStyle::Titlebar) != EWindowStyle::None) {
       sty |= WS_CAPTION;
-    else
+    } else {
       sty &= ~WS_CAPTION;
+    }
 
-    if ((style & EWindowStyle::Resize) != EWindowStyle::None)
+    if ((style & EWindowStyle::Resize) != EWindowStyle::None) {
       sty |= WS_THICKFRAME;
-    else
+    } else {
       sty &= ~WS_THICKFRAME;
+    }
 
-    if ((style & EWindowStyle::Close) != EWindowStyle::None)
+    if ((style & EWindowStyle::Close) != EWindowStyle::None) {
       sty |= (WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
-    else
+    } else {
       sty &= ~(WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
+    }
 
-    SetWindowLong(m_hwnd, GWL_STYLE, sty);
+    SetWindowLongPtr(m_hwnd, GWL_STYLE, sty);
   }
 
   EWindowStyle getStyle() const override {
-    LONG sty = GetWindowLong(m_hwnd, GWL_STYLE);
+    const LONG_PTR sty = GetWindowLongPtr(m_hwnd, GWL_STYLE);
+
     EWindowStyle retval = EWindowStyle::None;
-    if ((sty & WS_CAPTION) != 0)
+    if ((sty & WS_CAPTION) != 0) {
       retval |= EWindowStyle::Titlebar;
-    if ((sty & WS_THICKFRAME) != 0)
+    }
+    if ((sty & WS_THICKFRAME) != 0) {
       retval |= EWindowStyle::Resize;
-    if ((sty & WS_SYSMENU))
+    }
+    if ((sty & WS_SYSMENU)) {
       retval |= EWindowStyle::Close;
+    }
+
     return retval;
   }
 
