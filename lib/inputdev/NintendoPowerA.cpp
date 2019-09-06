@@ -8,7 +8,7 @@ namespace boo {
 NintendoPowerA::NintendoPowerA(DeviceToken* token)
 : TDeviceBase<INintendoPowerACallback>(dev_typeid(NintendoPowerA), token) {}
 
-NintendoPowerA::~NintendoPowerA() {}
+NintendoPowerA::~NintendoPowerA() = default;
 
 void NintendoPowerA::deviceDisconnected() {
   std::lock_guard<std::mutex> lk(m_callbackLock);

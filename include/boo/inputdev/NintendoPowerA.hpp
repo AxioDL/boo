@@ -34,7 +34,7 @@ struct INintendoPowerACallback {
 };
 
 class NintendoPowerA final : public TDeviceBase<INintendoPowerACallback> {
-  NintendoPowerAState m_last;
+  NintendoPowerAState m_last{};
   void deviceDisconnected() override;
   void initialCycle() override;
   void transferCycle() override;
@@ -42,7 +42,7 @@ class NintendoPowerA final : public TDeviceBase<INintendoPowerACallback> {
   void receivedHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message) override;
 
 public:
-  NintendoPowerA(DeviceToken*);
+  explicit NintendoPowerA(DeviceToken*);
   ~NintendoPowerA() override;
 };
 } // namespace boo
