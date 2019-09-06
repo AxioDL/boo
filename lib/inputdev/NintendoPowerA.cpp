@@ -27,7 +27,8 @@ void NintendoPowerA::transferCycle() {
     return;
   }
 
-  NintendoPowerAState state = *reinterpret_cast<NintendoPowerAState*>(&payload);
+  NintendoPowerAState state;
+  std::memcpy(&state, payload.data(), sizeof(state));
 
   std::lock_guard lk{m_callbackLock};
   if (state != m_last && m_callback != nullptr) {
@@ -41,7 +42,7 @@ void NintendoPowerA::finalCycle() {}
 void NintendoPowerA::receivedHIDReport(const uint8_t* data, size_t length, HIDReportType tp, uint32_t message) {}
 
 bool NintendoPowerAState::operator==(const NintendoPowerAState& other) const {
-  return memcmp(this, &other, sizeof(NintendoPowerAState)) == 0;
+  return std::memcmp(this, &other, sizeof(NintendoPowerAState)) == 0;
 }
 
 bool NintendoPowerAState::operator!=(const NintendoPowerAState& other) const { return !operator==(other); }
