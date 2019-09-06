@@ -47,16 +47,10 @@ struct DolphinControllerState {
 };
 
 struct IDolphinSmashAdapterCallback {
-  virtual void controllerConnected(unsigned idx, EDolphinControllerType type) {
-    (void)idx;
-    (void)type;
-  }
-  virtual void controllerDisconnected(unsigned idx) { (void)idx; }
-  virtual void controllerUpdate(unsigned idx, EDolphinControllerType type, const DolphinControllerState& state) {
-    (void)idx;
-    (void)type;
-    (void)state;
-  }
+  virtual void controllerConnected([[maybe_unused]] unsigned idx, [[maybe_unused]] EDolphinControllerType type) {}
+  virtual void controllerDisconnected([[maybe_unused]] unsigned idx) {}
+  virtual void controllerUpdate([[maybe_unused]] unsigned idx, [[maybe_unused]] EDolphinControllerType type,
+                                [[maybe_unused]] const DolphinControllerState& state) {}
 };
 
 class DolphinSmashAdapter final : public TDeviceBase<IDolphinSmashAdapterCallback> {
