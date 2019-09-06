@@ -1,5 +1,6 @@
 #include "boo/inputdev/NintendoPowerA.hpp"
 
+#include <array>
 #include <cstring>
 
 #include "boo/inputdev/DeviceSignature.hpp"
@@ -20,9 +21,9 @@ void NintendoPowerA::deviceDisconnected() {
 void NintendoPowerA::initialCycle() {}
 
 void NintendoPowerA::transferCycle() {
-  uint8_t payload[8];
-  size_t recvSz = receiveUSBInterruptTransfer(payload, sizeof(payload));
-  if (recvSz != 8) {
+  std::array<uint8_t, 8> payload;
+  const size_t recvSz = receiveUSBInterruptTransfer(payload.data(), payload.size());
+  if (recvSz != payload.size()) {
     return;
   }
 
