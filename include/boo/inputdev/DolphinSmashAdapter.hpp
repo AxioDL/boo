@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 
 #include "boo/System.hpp"
@@ -31,17 +33,14 @@ enum class EDolphinControllerButtons {
 ENABLE_BITWISE_ENUM(EDolphinControllerButtons)
 
 struct DolphinControllerState {
-  int16_t m_leftStick[2] = {0};
-  int16_t m_rightStick[2] = {0};
-  int16_t m_analogTriggers[2] = {0};
+  std::array<int16_t, 2> m_leftStick{};
+  std::array<int16_t, 2> m_rightStick{};
+  std::array<int16_t, 2> m_analogTriggers{};
   uint16_t m_btns = 0;
   void reset() {
-    m_leftStick[0] = 0;
-    m_leftStick[1] = 0;
-    m_rightStick[0] = 0;
-    m_rightStick[1] = 0;
-    m_analogTriggers[0] = 0;
-    m_analogTriggers[1] = 0;
+    m_leftStick = {};
+    m_rightStick = {};
+    m_analogTriggers = {};
     m_btns = 0;
   }
   void clamp();
@@ -61,12 +60,12 @@ struct IDolphinSmashAdapterCallback {
 };
 
 class DolphinSmashAdapter final : public TDeviceBase<IDolphinSmashAdapterCallback> {
-  int16_t m_leftStickCal[2] = {0x7f};
-  int16_t m_rightStickCal[2] = {0x7f};
-  int16_t m_triggersCal[2] = {0x0};
+  std::array<int16_t, 2> m_leftStickCal{0x7f, 0};
+  std::array<int16_t, 2> m_rightStickCal{0x7f, 0};
+  std::array<int16_t, 2> m_triggersCal{};
   uint8_t m_knownControllers = 0;
   uint8_t m_rumbleRequest = 0;
-  bool m_hardStop[4] = {false};
+  std::array<bool, 4> m_hardStop{};
   uint8_t m_rumbleState = 0xf; /* Force initial send of stop-rumble command */
   void deviceDisconnected() override;
   void initialCycle() override;
@@ -81,15 +80,21 @@ public:
     TDeviceBase<IDolphinSmashAdapterCallback>::setCallback(cb);
     m_knownControllers = 0;
   }
-  void startRumble(unsigned idx) {
-    if (idx >= 4)
+
+  void startRumble(size_t idx) {
+    if (idx >= m_hardStop.size()) {
       return;
-    m_rumbleRequest |= 1 << idx;
+    }
+
+    m_rumbleRequest |= 1U << idx;
   }
-  void stopRumble(unsigned idx, bool hard = false) {
-    if (idx >= 4)
+
+  void stopRumble(size_t idx, bool hard = false) {
+    if (idx >= m_hardStop.size()) {
       return;
-    m_rumbleRequest &= ~(1 << idx);
+    }
+
+    m_rumbleRequest &= ~(1U << idx);
     m_hardStop[idx] = hard;
   }
 };
