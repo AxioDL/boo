@@ -339,9 +339,10 @@ public:
       win.m_fsExStyle = GetWindowLong(win.m_hwnd, GWL_EXSTYLE);
       GetWindowRect(win.m_hwnd, &win.m_fsRect);
 
-      SetWindowLong(win.m_hwnd, GWL_STYLE, win.m_fsStyle & ~(WS_CAPTION | WS_THICKFRAME));
-      SetWindowLong(win.m_hwnd, GWL_EXSTYLE,
-                    win.m_fsExStyle & ~(WS_EX_DLGMODALFRAME | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE));
+      SetWindowLongPtr(win.m_hwnd, GWL_STYLE, win.m_fsStyle & ~(WS_CAPTION | WS_THICKFRAME));
+      SetWindowLongPtr(win.m_hwnd, GWL_EXSTYLE,
+                       win.m_fsExStyle &
+                           ~(WS_EX_DLGMODALFRAME | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE));
 
       MONITORINFO monitor_info;
       monitor_info.cbSize = sizeof(monitor_info);
@@ -353,8 +354,8 @@ public:
 
       win.m_fs = true;
     } else {
-      SetWindowLong(win.m_hwnd, GWL_STYLE, win.m_fsStyle);
-      SetWindowLong(win.m_hwnd, GWL_EXSTYLE, win.m_fsExStyle);
+      SetWindowLongPtr(win.m_hwnd, GWL_STYLE, win.m_fsStyle);
+      SetWindowLongPtr(win.m_hwnd, GWL_EXSTYLE, win.m_fsExStyle);
 
       SetWindowPos(win.m_hwnd, nullptr, win.m_fsRect.left, win.m_fsRect.top, win.m_fsRect.right - win.m_fsRect.left,
                    win.m_fsRect.bottom - win.m_fsRect.top, SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);

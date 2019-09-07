@@ -85,8 +85,8 @@ struct VulkanContext {
 #if _WIN32
     HWND m_hwnd = 0;
     bool m_fs = false;
-    LONG m_fsStyle;
-    LONG m_fsExStyle;
+    LONG_PTR m_fsStyle;
+    LONG_PTR m_fsExStyle;
     RECT m_fsRect;
     int m_fsCountDown = 0;
 #endif
