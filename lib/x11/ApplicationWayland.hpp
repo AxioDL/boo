@@ -19,7 +19,7 @@ class ApplicationWayland final : public IApplication {
   const std::vector<std::string> m_args;
   bool m_singleInstance;
 
-  void _deletedWindow(IWindow* window) override { (void)window; }
+  void _deletedWindow([[maybe_unused]] IWindow* window) override {}
 
 public:
   ApplicationWayland(IApplicationCallback& callback, std::string_view uniqueName, std::string_view friendlyName,

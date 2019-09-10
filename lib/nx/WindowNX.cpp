@@ -89,10 +89,7 @@ public:
   void waitForRetrace() override {}
 
   uintptr_t getPlatformHandle() const override { return 0; }
-  bool _incomingEvent(void* event) override {
-    (void)event;
-    return false;
-  }
+  bool _incomingEvent([[maybe_unused]] void* event) override { return false; }
   void _cleanup() override {}
 
   ETouchType getTouchType() const override { return ETouchType::Display; }
