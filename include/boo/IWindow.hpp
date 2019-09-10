@@ -1,8 +1,8 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <memory>
-#include <cstring>
 
 #include "boo/System.hpp"
 
@@ -17,36 +17,30 @@ struct IAudioVoiceEngine;
 enum class EMouseButton { None = 0, Primary = 1, Secondary = 2, Middle = 3, Aux1 = 4, Aux2 = 5 };
 
 struct SWindowCoord {
-  int pixel[2];
-  int virtualPixel[2];
-  float norm[2];
+  std::array<int, 2> pixel;
+  std::array<int, 2> virtualPixel;
+  std::array<float, 2> norm;
 };
 
 struct SWindowRect {
-  int location[2];
-  int size[2];
+  std::array<int, 2> location{};
+  std::array<int, 2> size{};
 
-  SWindowRect() { std::memset(this, 0, sizeof(SWindowRect)); }
+  constexpr SWindowRect() noexcept = default;
+  constexpr SWindowRect(int x, int y, int w, int h) noexcept : location{x, y}, size{w, h} {}
 
-  SWindowRect(int x, int y, int w, int h) {
-    location[0] = x;
-    location[1] = y;
-    size[0] = w;
-    size[1] = h;
+  constexpr bool operator==(const SWindowRect& other) const noexcept {
+    return location[0] == other.location[0] && location[1] == other.location[1] && size[0] == other.size[0] &&
+           size[1] == other.size[1];
   }
+  constexpr bool operator!=(const SWindowRect& other) const noexcept { return !operator==(other); }
 
-  bool operator!=(const SWindowRect& other) const {
-    return location[0] != other.location[0] || location[1] != other.location[1] || size[0] != other.size[0] ||
-           size[1] != other.size[1];
-  }
-  bool operator==(const SWindowRect& other) const { return !(*this != other); }
-
-  bool coordInRect(const SWindowCoord& coord) const {
+  constexpr bool coordInRect(const SWindowCoord& coord) const noexcept {
     return coord.pixel[0] >= location[0] && coord.pixel[0] < location[0] + size[0] && coord.pixel[1] >= location[1] &&
            coord.pixel[1] < location[1] + size[1];
   }
 
-  SWindowRect intersect(const SWindowRect& other) const {
+  constexpr SWindowRect intersect(const SWindowRect& other) const noexcept {
     if (location[0] < other.location[0] + other.size[0] && location[0] + size[0] > other.location[0] &&
         location[1] < other.location[1] + other.size[1] && location[1] + size[1] > other.location[1]) {
       SWindowRect ret;
@@ -61,15 +55,15 @@ struct SWindowRect {
 };
 
 struct STouchCoord {
-  double coord[2];
+  std::array<double, 2> coord;
 };
 
 struct SScrollDelta {
-  double delta[2] = {};
+  std::array<double, 2> delta{};
   bool isFine = false;        /* Use system-scale fine-scroll (for scrollable-trackpads) */
   bool isAccelerated = false; /* System performs acceleration computation */
 
-  SScrollDelta operator+(const SScrollDelta& other) const {
+  constexpr SScrollDelta operator+(const SScrollDelta& other) const noexcept {
     SScrollDelta ret;
     ret.delta[0] = delta[0] + other.delta[0];
     ret.delta[1] = delta[1] + other.delta[1];
@@ -77,7 +71,7 @@ struct SScrollDelta {
     ret.isAccelerated = isAccelerated || other.isAccelerated;
     return ret;
   }
-  SScrollDelta operator-(const SScrollDelta& other) const {
+  constexpr SScrollDelta operator-(const SScrollDelta& other) const noexcept {
     SScrollDelta ret;
     ret.delta[0] = delta[0] - other.delta[0];
     ret.delta[1] = delta[1] - other.delta[1];
@@ -85,18 +79,15 @@ struct SScrollDelta {
     ret.isAccelerated = isAccelerated || other.isAccelerated;
     return ret;
   }
-  SScrollDelta& operator+=(const SScrollDelta& other) {
+  constexpr SScrollDelta& operator+=(const SScrollDelta& other) noexcept {
     delta[0] += other.delta[0];
     delta[1] += other.delta[1];
     isFine |= other.isFine;
     isAccelerated |= other.isAccelerated;
     return *this;
   }
-  void zeroOut() {
-    delta[0] = 0.0;
-    delta[1] = 0.0;
-  }
-  bool isZero() const { return delta[0] == 0.0 && delta[1] == 0.0; }
+  constexpr void zeroOut() noexcept { delta = {}; }
+  constexpr bool isZero() const noexcept { return delta[0] == 0.0 && delta[1] == 0.0; }
 };
 
 enum class ESpecialKey {
