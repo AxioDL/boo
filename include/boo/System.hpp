@@ -56,8 +56,7 @@ static inline ComPtr<T>* ReferenceComPtr(ComPtr<T>& ptr) {
     return static_cast<T>(key) != 0;                                                                                   \
   }                                                                                                                    \
   constexpr bool False(type key) noexcept {                                                                            \
-    using T = std::underlying_type_t<type>;                                                                            \
-    return static_cast<T>(key) == 0;                                                                                   \
+    return !True(key);                                                                                                 \
   }
 #endif
 
