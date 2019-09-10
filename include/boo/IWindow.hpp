@@ -155,67 +155,34 @@ struct ITextInputCallback {
 
 class IWindowCallback {
 public:
-  virtual void resized(const SWindowRect& rect, bool sync) { (void)rect; }
-  virtual void mouseDown(const SWindowCoord& coord, EMouseButton button, EModifierKey mods) {
-    (void)coord;
-    (void)button;
-    (void)mods;
-  }
-  virtual void mouseUp(const SWindowCoord& coord, EMouseButton button, EModifierKey mods) {
-    (void)coord;
-    (void)button;
-    (void)mods;
-  }
-  virtual void mouseMove(const SWindowCoord& coord) { (void)coord; }
-  virtual void mouseEnter(const SWindowCoord& coord) { (void)coord; }
-  virtual void mouseLeave(const SWindowCoord& coord) { (void)coord; }
-  virtual void scroll(const SWindowCoord& coord, const SScrollDelta& scroll) {
-    (void)coord;
-    (void)scroll;
-  }
+  virtual void resized([[maybe_unused]] const SWindowRect& rect, [[maybe_unused]] bool sync) {}
+  virtual void mouseDown([[maybe_unused]] const SWindowCoord& coord, [[maybe_unused]] EMouseButton button,
+                         [[maybe_unused]] EModifierKey mods) {}
+  virtual void mouseUp([[maybe_unused]] const SWindowCoord& coord, [[maybe_unused]] EMouseButton button,
+                       [[maybe_unused]] EModifierKey mods) {}
+  virtual void mouseMove([[maybe_unused]] const SWindowCoord& coord) {}
+  virtual void mouseEnter([[maybe_unused]] const SWindowCoord& coord) {}
+  virtual void mouseLeave([[maybe_unused]] const SWindowCoord& coord) {}
+  virtual void scroll([[maybe_unused]] const SWindowCoord& coord, [[maybe_unused]] const SScrollDelta& scroll) {}
 
-  virtual void touchDown(const STouchCoord& coord, uintptr_t tid) {
-    (void)coord;
-    (void)tid;
-  }
-  virtual void touchUp(const STouchCoord& coord, uintptr_t tid) {
-    (void)coord;
-    (void)tid;
-  }
-  virtual void touchMove(const STouchCoord& coord, uintptr_t tid) {
-    (void)coord;
-    (void)tid;
-  }
+  virtual void touchDown([[maybe_unused]] const STouchCoord& coord, [[maybe_unused]] uintptr_t tid) {}
+  virtual void touchUp([[maybe_unused]] const STouchCoord& coord, [[maybe_unused]] uintptr_t tid) {}
+  virtual void touchMove([[maybe_unused]] const STouchCoord& coord, [[maybe_unused]] uintptr_t tid) {}
 
-  virtual void charKeyDown(unsigned long charCode, EModifierKey mods, bool isRepeat) {
-    (void)charCode;
-    (void)mods;
-    (void)isRepeat;
-  }
-  virtual void charKeyUp(unsigned long charCode, EModifierKey mods) {
-    (void)charCode;
-    (void)mods;
-  }
-  virtual void specialKeyDown(ESpecialKey key, EModifierKey mods, bool isRepeat) {
-    (void)key;
-    (void)mods;
-    (void)isRepeat;
-  }
-  virtual void specialKeyUp(ESpecialKey key, EModifierKey mods) {
-    (void)key;
-    (void)mods;
-  }
-  virtual void modKeyDown(EModifierKey mod, bool isRepeat) {
-    (void)mod;
-    (void)isRepeat;
-  }
-  virtual void modKeyUp(EModifierKey mod) { (void)mod; }
+  virtual void charKeyDown([[maybe_unused]] unsigned long charCode, [[maybe_unused]] EModifierKey mods,
+                           [[maybe_unused]] bool isRepeat) {}
+  virtual void charKeyUp([[maybe_unused]] unsigned long charCode, [[maybe_unused]] EModifierKey mods) {}
+  virtual void specialKeyDown([[maybe_unused]] ESpecialKey key, [[maybe_unused]] EModifierKey mods,
+                              [[maybe_unused]] bool isRepeat) {}
+  virtual void specialKeyUp([[maybe_unused]] ESpecialKey key, [[maybe_unused]] EModifierKey mods) {}
+  virtual void modKeyDown([[maybe_unused]] EModifierKey mod, [[maybe_unused]] bool isRepeat) {}
+  virtual void modKeyUp([[maybe_unused]] EModifierKey mod) {}
 
   virtual ITextInputCallback* getTextInputCallback() { return nullptr; }
 
   virtual void focusLost() {}
   virtual void focusGained() {}
-  virtual void windowMoved(const SWindowRect& rect) { (void)rect; }
+  virtual void windowMoved([[maybe_unused]] const SWindowRect& rect) {}
 
   virtual void destroyed() {}
 };
@@ -278,10 +245,7 @@ public:
   virtual int waitForRetrace() = 0;
 
   virtual uintptr_t getPlatformHandle() const = 0;
-  virtual bool _incomingEvent(void* event) {
-    (void)event;
-    return false;
-  }
+  virtual bool _incomingEvent([[maybe_unused]] void* event) { return false; }
   virtual void _cleanup() {}
 
   virtual ETouchType getTouchType() const = 0;
@@ -289,7 +253,7 @@ public:
   virtual void setStyle(EWindowStyle style) = 0;
   virtual EWindowStyle getStyle() const = 0;
 
-  virtual void setTouchBarProvider(void*) {}
+  virtual void setTouchBarProvider([[maybe_unused]] void* provider) {}
 
   virtual IGraphicsCommandQueue* getCommandQueue() = 0;
   virtual IGraphicsDataFactory* getDataFactory() = 0;
