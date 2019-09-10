@@ -859,18 +859,17 @@ public:
 
     m_hwnd = CreateWindowW(L"BooWindow", title.data(), WS_OVERLAPPEDWINDOW, r.left, r.top, r.right - r.left,
                            r.bottom - r.top, nullptr, nullptr, nullptr, nullptr);
-    HINSTANCE wndInstance = HINSTANCE(GetWindowLongPtr(m_hwnd, GWLP_HINSTANCE));
     m_imc = ImmGetContext(m_hwnd);
 
 #if BOO_HAS_VULKAN
+    HINSTANCE wndInstance = HINSTANCE(GetWindowLongPtr(m_hwnd, GWLP_HINSTANCE));
     if (b3dCtx.m_vulkanDxFactory) {
       m_gfxCtx.reset(new GraphicsContextWin32Vulkan(this, wndInstance, m_hwnd, &g_VulkanContext, b3dCtx));
       if (m_gfxCtx->initializeContext(nullptr))
         return;
     }
-#else
-    (void)wndInstance;
 #endif
+
     IGraphicsContext::EGraphicsAPI api = IGraphicsContext::EGraphicsAPI::D3D11;
     if (b3dCtx.m_ctxOgl.m_dxFactory) {
       m_gfxCtx.reset(new GraphicsContextWin32GL(IGraphicsContext::EGraphicsAPI::OpenGL3_3, this, m_hwnd, b3dCtx));
