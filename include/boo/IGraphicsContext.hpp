@@ -10,7 +10,7 @@ struct IGraphicsDataFactory;
 class IGraphicsContext {
   friend class WindowCocoa;
   friend class WindowXCB;
-  virtual void _setCallback(class IWindowCallback* cb) { (void)cb; }
+  virtual void _setCallback([[maybe_unused]] class IWindowCallback* cb) {}
 
 public:
   enum class EGraphicsAPI {

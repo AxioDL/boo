@@ -1,9 +1,6 @@
 #include "boo/inputdev/DolphinSmashAdapter.hpp"
 #include "boo/inputdev/DeviceSignature.hpp"
 
-#include <cstdio>
-#include <cstring>
-
 namespace boo {
 /*
  * Reference: https://github.com/ToadKing/wii-u-gc-adapter/blob/master/wii-u-gc-adapter.c
@@ -14,9 +11,10 @@ DolphinSmashAdapter::DolphinSmashAdapter(DeviceToken* token)
 
 DolphinSmashAdapter::~DolphinSmashAdapter() {}
 
-constexpr EDolphinControllerType parseType(unsigned char status) {
-  EDolphinControllerType type =
+static constexpr EDolphinControllerType parseType(unsigned char status) {
+  const auto type =
       EDolphinControllerType(status) & (EDolphinControllerType::Normal | EDolphinControllerType::Wavebird);
+
   switch (type) {
   case EDolphinControllerType::Normal:
   case EDolphinControllerType::Wavebird:
@@ -26,13 +24,13 @@ constexpr EDolphinControllerType parseType(unsigned char status) {
   }
 }
 
-static EDolphinControllerType parseState(DolphinControllerState* stateOut, uint8_t* payload, bool& rumble) {
-  unsigned char status = payload[0];
-  EDolphinControllerType type = parseType(status);
+static EDolphinControllerType parseState(DolphinControllerState* stateOut, const uint8_t* payload, bool& rumble) {
+  const unsigned char status = payload[0];
+  const EDolphinControllerType type = parseType(status);
 
   rumble = ((status & 0x04) != 0) ? true : false;
 
-  stateOut->m_btns = (uint16_t)payload[1] << 8 | (uint16_t)payload[2];
+  stateOut->m_btns = static_cast<uint16_t>(payload[1]) << 8 | static_cast<uint16_t>(payload[2]);
 
   stateOut->m_leftStick[0] = payload[3];
   stateOut->m_leftStick[1] = payload[4];
@@ -45,43 +43,44 @@ static EDolphinControllerType parseState(DolphinControllerState* stateOut, uint8
 }
 
 void DolphinSmashAdapter::initialCycle() {
-  uint8_t handshakePayload[] = {0x13};
-  sendUSBInterruptTransfer(handshakePayload, sizeof(handshakePayload));
+  constexpr std::array<uint8_t, 1> handshakePayload{0x13};
+  sendUSBInterruptTransfer(handshakePayload.data(), handshakePayload.size());
 }
 
 void DolphinSmashAdapter::transferCycle() {
-  uint8_t payload[37];
-  size_t recvSz = receiveUSBInterruptTransfer(payload, sizeof(payload));
-  if (recvSz != 37 || payload[0] != 0x21)
+  std::array<uint8_t, 37> payload;
+  const size_t recvSz = receiveUSBInterruptTransfer(payload.data(), payload.size());
+  if (recvSz != payload.size() || payload[0] != 0x21) {
     return;
+  }
 
   // fmt::print("RECEIVED DATA {} {:02X}\n", recvSz, payload[0]);
 
   std::lock_guard<std::mutex> lk(m_callbackLock);
-  if (!m_callback)
+  if (!m_callback) {
     return;
+  }
 
   /* Parse controller states */
-  uint8_t* controller = &payload[1];
+  const uint8_t* controller = &payload[1];
   uint8_t rumbleMask = 0;
   for (uint32_t i = 0; i < 4; i++, controller += 9) {
     DolphinControllerState state;
     bool rumble = false;
-    EDolphinControllerType type = parseState(&state, controller, rumble);
-    if (True(type) && !(m_knownControllers & 1 << i)) {
-      m_leftStickCal[0] = state.m_leftStick[0];
-      m_leftStickCal[1] = state.m_leftStick[1];
-      m_rightStickCal[0] = state.m_rightStick[0];
-      m_rightStickCal[1] = state.m_rightStick[1];
-      m_triggersCal[0] = state.m_analogTriggers[0];
-      m_triggersCal[1] = state.m_analogTriggers[1];
-      m_knownControllers |= 1 << i;
+    const EDolphinControllerType type = parseState(&state, controller, rumble);
+
+    if (True(type) && (m_knownControllers & (1U << i)) == 0) {
+      m_leftStickCal = state.m_leftStick;
+      m_rightStickCal = state.m_rightStick;
+      m_triggersCal = state.m_analogTriggers;
+      m_knownControllers |= 1U << i;
       m_callback->controllerConnected(i, type);
-    } else if (False(type) && (m_knownControllers & 1 << i)) {
-      m_knownControllers &= ~(1 << i);
+    } else if (False(type) && (m_knownControllers & (1U << i)) != 0) {
+      m_knownControllers &= ~(1U << i);
       m_callback->controllerDisconnected(i);
     }
-    if (m_knownControllers & 1 << i) {
+
+    if ((m_knownControllers & (1U << i)) != 0) {
       state.m_leftStick[0] = state.m_leftStick[0] - m_leftStickCal[0];
       state.m_leftStick[1] = state.m_leftStick[1] - m_leftStickCal[1];
       state.m_rightStick[0] = state.m_rightStick[0] - m_rightStickCal[0];
@@ -90,39 +89,42 @@ void DolphinSmashAdapter::transferCycle() {
       state.m_analogTriggers[1] = state.m_analogTriggers[1] - m_triggersCal[1];
       m_callback->controllerUpdate(i, type, state);
     }
-    rumbleMask |= rumble ? 1 << i : 0;
+
+    rumbleMask |= rumble ? 1U << i : 0;
   }
 
   /* Send rumble message (if needed) */
-  uint8_t rumbleReq = m_rumbleRequest & rumbleMask;
+  const uint8_t rumbleReq = m_rumbleRequest & rumbleMask;
   if (rumbleReq != m_rumbleState) {
-    uint8_t rumbleMessage[5] = {0x11};
-    for (int i = 0; i < 4; ++i) {
-      if (rumbleReq & 1 << i)
+    std::array<uint8_t, 5> rumbleMessage{0x11, 0, 0, 0, 0};
+    for (size_t i = 0; i < 4; ++i) {
+      if ((rumbleReq & (1U << i)) != 0) {
         rumbleMessage[i + 1] = 1;
-      else if (m_hardStop[i])
+      } else if (m_hardStop[i]) {
         rumbleMessage[i + 1] = 2;
-      else
+      } else {
         rumbleMessage[i + 1] = 0;
+      }
     }
 
-    sendUSBInterruptTransfer(rumbleMessage, sizeof(rumbleMessage));
+    sendUSBInterruptTransfer(rumbleMessage.data(), rumbleMessage.size());
     m_rumbleState = rumbleReq;
   }
 }
 
 void DolphinSmashAdapter::finalCycle() {
-  uint8_t rumbleMessage[5] = {0x11, 0, 0, 0, 0};
-  sendUSBInterruptTransfer(rumbleMessage, sizeof(rumbleMessage));
+  constexpr std::array<uint8_t, 5> rumbleMessage{0x11, 0, 0, 0, 0};
+  sendUSBInterruptTransfer(rumbleMessage.data(), sizeof(rumbleMessage));
 }
 
 void DolphinSmashAdapter::deviceDisconnected() {
   for (uint32_t i = 0; i < 4; i++) {
-    if (m_knownControllers & 1 << i) {
-      m_knownControllers &= ~(1 << i);
+    if ((m_knownControllers & (1U << i)) != 0) {
+      m_knownControllers &= ~(1U << i);
       std::lock_guard<std::mutex> lk(m_callbackLock);
-      if (m_callback)
+      if (m_callback) {
         m_callback->controllerDisconnected(i);
+      }
     }
   }
 }
@@ -151,15 +153,15 @@ void DolphinSmashAdapter::deviceDisconnected() {
  *    distribution.
  */
 
-static int16_t pad_clampregion[8] = {30, 180, 15, 72, 40, 15, 59, 31};
+constexpr std::array<int16_t, 8> pad_clampregion{
+    30, 180, 15, 72, 40, 15, 59, 31,
+};
 
 static void pad_clampstick(int16_t& px, int16_t& py, int16_t max, int16_t xy, int16_t min) {
   int x = px;
   int y = py;
-  int signX;
-  int signY;
-  int d;
 
+  int signX;
   if (x > 0) {
     signX = 1;
   } else {
@@ -167,6 +169,7 @@ static void pad_clampstick(int16_t& px, int16_t& py, int16_t max, int16_t xy, in
     x = -x;
   }
 
+  int signY;
   if (y > 0) {
     signY = 1;
   } else {
@@ -174,10 +177,11 @@ static void pad_clampstick(int16_t& px, int16_t& py, int16_t max, int16_t xy, in
     y = -y;
   }
 
-  if (x <= min)
+  if (x <= min) {
     x = 0;
-  else
+  } else {
     x -= min;
+  }
 
   if (y <= min) {
     y = 0;
@@ -191,13 +195,13 @@ static void pad_clampstick(int16_t& px, int16_t& py, int16_t max, int16_t xy, in
   }
 
   if (xy * y <= xy * x) {
-    d = xy * x + (max - xy) * y;
+    const int d = xy * x + (max - xy) * y;
     if (xy * max < d) {
       x = int16_t(xy * max * x / d);
       y = int16_t(xy * max * y / d);
     }
   } else {
-    d = xy * y + (max - xy) * x;
+    const int d = xy * y + (max - xy) * x;
     if (xy * max < d) {
       x = int16_t(xy * max * x / d);
       y = int16_t(xy * max * y / d);
@@ -209,15 +213,15 @@ static void pad_clampstick(int16_t& px, int16_t& py, int16_t max, int16_t xy, in
 }
 
 static void pad_clamptrigger(int16_t& trigger) {
-  int16_t min, max;
+  const int16_t min = pad_clampregion[0];
+  const int16_t max = pad_clampregion[1];
 
-  min = pad_clampregion[0];
-  max = pad_clampregion[1];
-  if (min > trigger)
+  if (min > trigger) {
     trigger = 0;
-  else {
-    if (max < trigger)
+  } else {
+    if (max < trigger) {
       trigger = max;
+    }
     trigger -= min;
   }
 }
