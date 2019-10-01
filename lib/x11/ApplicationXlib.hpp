@@ -220,14 +220,14 @@ public:
 
     /* Check for Vulkan presence and preference */
     bool tryVulkan = true;
-    if (!gfxApi.compare("OpenGL"))
+    if (gfxApi == "OpenGL")
       tryVulkan = false;
     for (const std::string& arg : args) {
-      if (!arg.compare("--gl")) {
+      if (arg == "--gl") {
         tryVulkan = false;
         break;
       }
-      if (!arg.compare("--vulkan")) {
+      if (arg == "--vulkan") {
         tryVulkan = true;
         break;
       }

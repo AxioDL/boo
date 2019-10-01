@@ -1,4 +1,4 @@
-option(ENABLE_NX "Build mesa for offline NX shader compilation and runtime" ON)
+option(ENABLE_NX "Build mesa for offline NX shader compilation and runtime" OFF)
 find_program(MESON_PROG meson)
 find_program(NINJA_PROG ninja)
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/mesa/meson.build AND

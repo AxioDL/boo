@@ -1845,7 +1845,7 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
   }
 
 #ifdef BOO_GRAPHICS_DEBUG_GROUPS
-  void pushDebugGroup(const char* name, const std::array<float, 4>& color) {
+  void pushDebugGroup(const char* name, const std::array<float, 4>& color) override {
     if (GLEW_KHR_debug) {
       std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
       auto& cmd = cmds.emplace_back(Command::Op::PushDebugGroup);
@@ -1853,7 +1853,7 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
     }
   }
 
-  void popDebugGroup() {
+  void popDebugGroup() override {
     if (GLEW_KHR_debug) {
       std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
       cmds.emplace_back(Command::Op::PopDebugGroup);
