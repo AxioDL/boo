@@ -16,7 +16,6 @@
 #include <linux/usbdevice_fs.h>
 #include <linux/input.h>
 #include <linux/hidraw.h>
-#include <stropts.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
