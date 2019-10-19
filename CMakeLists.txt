@@ -157,7 +157,7 @@ elseif(WIN32)
   if (NOT ${VULKAN_SDK_DIRS} STREQUAL "/registry")
     message(STATUS "Enabling Vulkan support")
     list(GET VULKAN_SDK_DIRS 0 VULKAN_SDK_DIR)
-    target_include_directories(boo PRIVATE "${VULKAN_SDK_DIR}/Include")
+    target_include_directories(boo PUBLIC "${VULKAN_SDK_DIR}/Include")
     target_compile_definitions(boo PUBLIC
       -DBOO_HAS_VULKAN=1
       -DVK_USE_PLATFORM_WIN32_KHR=1
