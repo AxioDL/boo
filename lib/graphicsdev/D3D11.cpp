@@ -1306,7 +1306,7 @@ class D3D11DataFactoryImpl : public D3D11DataFactory, public GraphicsDataFactory
       const std::array<VertexElementDescriptor, 2> vfmt{{{VertexSemantic::Position4}, {VertexSemantic::UV4}}};
       AdditionalPipelineInfo info = {
           BlendFactor::One, BlendFactor::Zero, Primitive::TriStrips, ZTest::None, false, true, false, CullMode::None};
-      m_gammaShader = ctx.newShaderPipeline(vertexShader, fragmentShader, vfmt.data(), info);
+      m_gammaShader = ctx.newShaderPipeline(vertexShader, fragmentShader, VertexFormatInfo(vfmt.size(), vfmt.data()), info);
       m_gammaLUT = ctx.newDynamicTexture(256, 256, TextureFormat::I16, TextureClampMode::ClampToEdge);
       setDisplayGamma(1.f);
 
