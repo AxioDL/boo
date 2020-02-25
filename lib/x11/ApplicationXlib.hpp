@@ -479,8 +479,10 @@ public:
           Window evWindow = GetWindowOfEvent(&event, windowEvent);
           if (windowEvent) {
             if (event.type == ClientMessage && event.xclient.data.l[0] == 'NWID') {
+#ifndef BOO_MSAN
               if (!inhibitor) /* First window created, use to inhibit screensaver */
                 inhibitor.emplace(m_dbus, evWindow);
+#endif
             } else {
               auto window = m_windows.find(evWindow);
               if (window != m_windows.end())
