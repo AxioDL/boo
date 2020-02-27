@@ -85,7 +85,7 @@ class MetalDataFactoryImpl : public MetalDataFactory, public GraphicsDataFactory
   ObjToken<ITextureD> m_gammaLUT;
   ObjToken<IGraphicsBufferS> m_gammaVBO;
   ObjToken<IShaderDataBinding> m_gammaBinding;
-  
+
   void SetupGammaResources();
 
 public:
@@ -228,6 +228,18 @@ class MetalTextureS : public GraphicsDataNode<ITextureS> {
       break;
     case TextureFormat::DXT3:
       pfmt = MTLPixelFormatBC2_RGBA;
+      ppitchNum = 1;
+      ppitchDenom = 1;
+      bytesPerRow = width * 16 / 4; // Metal wants this in blocks, not bytes
+      break;
+    case TextureFormat::DXT5:
+      pfmt = MTLPixelFormatBC3_RGBA;
+      ppitchNum = 1;
+      ppitchDenom = 1;
+      bytesPerRow = width * 16 / 4; // Metal wants this in blocks, not bytes
+      break;
+    case TextureFormat::BPTC:
+      pfmt = MTLPixelFormatBC7_RGBAUnorm;
       ppitchNum = 1;
       ppitchDenom = 1;
       bytesPerRow = width * 16 / 4; // Metal wants this in blocks, not bytes
@@ -1977,10 +1989,10 @@ std::vector<uint8_t> MetalDataFactory::CompileMetal(const char* source, Pipeline
   memcpy(ret.data() + 1, source, strSz);
   return ret;
 }
-  
+
 void MetalDataFactoryImpl::SetupGammaResources() {
   m_hasTessellation = [m_ctx->m_dev supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily1_v2];
-  
+
   commitTransaction([this](IGraphicsDataFactory::Context& ctx) {
     auto vertexMetal = MetalDataFactory::CompileMetal(GammaVS, PipelineStage::Vertex);
     auto vertexShader = ctx.newShaderStage(vertexMetal, PipelineStage::Vertex);

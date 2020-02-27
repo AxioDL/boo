@@ -335,6 +335,16 @@ class GLTextureS : public GraphicsDataNode<ITextureS> {
       compressed = true;
       pxPitch = 1;
       break;
+    case TextureFormat::DXT5:
+      intFormat = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+      compressed = true;
+      pxPitch = 1;
+      break;
+    case TextureFormat::BPTC:
+      intFormat = GL_COMPRESSED_RGBA_BPTC_UNORM_ARB;
+      compressed = true;
+      pxPitch = 1;
+      break;
     default:
       Log.report(logvisor::Fatal, fmt("unsupported tex format"));
     }

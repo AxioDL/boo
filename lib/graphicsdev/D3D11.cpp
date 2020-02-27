@@ -179,6 +179,20 @@ class D3D11TextureS : public GraphicsDataNode<ITextureS> {
       pxPitchDenom = 1;
       pxTilePitch = 4;
       break;
+    case TextureFormat::DXT5:
+      pfmt = DXGI_FORMAT_BC3_UNORM;
+      compressed = true;
+      pxPitchNum = 1;
+      pxPitchDenom = 1;
+      pxTilePitch = 4;
+      break;
+    case TextureFormat::BPTC:
+      pfmt = DXGI_FORMAT_BC7_UNORM;
+      compressed = true;
+      pxPitchNum = 1;
+      pxPitchDenom = 1;
+      pxTilePitch = 4;
+      break;
     default:
       Log.report(logvisor::Fatal, fmt("unsupported tex format"));
     }
