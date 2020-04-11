@@ -319,7 +319,7 @@ class NXTextureS : public GraphicsDataNode<ITextureS> {
       m_pixelPitchDenom = 2;
       break;
     default:
-      Log.report(logvisor::Fatal, fmt("unsupported tex format"));
+      Log.report(logvisor::Fatal, FMT_STRING("unsupported tex format"));
     }
     m_nxFmt = pfmt;
 
@@ -334,7 +334,7 @@ class NXTextureS : public GraphicsDataNode<ITextureS> {
     texTempl.bind = PIPE_BIND_SAMPLER_VIEW;
     m_gpuTex = ctx->m_screen->resource_create(ctx->m_screen, &texTempl);
     if (!m_gpuTex) {
-      Log.report(logvisor::Fatal, fmt("Failed to create texture"));
+      Log.report(logvisor::Fatal, FMT_STRING("Failed to create texture"));
       return;
     }
 
@@ -421,7 +421,7 @@ class NXTextureSA : public GraphicsDataNode<ITextureSA> {
       m_pixelPitchNum = 2;
       break;
     default:
-      Log.report(logvisor::Fatal, fmt("unsupported tex format"));
+      Log.report(logvisor::Fatal, FMT_STRING("unsupported tex format"));
     }
     m_nxFmt = pfmt;
 
@@ -436,7 +436,7 @@ class NXTextureSA : public GraphicsDataNode<ITextureSA> {
     texTempl.bind = PIPE_BIND_SAMPLER_VIEW;
     m_gpuTex = ctx->m_screen->resource_create(ctx->m_screen, &texTempl);
     if (!m_gpuTex) {
-      Log.report(logvisor::Fatal, fmt("Failed to create texture"));
+      Log.report(logvisor::Fatal, FMT_STRING("Failed to create texture"));
       return;
     }
 
@@ -559,7 +559,7 @@ class NXTextureR : public GraphicsDataNode<ITextureR> {
     texTempl.bind = PIPE_BIND_RENDER_TARGET;
     m_colorTex = ctx->m_screen->resource_create(ctx->m_screen, &texTempl);
     if (!m_colorTex) {
-      Log.report(logvisor::Fatal, fmt("Failed to create color target texture"));
+      Log.report(logvisor::Fatal, FMT_STRING("Failed to create color target texture"));
       return;
     }
 
@@ -569,7 +569,7 @@ class NXTextureR : public GraphicsDataNode<ITextureR> {
     texTempl.bind = PIPE_BIND_DEPTH_STENCIL;
     m_depthTex = ctx->m_screen->resource_create(ctx->m_screen, &texTempl);
     if (!m_depthTex) {
-      Log.report(logvisor::Fatal, fmt("Failed to create depth target texture"));
+      Log.report(logvisor::Fatal, FMT_STRING("Failed to create depth target texture"));
       return;
     }
 
@@ -580,7 +580,7 @@ class NXTextureR : public GraphicsDataNode<ITextureR> {
       texTempl.bind = PIPE_BIND_SAMPLER_VIEW;
       m_colorBindTex[i] = ctx->m_screen->resource_create(ctx->m_screen, &texTempl);
       if (!m_colorBindTex[i]) {
-        Log.report(logvisor::Fatal, fmt("Failed to create color bind texture"));
+        Log.report(logvisor::Fatal, FMT_STRING("Failed to create color bind texture"));
         return;
       }
     }
@@ -590,7 +590,7 @@ class NXTextureR : public GraphicsDataNode<ITextureR> {
       texTempl.bind = PIPE_BIND_SAMPLER_VIEW;
       m_depthBindTex[i] = ctx->m_screen->resource_create(ctx->m_screen, &texTempl);
       if (!m_depthBindTex[i]) {
-        Log.report(logvisor::Fatal, fmt("Failed to create depth bind texture"));
+        Log.report(logvisor::Fatal, FMT_STRING("Failed to create depth bind texture"));
         return;
       }
     }
@@ -605,7 +605,7 @@ class NXTextureR : public GraphicsDataNode<ITextureR> {
     svTempl.texture = m_colorTex;
     m_colorView = ctx->m_pctx->create_sampler_view(ctx->m_pctx, m_colorTex, &svTempl);
     if (!m_colorView) {
-      Log.report(logvisor::Fatal, fmt("Failed to create color sampler view"));
+      Log.report(logvisor::Fatal, FMT_STRING("Failed to create color sampler view"));
       return;
     }
 
@@ -613,7 +613,7 @@ class NXTextureR : public GraphicsDataNode<ITextureR> {
     svTempl.texture = m_depthTex;
     m_depthView = ctx->m_pctx->create_sampler_view(ctx->m_pctx, m_depthTex, &svTempl);
     if (!m_depthView) {
-      Log.report(logvisor::Fatal, fmt("Failed to create depth sampler view"));
+      Log.report(logvisor::Fatal, FMT_STRING("Failed to create depth sampler view"));
       return;
     }
 
@@ -622,7 +622,7 @@ class NXTextureR : public GraphicsDataNode<ITextureR> {
       svTempl.texture = m_colorBindTex[i];
       m_colorBindView[i] = ctx->m_pctx->create_sampler_view(ctx->m_pctx, m_colorBindTex[i], &svTempl);
       if (!m_colorBindView[i]) {
-        Log.report(logvisor::Fatal, fmt("Failed to create color bind sampler view"));
+        Log.report(logvisor::Fatal, FMT_STRING("Failed to create color bind sampler view"));
         return;
       }
     }
@@ -632,7 +632,7 @@ class NXTextureR : public GraphicsDataNode<ITextureR> {
       svTempl.texture = m_depthBindTex[i];
       m_depthBindView[i] = ctx->m_pctx->create_sampler_view(ctx->m_pctx, m_depthBindTex[i], &svTempl);
       if (!m_depthBindView[i]) {
-        Log.report(logvisor::Fatal, fmt("Failed to create depth bind sampler view"));
+        Log.report(logvisor::Fatal, FMT_STRING("Failed to create depth bind sampler view"));
         return;
       }
     }
@@ -642,14 +642,14 @@ class NXTextureR : public GraphicsDataNode<ITextureR> {
     surfTempl.format = ColorFormat;
     m_colorSurface = ctx->m_pctx->create_surface(ctx->m_pctx, m_colorTex, &surfTempl);
     if (!m_colorSurface) {
-      Log.report(logvisor::Fatal, fmt("Failed to create color surface"));
+      Log.report(logvisor::Fatal, FMT_STRING("Failed to create color surface"));
       return;
     }
 
     surfTempl.format = DepthFormat;
     m_depthSurface = ctx->m_pctx->create_surface(ctx->m_pctx, m_depthTex, &surfTempl);
     if (!m_depthSurface) {
-      Log.report(logvisor::Fatal, fmt("Failed to create depth surface"));
+      Log.report(logvisor::Fatal, FMT_STRING("Failed to create depth surface"));
       return;
     }
 
@@ -665,9 +665,9 @@ class NXTextureR : public GraphicsDataNode<ITextureR> {
              TextureClampMode clampMode, size_t colorBindCount, size_t depthBindCount)
   : GraphicsDataNode<ITextureR>(parent), m_ctx(ctx) {
     if (colorBindCount > MAX_BIND_TEXS)
-      Log.report(logvisor::Fatal, fmt("too many color bindings for render texture"));
+      Log.report(logvisor::Fatal, FMT_STRING("too many color bindings for render texture"));
     if (depthBindCount > MAX_BIND_TEXS)
-      Log.report(logvisor::Fatal, fmt("too many depth bindings for render texture"));
+      Log.report(logvisor::Fatal, FMT_STRING("too many depth bindings for render texture"));
 
     if (m_samplesColor == 0)
       m_samplesColor = 1;
@@ -795,7 +795,7 @@ class NXShaderStage : public GraphicsDataNode<IShaderStage> {
                 PipelineStage stage)
   : GraphicsDataNode<IShaderStage>(parent), m_obj(ctx->m_compiler.compile(SHADER_TYPE_TABLE[int(stage)], (char*)data)) {
     if (!m_obj)
-      Log.report(logvisor::Fatal, fmt("Shader compile fail:\n%s\n"), m_obj.info_log());
+      Log.report(logvisor::Fatal, FMT_STRING("Shader compile fail:\n%s\n"), m_obj.info_log());
   }
 
 public:
@@ -960,7 +960,7 @@ protected:
     std::string infoLog;
     m_shader = ctx->m_compiler.link(numStages, stages, &infoLog);
     if (!m_shader)
-      Log.report(logvisor::Fatal, fmt("Unable to link shader:\n%s\n"), infoLog.c_str());
+      Log.report(logvisor::Fatal, FMT_STRING("Unable to link shader:\n%s\n"), infoLog.c_str());
   }
 
 public:
@@ -1083,7 +1083,7 @@ struct NXShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
     for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
       if (!ubufs[i])
-        Log.report(logvisor::Fatal, fmt("null uniform-buffer %d provided to newShaderDataBinding"), int(i));
+        Log.report(logvisor::Fatal, FMT_STRING("null uniform-buffer %d provided to newShaderDataBinding"), int(i));
 #endif
       m_ubufs.push_back(ubufs[i]);
       if (ubufOffs && ubufSizes)
@@ -1141,7 +1141,7 @@ struct NXShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
   void bind(int b) {
 #ifndef NDEBUG
     if (!m_committed)
-      Log.report(logvisor::Fatal, fmt("attempted to use uncommitted NXShaderDataBinding"));
+      Log.report(logvisor::Fatal, FMT_STRING("attempted to use uncommitted NXShaderDataBinding"));
 #endif
     struct pipe_context* pctx = m_ctx->m_pctx;
 
@@ -1362,7 +1362,7 @@ struct NXCommandQueue : IGraphicsCommandQueue {
     NXTextureR* csource = m_resolveDispSource.cast<NXTextureR>();
 #ifndef NDEBUG
     if (!csource->m_colorBindCount)
-      Log.report(logvisor::Fatal, fmt("texture provided to resolveDisplay() must have at least 1 color binding"));
+      Log.report(logvisor::Fatal, FMT_STRING("texture provided to resolveDisplay() must have at least 1 color binding"));
 #endif
 
     struct pipe_surface* backBuf = m_ctx->m_windowSurfaces[ST_ATTACHMENT_BACK_LEFT];
@@ -1538,7 +1538,7 @@ NXTextureD::NXTextureD(const boo::ObjToken<BaseGraphicsData>& parent, NXCommandQ
     m_cpuSz = width * height * 2;
     break;
   default:
-    Log.report(logvisor::Fatal, fmt("unsupported tex format"));
+    Log.report(logvisor::Fatal, FMT_STRING("unsupported tex format"));
   }
   m_nxFmt = pfmt;
   m_stagingBuf.reset(new uint8_t[m_cpuSz]);
@@ -1554,7 +1554,7 @@ NXTextureD::NXTextureD(const boo::ObjToken<BaseGraphicsData>& parent, NXCommandQ
   for (int i = 0; i < 2; ++i) {
     m_gpuTex[i] = ctx->m_screen->resource_create(ctx->m_screen, &texTempl);
     if (!m_gpuTex[i]) {
-      Log.report(logvisor::Fatal, fmt("Failed to create texture"));
+      Log.report(logvisor::Fatal, FMT_STRING("Failed to create texture"));
       return;
     }
   }
@@ -1812,7 +1812,7 @@ bool NXContext::initialize() {
   printf("Activated console\n\n");
   m_screen = nouveau_switch_screen_create();
   if (!m_screen) {
-    Log.report(logvisor::Fatal, fmt("Failed to create nouveau screen"));
+    Log.report(logvisor::Fatal, FMT_STRING("Failed to create nouveau screen"));
     return false;
   }
   printf("nouveau_switch_screen_create done\n");
@@ -1820,7 +1820,7 @@ bool NXContext::initialize() {
 
   m_pctx = m_screen->context_create(m_screen, nullptr, 0);
   if (!m_pctx) {
-    Log.report(logvisor::Fatal, fmt("Failed to create pipe context"));
+    Log.report(logvisor::Fatal, FMT_STRING("Failed to create pipe context"));
     m_screen->destroy(m_screen);
     return false;
   }
@@ -1829,7 +1829,7 @@ bool NXContext::initialize() {
   st_config_options opts = {};
   m_st = st_create_context(API_OPENGL_CORE, m_pctx, nullptr, nullptr, &opts, false);
   if (!m_st) {
-    Log.report(logvisor::Fatal, fmt("Failed to create st context"));
+    Log.report(logvisor::Fatal, FMT_STRING("Failed to create st context"));
     m_screen->destroy(m_screen);
     return false;
   }
@@ -1856,7 +1856,7 @@ bool NXContext::initialize() {
     whandle.stride = gfxGetFramebufferPitch();
     struct pipe_resource* tex = m_screen->resource_from_handle(m_screen, &texTempl, &whandle, 0);
     if (!tex) {
-      Log.report(logvisor::Fatal, fmt("Failed to create color target texture"));
+      Log.report(logvisor::Fatal, FMT_STRING("Failed to create color target texture"));
       return false;
     }
 
@@ -1865,7 +1865,7 @@ bool NXContext::initialize() {
     surfTempl.format = ColorFormat;
     m_windowSurfaces[i] = m_pctx->create_surface(m_pctx, tex, &surfTempl);
     if (!m_windowSurfaces[i]) {
-      Log.report(logvisor::Fatal, fmt("Failed to create color surface"));
+      Log.report(logvisor::Fatal, FMT_STRING("Failed to create color surface"));
       return false;
     }
 

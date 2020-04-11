@@ -32,13 +32,13 @@ class ScreenSaverInhibitor {
     DBusError err = DBUS_ERROR_INIT;
     if ((msg = dbus_pending_call_steal_reply(m_pending)) &&
         dbus_message_get_args(msg, &err, DBUS_TYPE_UINT32, &m_cookie, DBUS_TYPE_INVALID)) {
-      Log.report(logvisor::Info, fmt("Screen saver inhibited"));
+      Log.report(logvisor::Info, FMT_STRING("Screen saver inhibited"));
     } else {
       /* Fallback to xdg-screensaver */
       dbus_error_free(&err);
-      Log.report(logvisor::Info, fmt("Falling back to xdg-screensaver inhibit"));
+      Log.report(logvisor::Info, FMT_STRING("Falling back to xdg-screensaver inhibit"));
       if (!fork()) {
-        execlp("xdg-screensaver", "xdg-screensaver", "suspend", fmt::format(fmt("0x{:X}"), m_wid).c_str(), nullptr);
+        execlp("xdg-screensaver", "xdg-screensaver", "suspend", fmt::format(FMT_STRING("0x{:X}"), m_wid).c_str(), nullptr);
         exit(1);
       }
     }
@@ -99,17 +99,17 @@ DBusConnection* RegisterDBus(const char* appName, bool& isFirst) {
   /* connect to the bus and check for errors */
   DBusConnection* conn = dbus_bus_get(DBUS_BUS_SESSION, &err);
   if (dbus_error_is_set(&err)) {
-    fmt::print(stderr, fmt("DBus Connection Error ({})\n"), err.message);
+    fmt::print(stderr, FMT_STRING("DBus Connection Error ({})\n"), err.message);
     dbus_error_free(&err);
   }
   if (conn == nullptr)
     return nullptr;
 
   /* request our name on the bus and check for errors */
-  int ret = dbus_bus_request_name(conn, fmt::format(fmt("boo.{}.unique"), appName).c_str(),
+  int ret = dbus_bus_request_name(conn, fmt::format(FMT_STRING("boo.{}.unique"), appName).c_str(),
                                   DBUS_NAME_FLAG_DO_NOT_QUEUE, &err);
   if (dbus_error_is_set(&err)) {
-    fmt::print(stderr, fmt("DBus Name Error ({})\n"), err.message);
+    fmt::print(stderr, FMT_STRING("DBus Name Error ({})\n"), err.message);
     dbus_error_free(&err);
     dbus_connection_close(conn);
     return nullptr;

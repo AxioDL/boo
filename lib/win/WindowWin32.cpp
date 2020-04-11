@@ -76,7 +76,7 @@ public:
     scDesc.Format = b3dCtx.m_ctx11.m_fbFormat;
     if (FAILED(b3dCtx.m_ctx11.m_dxFactory->CreateSwapChainForHwnd(b3dCtx.m_ctx11.m_dev.Get(), hwnd, &scDesc, nullptr,
                                                                   nullptr, &m_swapChain)))
-      Log.report(logvisor::Fatal, fmt("unable to create swap chain"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to create swap chain"));
     b3dCtx.m_ctx11.m_dxFactory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
 
     auto insIt = b3dCtx.m_ctx11.m_windows.emplace(std::make_pair(parentWindow, D3D11Context::Window()));
@@ -88,7 +88,7 @@ public:
     m_commandQueue->startRenderer();
 
     if (FAILED(m_swapChain->GetContainingOutput(&m_output)))
-      Log.report(logvisor::Fatal, fmt("unable to get DXGI output"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to get DXGI output"));
   }
 
   ~GraphicsContextWin32D3D() override { m_3dCtx.m_ctx11.m_windows.erase(m_parentWindow); }
@@ -154,14 +154,14 @@ public:
     }
 
     if (!m_output)
-      Log.report(logvisor::Fatal, fmt("unable to find window's IDXGIOutput"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to find window's IDXGIOutput"));
 
     auto insIt = b3dCtx.m_ctxOgl.m_windows.emplace(std::make_pair(parentWindow, OGLContext::Window()));
     OGLContext::Window& w = insIt.first->second;
     w.m_hwnd = hwnd;
     w.m_deviceContext = GetDC(hwnd);
     if (!w.m_deviceContext)
-      Log.report(logvisor::Fatal, fmt("unable to create window's device context"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to create window's device context"));
 
     if (!m_3dCtx.m_ctxOgl.m_lastContext) {
       PIXELFORMATDESCRIPTOR pfd = {sizeof(PIXELFORMATDESCRIPTOR),
@@ -198,7 +198,7 @@ public:
       HGLRC tmpCtx = wglCreateContext(w.m_deviceContext);
       wglMakeCurrent(w.m_deviceContext, tmpCtx);
       if (glewInit() != GLEW_OK)
-        Log.report(logvisor::Fatal, fmt("glewInit failed"));
+        Log.report(logvisor::Fatal, FMT_STRING("glewInit failed"));
       wglCreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC)wglGetProcAddress("wglCreateContextAttribsARB");
       wglChoosePixelFormatARB = (PFNWGLCHOOSEPIXELFORMATARBPROC)wglGetProcAddress("wglChoosePixelFormatARB");
       wglMakeCurrent(w.m_deviceContext, nullptr);
@@ -241,10 +241,10 @@ public:
     // w.m_mainContext = wglCreateContext(w.m_deviceContext);
     w.m_mainContext = wglCreateContextAttribsARB(w.m_deviceContext, 0, ContextAttribs);
     if (!w.m_mainContext)
-      Log.report(logvisor::Fatal, fmt("unable to create window's main context"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to create window's main context"));
     if (m_3dCtx.m_ctxOgl.m_lastContext)
       if (!wglShareLists(w.m_mainContext, m_3dCtx.m_ctxOgl.m_lastContext))
-        Log.report(logvisor::Fatal, fmt("unable to share contexts"));
+        Log.report(logvisor::Fatal, FMT_STRING("unable to share contexts"));
     m_3dCtx.m_ctxOgl.m_lastContext = w.m_mainContext;
 
     m_dataFactory = _NewGLDataFactory(this, &b3dCtx.m_ctxOgl.m_glCtx);
@@ -271,13 +271,13 @@ public:
   void makeCurrent() override {
     OGLContext::Window& w = m_3dCtx.m_ctxOgl.m_windows[m_parentWindow];
     // if (!wglMakeCurrent(w.m_deviceContext, w.m_mainContext))
-    //    Log.report(logvisor::Fatal, fmt("unable to make WGL context current"));
+    //    Log.report(logvisor::Fatal, FMT_STRING("unable to make WGL context current"));
 
     w.m_renderContext = wglCreateContextAttribsARB(w.m_deviceContext, w.m_mainContext, ContextAttribs);
     if (!w.m_renderContext)
-      Log.report(logvisor::Fatal, fmt("unable to make new WGL context"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to make new WGL context"));
     if (!wglMakeCurrent(w.m_deviceContext, w.m_renderContext))
-      Log.report(logvisor::Fatal, fmt("unable to make WGL context current"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to make WGL context current"));
   }
 
   void postInit() override {
@@ -287,12 +287,12 @@ public:
     //    wglGetProcAddress("wglCreateContextAttribsARB");
     // w.m_renderContext = wglCreateContextAttribsARB(w.m_deviceContext, w.m_mainContext, ContextAttribs);
     // if (!w.m_renderContext)
-    //    Log.report(logvisor::Fatal, fmt("unable to make new WGL context"));
+    //    Log.report(logvisor::Fatal, FMT_STRING("unable to make new WGL context"));
     // if (!wglMakeCurrent(w.m_deviceContext, w.m_renderContext))
-    //    Log.report(logvisor::Fatal, fmt("unable to make WGL context current"));
+    //    Log.report(logvisor::Fatal, FMT_STRING("unable to make WGL context current"));
 
     if (!WGLEW_EXT_swap_control)
-      Log.report(logvisor::Fatal, fmt("WGL_EXT_swap_control not available"));
+      Log.report(logvisor::Fatal, FMT_STRING("WGL_EXT_swap_control not available"));
     wglSwapIntervalEXT(1);
   }
 
@@ -312,10 +312,10 @@ public:
     if (!m_mainCtx) {
       m_mainCtx = wglCreateContextAttribsARB(w.m_deviceContext, w.m_mainContext, ContextAttribs);
       if (!m_mainCtx)
-        Log.report(logvisor::Fatal, fmt("unable to make main WGL context"));
+        Log.report(logvisor::Fatal, FMT_STRING("unable to make main WGL context"));
     }
     if (!wglMakeCurrent(w.m_deviceContext, m_mainCtx))
-      Log.report(logvisor::Fatal, fmt("unable to make main WGL context current"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to make main WGL context current"));
     return m_dataFactory.get();
   }
 
@@ -326,10 +326,10 @@ public:
     if (!m_loadCtx) {
       m_loadCtx = wglCreateContextAttribsARB(w.m_deviceContext, w.m_mainContext, ContextAttribs);
       if (!m_loadCtx)
-        Log.report(logvisor::Fatal, fmt("unable to make load WGL context"));
+        Log.report(logvisor::Fatal, FMT_STRING("unable to make load WGL context"));
     }
     if (!wglMakeCurrent(w.m_deviceContext, m_loadCtx))
-      Log.report(logvisor::Fatal, fmt("unable to make load WGL context current"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to make load WGL context current"));
     return m_dataFactory.get();
   }
 };
@@ -354,7 +354,7 @@ struct GraphicsContextWin32Vulkan : GraphicsContextWin32 {
       return;
     }
 
-    Log.report(logvisor::Fatal, fmt("{}\n"), res);
+    Log.report(logvisor::Fatal, FMT_STRING("{}\n"), res);
   }
 
 public:
@@ -388,7 +388,7 @@ public:
     }
 
     if (!m_output)
-      Log.report(logvisor::Fatal, fmt("unable to find window's IDXGIOutput"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to find window's IDXGIOutput"));
   }
 
   void destroy() {
@@ -458,18 +458,18 @@ public:
       /* Generate error if could not find a queue that supports both a graphics
        * and present */
       if (m_ctx->m_graphicsQueueFamilyIndex == UINT32_MAX)
-        Log.report(logvisor::Fatal, fmt("Could not find a queue that supports both graphics and present"));
+        Log.report(logvisor::Fatal, FMT_STRING("Could not find a queue that supports both graphics and present"));
 
       m_ctx->initDevice();
     } else {
       /* Subsequent window, verify present */
       if (supportsPresent[m_ctx->m_graphicsQueueFamilyIndex] == VK_FALSE)
-        Log.report(logvisor::Fatal, fmt("subsequent surface doesn't support present"));
+        Log.report(logvisor::Fatal, FMT_STRING("subsequent surface doesn't support present"));
     }
     free(supportsPresent);
 
     if (!vk::GetPhysicalDeviceWin32PresentationSupportKHR(m_ctx->m_gpus[0], m_ctx->m_graphicsQueueFamilyIndex)) {
-      Log.report(logvisor::Fatal, fmt("Win32 doesn't support vulkan present"));
+      Log.report(logvisor::Fatal, FMT_STRING("Win32 doesn't support vulkan present"));
       return false;
     }
 
@@ -502,10 +502,10 @@ public:
         }
       }
     } else
-      Log.report(logvisor::Fatal, fmt("no surface formats available for Vulkan swapchain"));
+      Log.report(logvisor::Fatal, FMT_STRING("no surface formats available for Vulkan swapchain"));
 
     if (m_format == VK_FORMAT_UNDEFINED)
-      Log.report(logvisor::Fatal, fmt("no UNORM formats available for Vulkan swapchain"));
+      Log.report(logvisor::Fatal, FMT_STRING("no UNORM formats available for Vulkan swapchain"));
 
     m_ctx->initSwapChain(*m_windowCtx, m_surface, m_format, m_colorspace);
 
@@ -730,7 +730,7 @@ static HGLOBAL MakeUnicodeCRLF(const char* data, size_t sz) {
     int32_t ch;
     int chSz = utf8proc_iterate(reinterpret_cast<const uint8_t*>(data + i), -1, &ch);
     if (chSz < 0)
-      Log.report(logvisor::Fatal, fmt("invalid UTF-8 char"));
+      Log.report(logvisor::Fatal, FMT_STRING("invalid UTF-8 char"));
     if (ch <= 0xffff) {
       if (ch == '\n' && lastCh != '\r')
         retSz += 4;
@@ -989,7 +989,7 @@ public:
   void _immSetOpenStatus(bool open) {
     if (GetCurrentThreadId() != g_mainThreadId) {
       if (!PostThreadMessageW(g_mainThreadId, WM_USER + 3, WPARAM(m_imc), LPARAM(open)))
-        Log.report(logvisor::Fatal, fmt("PostThreadMessage error"));
+        Log.report(logvisor::Fatal, FMT_STRING("PostThreadMessage error"));
       return;
     }
     ImmSetOpenStatus(m_imc, open);
@@ -1004,7 +1004,7 @@ public:
 
     if (GetCurrentThreadId() != g_mainThreadId) {
       if (!PostThreadMessageW(g_mainThreadId, WM_USER + 4, WPARAM(m_imc), LPARAM(&m_cForm)))
-        Log.report(logvisor::Fatal, fmt("PostThreadMessage error"));
+        Log.report(logvisor::Fatal, FMT_STRING("PostThreadMessage error"));
       return;
     }
     ImmSetCompositionWindow(m_imc, &m_cForm);

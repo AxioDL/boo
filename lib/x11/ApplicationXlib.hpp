@@ -237,10 +237,10 @@ public:
       loadVk();
 
     if (m_getVkProc)
-      Log.report(logvisor::Info, fmt("using Vulkan renderer"));
+      Log.report(logvisor::Info, FMT_STRING("using Vulkan renderer"));
     else
 #endif
-      Log.report(logvisor::Info, fmt("using OpenGL renderer"));
+      Log.report(logvisor::Info, FMT_STRING("using OpenGL renderer"));
 
 #ifndef BOO_MSAN
     /* DBus single instance registration */
@@ -280,7 +280,7 @@ public:
 #endif
 
     if (!XInitThreads()) {
-      Log.report(logvisor::Fatal, fmt("X doesn't support multithreading"));
+      Log.report(logvisor::Fatal, FMT_STRING("X doesn't support multithreading"));
       return;
     }
 
@@ -290,7 +290,7 @@ public:
     /* Open Xlib Display */
     m_xDisp = XOpenDisplay(0);
     if (!m_xDisp) {
-      Log.report(logvisor::Fatal, fmt("Can't open X display"));
+      Log.report(logvisor::Fatal, FMT_STRING("Can't open X display"));
       return;
     }
 
@@ -298,18 +298,18 @@ public:
     /* Cast Display to XCB connection for vulkan */
     m_xcbConn = XGetXCBConnection(m_xDisp);
     if (!m_xcbConn) {
-      Log.report(logvisor::Fatal, fmt("Can't cast Display to XCB connection for Vulkan"));
+      Log.report(logvisor::Fatal, FMT_STRING("Can't cast Display to XCB connection for Vulkan"));
       return;
     }
 #endif
 
     /* Configure locale */
     if (!XSupportsLocale()) {
-      Log.report(logvisor::Fatal, fmt("X does not support locale {}."), setlocale(LC_ALL, nullptr));
+      Log.report(logvisor::Fatal, FMT_STRING("X does not support locale {}."), setlocale(LC_ALL, nullptr));
       return;
     }
     if (XSetLocaleModifiers("") == nullptr)
-      Log.report(logvisor::Warning, fmt("Cannot set locale modifiers."));
+      Log.report(logvisor::Warning, FMT_STRING("Cannot set locale modifiers."));
 
     if ((m_xIM = XOpenIM(m_xDisp, nullptr, nullptr, nullptr))) {
       char** missing_charsets;
@@ -338,7 +338,7 @@ public:
       }
       /* if we couldn't support any of them, print an error and exit */
       if (m_bestStyle == 0) {
-        Log.report(logvisor::Fatal, fmt("interaction style not supported."));
+        Log.report(logvisor::Fatal, FMT_STRING("interaction style not supported."));
         return;
       }
       XFree(im_supported_styles);

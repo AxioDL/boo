@@ -79,7 +79,7 @@ class GLDataFactoryImpl final : public GLDataFactory, public GraphicsDataFactory
   void SetupGammaResources() {
     /* Good enough place for this */
     if (!glslang::InitializeProcess())
-      Log.report(logvisor::Error, fmt("unable to initialize glslang"));
+      Log.report(logvisor::Error, FMT_STRING("unable to initialize glslang"));
 
     if (GLEW_ARB_tessellation_shader) {
       m_hasTessellation = true;
@@ -346,7 +346,7 @@ class GLTextureS : public GraphicsDataNode<ITextureS> {
       pxPitch = 1;
       break;
     default:
-      Log.report(logvisor::Fatal, fmt("unsupported tex format"));
+      Log.report(logvisor::Fatal, FMT_STRING("unsupported tex format"));
     }
 
     if (compressed) {
@@ -430,7 +430,7 @@ class GLTextureSA : public GraphicsDataNode<ITextureSA> {
       pxPitch = 2;
       break;
     default:
-      Log.report(logvisor::Fatal, fmt("unsupported tex format"));
+      Log.report(logvisor::Fatal, FMT_STRING("unsupported tex format"));
     }
 
     GLenum compType = intFormat == GL_R16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
@@ -493,7 +493,7 @@ class GLTextureD : public GraphicsDataNode<ITextureD> {
       pxPitch = 2;
       break;
     default:
-      Log.report(logvisor::Fatal, fmt("unsupported tex format"));
+      Log.report(logvisor::Fatal, FMT_STRING("unsupported tex format"));
     }
     m_cpuSz = width * height * pxPitch;
     m_cpuBuf.reset(new uint8_t[m_cpuSz]);
@@ -752,15 +752,15 @@ class GLShaderStage : public GraphicsDataNode<IShaderStage> {
     glslang::TShader shader(lang);
     shader.setStrings(&source, 1);
     if (!shader.parse(&glslang::DefaultTBuiltInResource, 110, false, messages)) {
-      fmt::print(fmt("{}\n"), source);
-      Log.report(logvisor::Fatal, fmt("unable to compile shader\n{}"), shader.getInfoLog());
+      fmt::print(FMT_STRING("{}\n"), source);
+      Log.report(logvisor::Fatal, FMT_STRING("unable to compile shader\n{}"), shader.getInfoLog());
     }
 
     glslang::TProgram prog;
     prog.addShader(&shader);
     if (!prog.link(messages)) {
-      fmt::print(fmt("{}\n"), source);
-      Log.report(logvisor::Fatal, fmt("unable to link shader program\n{}"), prog.getInfoLog());
+      fmt::print(FMT_STRING("{}\n"), source);
+      Log.report(logvisor::Fatal, FMT_STRING("unable to link shader program\n{}"), prog.getInfoLog());
     }
 
     prog.buildReflection();
@@ -771,7 +771,7 @@ class GLShaderStage : public GraphicsDataNode<IShaderStage> {
         continue;
       const auto& qual = tp->getQualifier();
       if (!qual.hasBinding())
-        Log.report(logvisor::Fatal, fmt("shader uniform {} does not have layout binding"), prog.getUniformName(i));
+        Log.report(logvisor::Fatal, FMT_STRING("shader uniform {} does not have layout binding"), prog.getUniformName(i));
       m_texNames.emplace_back(std::make_pair(prog.getUniformName(i), qual.layoutBinding - BOO_GLSL_MAX_UNIFORM_COUNT));
     }
     count = prog.getNumLiveUniformBlocks();
@@ -780,7 +780,7 @@ class GLShaderStage : public GraphicsDataNode<IShaderStage> {
       const glslang::TType* tp = prog.getUniformBlockTType(i);
       const auto& qual = tp->getQualifier();
       if (!qual.hasBinding())
-        Log.report(logvisor::Fatal, fmt("shader uniform {} does not have layout binding"), prog.getUniformBlockName(i));
+        Log.report(logvisor::Fatal, FMT_STRING("shader uniform {} does not have layout binding"), prog.getUniformBlockName(i));
       m_blockNames.emplace_back(std::make_pair(prog.getUniformBlockName(i), qual.layoutBinding));
     }
   }
@@ -791,7 +791,7 @@ class GLShaderStage : public GraphicsDataNode<IShaderStage> {
 
     m_shad = glCreateShader(SHADER_STAGE_TABLE[int(stage)]);
     if (!m_shad) {
-      Log.report(logvisor::Fatal, fmt("unable to create shader"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to create shader"));
       return;
     }
 
@@ -804,7 +804,7 @@ class GLShaderStage : public GraphicsDataNode<IShaderStage> {
       glGetShaderiv(m_shad, GL_INFO_LOG_LENGTH, &logLen);
       std::unique_ptr<char[]> log(new char[logLen]);
       glGetShaderInfoLog(m_shad, logLen, nullptr, log.get());
-      Log.report(logvisor::Fatal, fmt("unable to compile source\n{}\n{}\n"), log.get(), source);
+      Log.report(logvisor::Fatal, FMT_STRING("unable to compile source\n{}\n{}\n"), log.get(), source);
       return;
     }
   }
@@ -895,7 +895,7 @@ public:
     if (!m_prog) {
       m_prog = glCreateProgram();
       if (!m_prog) {
-        Log.report(logvisor::Error, fmt("unable to create shader program"));
+        Log.report(logvisor::Error, FMT_STRING("unable to create shader program"));
         return 0;
       }
 
@@ -930,7 +930,7 @@ public:
         glGetProgramiv(m_prog, GL_INFO_LOG_LENGTH, &logLen);
         std::unique_ptr<char[]> log(new char[logLen]);
         glGetProgramInfoLog(m_prog, logLen, nullptr, log.get());
-        Log.report(logvisor::Fatal, fmt("unable to link shader program\n{}\n"), log.get());
+        Log.report(logvisor::Fatal, FMT_STRING("unable to link shader program\n{}\n"), log.get());
         return 0;
       }
 
@@ -941,14 +941,14 @@ public:
           for (const auto& name : stage->getBlockNames()) {
             GLint uniLoc = glGetUniformBlockIndex(m_prog, name.first.c_str());
             // if (uniLoc < 0) {
-            //    Log.report(logvisor::Warning, fmt("unable to find uniform block '{}'"), uniformBlockNames[i]);
+            //    Log.report(logvisor::Warning, FMT_STRING("unable to find uniform block '{}'"), uniformBlockNames[i]);
             // }
             m_uniLocs[name.second] = uniLoc;
           }
           for (const auto& name : stage->getTexNames()) {
             GLint texLoc = glGetUniformLocation(m_prog, name.first.c_str());
             if (texLoc < 0) {
-              // Log.report(logvisor::Warning, fmt("unable to find sampler variable '{}'"), texNames[i]);
+              // Log.report(logvisor::Warning, FMT_STRING("unable to find sampler variable '{}'"), texNames[i]);
             } else {
               glUniform1i(texLoc, name.second);
             }
@@ -1020,7 +1020,7 @@ ObjToken<IShaderStage> GLDataFactory::Context::newShaderStage(const uint8_t* dat
 
   if (stage == PipelineStage::Control || stage == PipelineStage::Evaluation) {
     if (!factory.m_hasTessellation)
-      Log.report(logvisor::Fatal, fmt("Device does not support tessellation shaders"));
+      Log.report(logvisor::Fatal, FMT_STRING("Device does not support tessellation shaders"));
   }
 
   BOO_MSAN_NO_INTERCEPT
@@ -1035,9 +1035,9 @@ ObjToken<IShaderPipeline> GLDataFactory::Context::newShaderPipeline(
 
   if (control || evaluation) {
     if (!factory.m_hasTessellation)
-      Log.report(logvisor::Fatal, fmt("Device does not support tessellation shaders"));
+      Log.report(logvisor::Fatal, FMT_STRING("Device does not support tessellation shaders"));
     if (additionalInfo.patchSize > factory.m_maxPatchSize)
-      Log.report(logvisor::Fatal, fmt("Device supports {} patch vertices, {} requested"), int(factory.m_maxPatchSize),
+      Log.report(logvisor::Fatal, FMT_STRING("Device supports {} patch vertices, {} requested"), int(factory.m_maxPatchSize),
                  int(additionalInfo.patchSize));
   }
 
@@ -1367,7 +1367,7 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
       std::unique_lock<std::mutex> lk(self->m_initmt);
       self->m_parent->makeCurrent();
       const GLubyte* version = glGetString(GL_VERSION);
-      Log.report(logvisor::Info, fmt("OpenGL Version: {}"), version);
+      Log.report(logvisor::Info, FMT_STRING("OpenGL Version: {}"), version);
       self->m_parent->postInit();
       glClearColor(0.f, 0.f, 0.f, 0.f);
       if (GLEW_EXT_texture_filter_anisotropic) {
@@ -1561,7 +1561,7 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
           if (const GLTextureR* tex = cmd.source.cast<GLTextureR>()) {
 #ifndef NDEBUG
             if (!tex->m_colorBindCount)
-              Log.report(logvisor::Fatal, fmt("texture provided to resolveDisplay() must have at least 1 color binding"));
+              Log.report(logvisor::Fatal, FMT_STRING("texture provided to resolveDisplay() must have at least 1 color binding"));
 #endif
             if (dataFactory->m_gamma != 1.f) {
               glBindFramebuffer(GL_READ_FRAMEBUFFER, tex->m_fbo);
@@ -1897,13 +1897,13 @@ GLTextureR::GLTextureR(const ObjToken<BaseGraphicsData>& parent, GLCommandQueue*
   glGenTextures(GLsizei(m_texs.size()), m_texs.data());
   if (colorBindingCount) {
     if (colorBindingCount > MAX_BIND_TEXS) {
-      Log.report(logvisor::Fatal, fmt("too many color bindings for render texture"));
+      Log.report(logvisor::Fatal, FMT_STRING("too many color bindings for render texture"));
     }
     glGenTextures(colorBindingCount, m_bindTexs[0].data());
   }
   if (depthBindingCount) {
     if (depthBindingCount > MAX_BIND_TEXS) {
-      Log.report(logvisor::Fatal, fmt("too many depth bindings for render texture"));
+      Log.report(logvisor::Fatal, FMT_STRING("too many depth bindings for render texture"));
     }
     glGenTextures(depthBindingCount, m_bindTexs[1].data());
   }
@@ -2018,7 +2018,7 @@ GLShaderDataBinding(const ObjToken<BaseGraphicsData>& d, const ObjToken<IShaderP
     for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
       if (ubufOffs[i] % 256) {
-        Log.report(logvisor::Fatal, fmt("non-256-byte-aligned uniform-offset {} provided to newShaderDataBinding"), i);
+        Log.report(logvisor::Fatal, FMT_STRING("non-256-byte-aligned uniform-offset {} provided to newShaderDataBinding"), i);
       }
 #endif
       m_ubufOffs.emplace_back(ubufOffs[i], (ubufSizes[i] + 255) & ~255);
@@ -2028,7 +2028,7 @@ GLShaderDataBinding(const ObjToken<BaseGraphicsData>& d, const ObjToken<IShaderP
   for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
     if (!ubufs[i]) {
-      Log.report(logvisor::Fatal, fmt("null uniform-buffer {} provided to newShaderDataBinding"), i);
+      Log.report(logvisor::Fatal, FMT_STRING("null uniform-buffer {} provided to newShaderDataBinding"), i);
     }
 #endif
     m_ubufs.push_back(ubufs[i]);

@@ -233,7 +233,7 @@ public:
     ~GraphicsContextCocoaGL() override
     {
         m_commandQueue->stopRenderer();
-        fmt::print(fmt("CONTEXT DESTROYED\n"));
+        fmt::print(FMT_STRING("CONTEXT DESTROYED\n"));
     }
 
     void _setCallback(IWindowCallback* cb) override
@@ -263,7 +263,7 @@ public:
     {
         m_nsContext = [[GraphicsContextCocoaGLInternal alloc] initWithBooContext:this];
         if (!m_nsContext)
-            Log.report(logvisor::Fatal, fmt("unable to make new NSOpenGLView"));
+            Log.report(logvisor::Fatal, FMT_STRING("unable to make new NSOpenGLView"));
         [(__bridge NSWindow*)(void*)m_parentWindow->getPlatformHandle() setContentView:m_nsContext];
         CVDisplayLinkCreateWithActiveCGDisplays(&m_dispLink);
         CVDisplayLinkSetOutputCallback(m_dispLink, (CVDisplayLinkOutputCallback)DLCallback, this);
@@ -299,7 +299,7 @@ public:
             NSOpenGLPixelFormat* nspf = [[NSOpenGLPixelFormat alloc] initWithAttributes:PF_TABLE[int(m_pf)]];
             m_mainCtx = [[NSOpenGLContext alloc] initWithFormat:nspf shareContext:[m_nsContext openGLContext]];
             if (!m_mainCtx)
-                Log.report(logvisor::Fatal, fmt("unable to make main NSOpenGLContext"));
+                Log.report(logvisor::Fatal, FMT_STRING("unable to make main NSOpenGLContext"));
         }
         [m_mainCtx makeCurrentContext];
         return m_dataFactory.get();
@@ -312,7 +312,7 @@ public:
             NSOpenGLPixelFormat* nspf = [[NSOpenGLPixelFormat alloc] initWithAttributes:PF_TABLE[int(m_pf)]];
             m_loadCtx = [[NSOpenGLContext alloc] initWithFormat:nspf shareContext:[m_nsContext openGLContext]];
             if (!m_loadCtx)
-                Log.report(logvisor::Fatal, fmt("unable to make load NSOpenGLContext"));
+                Log.report(logvisor::Fatal, FMT_STRING("unable to make load NSOpenGLContext"));
         }
         [m_loadCtx makeCurrentContext];
         return m_dataFactory.get();
@@ -356,7 +356,7 @@ IGraphicsContext* _GraphicsContextCocoaGLNew(IGraphicsContext::EGraphicsAPI api,
         minor = glVersion[2] - '0';
     }
     if (glewInit() != GLEW_OK)
-        Log.report(logvisor::Fatal, fmt("glewInit failed"));
+        Log.report(logvisor::Fatal, FMT_STRING("glewInit failed"));
     [NSOpenGLContext clearCurrentContext];
     if (!glVersion)
         return nullptr;
@@ -419,7 +419,7 @@ public:
     MetalContext::Window& w = m_metalCtx->m_windows[m_parentWindow];
     m_nsContext = [[GraphicsContextCocoaMetalInternal alloc] initWithBooContext:this];
     if (!m_nsContext)
-      Log.report(logvisor::Fatal, fmt("unable to make new NSView for Metal"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to make new NSView for Metal"));
     w.m_metalLayer = (CAMetalLayer*) m_nsContext.layer;
     [(__bridge NSWindow*) (void*) m_parentWindow->getPlatformHandle() setContentView:m_nsContext];
     CVDisplayLinkCreateWithActiveCGDisplays(&m_dispLink);

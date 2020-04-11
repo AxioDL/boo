@@ -366,7 +366,7 @@ class MetalTextureD : public GraphicsDataNode<ITextureD> {
       m_pxPitch = 2;
       break;
     default:
-      Log.report(logvisor::Fatal, fmt("unsupported tex format"));
+      Log.report(logvisor::Fatal, FMT_STRING("unsupported tex format"));
       return;
     }
 
@@ -430,9 +430,9 @@ class MetalTextureR : public GraphicsDataNode<ITextureR> {
 
   void Setup(MetalContext* ctx) {
     if (m_colorBindCount > MAX_BIND_TEXS)
-      Log.report(logvisor::Fatal, fmt("too many color bindings for render texture"));
+      Log.report(logvisor::Fatal, FMT_STRING("too many color bindings for render texture"));
     if (m_depthBindCount > MAX_BIND_TEXS)
-      Log.report(logvisor::Fatal, fmt("too many depth bindings for render texture"));
+      Log.report(logvisor::Fatal, FMT_STRING("too many depth bindings for render texture"));
 
     @autoreleasepool {
       MTLTextureDescriptor* desc =
@@ -862,11 +862,11 @@ class MetalShaderStage : public GraphicsDataNode<IShaderStage> {
                                            options:compOpts
                                              error:&err];
       if (!shaderLib) {
-        fmt::print(fmt("{}\n"), data + 1);
+        fmt::print(FMT_STRING("{}\n"), data + 1);
       }
     }
     if (!shaderLib) {
-      Log.report(logvisor::Fatal, fmt("error creating library: {}"), [[err localizedDescription] UTF8String]);
+      Log.report(logvisor::Fatal, FMT_STRING("error creating library: {}"), [[err localizedDescription] UTF8String]);
     }
 
     NSString* funcName;
@@ -985,7 +985,7 @@ protected:
     NSError* err = nullptr;
     m_state = [ctx->m_dev newRenderPipelineStateWithDescriptor:desc error:&err];
     if (err) {
-      Log.report(logvisor::Fatal, fmt("error making shader pipeline: {}"),
+      Log.report(logvisor::Fatal, FMT_STRING("error making shader pipeline: {}"),
                  [[err localizedDescription] UTF8String]);
     }
 
@@ -1060,7 +1060,7 @@ class MetalTessellationShaderPipeline : public MetalShaderPipeline {
     m_computeState = [ctx->m_dev newComputePipelineStateWithDescriptor:compDesc options:MTLPipelineOptionNone
                                                             reflection:nil error:&err];
     if (err) {
-      Log.report(logvisor::Fatal, fmt("error making compute pipeline: {}"),
+      Log.report(logvisor::Fatal, FMT_STRING("error making compute pipeline: {}"),
                  [[err localizedDescription] UTF8String]);
     }
   }
@@ -1165,7 +1165,7 @@ struct MetalShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
       for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
         if (ubufOffs[i] % 256) {
-          Log.report(logvisor::Fatal, fmt("non-256-byte-aligned uniform-offset {} provided to newShaderDataBinding"),
+          Log.report(logvisor::Fatal, FMT_STRING("non-256-byte-aligned uniform-offset {} provided to newShaderDataBinding"),
                      i);
         }
 #endif
@@ -1176,7 +1176,7 @@ struct MetalShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
     for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
       if (!ubufs[i]) {
-        Log.report(logvisor::Fatal, fmt("null uniform-buffer {} provided to newShaderDataBinding"), i);
+        Log.report(logvisor::Fatal, FMT_STRING("null uniform-buffer {} provided to newShaderDataBinding"), i);
       }
 #endif
       m_ubufs.push_back(ubufs[i]);

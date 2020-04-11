@@ -79,7 +79,7 @@ class HIDDeviceIOKit : public IHIDDevice {
   }
 
   static void _threadProcUSBLL(std::shared_ptr<HIDDeviceIOKit> device) {
-    pthread_setname_np(fmt::format(fmt("{} Transfer Thread"), device->m_token.getProductName()).c_str());
+    pthread_setname_np(fmt::format(FMT_STRING("{} Transfer Thread"), device->m_token.getProductName()).c_str());
     std::unique_lock<std::mutex> lk(device->m_initMutex);
 
     /* Get the HID element's parent (USB interrupt transfer-interface) */
@@ -95,7 +95,7 @@ class HIDDeviceIOKit : public IHIDDevice {
       }
     }
     if (!interfaceEntry) {
-      device->m_devImp->deviceError(fmt("Unable to find interface for {}@{}\n"),
+      device->m_devImp->deviceError(FMT_STRING("Unable to find interface for {}@{}\n"),
                                     device->m_token.getProductName(), device->m_devPath);
       lk.unlock();
       device->m_initCond.notify_one();
@@ -109,7 +109,7 @@ class HIDDeviceIOKit : public IHIDDevice {
     err = IOCreatePlugInInterfaceForService(interfaceEntry.get(), kIOUSBInterfaceUserClientTypeID,
                                             kIOCFPlugInInterfaceID, &iodev, &score);
     if (err) {
-      device->m_devImp->deviceError(fmt("Unable to open {}@{}\n"),
+      device->m_devImp->deviceError(FMT_STRING("Unable to open {}@{}\n"),
                                     device->m_token.getProductName(), device->m_devPath);
       lk.unlock();
       device->m_initCond.notify_one();
@@ -120,7 +120,7 @@ class HIDDeviceIOKit : public IHIDDevice {
     IUnknownPointer<IOUSBInterfaceInterface> intf;
     err = iodev.As(&intf, kIOUSBInterfaceInterfaceID);
     if (err) {
-      device->m_devImp->deviceError(fmt("Unable to open {}@{}\n"),
+      device->m_devImp->deviceError(FMT_STRING("Unable to open {}@{}\n"),
                                     device->m_token.getProductName(), device->m_devPath);
       lk.unlock();
       device->m_initCond.notify_one();
@@ -132,10 +132,10 @@ class HIDDeviceIOKit : public IHIDDevice {
     err = intf->USBInterfaceOpen(intf.storage());
     if (err != kIOReturnSuccess) {
       if (err == kIOReturnExclusiveAccess) {
-        device->m_devImp->deviceError(fmt("Unable to open {}@{}: someone else using it\n"),
+        device->m_devImp->deviceError(FMT_STRING("Unable to open {}@{}: someone else using it\n"),
                                       device->m_token.getProductName(), device->m_devPath);
       } else {
-        device->m_devImp->deviceError(fmt("Unable to open {}@{}\n"),
+        device->m_devImp->deviceError(FMT_STRING("Unable to open {}@{}\n"),
                                       device->m_token.getProductName(), device->m_devPath);
       }
       lk.unlock();
@@ -199,14 +199,14 @@ class HIDDeviceIOKit : public IHIDDevice {
   }
 
   static void _threadProcHID(std::shared_ptr<HIDDeviceIOKit> device) {
-    pthread_setname_np(fmt::format(fmt("{} Transfer Thread"), device->m_token.getProductName()).c_str());
+    pthread_setname_np(fmt::format(FMT_STRING("{} Transfer Thread"), device->m_token.getProductName()).c_str());
     std::unique_lock<std::mutex> lk(device->m_initMutex);
 
     /* Get the HID element's object (HID device interface) */
     IOObjectPointer<io_service_t> interfaceEntry =
         IORegistryEntryFromPath(kIOMasterPortDefault, device->m_devPath.data());
     if (!IOObjectConformsTo(interfaceEntry.get(), "IOHIDDevice")) {
-      device->m_devImp->deviceError(fmt("Unable to find interface for {}@{}\n"),
+      device->m_devImp->deviceError(FMT_STRING("Unable to find interface for {}@{}\n"),
                                     device->m_token.getProductName(), device->m_devPath);
       lk.unlock();
       device->m_initCond.notify_one();
@@ -215,7 +215,7 @@ class HIDDeviceIOKit : public IHIDDevice {
 
     device->m_hidIntf = IOHIDDeviceCreate(nullptr, interfaceEntry.get());
     if (!device->m_hidIntf) {
-      device->m_devImp->deviceError(fmt("Unable to open {}@{}\n"),
+      device->m_devImp->deviceError(FMT_STRING("Unable to open {}@{}\n"),
                                     device->m_token.getProductName(), device->m_devPath);
       lk.unlock();
       device->m_initCond.notify_one();
@@ -226,10 +226,10 @@ class HIDDeviceIOKit : public IHIDDevice {
     IOReturn err = IOHIDDeviceOpen(device->m_hidIntf.get(), kIOHIDOptionsTypeNone);
     if (err != kIOReturnSuccess) {
       if (err == kIOReturnExclusiveAccess) {
-        device->m_devImp->deviceError(fmt("Unable to open {}@{}: someone else using it\n"),
+        device->m_devImp->deviceError(FMT_STRING("Unable to open {}@{}: someone else using it\n"),
                                        device->m_token.getProductName(), device->m_devPath);
       } else {
-        device->m_devImp->deviceError(fmt("Unable to open {}@{}\n"),
+        device->m_devImp->deviceError(FMT_STRING("Unable to open {}@{}\n"),
                                       device->m_token.getProductName(), device->m_devPath);
       }
       lk.unlock();
@@ -292,7 +292,7 @@ public:
     else if (dType == DeviceType::HID)
       m_thread = std::thread(_threadProcHID, std::static_pointer_cast<HIDDeviceIOKit>(shared_from_this()));
     else {
-      fmt::print(stderr, fmt("invalid token supplied to device constructor\n"));
+      fmt::print(stderr, FMT_STRING("invalid token supplied to device constructor\n"));
       return;
     }
     m_initCond.wait(lk);

@@ -77,7 +77,7 @@ static inline void ThrowIfFailed(HRESULT hr) {
     _com_error err(hr, L"D3D11 fail");
 #endif
     LPCTSTR errMsg = err.ErrorMessage();
-    Log.report(logvisor::Fatal, fmt(_SYS_STR("{}")), errMsg);
+    Log.report(logvisor::Fatal, FMT_STRING(_SYS_STR("{}")), errMsg);
   }
 }
 
@@ -194,7 +194,7 @@ class D3D11TextureS : public GraphicsDataNode<ITextureS> {
       pxTilePitch = 4;
       break;
     default:
-      Log.report(logvisor::Fatal, fmt("unsupported tex format"));
+      Log.report(logvisor::Fatal, FMT_STRING("unsupported tex format"));
     }
 
     const CD3D11_TEXTURE2D_DESC desc(pfmt, width, height, 1, mips, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_IMMUTABLE);
@@ -250,7 +250,7 @@ class D3D11TextureSA : public GraphicsDataNode<ITextureSA> {
       pixelFmt = DXGI_FORMAT_R16_UNORM;
       break;
     default:
-      Log.report(logvisor::Fatal, fmt("unsupported tex format"));
+      Log.report(logvisor::Fatal, FMT_STRING("unsupported tex format"));
     }
 
     CD3D11_TEXTURE2D_DESC desc(pixelFmt, width, height, layers, mips, D3D11_BIND_SHADER_RESOURCE,
@@ -312,7 +312,7 @@ class D3D11TextureD : public GraphicsDataNode<ITextureD> {
       m_pxPitch = 2;
       break;
     default:
-      Log.report(logvisor::Fatal, fmt("unsupported tex format"));
+      Log.report(logvisor::Fatal, FMT_STRING("unsupported tex format"));
     }
 
     m_cpuSz = width * height * m_pxPitch;
@@ -400,10 +400,10 @@ class D3D11TextureR : public GraphicsDataNode<ITextureR> {
   , m_colorBindCount(colorBindCount)
   , m_depthBindCount(depthBindCount) {
     if (colorBindCount > m_colorBindTex.size()) {
-      Log.report(logvisor::Fatal, fmt("too many color bindings for render texture"));
+      Log.report(logvisor::Fatal, FMT_STRING("too many color bindings for render texture"));
     }
     if (depthBindCount > m_depthBindTex.size()) {
-      Log.report(logvisor::Fatal, fmt("too many depth bindings for render texture"));
+      Log.report(logvisor::Fatal, FMT_STRING("too many depth bindings for render texture"));
     }
 
     if (samples == 0) {
@@ -790,7 +790,7 @@ struct D3D11ShaderDataBinding : public GraphicsDataNode<IShaderDataBinding> {
       for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
         if (ubufOffs[i] % 256) {
-          Log.report(logvisor::Fatal, fmt("non-256-byte-aligned uniform-offset {} provided to newShaderDataBinding"),
+          Log.report(logvisor::Fatal, FMT_STRING("non-256-byte-aligned uniform-offset {} provided to newShaderDataBinding"),
                      i);
         }
 #endif
@@ -801,7 +801,7 @@ struct D3D11ShaderDataBinding : public GraphicsDataNode<IShaderDataBinding> {
     for (size_t i = 0; i < ubufCount; ++i) {
 #ifndef NDEBUG
       if (!ubufs[i]) {
-        Log.report(logvisor::Fatal, fmt("null uniform-buffer {} provided to newShaderDataBinding"), i);
+        Log.report(logvisor::Fatal, FMT_STRING("null uniform-buffer {} provided to newShaderDataBinding"), i);
       }
 #endif
       m_ubufs.push_back(ubufs[i]);
@@ -1535,7 +1535,7 @@ void D3D11CommandQueue::RenderingWorker(D3D11CommandQueue* self) {
     if (D3D11TextureR* csource = CmdList.workDoPresent.cast<D3D11TextureR>()) {
 #ifndef NDEBUG
       if (!csource->m_colorBindCount)
-        Log.report(logvisor::Fatal, fmt("texture provided to resolveDisplay() must have at least 1 color binding"));
+        Log.report(logvisor::Fatal, FMT_STRING("texture provided to resolveDisplay() must have at least 1 color binding"));
 #endif
 
       if (dataFactory->m_gamma != 1.f) {
@@ -1654,8 +1654,8 @@ std::vector<uint8_t> D3D11DataFactory::CompileHLSL(const char* source, PipelineS
   ComPtr<ID3DBlob> blobOut;
   if (FAILED(D3DCompilePROC(source, strlen(source), "Boo HLSL Source", nullptr, nullptr, "main",
                             D3DShaderTypes[int(stage)], BOO_D3DCOMPILE_FLAG, 0, &blobOut, &errBlob))) {
-    fmt::print(fmt("{}\n"), source);
-    Log.report(logvisor::Fatal, fmt("error compiling shader: {}"), errBlob->GetBufferPointer());
+    fmt::print(FMT_STRING("{}\n"), source);
+    Log.report(logvisor::Fatal, FMT_STRING("error compiling shader: {}"), errBlob->GetBufferPointer());
     return {};
   }
   std::vector<uint8_t> ret(blobOut->GetBufferSize());

@@ -73,7 +73,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     argSize = sizeof(devId);
     if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &propertyAddress, sizeof(devName), &devName, &argSize,
                                    &devId) != noErr) {
-      Log.report(logvisor::Error, fmt("unable to resolve audio device UID {}, using default"),
+      Log.report(logvisor::Error, FMT_STRING("unable to resolve audio device UID {}, using default"),
                  CFStringGetCStringPtr(devName, kCFStringEncodingUTF8));
       argSize = sizeof(devId);
       propertyAddress.mSelector = kAudioHardwarePropertyDefaultOutputDevice;
@@ -83,7 +83,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
         deviceAddress.mSelector = kAudioDevicePropertyDeviceUID;
         AudioObjectGetPropertyData(devId, &deviceAddress, 0, nullptr, &argSize, &m_devName);
       } else {
-        Log.report(logvisor::Fatal, fmt("unable determine default audio device"));
+        Log.report(logvisor::Fatal, FMT_STRING("unable determine default audio device"));
         return {AudioChannelSet::Unknown, 48000.0};
       }
     }
@@ -249,7 +249,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
       if (!(nameCstr = CFStringGetCStringPtr(namestr.get(), kCFStringEncodingUTF8)))
         continue;
 
-      ret.push_back(std::make_pair(fmt::format(fmt("{:08X}"), idNum), std::string(nameCstr)));
+      ret.push_back(std::make_pair(fmt::format(FMT_STRING("{:08X}"), idNum), std::string(nameCstr)));
     }
 
     return ret;
@@ -268,7 +268,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
       if (MIDIObjectGetIntegerProperty(dev, kMIDIPropertyUniqueID, &idNum))
         continue;
 
-      if (fmt::format(fmt("{:08X}"), idNum) != name)
+      if (fmt::format(FMT_STRING("{:08X}"), idNum) != name)
         continue;
 
       return dev;
@@ -462,9 +462,9 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     std::string name;
     auto appName = APP->getFriendlyName();
     if (!m_midiInCounter)
-      name = fmt::format(fmt("{} MIDI-In"), appName);
+      name = fmt::format(FMT_STRING("{} MIDI-In"), appName);
     else
-      name = fmt::format(fmt("{} MIDI-In {}"), appName, m_midiInCounter);
+      name = fmt::format(FMT_STRING("{} MIDI-In {}"), appName, m_midiInCounter);
     m_midiInCounter++;
     CFPointer<CFStringRef> midiName = CFPointer<CFStringRef>::adopt(
         CFStringCreateWithCStringNoCopy(nullptr, name.c_str(), kCFStringEncodingUTF8, kCFAllocatorNull));
@@ -487,9 +487,9 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     std::string name;
     auto appName = APP->getFriendlyName();
     if (!m_midiOutCounter)
-      name = fmt::format(fmt("{} MIDI-Out"), appName);
+      name = fmt::format(FMT_STRING("{} MIDI-Out"), appName);
     else
-      name = fmt::format(fmt("{} MIDI-Out {}"), appName, m_midiOutCounter);
+      name = fmt::format(FMT_STRING("{} MIDI-Out {}"), appName, m_midiOutCounter);
     m_midiOutCounter++;
     CFPointer<CFStringRef> midiName = CFPointer<CFStringRef>::adopt(
         CFStringCreateWithCStringNoCopy(nullptr, name.c_str(), kCFStringEncodingUTF8, kCFAllocatorNull));
@@ -510,9 +510,9 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     std::string name;
     auto appName = APP->getFriendlyName();
     if (!m_midiInCounter)
-      name = fmt::format(fmt("{} MIDI-In"), appName);
+      name = fmt::format(FMT_STRING("{} MIDI-In"), appName);
     else
-      name = fmt::format(fmt("{} MIDI-In {}"), appName, m_midiInCounter);
+      name = fmt::format(FMT_STRING("{} MIDI-In {}"), appName, m_midiInCounter);
     m_midiInCounter++;
     CFPointer<CFStringRef> midiName = CFPointer<CFStringRef>::adopt(
         CFStringCreateWithCStringNoCopy(nullptr, name.c_str(), kCFStringEncodingUTF8, kCFAllocatorNull));
@@ -524,9 +524,9 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
       return {};
 
     if (!m_midiOutCounter)
-      name = fmt::format(fmt("{} MIDI-Out"), appName);
+      name = fmt::format(FMT_STRING("{} MIDI-Out"), appName);
     else
-      name = fmt::format(fmt("{} MIDI-Out {}"), appName, m_midiOutCounter);
+      name = fmt::format(FMT_STRING("{} MIDI-Out {}"), appName, m_midiOutCounter);
     m_midiOutCounter++;
     midiName = CFPointer<CFStringRef>::adopt(
         CFStringCreateWithCStringNoCopy(nullptr, name.c_str(), kCFStringEncodingUTF8, kCFAllocatorNull));
@@ -548,7 +548,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     if (!ret)
       return {};
 
-    std::string mname = fmt::format(fmt("Boo MIDI Real In {}"), m_midiInCounter++);
+    std::string mname = fmt::format(FMT_STRING("Boo MIDI Real In {}"), m_midiInCounter++);
     CFPointer<CFStringRef> midiName = CFPointer<CFStringRef>::adopt(
         CFStringCreateWithCStringNoCopy(nullptr, mname.c_str(), kCFStringEncodingUTF8, kCFAllocatorNull));
     if (MIDIInputPortCreate(m_midiClient, midiName.get(), MIDIReadProc(MIDIReceiveProc),
@@ -572,7 +572,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     if (!ret)
       return {};
 
-    std::string mname = fmt::format(fmt("Boo MIDI Real Out {}"), m_midiOutCounter++);
+    std::string mname = fmt::format(FMT_STRING("Boo MIDI Real Out {}"), m_midiOutCounter++);
     CFPointer<CFStringRef> midiName = CFPointer<CFStringRef>::adopt(
         CFStringCreateWithCStringNoCopy(nullptr, mname.c_str(), kCFStringEncodingUTF8, kCFAllocatorNull));
     if (MIDIOutputPortCreate(m_midiClient, midiName.get(), &static_cast<MIDIOut&>(*ret).m_midiPort))
@@ -599,7 +599,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     if (!ret)
       return {};
 
-    std::string mname = fmt::format(fmt("Boo MIDI Real In {}"), m_midiInCounter++);
+    std::string mname = fmt::format(FMT_STRING("Boo MIDI Real In {}"), m_midiInCounter++);
     CFPointer<CFStringRef> midiName = CFPointer<CFStringRef>::adopt(
         CFStringCreateWithCStringNoCopy(nullptr, mname.c_str(), kCFStringEncodingUTF8, kCFAllocatorNull));
     if (MIDIInputPortCreate(m_midiClient, midiName.get(), MIDIReadProc(MIDIReceiveProc),
@@ -611,7 +611,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     if (!ret)
       return {};
 
-    mname = fmt::format(fmt("Boo MIDI Real Out {}"), m_midiOutCounter++);
+    mname = fmt::format(FMT_STRING("Boo MIDI Real Out {}"), m_midiOutCounter++);
     midiName = CFPointer<CFStringRef>::adopt(
         CFStringCreateWithCStringNoCopy(nullptr, mname.c_str(), kCFStringEncodingUTF8, kCFAllocatorNull));
     if (MIDIOutputPortCreate(m_midiClient, midiName.get(), &static_cast<MIDIInOut&>(*ret).m_midiPortOut))
@@ -653,13 +653,13 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     OSStatus err;
     if ((err = AudioQueueNewOutput(&desc, AudioQueueOutputCallback(Callback), this, CFRunLoopGetCurrent(),
                                    m_runLoopMode.get(), 0, &m_queue))) {
-      Log.report(logvisor::Fatal, fmt("unable to create output audio queue"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to create output audio queue"));
       return;
     }
 
     CFStringRef devName = m_devName.get();
     if ((err = AudioQueueSetProperty(m_queue, kAudioQueueProperty_CurrentDevice, &devName, sizeof(devName)))) {
-      Log.report(logvisor::Fatal, fmt("unable to set current device into audio queue"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to set current device into audio queue"));
       return;
     }
 
@@ -677,7 +677,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
       AudioChannelLayout layout;
       UInt32 layoutSz = sizeof(layout);
       if (AudioQueueGetProperty(m_queue, kAudioQueueProperty_ChannelLayout, &layout, &layoutSz)) {
-        Log.report(logvisor::Warning, fmt("unable to get channel layout from audio queue; using count's default"));
+        Log.report(logvisor::Warning, FMT_STRING("unable to get channel layout from audio queue; using count's default"));
         switch (m_mixInfo.m_channels) {
         case AudioChannelSet::Stereo:
         default:
@@ -758,7 +758,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
           chMapOut.m_channels[4] = AudioChannel::FrontCenter;
           break;
         default:
-          Log.report(logvisor::Warning, fmt("unknown channel layout {}; using stereo"), layout.mChannelLayoutTag);
+          Log.report(logvisor::Warning, FMT_STRING("unknown channel layout {}; using stereo"), layout.mChannelLayoutTag);
           chMapOut.m_channelCount = 2;
           chMapOut.m_channels[0] = AudioChannel::FrontLeft;
           chMapOut.m_channels[1] = AudioChannel::FrontRight;
@@ -776,7 +776,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     m_mixInfo.m_periodFrames = m_5msFrames;
     for (int i = 0; i < AQS_NUM_BUFFERS; ++i)
       if (AudioQueueAllocateBuffer(m_queue, m_mixInfo.m_periodFrames * chCount * 4, &m_buffers[i])) {
-        Log.report(logvisor::Fatal, fmt("unable to create audio queue buffer"));
+        Log.report(logvisor::Fatal, FMT_STRING("unable to create audio queue buffer"));
         AudioQueueDispose(m_queue, false);
         m_queue = nullptr;
         return;
@@ -826,7 +826,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
       deviceAddress.mSelector = kAudioDevicePropertyDeviceUID;
       AudioObjectGetPropertyData(defaultDeviceId, &deviceAddress, 0, nullptr, &argSize, &m_devName);
     } else {
-      Log.report(logvisor::Fatal, fmt("unable determine default audio device"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable determine default audio device"));
       return;
     }
 

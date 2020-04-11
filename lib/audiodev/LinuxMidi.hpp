@@ -49,7 +49,7 @@ struct LinuxMidi : BaseAudioVoiceEngine {
       snd_ctl_t* ctl;
       int device = -1;
       int status;
-      std::string name = fmt::format(fmt("hw:{}"), card);
+      std::string name = fmt::format(FMT_STRING("hw:{}"), card);
       if ((status = snd_ctl_open(&ctl, name.c_str(), 0)) < 0)
         continue;
 
@@ -58,7 +58,7 @@ struct LinuxMidi : BaseAudioVoiceEngine {
         if (status < 0)
           break;
         if (device >= 0) {
-          name += fmt::format(fmt(",{}"), device);
+          name += fmt::format(FMT_STRING(",{}"), device);
           auto search = m_openHandles.find(name);
           if (search != m_openHandles.cend()) {
             ret.push_back(std::make_pair(name, search->second->description()));
@@ -103,7 +103,7 @@ struct LinuxMidi : BaseAudioVoiceEngine {
       int rdBytes = snd_rawmidi_read(midi, buf, 512);
       if (rdBytes < 0) {
         if (rdBytes != -EINTR) {
-          ALSALog.report(logvisor::Error, fmt("MIDI connection lost"));
+          ALSALog.report(logvisor::Error, FMT_STRING("MIDI connection lost"));
           break;
         }
         continue;

@@ -84,14 +84,14 @@ class HIDListenerIOKit : public IHIDListener {
         err = IOCreatePlugInInterfaceForService(obj.get(), kIOUSBDeviceUserClientTypeID, kIOCFPlugInInterfaceID,
                                                 &devServ, &score);
         if (err != kIOReturnSuccess) {
-          fmt::print(stderr, fmt("unable to open IOKit plugin interface\n"));
+          fmt::print(stderr, FMT_STRING("unable to open IOKit plugin interface\n"));
           continue;
         }
 
         IUnknownPointer<IOUSBDeviceInterface182> dev;
         err = devServ.As(&dev, kIOUSBDeviceInterfaceID182);
         if (err != kIOReturnSuccess) {
-          fmt::print(stderr, fmt("unable to open IOKit device interface\n"));
+          fmt::print(stderr, FMT_STRING("unable to open IOKit device interface\n"));
           continue;
         }
 
@@ -108,7 +108,7 @@ class HIDListenerIOKit : public IHIDListener {
 
       listener->m_finder._insertToken(std::make_unique<DeviceToken>(DeviceType::USB, vid, pid, vstr, pstr, devPath));
 
-      // fmt::print(fmt("ADDED {:08X} {}\n"), obj.get(), devPath);
+      // fmt::print(FMT_STRING("ADDED {:08X} {}\n"), obj.get(), devPath);
     }
   }
 
@@ -124,7 +124,7 @@ class HIDListenerIOKit : public IHIDListener {
       if (IORegistryEntryGetPath(obj.get(), kIOServicePlane, devPath) != 0)
         continue;
       listener->m_finder._removeToken(devPath);
-      // fmt::print(fmt("REMOVED {:08X} {}\n"), obj.get(), devPath);
+      // fmt::print(FMT_STRING("REMOVED {:08X} {}\n"), obj.get(), devPath);
     }
   }
 
@@ -147,14 +147,14 @@ class HIDListenerIOKit : public IHIDListener {
         err =
             IOCreatePlugInInterfaceForService(obj.get(), kIOHIDDeviceTypeID, kIOCFPlugInInterfaceID, &devServ, &score);
         if (err != kIOReturnSuccess) {
-          fmt::print(stderr, fmt("unable to open IOKit plugin interface\n"));
+          fmt::print(stderr, FMT_STRING("unable to open IOKit plugin interface\n"));
           continue;
         }
 
         IUnknownPointer<IOHIDDeviceDeviceInterface> dev;
         err = devServ.As(&dev, kIOHIDDeviceDeviceInterfaceID);
         if (err != kIOReturnSuccess) {
-          fmt::print(stderr, fmt("unable to open IOKit device interface\n"));
+          fmt::print(stderr, FMT_STRING("unable to open IOKit device interface\n"));
           continue;
         }
 
@@ -191,7 +191,7 @@ class HIDListenerIOKit : public IHIDListener {
 
       listener->m_finder._insertToken(std::make_unique<DeviceToken>(DeviceType::HID, vidv, pidv, vstr, pstr, devPath));
 
-      // fmt::print(fmt("ADDED {:08X} {}\n"), obj, devPath);
+      // fmt::print(FMT_STRING("ADDED {:08X} {}\n"), obj, devPath);
     }
   }
 
@@ -207,7 +207,7 @@ class HIDListenerIOKit : public IHIDListener {
       if (IORegistryEntryGetPath(obj.get(), kIOServicePlane, devPath) != 0)
         continue;
       listener->m_finder._removeToken(devPath);
-      // fmt::print(fmt("REMOVED {:08X} {}\n"), obj, devPath);
+      // fmt::print(FMT_STRING("REMOVED {:08X} {}\n"), obj, devPath);
     }
   }
 

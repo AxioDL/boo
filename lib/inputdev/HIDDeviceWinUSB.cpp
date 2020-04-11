@@ -72,7 +72,7 @@ class HIDDeviceWinUSB final : public IHIDDevice {
         CreateFileA(device->m_devPath.data(), GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, nullptr,
                     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, nullptr);
     if (INVALID_HANDLE_VALUE == device->m_devHandle) {
-      device->m_devImp->deviceError(fmt("Unable to open {}@{}: {}\n"),
+      device->m_devImp->deviceError(FMT_STRING("Unable to open {}@{}: {}\n"),
         device->m_token.getProductName(), device->m_devPath, GetLastError());
       lk.unlock();
       device->m_initCond.notify_one();
@@ -80,7 +80,7 @@ class HIDDeviceWinUSB final : public IHIDDevice {
     }
 
     if (!WinUsb_Initialize(device->m_devHandle, &device->m_usbHandle)) {
-      device->m_devImp->deviceError(fmt("Unable to open {}@{}: {}\n"),
+      device->m_devImp->deviceError(FMT_STRING("Unable to open {}@{}: {}\n"),
         device->m_token.getProductName(), device->m_devPath, GetLastError());
       lk.unlock();
       device->m_initCond.notify_one();
@@ -91,7 +91,7 @@ class HIDDeviceWinUSB final : public IHIDDevice {
     /* Enumerate device pipes */
     USB_INTERFACE_DESCRIPTOR ifDesc = {0};
     if (!WinUsb_QueryInterfaceSettings(device->m_usbHandle, 0, &ifDesc)) {
-      device->m_devImp->deviceError(fmt("Unable to open {}@{}: {}\n"),
+      device->m_devImp->deviceError(FMT_STRING("Unable to open {}@{}: {}\n"),
         device->m_token.getProductName(), device->m_devPath, GetLastError());
       lk.unlock();
       device->m_initCond.notify_one();
@@ -156,7 +156,7 @@ class HIDDeviceWinUSB final : public IHIDDevice {
         CreateFileA(device->m_devPath.data(), GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, nullptr,
                     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, nullptr);
     if (INVALID_HANDLE_VALUE == device->m_hidHandle) {
-      device->m_devImp->deviceError(fmt("Unable to open {}@{}: {}\n"),
+      device->m_devImp->deviceError(FMT_STRING("Unable to open {}@{}: {}\n"),
         device->m_token.getProductName(), device->m_devPath, GetLastError());
       lk.unlock();
       device->m_initCond.notify_one();
@@ -164,7 +164,7 @@ class HIDDeviceWinUSB final : public IHIDDevice {
     }
 
     if (!HidD_GetPreparsedData(device->m_hidHandle, &device->m_preparsedData)) {
-      device->m_devImp->deviceError(fmt("Unable get preparsed data of {}@{}: {}\n"),
+      device->m_devImp->deviceError(FMT_STRING("Unable get preparsed data of {}@{}: {}\n"),
         device->m_token.getProductName(), device->m_devPath, GetLastError());
       lk.unlock();
       device->m_initCond.notify_one();
@@ -233,14 +233,14 @@ class HIDDeviceWinUSB final : public IHIDDevice {
         }
 
         if (Error != ERROR_IO_PENDING) {
-          fmt::print(stderr, fmt("Write Failed {:08X}\n"), int(Error));
+          fmt::print(stderr, FMT_STRING("Write Failed {:08X}\n"), int(Error));
           return false;
         }
       }
 
       if (!GetOverlappedResult(m_hidHandle, &Overlapped, &BytesWritten, TRUE)) {
         DWORD Error = GetLastError();
-        fmt::print(stderr, fmt("Write Failed {:08X}\n"), int(Error));
+        fmt::print(stderr, FMT_STRING("Write Failed {:08X}\n"), int(Error));
         return false;
       }
     } else if (tp == HIDReportType::Feature) {
@@ -309,7 +309,7 @@ public:
         m_runningTransferLoop = false;
         return;
       } else if (Error != ERROR_IO_PENDING) {
-        fmt::print(stderr, fmt("Read Failed: {:08X}\n"), int(Error));
+        fmt::print(stderr, FMT_STRING("Read Failed: {:08X}\n"), int(Error));
         return;
       } else if (!GetOverlappedResultEx(m_hidHandle, &m_overlapped, &BytesRead, 10, TRUE)) {
         return;

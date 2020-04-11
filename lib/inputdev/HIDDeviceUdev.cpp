@@ -69,7 +69,7 @@ class HIDDeviceUdev final : public IHIDDevice {
     const char* dp = udev_device_get_devnode(udevDev);
     int fd = open(dp, O_RDWR);
     if (fd < 0) {
-      device->m_devImp->deviceError(fmt("Unable to open {}@{}: {}\n"),
+      device->m_devImp->deviceError(FMT_STRING("Unable to open {}@{}: {}\n"),
         device->m_token.getProductName(), dp, strerror(errno));
       lk.unlock();
       device->m_initCond.notify_one();
@@ -149,7 +149,7 @@ class HIDDeviceUdev final : public IHIDDevice {
     const char* dp = udev_device_get_devnode(udevDev);
     int fd = open(dp, O_RDWR | O_NONBLOCK);
     if (fd < 0) {
-      device->m_devImp->deviceError(fmt("Unable to open {}@{}: {}\n"),
+      device->m_devImp->deviceError(FMT_STRING("Unable to open {}@{}: {}\n"),
                                     device->m_token.getProductName(), dp, strerror(errno));
       lk.unlock();
       device->m_initCond.notify_one();
@@ -166,7 +166,7 @@ class HIDDeviceUdev final : public IHIDDevice {
     /* Report descriptor size */
     int reportDescSize;
     if (ioctl(fd, HIDIOCGRDESCSIZE, &reportDescSize) == -1) {
-      device->m_devImp->deviceError(fmt("Unable to ioctl(HIDIOCGRDESCSIZE) {}@{}: {}\n"),
+      device->m_devImp->deviceError(FMT_STRING("Unable to ioctl(HIDIOCGRDESCSIZE) {}@{}: {}\n"),
                                     device->m_token.getProductName(), dp, strerror(errno));
       close(fd);
       return;
@@ -176,7 +176,7 @@ class HIDDeviceUdev final : public IHIDDevice {
     hidraw_report_descriptor reportDesc;
     reportDesc.size = reportDescSize;
     if (ioctl(fd, HIDIOCGRDESC, &reportDesc) == -1) {
-      device->m_devImp->deviceError(fmt("Unable to ioctl(HIDIOCGRDESC) {}@{}: {}\n"),
+      device->m_devImp->deviceError(FMT_STRING("Unable to ioctl(HIDIOCGRDESC) {}@{}: {}\n"),
                                     device->m_token.getProductName(), dp, strerror(errno));
       close(fd);
       return;
@@ -272,7 +272,7 @@ public:
     else if (dType == DeviceType::HID)
       m_thread = std::thread(_threadProcHID, std::static_pointer_cast<HIDDeviceUdev>(shared_from_this()));
     else {
-      fmt::print(stderr, fmt("invalid token supplied to device constructor"));
+      fmt::print(stderr, FMT_STRING("invalid token supplied to device constructor"));
       abort();
     }
     m_initCond.wait(lk);

@@ -15,7 +15,7 @@ DeviceFinder* DeviceFinder::skDevFinder = nullptr;
 
 DeviceFinder::DeviceFinder(std::unordered_set<uint64_t> types) {
   if (skDevFinder) {
-    fmt::print(stderr, fmt("only one instance of CDeviceFinder may be constructed"));
+    fmt::print(stderr, FMT_STRING("only one instance of CDeviceFinder may be constructed"));
     std::abort();
   }
   skDevFinder = this;

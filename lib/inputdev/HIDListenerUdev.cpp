@@ -123,7 +123,7 @@ class HIDListenerUdev final : public IHIDListener {
     {
       const char* name = udev_list_entry_get_name(att);
       const char* val = udev_list_entry_get_value(att);
-      fmt::print(stderr, fmt("{} {}\n"), name, val);
+      fmt::print(stderr, FMT_STRING("{} {}\n"), name, val);
     }
     std::fputs("\n\n", stderr);
 #endif
@@ -170,7 +170,7 @@ public:
     /* Setup hotplug events */
     m_udevMon = udev_monitor_new_from_netlink(GetUdev(), "udev");
     if (!m_udevMon) {
-      fmt::print(stderr, fmt("unable to init udev_monitor"));
+      fmt::print(stderr, FMT_STRING("unable to init udev_monitor"));
       abort();
     }
     udev_monitor_filter_add_match_subsystem_devtype(m_udevMon, "usb", "usb_device");

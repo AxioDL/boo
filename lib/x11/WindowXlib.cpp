@@ -305,7 +305,7 @@ public:
     int numFBConfigs = 0;
     fbConfigs = glXGetFBConfigs(display, defaultScreen, &numFBConfigs);
     if (!fbConfigs || numFBConfigs == 0) {
-      Log.report(logvisor::Fatal, fmt("glXGetFBConfigs failed"));
+      Log.report(logvisor::Fatal, FMT_STRING("glXGetFBConfigs failed"));
       return;
     }
 
@@ -351,7 +351,7 @@ public:
     XFree(fbConfigs);
 
     if (!m_fbconfig) {
-      Log.report(logvisor::Fatal, fmt("unable to find suitable pixel format"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to find suitable pixel format"));
       return;
     }
 
@@ -394,7 +394,7 @@ public:
       glXCreateContextAttribsARB =
           (glXCreateContextAttribsARBProc)glXGetProcAddressARB((const GLubyte*)"glXCreateContextAttribsARB");
       if (!glXCreateContextAttribsARB)
-        Log.report(logvisor::Fatal, fmt("unable to resolve glXCreateContextAttribsARB"));
+        Log.report(logvisor::Fatal, FMT_STRING("unable to resolve glXCreateContextAttribsARB"));
     }
 
     s_glxError = false;
@@ -406,16 +406,16 @@ public:
     }
     XSetErrorHandler(oldHandler);
     if (!m_glxCtx)
-      Log.report(logvisor::Fatal, fmt("unable to make new GLX context"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to make new GLX context"));
     m_glxWindow = glXCreateWindow(m_xDisp, m_fbconfig, m_parentWindow->getPlatformHandle(), nullptr);
     if (!m_glxWindow)
-      Log.report(logvisor::Fatal, fmt("unable to make new GLX window"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to make new GLX window"));
     _XlibUpdateLastGlxCtx(m_glxCtx);
 
     if (!glXMakeCurrent(m_xDisp, DefaultRootWindow(m_xDisp), m_glxCtx))
-      Log.report(logvisor::Fatal, fmt("unable to make GLX context current"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to make GLX context current"));
     if (glewInit() != GLEW_OK)
-      Log.report(logvisor::Fatal, fmt("glewInit failed"));
+      Log.report(logvisor::Fatal, FMT_STRING("glewInit failed"));
     glXMakeCurrent(m_xDisp, 0, 0);
 
     XUnlockDisplay(m_xDisp);
@@ -429,7 +429,7 @@ public:
   void makeCurrent() override {
     XLockDisplay(m_xDisp);
     if (!glXMakeContextCurrent(m_xDisp, m_glxWindow, m_glxWindow, m_glxCtx))
-      Log.report(logvisor::Fatal, fmt("unable to make GLX context current"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to make GLX context current"));
     XUnlockDisplay(m_xDisp);
   }
 
@@ -452,10 +452,10 @@ public:
       m_mainCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, true, ContextAttribList[m_attribIdx]);
       XSetErrorHandler(oldHandler);
       if (!m_mainCtx)
-        Log.report(logvisor::Fatal, fmt("unable to make main GLX context"));
+        Log.report(logvisor::Fatal, FMT_STRING("unable to make main GLX context"));
     }
     if (!glXMakeContextCurrent(m_xDisp, m_glxWindow, m_glxWindow, m_mainCtx))
-      Log.report(logvisor::Fatal, fmt("unable to make main GLX context current"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to make main GLX context current"));
     XUnlockDisplay(m_xDisp);
     return getDataFactory();
   }
@@ -468,10 +468,10 @@ public:
       m_loadCtx = glXCreateContextAttribsARB(m_xDisp, m_fbconfig, m_glxCtx, true, ContextAttribList[m_attribIdx]);
       XSetErrorHandler(oldHandler);
       if (!m_loadCtx)
-        Log.report(logvisor::Fatal, fmt("unable to make load GLX context"));
+        Log.report(logvisor::Fatal, FMT_STRING("unable to make load GLX context"));
     }
     if (!glXMakeContextCurrent(m_xDisp, m_glxWindow, m_glxWindow, m_loadCtx))
-      Log.report(logvisor::Fatal, fmt("unable to make load GLX context current"));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to make load GLX context current"));
     XUnlockDisplay(m_xDisp);
     return getDataFactory();
   }
@@ -495,7 +495,7 @@ struct GraphicsContextXlibVulkan : GraphicsContextXlib {
 
   static void ThrowIfFailed(VkResult res) {
     if (res != VK_SUCCESS)
-      Log.report(logvisor::Fatal, fmt("{}\n"), res);
+      Log.report(logvisor::Fatal, FMT_STRING("{}\n"), res);
   }
 
 public:
@@ -579,19 +579,19 @@ public:
       /* Generate error if could not find a queue that supports both a graphics
        * and present */
       if (m_ctx->m_graphicsQueueFamilyIndex == UINT32_MAX)
-        Log.report(logvisor::Fatal, fmt("Could not find a queue that supports both graphics and present"));
+        Log.report(logvisor::Fatal, FMT_STRING("Could not find a queue that supports both graphics and present"));
 
       m_ctx->initDevice();
     } else {
       /* Subsequent window, verify present */
       if (supportsPresent[m_ctx->m_graphicsQueueFamilyIndex] == VK_FALSE)
-        Log.report(logvisor::Fatal, fmt("subsequent surface doesn't support present"));
+        Log.report(logvisor::Fatal, FMT_STRING("subsequent surface doesn't support present"));
     }
     free(supportsPresent);
 
     if (!vk::GetPhysicalDeviceXcbPresentationSupportKHR(m_ctx->m_gpus[0], m_ctx->m_graphicsQueueFamilyIndex, m_xcbConn,
                                                         m_visualid)) {
-      Log.report(logvisor::Fatal, fmt("XCB visual doesn't support vulkan present"));
+      Log.report(logvisor::Fatal, FMT_STRING("XCB visual doesn't support vulkan present"));
       return false;
     }
 
@@ -625,10 +625,10 @@ public:
         }
       }
     } else
-      Log.report(logvisor::Fatal, fmt("no surface formats available for Vulkan swapchain"));
+      Log.report(logvisor::Fatal, FMT_STRING("no surface formats available for Vulkan swapchain"));
 
     if (m_format == VK_FORMAT_UNDEFINED)
-      Log.report(logvisor::Fatal, fmt("no UNORM formats available for Vulkan swapchain"));
+      Log.report(logvisor::Fatal, FMT_STRING("no UNORM formats available for Vulkan swapchain"));
 
     m_ctx->initSwapChain(*m_windowCtx, m_surface, m_format, m_colorspace);
 
@@ -734,7 +734,7 @@ public:
         m_gfxCtx.reset(new GraphicsContextXlibGLX(IGraphicsContext::EGraphicsAPI::OpenGL3_3, this, display,
                                                   defaultScreen, lastCtx, m_visualId, glCtx));
         m_openGL = true;
-        Log.report(logvisor::Warning, fmt("OPENGL HAS BEEN DEPRECATED, IT IS HIGHLY RECOMMENDED TO BUILD AND USE VULKAN INSTEAD"));
+        Log.report(logvisor::Warning, FMT_STRING("OPENGL HAS BEEN DEPRECATED, IT IS HIGHLY RECOMMENDED TO BUILD AND USE VULKAN INSTEAD"));
       }
 
       XVisualInfo visTemplate;
@@ -1182,13 +1182,13 @@ public:
 
           if (XGetWindowProperty(m_xDisp, m_windowId, S_ATOMS->m_clipdata, 0, 32, false, AnyPropertyType, &type,
                                  &format, &nitems, &rem, &data)) {
-            Log.report(logvisor::Fatal, fmt("Clipboard allocation failed"));
+            Log.report(logvisor::Fatal, FMT_STRING("Clipboard allocation failed"));
             XUnlockDisplay(m_xDisp);
             return {};
           }
 
           if (rem != 0) {
-            Log.report(logvisor::Fatal, fmt("partial clipboard read"));
+            Log.report(logvisor::Fatal, FMT_STRING("partial clipboard read"));
             XUnlockDisplay(m_xDisp);
             return {};
           }
@@ -1606,7 +1606,7 @@ public:
         getWindowFrame(m_wrect.location[0], m_wrect.location[1], m_wrect.size[0], m_wrect.size[1]);
         switch (event->xgeneric.evtype) {
         case XI_Motion: {
-          fmt::print(stderr, fmt("motion\n"));
+          fmt::print(stderr, FMT_STRING("motion\n"));
 
           XIDeviceEvent* ev = (XIDeviceEvent*)event;
           if (m_lastInputID != ev->deviceid)

@@ -24,7 +24,7 @@ void AudioVoice::_setPitchRatio(double ratio, bool slew) {
     m_sampleRatio = ratio * m_sampleRateIn / m_sampleRateOut;
     soxr_error_t err = soxr_set_io_ratio(m_src, m_sampleRatio, slew ? m_head->m_5msFrames : 0);
     if (err) {
-      Log.report(logvisor::Fatal, fmt("unable to set resampler rate: {}"), soxr_strerror(err));
+      Log.report(logvisor::Fatal, FMT_STRING("unable to set resampler rate: {}"), soxr_strerror(err));
       m_setPitchRatio = false;
       return;
     }
@@ -71,7 +71,7 @@ void AudioVoiceMono::_resetSampleRate(double sampleRate) {
   m_src = soxr_create(sampleRate, rateOut, 1, &err, &ioSpec, &qSpec, nullptr);
 
   if (err) {
-    Log.report(logvisor::Fatal, fmt("unable to create soxr resampler: {}"), soxr_strerror(err));
+    Log.report(logvisor::Fatal, FMT_STRING("unable to create soxr resampler: {}"), soxr_strerror(err));
     m_resetSampleRate = false;
     return;
   }
@@ -192,7 +192,7 @@ void AudioVoiceStereo::_resetSampleRate(double sampleRate) {
   m_src = soxr_create(sampleRate, rateOut, 2, &err, &ioSpec, &qSpec, nullptr);
 
   if (!m_src) {
-    Log.report(logvisor::Fatal, fmt("unable to create soxr resampler: {}"), soxr_strerror(err));
+    Log.report(logvisor::Fatal, FMT_STRING("unable to create soxr resampler: {}"), soxr_strerror(err));
     m_resetSampleRate = false;
     return;
   }
