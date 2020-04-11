@@ -2,8 +2,10 @@ cmake_minimum_required(VERSION 3.10 FATAL_ERROR) # because of c++17
 project(boo)
 cmake_policy(SET CMP0074 NEW)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if (NOT MSVC)
+  set(CMAKE_CXX_STANDARD 20)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+endif()
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
 
