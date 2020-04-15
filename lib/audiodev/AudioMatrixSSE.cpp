@@ -8,8 +8,8 @@ namespace boo {
 union TVectorUnion {
   float v[4];
 #if __SSE__
-  __m128 q;
-  __m64 d[2];
+  alignas(16) __m128 q;
+  alignas(16) __m64 d[2];
 #endif
 };
 

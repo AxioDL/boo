@@ -34,8 +34,8 @@ class AudioMatrixMono {
   union Coefs {
     float v[8];
 #if __SSE__
-    __m128 q[2];
-    __m64 d[4];
+    alignas(16) __m128 q[2];
+    alignas(16) __m64 d[4];
 #endif
   };
   Coefs m_coefs = {};
@@ -88,8 +88,8 @@ class AudioMatrixStereo {
   union Coefs {
     float v[8][2];
 #if __SSE__
-    __m128 q[4];
-    __m64 d[8];
+    alignas(16) __m128 q[4];
+    alignas(16) __m64 d[8];
 #endif
   };
   Coefs m_coefs = {};
