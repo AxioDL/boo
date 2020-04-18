@@ -219,7 +219,9 @@ class HIDListenerWinUSB final : public IHIDListener {
 public:
   HIDListenerWinUSB(DeviceFinder& finder) : m_finder(finder) {
     /* Initial HID Device Add */
+    m_scanningEnabled = true;
     _pollDevices(nullptr);
+    m_scanningEnabled = false;
 
     /* XInput arbitration thread */
     for (const DeviceSignature* sig : m_finder.getTypes()) {
