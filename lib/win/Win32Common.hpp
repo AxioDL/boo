@@ -45,8 +45,9 @@ struct OGLContext {
     int m_fsCountDown = 0;
   };
   std::unordered_map<const boo::IWindow*, Window> m_windows;
-
+#if BOO_HAS_GL
   boo::GLContext m_glCtx;
+#endif
 };
 
 #if !WINDOWS_STORE

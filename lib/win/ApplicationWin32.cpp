@@ -102,9 +102,11 @@ public:
     m_3dCtx.m_ctx11.m_sampleCount = samples;
     m_3dCtx.m_ctx11.m_anisotropy = anisotropy;
     m_3dCtx.m_ctx11.m_fbFormat = deepColor ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
+#if BOO_HAS_GL
     m_3dCtx.m_ctxOgl.m_glCtx.m_sampleCount = samples;
     m_3dCtx.m_ctxOgl.m_glCtx.m_anisotropy = anisotropy;
     m_3dCtx.m_ctxOgl.m_glCtx.m_deepColor = deepColor;
+#endif
 #if BOO_HAS_VULKAN
     g_VulkanContext.m_sampleCountColor = samples;
     g_VulkanContext.m_sampleCountDepth = samples;
@@ -264,6 +266,7 @@ public:
     }
 #endif
 
+#if BOO_HAS_GL
     /* Finally try OpenGL */
     {
       /* Obtain DXGI Factory */
@@ -274,6 +277,7 @@ public:
       Log.report(logvisor::Info, FMT_STRING("initialized OpenGL renderer"));
       return;
     }
+#endif
 
     Log.report(logvisor::Fatal, FMT_STRING("system doesn't support Vulkan, D3D11, or OpenGL"));
   }

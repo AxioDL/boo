@@ -7,8 +7,11 @@
 #include "boo/IWindow.hpp"
 
 #include "boo/audiodev/IAudioVoiceEngine.hpp"
+#include "boo/graphicsdev/IGraphicsCommandQueue.hpp"
 #include "boo/graphicsdev/D3D.hpp"
+#if BOO_HAS_GL
 #include "boo/graphicsdev/GL.hpp"
+#endif
 #include "boo/graphicsdev/glew.h"
 #include "boo/graphicsdev/wglew.h"
 
@@ -34,8 +37,10 @@ static logvisor::Module Log("boo::WindowWin32");
 std::unique_ptr<IGraphicsCommandQueue> _NewD3D11CommandQueue(D3D11Context* ctx, D3D11Context::Window* windowCtx,
                                                              IGraphicsContext* parent);
 std::unique_ptr<IGraphicsDataFactory> _NewD3D11DataFactory(D3D11Context* ctx, IGraphicsContext* parent);
+#if BOO_HAS_GL
 std::unique_ptr<IGraphicsCommandQueue> _NewGLCommandQueue(IGraphicsContext* parent, GLContext* glCtx);
 std::unique_ptr<IGraphicsDataFactory> _NewGLDataFactory(IGraphicsContext* parent, GLContext* glCtx);
+#endif
 #if BOO_HAS_VULKAN
 std::unique_ptr<IGraphicsCommandQueue> _NewVulkanCommandQueue(VulkanContext* ctx, VulkanContext::Window* windowCtx,
                                                               IGraphicsContext* parent);
@@ -122,6 +127,7 @@ public:
   IGraphicsDataFactory* getLoadContextDataFactory() override { return m_dataFactory.get(); }
 };
 
+#if BOO_HAS_GL
 struct GraphicsContextWin32GL : GraphicsContextWin32 {
   std::unique_ptr<IGraphicsDataFactory> m_dataFactory;
   std::unique_ptr<IGraphicsCommandQueue> m_commandQueue;
@@ -333,6 +339,7 @@ public:
     return m_dataFactory.get();
   }
 };
+#endif
 
 #if BOO_HAS_VULKAN
 struct GraphicsContextWin32Vulkan : GraphicsContextWin32 {
@@ -871,11 +878,13 @@ public:
 #endif
 
     IGraphicsContext::EGraphicsAPI api = IGraphicsContext::EGraphicsAPI::D3D11;
+#if BOO_HAS_GL
     if (b3dCtx.m_ctxOgl.m_dxFactory) {
       m_gfxCtx.reset(new GraphicsContextWin32GL(IGraphicsContext::EGraphicsAPI::OpenGL3_3, this, m_hwnd, b3dCtx));
       m_openGL = true;
       return;
     }
+#endif
     m_gfxCtx.reset(new GraphicsContextWin32D3D(api, this, m_hwnd, b3dCtx));
   }
 
