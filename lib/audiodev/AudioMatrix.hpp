@@ -25,7 +25,7 @@ static inline int16_t Clamp16(float in) {
 static inline int32_t Clamp32(float in) {
   if (in < INT_MIN)
     return INT_MIN;
-  else if (in > INT_MAX)
+  else if (in > static_cast<float>(INT_MAX))
     return INT_MAX;
   return in;
 }
