@@ -1,6 +1,7 @@
 [submodule "glslang"]
 	path = glslang
-	url = https://github.com/KhronosGroup/glslang.git
+	url = https://github.com/Antidote/glslang.git
+        branch = const-operators
 [submodule "logvisor"]
 	path = logvisor
 	url = ../logvisor.git
