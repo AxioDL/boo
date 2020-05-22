@@ -2375,12 +2375,7 @@ public:
           break;
         }
 
-        VkDynamicState dynamicStateEnables[VK_DYNAMIC_STATE_RANGE_SIZE] = {};
-        VkPipelineDynamicStateCreateInfo dynamicState = {};
-        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicState.pNext = nullptr;
-        dynamicState.pDynamicStates = dynamicStateEnables;
-        dynamicState.dynamicStateCount = 0;
+        std::vector<VkDynamicState> dynamicStateEnables;
 
         VkPipelineShaderStageCreateInfo stages[5] = {};
         uint32_t numStages = 0;
@@ -2456,10 +2451,10 @@ public:
         viewportInfo.pViewports = nullptr;
         viewportInfo.scissorCount = 1;
         viewportInfo.pScissors = nullptr;
-        dynamicStateEnables[dynamicState.dynamicStateCount++] = VK_DYNAMIC_STATE_VIEWPORT;
-        dynamicStateEnables[dynamicState.dynamicStateCount++] = VK_DYNAMIC_STATE_SCISSOR;
+        dynamicStateEnables.push_back(VK_DYNAMIC_STATE_VIEWPORT);
+        dynamicStateEnables.push_back(VK_DYNAMIC_STATE_SCISSOR);
 #if AMD_PAL_HACK
-        dynamicStateEnables[dynamicState.dynamicStateCount++] = VK_DYNAMIC_STATE_BLEND_CONSTANTS;
+        dynamicStateEnables.push_back(VK_DYNAMIC_STATE_BLEND_CONSTANTS);
 #endif
 
         VkPipelineRasterizationStateCreateInfo rasterizationInfo = {};
@@ -2547,6 +2542,12 @@ public:
         colorBlendInfo.logicOpEnable = VK_FALSE;
         colorBlendInfo.attachmentCount = 1;
         colorBlendInfo.pAttachments = &colorAttachment;
+
+        VkPipelineDynamicStateCreateInfo dynamicState = {};
+        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.pNext = nullptr;
+        dynamicState.pDynamicStates = dynamicStateEnables.data();
+        dynamicState.dynamicStateCount = uint32_t(dynamicStateEnables.size());
 
         VkGraphicsPipelineCreateInfo pipelineCreateInfo = {};
         pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
