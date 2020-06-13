@@ -417,7 +417,7 @@ public:
 
   VulkanContext::Window* m_windowCtx = nullptr;
 
-  void resized(const SWindowRect& rect) {
+  void resized(const SWindowRect& rect) override {
     if (m_windowCtx)
       m_ctx->resizeSwapChain(*m_windowCtx, m_surface, m_format, m_colorspace, rect);
   }
