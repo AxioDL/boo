@@ -202,7 +202,7 @@ class ApplicationXlib final : public IApplication {
 public:
   ApplicationXlib(IApplicationCallback& callback, std::string_view uniqueName, std::string_view friendlyName,
                   std::string_view pname, const std::vector<std::string>& args, std::string_view gfxApi,
-                  uint32_t samples, uint32_t anisotropy, bool deepColor, bool singleInstance)
+                  uint32_t samples, uint32_t anisotropy, bool deepColor, int64_t targetFrameTime, bool singleInstance)
   : m_callback(callback)
   , m_uniqueName(uniqueName)
   , m_friendlyName(friendlyName)
@@ -217,6 +217,7 @@ public:
     g_VulkanContext.m_sampleCountDepth = samples;
     g_VulkanContext.m_anisotropy = anisotropy;
     g_VulkanContext.m_deepColor = deepColor;
+    g_VulkanContext.m_targetFrameTime = targetFrameTime;
 
     /* Check for Vulkan presence and preference */
     bool tryVulkan = true;

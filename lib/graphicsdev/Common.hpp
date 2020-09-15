@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cassert>
 #include <condition_variable>
+#include <chrono>
 #include <mutex>
 #include <queue>
 #include <thread>
@@ -282,5 +283,23 @@ public:
 #else
 #define SCOPED_GRAPHICS_DEBUG_GROUP(...)
 #endif
+
+class Limiter {
+  using delta_clock = std::chrono::steady_clock;
+  using nanotime_t = std::chrono::nanoseconds::rep;
+
+public:
+  void Sleep(nanotime_t targetFrameTimeNs);
+
+private:
+  delta_clock::time_point m_oldTime;
+  std::array<nanotime_t, 4> m_overheadTimes{};
+  size_t m_overheadTimeIdx = 0;
+  nanotime_t m_overhead = 0;
+
+  nanotime_t TimeSince(delta_clock::time_point start) {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(delta_clock::now() - start).count();
+  }
+};
 
 } // namespace boo

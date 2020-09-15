@@ -97,6 +97,7 @@ struct VulkanContext {
   VkSampleCountFlags m_sampleCountDepth = VK_SAMPLE_COUNT_1_BIT;
   float m_anisotropy = 1.f;
   bool m_deepColor = false;
+  int64_t m_targetFrameTime = 0;
 
   std::unordered_map<uint32_t, VkSampler> m_samplers;
 

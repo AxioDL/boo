@@ -97,7 +97,7 @@ class ApplicationWin32 final : public IApplication {
 public:
   ApplicationWin32(IApplicationCallback& callback, SystemStringView uniqueName, SystemStringView friendlyName,
                    SystemStringView pname, const std::vector<SystemString>& args, std::string_view gfxApi,
-                   uint32_t samples, uint32_t anisotropy, bool deepColor, bool singleInstance)
+                   uint32_t samples, uint32_t anisotropy, bool deepColor, int64_t targetFrameTime, bool singleInstance)
   : m_callback(callback), m_uniqueName(uniqueName), m_friendlyName(friendlyName), m_pname(pname), m_args(args) {
     m_3dCtx.m_ctx11.m_sampleCount = samples;
     m_3dCtx.m_ctx11.m_anisotropy = anisotropy;
@@ -112,6 +112,7 @@ public:
     g_VulkanContext.m_sampleCountDepth = samples;
     g_VulkanContext.m_anisotropy = anisotropy;
     g_VulkanContext.m_deepColor = deepColor;
+    g_VulkanContext.m_targetFrameTime = targetFrameTime;
 #endif
 
     HMODULE dxgilib = LoadLibraryW(L"dxgi.dll");
@@ -472,7 +473,7 @@ IApplication* APP = nullptr;
 int ApplicationRun(IApplication::EPlatformType platform, IApplicationCallback& cb, SystemStringView uniqueName,
                    SystemStringView friendlyName, SystemStringView pname, const std::vector<SystemString>& args,
                    std::string_view gfxApi, uint32_t samples, uint32_t anisotropy, bool deepColor,
-                   bool singleInstance) {
+                   int64_t targetFrameTime, bool singleInstance) {
   std::string thrName = WCSTMBS(friendlyName.data()) + " Main Thread";
   logvisor::RegisterThreadName(thrName.c_str());
   if (APP)
@@ -501,7 +502,7 @@ int ApplicationRun(IApplication::EPlatformType platform, IApplicationCallback& c
   RegisterClassW(&wndClass);
 
   APP = new ApplicationWin32(cb, uniqueName, friendlyName, pname, args, gfxApi, samples, anisotropy, deepColor,
-                             singleInstance);
+                             targetFrameTime, singleInstance);
   int ret = APP->run();
   delete APP;
   APP = nullptr;

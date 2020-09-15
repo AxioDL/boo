@@ -125,7 +125,7 @@ namespace boo {
 int ApplicationRun(IApplication::EPlatformType platform, IApplicationCallback& cb, std::string_view uniqueName,
                    std::string_view friendlyName, std::string_view pname, const std::vector<std::string>& args,
                    std::string_view gfxApi, uint32_t samples, uint32_t anisotropy, bool deepColor,
-                   bool singleInstance) {
+                   int64_t targetFrameTime, bool singleInstance) {
   std::string thrName = std::string(friendlyName) + " Main";
   logvisor::RegisterThreadName(thrName.c_str());
   if (APP)
@@ -135,7 +135,7 @@ int ApplicationRun(IApplication::EPlatformType platform, IApplicationCallback& c
                                  singleInstance);
   else if (platform == IApplication::EPlatformType::Xlib || platform == IApplication::EPlatformType::Auto)
     APP = new ApplicationXlib(cb, uniqueName, friendlyName, pname, args, gfxApi, samples, anisotropy, deepColor,
-                              singleInstance);
+                              targetFrameTime, singleInstance);
   else
     return 1;
   int ret = APP->run();

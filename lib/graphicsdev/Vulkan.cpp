@@ -2871,6 +2871,8 @@ struct VulkanCommandQueue final : IGraphicsCommandQueue {
 
   std::vector<boo::ObjToken<boo::IObj>> m_drawResTokens[2];
 
+  Limiter m_frameLimiter;
+
   void resetCommandBuffer() {
     ThrowIfFailed(vk::ResetCommandBuffer(m_cmdBufs[m_fillBuf], 0));
     VkCommandBufferBeginInfo cmdBufBeginInfo = {};
@@ -4076,6 +4078,7 @@ void VulkanCommandQueue::execute() {
     present.pResults = nullptr;
 
     ThrowIfFailed(vk::QueuePresentKHR(m_ctx->m_queue, &present));
+    m_frameLimiter.Sleep(m_ctx->m_targetFrameTime);
   }
 
   resetCommandBuffer();
