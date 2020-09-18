@@ -24,7 +24,9 @@ static bool getUSBStringDescriptor(const IUnknownPointer<IOUSBDeviceInterface182
   // hard disk programming in the 80's!
   IOUSBDevRequest request;
 
-  request.bmRequestType = USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice);
+  request.bmRequestType =
+      USBmakebmRequestType(static_cast<typeof kUSBRqDirnMask>(kUSBIn), static_cast<typeof kUSBRqTypeMask>(kUSBStandard),
+                           static_cast<typeof kUSBRqRecipientMask>(kUSBDevice));
   request.bRequest = kUSBRqGetDescriptor;
   request.wValue = (kUSBStringDesc << 8) | idx;
   request.wIndex = 0x409; // english
