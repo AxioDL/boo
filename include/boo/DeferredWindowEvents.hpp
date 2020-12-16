@@ -6,7 +6,6 @@
 #include <vector>
 
 #include "boo/IWindow.hpp"
-#include "nxstl/condition_variable"
 
 namespace boo {
 

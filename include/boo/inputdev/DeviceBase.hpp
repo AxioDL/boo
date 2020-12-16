@@ -7,7 +7,6 @@
 #include <mutex>
 #include <vector>
 
-#include "nxstl/mutex"
 #include "boo/System.hpp"
 
 #if _WIN32
