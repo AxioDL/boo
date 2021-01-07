@@ -13,7 +13,11 @@
 #endif
 #include <string.h>
 #include <stdlib.h>
+#if __x86_64__
 #include <xmmintrin.h>
+#else
+#include "sse2neon.h"
+#endif
 #include "internal.h"
 #define FIFO_SIZE_T int
 #define FIFO_MIN 0x8000

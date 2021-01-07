@@ -212,9 +212,13 @@ elseif(WIN32)
     Xinput
   )
 elseif(APPLE)
+  set(AudioMatrix_SRC lib/audiodev/AudioMatrix.cpp)
+  if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL x86_64)
+    set(AudioMatrix_SRC lib/audiodev/AudioMatrixSSE.cpp)
+  endif()
   target_sources(boo PRIVATE
     lib/audiodev/AQS.cpp
-    lib/audiodev/AudioMatrixSSE.cpp
+    ${AudioMatrix_SRC}
     lib/inputdev/HIDListenerIOKit.cpp
     lib/inputdev/HIDDeviceIOKit.cpp
     lib/mac/ApplicationCocoa.mm
