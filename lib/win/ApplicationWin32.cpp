@@ -126,7 +126,7 @@ public:
 
     bool noD3d = false;
 #if BOO_HAS_VULKAN
-    bool useVulkan = false;
+    bool useVulkan = true;
 #endif
     if (!gfxApi.empty()) {
 #if BOO_HAS_VULKAN
@@ -164,6 +164,32 @@ public:
         noD3d = true;
 #endif
     }
+
+#if BOO_HAS_VULKAN
+    if (useVulkan) {
+      HMODULE vulkanLib = LoadLibraryW(L"vulkan-1.dll");
+      if (vulkanLib) {
+        m_getVkProc = (PFN_vkGetInstanceProcAddr)GetProcAddress(vulkanLib, "vkGetInstanceProcAddr");
+        if (m_getVkProc) {
+          /* Check device support for vulkan */
+          if (g_VulkanContext.m_instance == VK_NULL_HANDLE) {
+            auto appName = getUniqueName();
+            if (g_VulkanContext.initVulkan(WCSTMBS(appName.data()).c_str(), m_getVkProc)) {
+              if (g_VulkanContext.enumerateDevices()) {
+                /* Obtain DXGI Factory */
+                HRESULT hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory1), &m_3dCtx.m_vulkanDxFactory);
+                if (FAILED(hr))
+                  Log.report(logvisor::Fatal, FMT_STRING("unable to create DXGI factory"));
+
+                Log.report(logvisor::Info, FMT_STRING("initialized Vulkan renderer"));
+                return;
+              }
+            }
+          }
+        }
+      }
+    }
+#endif
 
     HMODULE d3d11lib = nullptr;
     if (!noD3d)
@@ -240,32 +266,6 @@ public:
       Log.report(logvisor::Info, FMT_STRING("initialized D3D11 renderer"));
       return;
     }
-
-#if BOO_HAS_VULKAN
-    if (useVulkan) {
-      HMODULE vulkanLib = LoadLibraryW(L"vulkan-1.dll");
-      if (vulkanLib) {
-        m_getVkProc = (PFN_vkGetInstanceProcAddr)GetProcAddress(vulkanLib, "vkGetInstanceProcAddr");
-        if (m_getVkProc) {
-          /* Check device support for vulkan */
-          if (g_VulkanContext.m_instance == VK_NULL_HANDLE) {
-            auto appName = getUniqueName();
-            if (g_VulkanContext.initVulkan(WCSTMBS(appName.data()).c_str(), m_getVkProc)) {
-              if (g_VulkanContext.enumerateDevices()) {
-                /* Obtain DXGI Factory */
-                HRESULT hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory1), &m_3dCtx.m_vulkanDxFactory);
-                if (FAILED(hr))
-                  Log.report(logvisor::Fatal, FMT_STRING("unable to create DXGI factory"));
-
-                Log.report(logvisor::Info, FMT_STRING("initialized Vulkan renderer"));
-                return;
-              }
-            }
-          }
-        }
-      }
-    }
-#endif
 
 #if BOO_HAS_GL
     /* Finally try OpenGL */
