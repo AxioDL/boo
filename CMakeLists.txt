@@ -121,9 +121,14 @@ if(NOT GEKKO AND NOT CAFE AND NOT WINDOWS_STORE AND NOT NX AND NOT APPLE)
   )
 endif()
 
+set(AudioMatrix_SRC lib/audiodev/AudioMatrix.cpp)
+if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL x86_64)
+  set(AudioMatrix_SRC lib/audiodev/AudioMatrixSSE.cpp)
+endif()
+
 if(WINDOWS_STORE)
   target_sources(boo PRIVATE
-    lib/audiodev/AudioMatrixSSE.cpp
+    ${AudioMatrix_SRC}
     lib/audiodev/WASAPI.cpp
     lib/inputdev/HIDDeviceUWP.cpp
     lib/inputdev/HIDListenerUWP.cpp
@@ -184,7 +189,7 @@ elseif(WIN32)
   endif()
 
   target_sources(boo PRIVATE
-    lib/audiodev/AudioMatrixSSE.cpp
+    ${AudioMatrix_SRC}
     lib/audiodev/WASAPI.cpp
     lib/graphicsdev/D3D11.cpp
     lib/inputdev/HIDListenerWinUSB.cpp
@@ -212,10 +217,6 @@ elseif(WIN32)
     Xinput
   )
 elseif(APPLE)
-  set(AudioMatrix_SRC lib/audiodev/AudioMatrix.cpp)
-  if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL x86_64)
-    set(AudioMatrix_SRC lib/audiodev/AudioMatrixSSE.cpp)
-  endif()
   target_sources(boo PRIVATE
     lib/audiodev/AQS.cpp
     ${AudioMatrix_SRC}
@@ -317,7 +318,8 @@ else(NOT GEKKO)
       /usr/lib/dbus-1.0/include
       /usr/lib64/dbus-1.0/include
       /usr/local/lib/dbus-1.0/include
-      /usr/lib/x86_64-linux-gnu/dbus-1.0/include/
+      /usr/lib/x86_64-linux-gnu/dbus-1.0/include
+      /usr/lib/aarch64-linux-gnu/dbus-1.0/include
 
     PATH_SUFFIXES
       dbus-1.0/include/
@@ -383,7 +385,7 @@ else(NOT GEKKO)
       )
     endif()
     target_sources(boo PRIVATE
-      lib/audiodev/AudioMatrixSSE.cpp
+      ${AudioMatrix_SRC}
       lib/inputdev/HIDDeviceUdev.cpp
       lib/inputdev/HIDListenerUdev.cpp
     )
@@ -396,7 +398,7 @@ else(NOT GEKKO)
     )
   else()
     target_sources(boo PRIVATE
-      lib/audiodev/AudioMatrixSSE.cpp
+      ${AudioMatrix_SRC}
       lib/inputdev/HIDDeviceBSD.cpp
       lib/inputdev/HIDListenerBSD.cpp
     )
