@@ -13,9 +13,9 @@
 #endif
 #include <string.h>
 #include <stdlib.h>
-#if __x86_64__
+#if defined(__x86_64__) || defined(_M_X64)
 #include <xmmintrin.h>
-#else
+#elif defined(__ARM_NEON)
 #include "sse2neon.h"
 #endif
 #include "internal.h"
