@@ -39,7 +39,7 @@ class HIDListenerUdev final : public IHIDListener {
 
     /* Filter to USB/BT */
     const char* dt = udev_device_get_devtype(device);
-    DeviceType type;
+    DeviceType type = DeviceType::None;
     int vid = 0, pid = 0;
     const char* manuf = nullptr;
     const char* product = nullptr;
