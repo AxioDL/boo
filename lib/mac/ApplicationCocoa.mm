@@ -109,6 +109,8 @@ public:
     while (![m_metalCtx.m_dev supportsTextureSampleCount:m_metalCtx.m_sampleCount])
       m_metalCtx.m_sampleCount = flp2(m_metalCtx.m_sampleCount - 1);
     Log.report(logvisor::Info, FMT_STRING("using Metal renderer"));
+
+    [[NSApplication sharedApplication] activateIgnoringOtherApps:YES];
   }
 
   EPlatformType getPlatformType() const override {
