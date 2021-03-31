@@ -45,39 +45,39 @@ include_directories (${CMAKE_CURRENT_BINARY_DIR})
 
 # Libsoxr configuration:
 
-set (RDFT32 fft4g32)
+set (RDFT32 fft4g32.c)
 if (WITH_AVFFT AND AVCODEC_FOUND)
-  set (RDFT32 avfft32)
-  set (RDFT32S avfft32s)
+  set (RDFT32 avfft32.c)
+  set (RDFT32S avfft32s.c)
 elseif (WITH_PFFFT)
-  #set (RDFT32 pffft32)
-  set (RDFT32S pffft32s)
+  #set (RDFT32 pffft32.c)
+  set (RDFT32S pffft32s.c)
 elseif (WITH_SIMD)
-  set (RDFT32S fft4g32s)
+  set (RDFT32S fft4g32s.c)
 endif ()
 
 if (WITH_DOUBLE_PRECISION)
-  set (DP_SOURCES rate64)
+  set (DP_SOURCES rate64.c)
 endif ()
 
 if (WITH_SINGLE_PRECISION)
-  set (SP_SOURCES rate32 ${RDFT32})
+  set (SP_SOURCES rate32.c ${RDFT32})
 endif ()
 
 if (HAVE_SIMD)
-  set (SIMD_SOURCES rate32s vr32s ${RDFT32S} simd)
+  set (SIMD_SOURCES rate32s.c vr32s.c ${RDFT32S} simd.c)
   foreach (source ${SIMD_SOURCES})
     set_property (SOURCE ${source} PROPERTY COMPILE_FLAGS ${SIMD_C_FLAGS})
   endforeach ()
 else ()
-  set (SIMD_SOURCES vr32)
+  set (SIMD_SOURCES vr32.c)
 endif ()
 
 
 
 # Libsoxr:
 
-add_library (soxr ${LIB_TYPE} soxr.c data-io dbesi0 filter fft4g64
+add_library (soxr ${LIB_TYPE} soxr.c data-io.c dbesi0.c filter.c fft4g64.c
   ${SP_SOURCES} ${DP_SOURCES} ${SIMD_SOURCES})
 set_target_properties (soxr PROPERTIES
   VERSION "${SO_VERSION}"
