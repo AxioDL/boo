@@ -3180,8 +3180,12 @@ struct VulkanCommandQueue final : IGraphicsCommandQueue {
       Log.report(logvisor::Fatal, FMT_STRING("texture provided to resolveDisplay() must have at least 1 color binding"));
 #endif
 
-    ThrowIfFailed(
-        vk::AcquireNextImageKHR(m_ctx->m_dev, sc.m_swapChain, UINT64_MAX, m_swapChainReadySem, nullptr, &sc.m_backBuf));
+    VkResult res =
+        vk::AcquireNextImageKHR(m_ctx->m_dev, sc.m_swapChain, UINT64_MAX, m_swapChainReadySem, nullptr, &sc.m_backBuf);
+    if (res == VK_ERROR_OUT_OF_DATE_KHR) {
+      return false;
+    }
+    ThrowIfFailed(res);
     VulkanContext::Window::SwapChain::Buffer& dest = sc.m_bufs[sc.m_backBuf];
 
     VulkanDataFactoryImpl* dataFactory = static_cast<VulkanDataFactoryImpl*>(m_parent->getDataFactory());
@@ -4077,7 +4081,12 @@ void VulkanCommandQueue::execute() {
     present.pWaitSemaphores = &m_drawCompleteSem;
     present.pResults = nullptr;
 
-    ThrowIfFailed(vk::QueuePresentKHR(m_ctx->m_queue, &present));
+    VkResult res = vk::QueuePresentKHR(m_ctx->m_queue, &present);
+    if (res == VK_ERROR_OUT_OF_DATE_KHR) {
+      // ignore, resize deferred
+    } else {
+      ThrowIfFailed(res);
+    }
     m_frameLimiter.Sleep(m_ctx->m_targetFrameTime);
   }
 
