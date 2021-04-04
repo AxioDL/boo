@@ -8,6 +8,7 @@
 #include <StandAlone/ResourceLimits.h>
 #include <SPIRV/GlslangToSpv.h>
 #include <SPIRV/disassemble.h>
+#include <optick.h>
 
 #include "boo/IGraphicsContext.hpp"
 #include "boo/graphicsdev/GLSLMacros.hpp"
@@ -603,6 +604,7 @@ void VulkanContext::initDevice() {
   ThrowIfFailed(vk::AllocateCommandBuffers(m_dev, &cmd, &m_loadCmdBuf));
 
   vk::GetDeviceQueue(m_dev, m_graphicsQueueFamilyIndex, 0, &m_queue);
+  OPTICK_GPU_INIT_VULKAN(&m_dev, &m_gpus[0], &m_queue, &m_graphicsQueueFamilyIndex, 1, nullptr);
 
   /* Begin load command buffer here */
   VkCommandBufferBeginInfo cmdBufBeginInfo = {};
@@ -1040,6 +1042,7 @@ struct VulkanDescriptorPool : ListNode<VulkanDescriptorPool, VulkanDataFactoryIm
 
   VulkanDescriptorPool(VulkanDataFactoryImpl* factory)
   : ListNode<VulkanDescriptorPool, VulkanDataFactoryImpl*>(factory) {
+    OPTICK_EVENT();
     VkDescriptorPoolSize poolSizes[2] = {};
     VkDescriptorPoolCreateInfo descriptorPoolInfo = {};
     descriptorPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1057,7 +1060,10 @@ struct VulkanDescriptorPool : ListNode<VulkanDescriptorPool, VulkanDataFactoryIm
     ThrowIfFailed(vk::CreateDescriptorPool(factory->m_ctx->m_dev, &descriptorPoolInfo, nullptr, &m_descPool));
   }
 
-  ~VulkanDescriptorPool() { vk::DestroyDescriptorPool(m_head->m_ctx->m_dev, m_descPool, nullptr); }
+  ~VulkanDescriptorPool() {
+    OPTICK_EVENT();
+    vk::DestroyDescriptorPool(m_head->m_ctx->m_dev, m_descPool, nullptr);
+  }
 
   static std::unique_lock<std::recursive_mutex> _getHeadLock(VulkanDataFactoryImpl* factory) {
     return std::unique_lock<std::recursive_mutex>{factory->m_dataMutex};
@@ -1066,6 +1072,7 @@ struct VulkanDescriptorPool : ListNode<VulkanDescriptorPool, VulkanDataFactoryIm
 };
 
 boo::ObjToken<VulkanDescriptorPool> VulkanDataFactoryImpl::allocateDescriptorSets(VkDescriptorSet* out) {
+  OPTICK_EVENT();
   std::lock_guard<std::recursive_mutex> lk(m_dataMutex);
   boo::ObjToken<VulkanDescriptorPool> pool;
   if (!m_descPoolHead || m_descPoolHead->m_allocatedSets == BOO_VK_MAX_DESCRIPTOR_SETS)
@@ -1091,6 +1098,7 @@ struct AllocatedBuffer {
   VmaAllocation m_allocation;
 
   void* _create(VulkanContext* ctx, const VkBufferCreateInfo* pBufferCreateInfo, VmaMemoryUsage usage) {
+    OPTICK_EVENT();
     assert(m_buffer == VK_NULL_HANDLE && "create may only be called once");
     VmaAllocationCreateInfo bufAllocInfo = {};
     bufAllocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
@@ -1112,6 +1120,7 @@ struct AllocatedBuffer {
 
   void destroy(VulkanContext* ctx) {
     if (m_buffer) {
+      OPTICK_EVENT();
       vmaDestroyBuffer(ctx->m_allocator, m_buffer, m_allocation);
       m_buffer = VK_NULL_HANDLE;
     }
@@ -2705,6 +2714,7 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
   }
 
   void commit(VulkanContext* ctx) {
+    OPTICK_EVENT();
     VkWriteDescriptorSet writes[(BOO_GLSL_MAX_UNIFORM_COUNT + BOO_GLSL_MAX_TEXTURE_COUNT) * 2] = {};
     size_t totalWrites = 0;
     for (int b = 0; b < 2; ++b) {
@@ -2780,8 +2790,10 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
         ++binding;
       }
     }
-    if (totalWrites)
+    if (totalWrites) {
+      OPTICK_EVENT("vk::UpdateDescriptorSets");
       vk::UpdateDescriptorSets(ctx->m_dev, totalWrites, writes, 0, nullptr);
+    }
 
 #ifndef NDEBUG
     m_committed = true;
@@ -2879,6 +2891,7 @@ struct VulkanCommandQueue final : IGraphicsCommandQueue {
     cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     cmdBufBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     ThrowIfFailed(vk::BeginCommandBuffer(m_cmdBufs[m_fillBuf], &cmdBufBeginInfo));
+    OPTICK_GPU_CONTEXT(m_cmdBufs[m_fillBuf]);
   }
 
   void resetDynamicCommandBuffer() {
@@ -2887,6 +2900,7 @@ struct VulkanCommandQueue final : IGraphicsCommandQueue {
     cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     cmdBufBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     ThrowIfFailed(vk::BeginCommandBuffer(m_dynamicCmdBufs[m_fillBuf], &cmdBufBeginInfo));
+    OPTICK_GPU_CONTEXT(m_dynamicCmdBufs[m_fillBuf]);
     m_dynamicNeedsReset = false;
   }
 
@@ -2918,10 +2932,12 @@ struct VulkanCommandQueue final : IGraphicsCommandQueue {
 
     ThrowIfFailed(vk::AllocateCommandBuffers(m_ctx->m_dev, &allocInfo, m_cmdBufs));
     ThrowIfFailed(vk::BeginCommandBuffer(m_cmdBufs[0], &cmdBufBeginInfo));
+    OPTICK_GPU_CONTEXT(m_cmdBufs[0]);
 
     allocInfo.commandPool = m_dynamicCmdPool;
     ThrowIfFailed(vk::AllocateCommandBuffers(m_ctx->m_dev, &allocInfo, m_dynamicCmdBufs));
     ThrowIfFailed(vk::BeginCommandBuffer(m_dynamicCmdBufs[0], &cmdBufBeginInfo));
+    OPTICK_GPU_CONTEXT(m_dynamicCmdBufs[0]);
 
     VkSemaphoreCreateInfo semInfo = {};
     semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -3580,6 +3596,7 @@ template <class DataCls>
 void VulkanGraphicsBufferD<DataCls>::update(int b) {
   int slot = 1 << b;
   if ((slot & m_validSlots) == 0) {
+    OPTICK_EVENT();
     memmove(m_bufferPtrs[b], m_cpuBuf.get(), m_cpuSz);
     m_validSlots |= slot;
   }
@@ -3587,6 +3604,7 @@ void VulkanGraphicsBufferD<DataCls>::update(int b) {
 
 template <class DataCls>
 void VulkanGraphicsBufferD<DataCls>::load(const void* data, size_t sz) {
+  OPTICK_EVENT();
   size_t bufSz = std::min(sz, m_cpuSz);
   memmove(m_cpuBuf.get(), data, bufSz);
   m_validSlots = 0;
@@ -3675,12 +3693,14 @@ VulkanDataFactory::Context::~Context() {}
 
 boo::ObjToken<IGraphicsBufferS> VulkanDataFactory::Context::newStaticBuffer(BufferUse use, const void* data,
                                                                             size_t stride, size_t count) {
+  OPTICK_EVENT();
   VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
   return {new VulkanGraphicsBufferS(m_data, use, factory.m_ctx, data, stride, count)};
 }
 
 boo::ObjToken<IGraphicsBufferD> VulkanDataFactory::Context::newDynamicBuffer(BufferUse use, size_t stride,
                                                                              size_t count) {
+  OPTICK_EVENT();
   VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
   return {new VulkanGraphicsBufferD<BaseGraphicsData>(m_data, use, factory.m_ctx, stride, count)};
 }
@@ -3688,6 +3708,7 @@ boo::ObjToken<IGraphicsBufferD> VulkanDataFactory::Context::newDynamicBuffer(Buf
 boo::ObjToken<ITextureS> VulkanDataFactory::Context::newStaticTexture(size_t width, size_t height, size_t mips,
                                                                       TextureFormat fmt, TextureClampMode clampMode,
                                                                       const void* data, size_t sz) {
+  OPTICK_EVENT();
   VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
   return {new VulkanTextureS(m_data, factory.m_ctx, width, height, mips, fmt, clampMode, data, sz)};
 }
@@ -3696,12 +3717,14 @@ boo::ObjToken<ITextureSA> VulkanDataFactory::Context::newStaticArrayTexture(size
                                                                             size_t mips, TextureFormat fmt,
                                                                             TextureClampMode clampMode,
                                                                             const void* data, size_t sz) {
+  OPTICK_EVENT();
   VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
   return {new VulkanTextureSA(m_data, factory.m_ctx, width, height, layers, mips, fmt, clampMode, data, sz)};
 }
 
 boo::ObjToken<ITextureD> VulkanDataFactory::Context::newDynamicTexture(size_t width, size_t height, TextureFormat fmt,
                                                                        TextureClampMode clampMode) {
+  OPTICK_EVENT();
   VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
   VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(factory.m_parent->getCommandQueue());
   return {new VulkanTextureD(m_data, q, width, height, fmt, clampMode)};
@@ -3710,12 +3733,14 @@ boo::ObjToken<ITextureD> VulkanDataFactory::Context::newDynamicTexture(size_t wi
 boo::ObjToken<ITextureR> VulkanDataFactory::Context::newRenderTexture(size_t width, size_t height,
                                                                       TextureClampMode clampMode, size_t colorBindCount,
                                                                       size_t depthBindCount) {
+  OPTICK_EVENT();
   VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
   VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(factory.m_parent->getCommandQueue());
   return {new VulkanTextureR(m_data, q, width, height, clampMode, colorBindCount, depthBindCount)};
 }
 
 ObjToken<ITextureCubeR> VulkanDataFactory::Context::newCubeRenderTexture(size_t width, size_t mips) {
+  OPTICK_EVENT();
   VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
   VulkanCommandQueue* q = static_cast<VulkanCommandQueue*>(factory.m_parent->getCommandQueue());
   return {new VulkanTextureCubeR(m_data, q, width, mips)};
@@ -3723,6 +3748,7 @@ ObjToken<ITextureCubeR> VulkanDataFactory::Context::newCubeRenderTexture(size_t 
 
 ObjToken<IShaderStage> VulkanDataFactory::Context::newShaderStage(const uint8_t* data, size_t size,
                                                                   PipelineStage stage) {
+  OPTICK_EVENT();
   VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
 
   if (stage == PipelineStage::Control || stage == PipelineStage::Evaluation) {
@@ -3737,6 +3763,7 @@ ObjToken<IShaderPipeline> VulkanDataFactory::Context::newShaderPipeline(
     ObjToken<IShaderStage> vertex, ObjToken<IShaderStage> fragment, ObjToken<IShaderStage> geometry,
     ObjToken<IShaderStage> control, ObjToken<IShaderStage> evaluation, const VertexFormatInfo& vtxFmt,
     const AdditionalPipelineInfo& additionalInfo, bool asynchronous) {
+  OPTICK_EVENT();
   VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
 
   if (control || evaluation) {
@@ -3757,6 +3784,7 @@ boo::ObjToken<IShaderDataBinding> VulkanDataFactory::Context::newShaderDataBindi
     const boo::ObjToken<IGraphicsBuffer>* ubufs, const PipelineStage* /*ubufStages*/, const size_t* ubufOffs,
     const size_t* ubufSizes, size_t texCount, const boo::ObjToken<ITexture>* texs, const int* bindIdxs,
     const bool* bindDepth, size_t baseVert, size_t baseInst) {
+  OPTICK_EVENT();
   VulkanDataFactoryImpl& factory = static_cast<VulkanDataFactoryImpl&>(m_parent);
   return {new VulkanShaderDataBinding(m_data, factory, pipeline, vbuf, instVbuf, ibuf, ubufCount, ubufs, ubufOffs,
                                       ubufSizes, texCount, texs, bindIdxs, bindDepth, baseVert, baseInst)};
@@ -3839,16 +3867,21 @@ void VulkanDataFactoryImpl::commitTransaction(
   }
 
   /* place static textures */
-  if (data->m_STexs)
+  if (data->m_STexs) {
+    OPTICK_EVENT("m_STexs place static textures");
     for (ITextureS& tex : *data->m_STexs)
       static_cast<VulkanTextureS&>(tex).placeForGPU(m_ctx);
+  }
 
-  if (data->m_SATexs)
+  if (data->m_SATexs) {
+    OPTICK_EVENT("m_SATexs place static textures");
     for (ITextureSA& tex : *data->m_SATexs)
       static_cast<VulkanTextureSA&>(tex).placeForGPU(m_ctx);
+  }
 
   /* allocate memory and place dynamic textures */
   if (texMemSize) {
+    OPTICK_EVENT("place dynamic textures");
     AllocatedBuffer& poolBuf = data->m_texStagingBuffer;
 
     VkBufferCreateInfo createInfo = {};
@@ -3868,41 +3901,67 @@ void VulkanDataFactoryImpl::commitTransaction(
     for (ITextureR& tex : *data->m_RTexs)
       static_cast<VulkanTextureR&>(tex).initializeBindLayouts(m_ctx);
 
-  /* Execute static uploads */
-  ThrowIfFailed(vk::EndCommandBuffer(m_ctx->m_loadCmdBuf));
-  VkSubmitInfo submitInfo = {};
-  submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submitInfo.commandBufferCount = 1;
-  submitInfo.pCommandBuffers = &m_ctx->m_loadCmdBuf;
+  {
+    /* Execute static uploads */
+    OPTICK_EVENT("vk::EndCommandBuffer");
+    ThrowIfFailed(vk::EndCommandBuffer(m_ctx->m_loadCmdBuf));
+  }
 
-  /* Take exclusive lock here and submit queue */
-  ThrowIfFailed(vk::QueueWaitIdle(m_ctx->m_queue));
-  ThrowIfFailed(vk::QueueSubmit(m_ctx->m_queue, 1, &submitInfo, VK_NULL_HANDLE));
+  {
+    /* Take exclusive lock here and submit queue */
+    OPTICK_EVENT("vk::QueueWaitIdle");
+    ThrowIfFailed(vk::QueueWaitIdle(m_ctx->m_queue));
+  }
+
+  {
+    OPTICK_EVENT("vk::QueueSubmit");
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &m_ctx->m_loadCmdBuf;
+    ThrowIfFailed(vk::QueueSubmit(m_ctx->m_queue, 1, &submitInfo, VK_NULL_HANDLE));
+  }
 
   /* Commit data bindings (create descriptor sets) */
-  if (data->m_SBinds)
+  if (data->m_SBinds) {
+    OPTICK_EVENT("Commit data bindings");
     for (IShaderDataBinding& bind : *data->m_SBinds)
       static_cast<VulkanShaderDataBinding&>(bind).commit(m_ctx);
+  }
 
-  /* Wait for uploads to complete */
-  ThrowIfFailed(vk::QueueWaitIdle(m_ctx->m_queue));
-  qlk.unlock();
+  {
+    /* Wait for uploads to complete */
+    OPTICK_EVENT("vk::QueueWaitIdle");
+    ThrowIfFailed(vk::QueueWaitIdle(m_ctx->m_queue));
+    qlk.unlock();
+  }
 
-  /* Reset command buffer */
-  ThrowIfFailed(vk::ResetCommandBuffer(m_ctx->m_loadCmdBuf, 0));
-  VkCommandBufferBeginInfo cmdBufBeginInfo = {};
-  cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  cmdBufBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-  ThrowIfFailed(vk::BeginCommandBuffer(m_ctx->m_loadCmdBuf, &cmdBufBeginInfo));
+  {
+    /* Reset command buffer */
+    OPTICK_EVENT("vk::ResetCommandBuffer");
+    ThrowIfFailed(vk::ResetCommandBuffer(m_ctx->m_loadCmdBuf, 0));
+  }
+
+  {
+    OPTICK_EVENT("vk::BeginCommandBuffer");
+    VkCommandBufferBeginInfo cmdBufBeginInfo = {};
+    cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    cmdBufBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    ThrowIfFailed(vk::BeginCommandBuffer(m_ctx->m_loadCmdBuf, &cmdBufBeginInfo));
+  }
 
   /* Delete upload objects */
-  if (data->m_STexs)
+  if (data->m_STexs) {
+    OPTICK_EVENT("m_STexs deleteUploadObjects");
     for (ITextureS& tex : *data->m_STexs)
       static_cast<VulkanTextureS&>(tex).deleteUploadObjects();
+  }
 
-  if (data->m_SATexs)
+  if (data->m_SATexs) {
+    OPTICK_EVENT("m_SATexs deleteUploadObjects");
     for (ITextureSA& tex : *data->m_SATexs)
       static_cast<VulkanTextureSA&>(tex).deleteUploadObjects();
+  }
 }
 
 boo::ObjToken<IGraphicsBufferD> VulkanDataFactoryImpl::newPoolBuffer(BufferUse use, size_t stride,
@@ -3964,66 +4023,77 @@ void VulkanCommandQueue::execute() {
   SCOPED_GRAPHICS_DEBUG_GROUP(this, "VulkanCommandQueue::execute", {1.f, 0.f, 0.f, 1.f});
 
   /* Stage dynamic uploads */
-  VulkanDataFactoryImpl* gfxF = static_cast<VulkanDataFactoryImpl*>(m_parent->getDataFactory());
-  std::unique_lock<std::recursive_mutex> datalk(gfxF->m_dataMutex);
-  if (gfxF->m_dataHead) {
-    for (BaseGraphicsData& d : *gfxF->m_dataHead) {
-      if (d.m_DBufs)
-        for (IGraphicsBufferD& b : *d.m_DBufs)
-          static_cast<VulkanGraphicsBufferD<BaseGraphicsData>&>(b).update(m_fillBuf);
-      if (d.m_DTexs)
-        for (ITextureD& t : *d.m_DTexs)
-          static_cast<VulkanTextureD&>(t).update(m_fillBuf);
+  {
+    OPTICK_EVENT("Stage dynamic uploads");
+    VulkanDataFactoryImpl* gfxF = static_cast<VulkanDataFactoryImpl*>(m_parent->getDataFactory());
+    std::unique_lock<std::recursive_mutex> datalk(gfxF->m_dataMutex);
+    if (gfxF->m_dataHead) {
+      for (BaseGraphicsData& d : *gfxF->m_dataHead) {
+        if (d.m_DBufs)
+          for (IGraphicsBufferD& b : *d.m_DBufs)
+            static_cast<VulkanGraphicsBufferD<BaseGraphicsData>&>(b).update(m_fillBuf);
+        if (d.m_DTexs)
+          for (ITextureD& t : *d.m_DTexs)
+            static_cast<VulkanTextureD&>(t).update(m_fillBuf);
+      }
     }
-  }
-  if (gfxF->m_poolHead) {
-    for (BaseGraphicsPool& p : *gfxF->m_poolHead) {
-      if (p.m_DBufs)
-        for (IGraphicsBufferD& b : *p.m_DBufs)
-          static_cast<VulkanGraphicsBufferD<BaseGraphicsData>&>(b).update(m_fillBuf);
+    if (gfxF->m_poolHead) {
+      for (BaseGraphicsPool& p : *gfxF->m_poolHead) {
+        if (p.m_DBufs)
+          for (IGraphicsBufferD& b : *p.m_DBufs)
+            static_cast<VulkanGraphicsBufferD<BaseGraphicsData>&>(b).update(m_fillBuf);
+      }
     }
+    datalk.unlock();
   }
-  datalk.unlock();
 
   /* Perform dynamic uploads */
-  std::unique_lock<std::mutex> lk(m_ctx->m_queueLock);
-  if (!m_dynamicNeedsReset) {
-    vk::EndCommandBuffer(m_dynamicCmdBufs[m_fillBuf]);
+  {
+    OPTICK_EVENT("Perform dynamic uploads");
+    std::unique_lock<std::mutex> lk(m_ctx->m_queueLock);
+    if (!m_dynamicNeedsReset) {
+      vk::EndCommandBuffer(m_dynamicCmdBufs[m_fillBuf]);
 
-    vk::WaitForFences(m_ctx->m_dev, 1, &m_dynamicBufFence, VK_FALSE, -1);
-    vk::ResetFences(m_ctx->m_dev, 1, &m_dynamicBufFence);
+      vk::WaitForFences(m_ctx->m_dev, 1, &m_dynamicBufFence, VK_FALSE, -1);
+      vk::ResetFences(m_ctx->m_dev, 1, &m_dynamicBufFence);
 
-    VkSubmitInfo submitInfo = {};
-    submitInfo.pNext = nullptr;
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.waitSemaphoreCount = 0;
-    submitInfo.pWaitSemaphores = nullptr;
-    submitInfo.pWaitDstStageMask = nullptr;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &m_dynamicCmdBufs[m_fillBuf];
-    submitInfo.signalSemaphoreCount = 0;
-    submitInfo.pSignalSemaphores = nullptr;
-    ThrowIfFailed(vk::QueueSubmit(m_ctx->m_queue, 1, &submitInfo, m_dynamicBufFence));
+      VkSubmitInfo submitInfo = {};
+      submitInfo.pNext = nullptr;
+      submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+      submitInfo.waitSemaphoreCount = 0;
+      submitInfo.pWaitSemaphores = nullptr;
+      submitInfo.pWaitDstStageMask = nullptr;
+      submitInfo.commandBufferCount = 1;
+      submitInfo.pCommandBuffers = &m_dynamicCmdBufs[m_fillBuf];
+      submitInfo.signalSemaphoreCount = 0;
+      submitInfo.pSignalSemaphores = nullptr;
+      ThrowIfFailed(vk::QueueSubmit(m_ctx->m_queue, 1, &submitInfo, m_dynamicBufFence));
+    }
   }
 
   vk::CmdEndRenderPass(m_cmdBufs[m_fillBuf]);
   m_boundTarget.reset();
 
-  /* Check on fence */
-  if (m_submitted && vk::GetFenceStatus(m_ctx->m_dev, m_drawCompleteFence) == VK_NOT_READY) {
-    /* Abandon this list (renderer too slow) */
-    resetCommandBuffer();
-    _rollbackImageLayouts();
-    m_dynamicNeedsReset = true;
-    m_resolveDispSource = nullptr;
+  {
+    OPTICK_EVENT("Check on fence");
+    /* Check on fence */
+    if (m_submitted && vk::GetFenceStatus(m_ctx->m_dev, m_drawCompleteFence) == VK_NOT_READY) {
+      /* Abandon this list (renderer too slow) */
+      resetCommandBuffer();
+      _rollbackImageLayouts();
+      m_dynamicNeedsReset = true;
+      m_resolveDispSource = nullptr;
 
-    /* Clear dead data */
-    m_drawResTokens[m_fillBuf].clear();
-    return;
+      /* Clear dead data */
+      m_drawResTokens[m_fillBuf].clear();
+      return;
+    }
+    m_submitted = false;
   }
-  m_submitted = false;
-
-  vk::ResetFences(m_ctx->m_dev, 1, &m_drawCompleteFence);
+  {
+    OPTICK_EVENT("vk::ResetFences");
+    vk::ResetFences(m_ctx->m_dev, 1, &m_drawCompleteFence);
+  }
 
   /* Perform texture and swap-chain resizes */
   if (m_ctx->_resizeSwapChains() || m_texResizes.size() || m_cubeTexResizes.size()) {
@@ -4064,8 +4134,12 @@ void VulkanCommandQueue::execute() {
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = &m_drawCompleteSem;
   }
-  ThrowIfFailed(vk::EndCommandBuffer(m_cmdBufs[m_drawBuf]));
-  ThrowIfFailed(vk::QueueSubmit(m_ctx->m_queue, 1, &submitInfo, m_drawCompleteFence));
+
+  {
+    OPTICK_EVENT("vk::QueueSubmit");
+    ThrowIfFailed(vk::EndCommandBuffer(m_cmdBufs[m_drawBuf]));
+    ThrowIfFailed(vk::QueueSubmit(m_ctx->m_queue, 1, &submitInfo, m_drawCompleteFence));
+  }
   m_submitted = true;
 
   if (submitInfo.signalSemaphoreCount) {
@@ -4080,6 +4154,8 @@ void VulkanCommandQueue::execute() {
     present.waitSemaphoreCount = 1;
     present.pWaitSemaphores = &m_drawCompleteSem;
     present.pResults = nullptr;
+
+    OPTICK_GPU_FLIP(&thisSc.m_swapChain);
 
     VkResult res = vk::QueuePresentKHR(m_ctx->m_queue, &present);
     if (res == VK_ERROR_OUT_OF_DATE_KHR) {

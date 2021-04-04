@@ -13,6 +13,7 @@
 #include <thread>
 #include <vector>
 
+#include <optick.h>
 #include "boo/graphicsdev/IGraphicsDataFactory.hpp"
 #include "boo/graphicsdev/IGraphicsCommandQueue.hpp"
 #include "lib/Common.hpp"
@@ -281,7 +282,7 @@ public:
 };
 #define SCOPED_GRAPHICS_DEBUG_GROUP(...) GraphicsDebugGroup _GfxDbg_(__VA_ARGS__);
 #else
-#define SCOPED_GRAPHICS_DEBUG_GROUP(...)
+#define SCOPED_GRAPHICS_DEBUG_GROUP(_, name, ...) OPTICK_EVENT(name)
 #endif
 
 class Limiter {

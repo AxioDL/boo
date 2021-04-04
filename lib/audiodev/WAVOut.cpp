@@ -4,6 +4,7 @@
 
 #include "boo/audiodev/IAudioVoiceEngine.hpp"
 #include <logvisor/logvisor.hpp>
+#include <optick.h>
 
 namespace boo {
 
@@ -227,6 +228,7 @@ struct WAVOutVoiceEngine : BaseAudioVoiceEngine {
   }
 
   void pumpAndMixVoices() override {
+    OPTICK_EVENT();
     size_t frameSz = 4 * m_mixInfo.m_channelMap.m_channelCount;
     _pumpAndMixVoices(m_5msFrames, m_interleavedBuf.data());
     fwrite(m_interleavedBuf.data(), 1, m_5msFrames * frameSz, m_fp);

@@ -168,6 +168,7 @@ elseif(WIN32)
       lib/graphicsdev/Vulkan.cpp
       lib/graphicsdev/VulkanDispatchTable.cpp
     )
+    set(BOO_ENABLE_VULKAN_IN_OPTICK TRUE)
   endif()
 
   find_file(TE_VIRTUAL_MIDI_H teVirtualMIDI.h PATHS
@@ -211,6 +212,7 @@ elseif(WIN32)
     Winusb opengl32
     Xinput
   )
+  set(SHOULD_LINK_OPTICK TRUE)
 elseif(APPLE)
   target_sources(boo PRIVATE
     lib/audiodev/AQS.cpp
@@ -352,6 +354,7 @@ else(NOT GEKKO)
       Xi
       Xrandr
   )
+  set(SHOULD_LINK_OPTICK TRUE)
 
   if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
     find_path(VULKAN_INCLUDE_DIR
@@ -368,6 +371,7 @@ else(NOT GEKKO)
           -DBOO_HAS_VULKAN=1
           -DVK_USE_PLATFORM_XCB_KHR=1
       )
+      set(BOO_ENABLE_VULKAN_IN_OPTICK TRUE)
     endif()
     target_sources(boo PRIVATE
       ${AudioMatrix_SRC}
@@ -431,6 +435,18 @@ if(NOT NX)
       xxhash
   )
 endif()
+
+
+# Include Optick and change the default value of some options
+option(OPTICK_ENABLED "Enable profiling with Optick" OFF)
+set(OPTICK_USE_VULKAN ${BOO_ENABLE_VULKAN_IN_OPTICK} CACHE BOOL "Built-in support for Vulkan" FORCE)
+set(OPTICK_INSTALL_TARGETS OFF CACHE BOOL "Should optick be installed? Set to OFF if you use add_subdirectory to include Optick.")
+add_subdirectory(optick)
+
+if(SHOULD_LINK_OPTICK)
+    target_link_libraries(boo PUBLIC OptickCore)
+endif()
+
 
 target_link_libraries(boo PUBLIC logvisor)
 target_include_directories(boo
