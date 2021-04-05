@@ -17,7 +17,14 @@ set(IPP_STATIC ON)
 include(FindPackageHandleStandardArgs)
 
 if(WIN32)
-    set(IPP_ROOT $ENV{PROGRAMFILES\(X86\)}/IntelSWTools/compilers_and_libraries/windows/ipp CACHE PATH "Folder contains IPP")
+    if (EXISTS "$ENV{PROGRAMFILES\(X86\)}/IntelSWTools/compilers_and_libraries/windows/ipp"
+            AND NOT EXISTS "$ENV{PROGRAMFILES\(X86\)}/Intel/oneAPI/ipp/latest")
+        # old path
+        set(IPP_ROOT "$ENV{PROGRAMFILES\(X86\)}/IntelSWTools/compilers_and_libraries/windows/ipp" CACHE PATH "Folder contains IPP")
+    else()
+        # new path
+        set(IPP_ROOT "$ENV{PROGRAMFILES\(X86\)}/Intel/oneAPI/ipp/latest" CACHE PATH "Folder contains IPP")
+    endif()
 else()
     set(IPP_ROOT /opt/intel/ipp CACHE PATH "Folder contains IPP")
 endif()
