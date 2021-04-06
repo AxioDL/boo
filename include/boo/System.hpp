@@ -22,8 +22,6 @@ static inline ComPtr<T>* ReferenceComPtr(ComPtr<T>& ptr) {
 #include <string>
 #include <string_view>
 
-#define FMT_STRING_ALIAS 1
-#define FMT_ENFORCE_COMPILE_STRING 1
 #include <fmt/format.h>
 
 #ifndef ENABLE_BITWISE_ENUM
