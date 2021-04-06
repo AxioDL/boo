@@ -44,7 +44,7 @@ public:
   void deviceError(const S& format, Args&&... args) {
     vdeviceError(fmt::to_string_view<Char>(format),
       fmt::basic_format_args<fmt::buffer_context<Char>>(
-        fmt::internal::make_args_checked<Args...>(format, args...)));
+        fmt::make_args_checked<Args...>(format, args...)));
   }
   virtual void initialCycle() {}
   virtual void transferCycle() {}

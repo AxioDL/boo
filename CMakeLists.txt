@@ -93,11 +93,6 @@ target_include_directories(boo PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-add_subdirectory(lib/graphicsdev/nx)
-if(TARGET nx_compiler)
-  target_compile_definitions(boo PUBLIC -DHECL_NOUVEAU_NX=1)
-endif()
-
 if(NOT GEKKO AND NOT CAFE AND NOT WINDOWS_STORE AND NOT NX)
   add_library(glew lib/graphicsdev/glew.c)
   # For some reason, clang takes forever if glew.c is not built with -Os
@@ -265,16 +260,6 @@ elseif(APPLE)
     ${METAL_LIBRARY}
     ${QUARTZCORE_LIBRARY}
   )
-elseif(NX)
-  target_compile_definitions(boo PUBLIC -DBOO_HAS_NX=1)
-  target_sources(boo PRIVATE
-    lib/nx/ApplicationNX.cpp
-    lib/nx/WindowNX.cpp
-    lib/audiodev/AudioMatrix.cpp
-    lib/inputdev/HIDListenerNX.cpp
-    lib/inputdev/HIDDeviceNX.cpp
-  )
-  target_link_libraries(boo PUBLIC nx_runtime)
 else(NOT GEKKO)
   target_sources(boo PRIVATE
     lib/audiodev/LinuxMidi.hpp
