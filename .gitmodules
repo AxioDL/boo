@@ -6,3 +6,6 @@
 	path = logvisor
 	url = ../logvisor.git
 	branch = master
+[submodule "optick"]
+	path = optick
+	url = https://github.com/bombomby/optick.git

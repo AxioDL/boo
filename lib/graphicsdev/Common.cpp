@@ -16,6 +16,7 @@ void UpdateGammaLUT(ITextureD* tex, float gamma) {
 }
 
 void Limiter::Sleep(nanotime_t targetFrameTime) {
+  OPTICK_EVENT();
   if (targetFrameTime == 0) {
     return;
   }

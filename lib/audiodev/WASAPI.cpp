@@ -11,6 +11,7 @@
 #include <Functiondiscoverykeys_devpkey.h>
 
 #include <logvisor/logvisor.hpp>
+#include <optick.h>
 
 #ifdef TE_VIRTUAL_MIDI
 #include <teVirtualMIDI.h>
@@ -391,6 +392,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
   }
 
   void pumpAndMixVoices() override {
+    OPTICK_EVENT();
 #if WINDOWS_STORE
     if (!m_ready)
       return;
