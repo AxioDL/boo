@@ -212,7 +212,6 @@ elseif(WIN32)
     Winusb opengl32
     Xinput
   )
-  set(SHOULD_LINK_OPTICK TRUE)
 elseif(APPLE)
   target_sources(boo PRIVATE
     lib/audiodev/AQS.cpp
@@ -354,7 +353,6 @@ else(NOT GEKKO)
       Xi
       Xrandr
   )
-  set(SHOULD_LINK_OPTICK TRUE)
 
   if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
     find_path(VULKAN_INCLUDE_DIR
@@ -436,19 +434,13 @@ if(NOT NX)
   )
 endif()
 
-
 # Include Optick and change the default value of some options
 option(OPTICK_ENABLED "Enable profiling with Optick" OFF)
 set(OPTICK_USE_VULKAN ${BOO_ENABLE_VULKAN_IN_OPTICK} CACHE BOOL "Built-in support for Vulkan" FORCE)
-set(OPTICK_INSTALL_TARGETS OFF CACHE BOOL "Should optick be installed? Set to OFF if you use add_subdirectory to include Optick.")
+set(OPTICK_INSTALL_TARGETS OFF CACHE BOOL "Should optick be installed? Set to OFF if you use add_subdirectory to include Optick." FORCE)
 add_subdirectory(optick)
 
-if(SHOULD_LINK_OPTICK)
-    target_link_libraries(boo PUBLIC OptickCore)
-endif()
-
-
-target_link_libraries(boo PUBLIC logvisor)
+target_link_libraries(boo PUBLIC logvisor OptickCore)
 target_include_directories(boo
   PUBLIC
     include
