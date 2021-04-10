@@ -8,4 +8,4 @@
 	branch = master
 [submodule "optick"]
 	path = optick
-	url = https://github.com/bombomby/optick.git
+	url = https://github.com/AxioDL/optick.git
