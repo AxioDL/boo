@@ -1,8 +1,6 @@
 #include "lib/audiodev/AudioMatrix.hpp"
 #include "lib/audiodev/AudioVoiceEngine.hpp"
 
-#include <immintrin.h>
-
 namespace boo {
 
 union TVectorUnion {

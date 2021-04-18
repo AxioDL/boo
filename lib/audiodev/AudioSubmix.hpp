@@ -11,8 +11,11 @@
 #include "boo/audiodev/IAudioSubmix.hpp"
 #include "lib/audiodev/Common.hpp"
 
-#if __SSE__
+#if defined(__x86_64__) || defined(_M_AMD64)
 #include <immintrin.h>
+#elif defined(__aarch64__) || defined(_M_ARM64)
+#define __SSE__ 1
+#include "sse2neon.h"
 #endif
 
 struct AudioUnitVoiceEngine;
