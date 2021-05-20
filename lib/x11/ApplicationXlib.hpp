@@ -23,6 +23,7 @@ DBusConnection* RegisterDBus(const char* appName, bool& isFirst);
 #include <mutex>
 #include <sys/param.h>
 #include <thread>
+#include <optional>
 
 #include "XlibCommon.hpp"
 #include <X11/cursorfont.h>
