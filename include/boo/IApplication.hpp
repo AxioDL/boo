@@ -56,21 +56,20 @@ public:
 int ApplicationRun(IApplication::EPlatformType platform, IApplicationCallback& cb, SystemStringView uniqueName,
                    SystemStringView friendlyName, SystemStringView pname, const std::vector<SystemString>& args,
                    std::string_view gfxApi = {}, uint32_t samples = 1, uint32_t anisotropy = 1, bool deepColor = false,
-                   int64_t targetFrameTime = 0, bool singleInstance = true);
+                   bool singleInstance = true);
 extern IApplication* APP;
 
 static inline int ApplicationRun(IApplication::EPlatformType platform, IApplicationCallback& cb,
                                  SystemStringView uniqueName, SystemStringView friendlyName, int argc,
                                  const SystemChar** argv, std::string_view gfxApi = {}, uint32_t samples = 1,
-                                 uint32_t anisotropy = 1, bool deepColor = false, int64_t targetFrameTime = 0,
-                                 bool singleInstance = true) {
+                                 uint32_t anisotropy = 1, bool deepColor = false, bool singleInstance = true) {
   if (APP)
     return 1;
   std::vector<SystemString> args;
   for (int i = 1; i < argc; ++i)
     args.push_back(argv[i]);
   return ApplicationRun(platform, cb, uniqueName, friendlyName, argv[0], args, gfxApi, samples, anisotropy, deepColor,
-                        targetFrameTime, singleInstance);
+                        singleInstance);
 }
 
 } // namespace boo

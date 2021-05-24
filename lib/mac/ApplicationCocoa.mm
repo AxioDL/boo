@@ -211,7 +211,6 @@ int ApplicationRun(IApplication::EPlatformType platform,
                    uint32_t samples,
                    uint32_t anisotropy,
                    bool deepColor,
-                   int64_t targetFrameTime,
                    bool singleInstance) {
   std::string thrName = std::string(friendlyName) + " Main Thread";
   logvisor::RegisterThreadName(thrName.c_str());
