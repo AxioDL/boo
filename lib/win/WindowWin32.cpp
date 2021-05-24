@@ -578,6 +578,8 @@ static uint32_t translateKeysym(WPARAM sym, UINT scancode, ESpecialKey& specialS
     specialSym = ESpecialKey::Up;
   else if (sym == VK_DOWN)
     specialSym = ESpecialKey::Down;
+  else if (sym == VK_TAB)
+    specialSym = ESpecialKey::Tab;
   else if (sym == VK_SHIFT)
     modifierSym = EModifierKey::Shift;
   else if (sym == VK_CONTROL)

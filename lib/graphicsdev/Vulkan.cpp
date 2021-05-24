@@ -2204,13 +2204,14 @@ public:
   }
 };
 
-static const size_t SEMANTIC_SIZE_TABLE[] = {0, 12, 16, 12, 16, 16, 4, 8, 16, 16, 16};
+static const size_t SEMANTIC_SIZE_TABLE[] = {0, 12, 16, 12, 16, 16, 4, 8, 16, 16, 16, 8};
 
 static const VkFormat SEMANTIC_TYPE_TABLE[] = {
     VK_FORMAT_UNDEFINED,           VK_FORMAT_R32G32B32_SFLOAT,    VK_FORMAT_R32G32B32A32_SFLOAT,
     VK_FORMAT_R32G32B32_SFLOAT,    VK_FORMAT_R32G32B32A32_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT,
     VK_FORMAT_R8G8B8A8_UNORM,      VK_FORMAT_R32G32_SFLOAT,       VK_FORMAT_R32G32B32A32_SFLOAT,
-    VK_FORMAT_R32G32B32A32_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT};
+    VK_FORMAT_R32G32B32A32_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT, VK_FORMAT_R32G32_SFLOAT,
+};
 
 struct VulkanVertexFormat {
   VkVertexInputBindingDescription m_bindings[2];
@@ -3167,7 +3168,7 @@ struct VulkanCommandQueue final : IGraphicsCommandQueue {
 
   void draw(size_t start, size_t count) { vk::CmdDraw(m_cmdBufs[m_fillBuf], count, 1, start, 0); }
 
-  void drawIndexed(size_t start, size_t count) { vk::CmdDrawIndexed(m_cmdBufs[m_fillBuf], count, 1, start, 0, 0); }
+  void drawIndexed(size_t start, size_t count, size_t baseVertex) { vk::CmdDrawIndexed(m_cmdBufs[m_fillBuf], count, 1, start, baseVertex, 0); }
 
   void drawInstances(size_t start, size_t count, size_t instCount, size_t startInst) {
     vk::CmdDraw(m_cmdBufs[m_fillBuf], count, instCount, start, startInst);

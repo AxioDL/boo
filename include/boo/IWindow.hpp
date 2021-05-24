@@ -116,7 +116,8 @@ enum class ESpecialKey {
   Left = 22,
   Right = 23,
   Up = 24,
-  Down = 25
+  Down = 25,
+  Tab = 26,
 };
 
 enum class EModifierKey {

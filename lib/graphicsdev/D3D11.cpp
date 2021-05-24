@@ -499,12 +499,12 @@ public:
   }
 };
 
-constexpr std::array<size_t, 11> SEMANTIC_SIZE_TABLE{
-    0, 12, 16, 12, 16, 16, 4, 8, 16, 16, 16,
+constexpr std::array<size_t, 12> SEMANTIC_SIZE_TABLE{
+    0, 12, 16, 12, 16, 16, 4, 8, 16, 16, 16, 8,
 };
 
-constexpr std::array<const char*, 11> SEMANTIC_NAME_TABLE{
-    nullptr, "POSITION", "POSITION", "NORMAL", "NORMAL", "COLOR", "COLOR", "UV", "UV", "WEIGHT", "MODELVIEW",
+constexpr std::array<const char*, 12> SEMANTIC_NAME_TABLE{
+    nullptr, "POSITION", "POSITION", "NORMAL", "NORMAL", "COLOR", "COLOR", "UV", "UV", "WEIGHT", "MODELVIEW", "POSITION",
 };
 
 constexpr std::array<DXGI_FORMAT, 11> SEMANTIC_TYPE_TABLE{
@@ -1175,7 +1175,9 @@ struct D3D11CommandQueue final : IGraphicsCommandQueue {
 
   void draw(size_t start, size_t count) override { m_deferredCtx->Draw(count, start); }
 
-  void drawIndexed(size_t start, size_t count) override { m_deferredCtx->DrawIndexed(count, start, 0); }
+  void drawIndexed(size_t start, size_t count, size_t baseVertex) override {
+    m_deferredCtx->DrawIndexed(count, start, baseVertex);
+  }
 
   void drawInstances(size_t start, size_t count, size_t instCount, size_t startInst) override {
     m_deferredCtx->DrawInstanced(count, instCount, start, startInst);

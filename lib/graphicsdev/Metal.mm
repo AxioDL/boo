@@ -707,7 +707,8 @@ static const size_t SEMANTIC_SIZE_TABLE[] =
     8,
     16,
     16,
-    16
+    16,
+    8,
   };
 
 static const MTLVertexFormat SEMANTIC_TYPE_TABLE[] =
@@ -722,7 +723,8 @@ static const MTLVertexFormat SEMANTIC_TYPE_TABLE[] =
     MTLVertexFormatFloat2,
     MTLVertexFormatFloat4,
     MTLVertexFormatFloat4,
-    MTLVertexFormatFloat4
+    MTLVertexFormatFloat4,
+    MTLVertexFormatFloat2,
   };
 
 struct MetalVertexFormat {
@@ -913,7 +915,7 @@ protected:
 
   virtual void draw(MetalCommandQueue& q, size_t start, size_t count);
 
-  virtual void drawIndexed(MetalCommandQueue& q, size_t start, size_t count);
+  virtual void drawIndexed(MetalCommandQueue& q, size_t start, size_t count, size_t baseVertex);
 
   virtual void drawInstances(MetalCommandQueue& q, size_t start, size_t count, size_t instCount, size_t startInst);
 
@@ -1067,7 +1069,7 @@ class MetalTessellationShaderPipeline : public MetalShaderPipeline {
 
   void draw(MetalCommandQueue& q, size_t start, size_t count);
 
-  void drawIndexed(MetalCommandQueue& q, size_t start, size_t count);
+  void drawIndexed(MetalCommandQueue& q, size_t start, size_t count, size_t baseVertex);
 
   void drawInstances(MetalCommandQueue& q, size_t start, size_t count, size_t instCount, size_t startInst);
 
@@ -1475,8 +1477,8 @@ struct MetalCommandQueue : IGraphicsCommandQueue {
     m_boundData->m_pipeline.cast<MetalShaderPipeline>()->draw(*this, start, count);
   }
 
-  void drawIndexed(size_t start, size_t count) {
-    m_boundData->m_pipeline.cast<MetalShaderPipeline>()->drawIndexed(*this, start, count);
+  void drawIndexed(size_t start, size_t count, size_t baseVertex) {
+    m_boundData->m_pipeline.cast<MetalShaderPipeline>()->drawIndexed(*this, start, count, baseVertex);
   }
 
   void drawInstances(size_t start, size_t count, size_t instCount, size_t startInst) {
@@ -1760,14 +1762,14 @@ void MetalShaderPipeline::draw(MetalCommandQueue& q, size_t start, size_t count)
               vertexCount:count];
 }
 
-void MetalShaderPipeline::drawIndexed(MetalCommandQueue& q, size_t start, size_t count) {
+void MetalShaderPipeline::drawIndexed(MetalCommandQueue& q, size_t start, size_t count, size_t baseVertex) {
   [q.m_enc drawIndexedPrimitives:m_drawPrim
                       indexCount:count
                        indexType:MTLIndexTypeUInt32
                      indexBuffer:GetBufferGPUResource(q.m_boundData->m_ibuf, q.m_fillBuf)
                indexBufferOffset:start * 4
                    instanceCount:1
-                      baseVertex:q.m_boundData->m_baseVert
+                      baseVertex:q.m_boundData->m_baseVert + baseVertex
                     baseInstance:0];
 }
 
@@ -1803,13 +1805,13 @@ patchIndexBufferOffset:0
           baseInstance:0];
 }
 
-void MetalTessellationShaderPipeline::drawIndexed(MetalCommandQueue& q, size_t start, size_t count) {
+void MetalTessellationShaderPipeline::drawIndexed(MetalCommandQueue& q, size_t start, size_t count, size_t baseVertex) {
   q.dispatchTessKernel(m_computeState, start, count, m_patchSize);
   [q.m_enc drawIndexedPatches:m_patchSize
                    patchStart:0
                    patchCount:count
              patchIndexBuffer:nullptr
-       patchIndexBufferOffset:0
+       patchIndexBufferOffset:baseVertex
       controlPointIndexBuffer:GetBufferGPUResource(q.m_boundData->m_ibuf, q.m_fillBuf)
 controlPointIndexBufferOffset:start * 4
                 instanceCount:1

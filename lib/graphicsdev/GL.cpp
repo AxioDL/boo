@@ -1151,12 +1151,12 @@ ObjToken<IGraphicsBufferD> GLDataFactoryImpl::newPoolBuffer(BufferUse use, size_
   return {new GLGraphicsBufferD<BaseGraphicsPool>(pool, use, stride * count)};
 }
 
-constexpr std::array<GLint, 11> SEMANTIC_COUNT_TABLE{
-    0, 3, 4, 3, 4, 4, 4, 2, 4, 4, 4,
+constexpr std::array<GLint, 12> SEMANTIC_COUNT_TABLE{
+    0, 3, 4, 3, 4, 4, 4, 2, 4, 4, 4, 2,
 };
 
-constexpr std::array<size_t, 11> SEMANTIC_SIZE_TABLE{
-    0, 12, 16, 12, 16, 16, 4, 8, 16, 16, 16,
+constexpr std::array<size_t, 12> SEMANTIC_SIZE_TABLE{
+    0, 12, 16, 12, 16, 16, 4, 8, 16, 16, 16, 8,
 };
 
 constexpr std::array<GLenum, 11> SEMANTIC_TYPE_TABLE{
@@ -1210,6 +1210,7 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
         size_t count;
         size_t instCount;
         size_t startInst;
+        size_t baseVertex;
       };
     };
 #ifdef BOO_GRAPHICS_DEBUG_GROUPS
@@ -1494,6 +1495,10 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
           glDrawArrays(currentPrim, cmd.start, cmd.count);
           break;
         case Command::Op::DrawIndexed:
+          if (cmd.baseVertex > 0) {
+            Log.report(logvisor::Fatal,
+                       FMT_STRING(_SYS_STR("Attempted to render with baseVertex > 0 (currently unsupported in GL)")));
+          }
           glDrawElements(currentPrim, cmd.count, GL_UNSIGNED_INT, reinterpret_cast<void*>(cmd.start * 4));
           break;
         case Command::Op::DrawInstances:
@@ -1738,11 +1743,12 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
     cmd.count = count;
   }
 
-  void drawIndexed(size_t start, size_t count) override {
+  void drawIndexed(size_t start, size_t count, size_t baseVertex) override {
     std::vector<Command>& cmds = m_cmdBufs[m_fillBuf];
     auto& cmd = cmds.emplace_back(Command::Op::DrawIndexed);
     cmd.start = start;
     cmd.count = count;
+    cmd.baseVertex = baseVertex;
   }
 
   void drawInstances(size_t start, size_t count, size_t instCount, size_t startInst) override {

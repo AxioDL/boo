@@ -188,6 +188,8 @@ static uint32_t translateKeysym(CoreWindow ^ window, VirtualKey sym, ESpecialKey
     specialSym = ESpecialKey::Up;
   else if (sym == VirtualKey::Down)
     specialSym = ESpecialKey::Down;
+  else if (sym == VirtualKey::Tab)
+    specialSym = ESpecialKey::Tab;
   else if (sym == VirtualKey::Shift)
     modifierSym = EModifierKey::Shift;
   else if (sym == VirtualKey::Control)

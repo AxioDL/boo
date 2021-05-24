@@ -1006,6 +1006,8 @@ static boo::ESpecialKey translateKeycode(short code) {
     return boo::ESpecialKey::Up;
   case kVK_DownArrow:
     return boo::ESpecialKey::Down;
+  case kVK_Tab:
+    return boo::ESpecialKey::Tab;
   default:
     return boo::ESpecialKey::None;
   }

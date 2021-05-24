@@ -147,6 +147,8 @@ static char translateKeysym(XKeyEvent* ev, ESpecialKey& specialSym, EModifierKey
     specialSym = ESpecialKey::Up;
   else if (sym == XK_Down)
     specialSym = ESpecialKey::Down;
+  else if (sym == XK_Tab)
+    specialSym = ESpecialKey::Tab;
   else if (sym == XK_Shift_L || sym == XK_Shift_R)
     modifierSym = EModifierKey::Shift;
   else if (sym == XK_Control_L || sym == XK_Control_R)

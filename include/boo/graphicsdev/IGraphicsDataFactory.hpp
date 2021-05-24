@@ -112,6 +112,7 @@ enum class VertexSemantic {
   UV4,
   Weight,
   ModelView,
+  Position2,
   SemanticMask = 0xf,
   Instanced = 0x10
 };

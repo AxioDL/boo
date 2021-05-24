@@ -32,7 +32,7 @@ struct IGraphicsCommandQueue {
   virtual void clearTarget(bool render = true, bool depth = true) = 0;
 
   virtual void draw(size_t start, size_t count) = 0;
-  virtual void drawIndexed(size_t start, size_t count) = 0;
+  virtual void drawIndexed(size_t start, size_t count, size_t baseVertex = 0) = 0;
   virtual void drawInstances(size_t start, size_t count, size_t instCount, size_t startInst = 0) = 0;
   virtual void drawInstancesIndexed(size_t start, size_t count, size_t instCount, size_t startInst = 0) = 0;
 
