@@ -719,7 +719,7 @@ static const MTLVertexFormat SEMANTIC_TYPE_TABLE[] =
     MTLVertexFormatFloat3,
     MTLVertexFormatFloat4,
     MTLVertexFormatFloat4,
-    MTLVertexFormatUChar4Normalized,
+    MTLVertexFormatUChar4,
     MTLVertexFormatFloat2,
     MTLVertexFormatFloat4,
     MTLVertexFormatFloat4,
