@@ -19,6 +19,10 @@
 #error ARC Required
 #endif
 
+#ifndef USE_PRIVATE_APIS
+#define USE_PRIVATE_APIS 1
+#endif
+
 namespace boo {
 class WindowCocoa;
 
@@ -1311,18 +1315,41 @@ public:
                      case EMouseCursor::Pointer:
                        [[NSCursor arrowCursor] set];
                        break;
+#if !USE_PRIVATE_APIS
                      case EMouseCursor::HorizontalArrow:
                        [[NSCursor resizeLeftRightCursor] set];
                        break;
                      case EMouseCursor::VerticalArrow:
                        [[NSCursor resizeUpDownCursor] set];
                        break;
+#endif
                      case EMouseCursor::IBeam:
                        [[NSCursor IBeamCursor] set];
                        break;
                      case EMouseCursor::Crosshairs:
                        [[NSCursor crosshairCursor] set];
                        break;
+                     case EMouseCursor::Hand:
+                       [[NSCursor pointingHandCursor] set];
+                       break;
+                     case EMouseCursor::NotAllowed:
+                       [[NSCursor operationNotAllowedCursor] set];
+                       break;
+#if USE_PRIVATE_APIS
+                     // Private API cursors
+                     case EMouseCursor::HorizontalArrow:
+                       [(NSCursor*)[[NSCursor class] performSelector:@selector(_windowResizeEastWestCursor)] set];
+                       break;
+                     case EMouseCursor::VerticalArrow:
+                       [(NSCursor*)[[NSCursor class] performSelector:@selector(_windowResizeNorthSouthCursor)] set];
+                       break;
+                     case EMouseCursor::BottomRightArrow:
+                       [(NSCursor*)[[NSCursor class] performSelector:@selector(_windowResizeNorthWestSouthEastCursor)] set];
+                       break;
+                     case EMouseCursor::BottomLeftArrow:
+                       [(NSCursor*)[[NSCursor class] performSelector:@selector(_windowResizeNorthEastSouthWestCursor)] set];
+                       break;
+#endif
                      default:
                        break;
                      }

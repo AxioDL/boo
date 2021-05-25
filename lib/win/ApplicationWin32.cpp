@@ -488,11 +488,15 @@ int ApplicationRun(IApplication::EPlatformType platform, IApplicationCallback& c
 #endif
 
   WIN32_CURSORS.m_arrow = LoadCursor(nullptr, IDC_ARROW);
-  WIN32_CURSORS.m_hResize = LoadCursor(nullptr, IDC_SIZEWE);
-  WIN32_CURSORS.m_vResize = LoadCursor(nullptr, IDC_SIZENS);
+  WIN32_CURSORS.m_weResize = LoadCursor(nullptr, IDC_SIZEWE);
+  WIN32_CURSORS.m_nsResize = LoadCursor(nullptr, IDC_SIZENS);
   WIN32_CURSORS.m_ibeam = LoadCursor(nullptr, IDC_IBEAM);
   WIN32_CURSORS.m_crosshairs = LoadCursor(nullptr, IDC_CROSS);
   WIN32_CURSORS.m_wait = LoadCursor(nullptr, IDC_WAIT);
+  WIN32_CURSORS.m_nwseResize = LoadCursor(nullptr, IDC_SIZENWSE);
+  WIN32_CURSORS.m_neswResize = LoadCursor(nullptr, IDC_SIZENESW);
+  WIN32_CURSORS.m_hand = LoadCursor(nullptr, IDC_HAND);
+  WIN32_CURSORS.m_notAllowed = LoadCursor(nullptr, IDC_NO);
 
   /* One class for *all* boo windows */
   WNDCLASS wndClass = {0, WindowProc, 0, 0, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"BooWindow"};

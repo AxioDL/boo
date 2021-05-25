@@ -701,13 +701,21 @@ class WindowXlib final : public IWindow {
     case EMouseCursor::Pointer:
       return X_CURSORS.m_pointer;
     case EMouseCursor::HorizontalArrow:
-      return X_CURSORS.m_hArrow;
+      return X_CURSORS.m_weArrow;
     case EMouseCursor::VerticalArrow:
-      return X_CURSORS.m_vArrow;
+      return X_CURSORS.m_nsArrow;
     case EMouseCursor::IBeam:
       return X_CURSORS.m_ibeam;
     case EMouseCursor::Crosshairs:
       return X_CURSORS.m_crosshairs;
+    case EMouseCursor::BottomLeftArrow:
+      return X_CURSORS.m_nwseResize;
+    case EMouseCursor::BottomRightArrow:
+      return X_CURSORS.m_neswResize;
+    case EMouseCursor::Hand:
+      return X_CURSORS.m_hand;
+    case EMouseCursor::NotAllowed:
+      return X_CURSORS.m_notAllowed;
     default:
       break;
     }

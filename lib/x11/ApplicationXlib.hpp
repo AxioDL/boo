@@ -347,11 +347,15 @@ public:
 
     m_xDefaultScreen = DefaultScreen(m_xDisp);
     X_CURSORS.m_pointer = XCreateFontCursor(m_xDisp, XC_left_ptr);
-    X_CURSORS.m_hArrow = XCreateFontCursor(m_xDisp, XC_sb_h_double_arrow);
-    X_CURSORS.m_vArrow = XCreateFontCursor(m_xDisp, XC_sb_v_double_arrow);
+    X_CURSORS.m_weArrow = XCreateFontCursor(m_xDisp, XC_sb_h_double_arrow);
+    X_CURSORS.m_nsArrow = XCreateFontCursor(m_xDisp, XC_sb_v_double_arrow);
     X_CURSORS.m_ibeam = XCreateFontCursor(m_xDisp, XC_xterm);
     X_CURSORS.m_crosshairs = XCreateFontCursor(m_xDisp, XC_cross);
     X_CURSORS.m_wait = XCreateFontCursor(m_xDisp, XC_watch);
+    X_CURSORS.m_nwseResize = XCreateFontCursor(m_xDisp, XC_lr_angle);
+    X_CURSORS.m_neswResize = XCreateFontCursor(m_xDisp, XC_ll_angle);
+    X_CURSORS.m_hand = XCreateFontCursor(m_xDisp, XC_hand2);
+    X_CURSORS.m_notAllowed = XCreateFontCursor(m_xDisp, XC_pirate);
 
     /* The xkb extension requests that the X server does not
      * send repeated keydown events when a key is held */

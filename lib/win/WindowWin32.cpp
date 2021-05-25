@@ -841,13 +841,21 @@ class WindowWin32 : public IWindow {
     case EMouseCursor::Pointer:
       return WIN32_CURSORS.m_arrow;
     case EMouseCursor::HorizontalArrow:
-      return WIN32_CURSORS.m_hResize;
+      return WIN32_CURSORS.m_weResize;
     case EMouseCursor::VerticalArrow:
-      return WIN32_CURSORS.m_vResize;
+      return WIN32_CURSORS.m_nsResize;
     case EMouseCursor::IBeam:
       return WIN32_CURSORS.m_ibeam;
     case EMouseCursor::Crosshairs:
       return WIN32_CURSORS.m_crosshairs;
+    case EMouseCursor::BottomRightArrow:
+      return WIN32_CURSORS.m_nwseResize;
+    case EMouseCursor::BottomLeftArrow:
+      return WIN32_CURSORS.m_neswResize;
+    case EMouseCursor::Hand:
+      return WIN32_CURSORS.m_hand;
+    case EMouseCursor::NotAllowed:
+      return WIN32_CURSORS.m_notAllowed;
     default:
       break;
     }

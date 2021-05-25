@@ -145,11 +145,15 @@ struct HWNDEvent {
 
 struct Win32Cursors {
   HCURSOR m_arrow;
-  HCURSOR m_hResize;
-  HCURSOR m_vResize;
+  HCURSOR m_weResize;
+  HCURSOR m_nsResize;
   HCURSOR m_ibeam;
   HCURSOR m_crosshairs;
   HCURSOR m_wait;
+  HCURSOR m_nwseResize;
+  HCURSOR m_neswResize;
+  HCURSOR m_hand;
+  HCURSOR m_notAllowed;
 };
 namespace boo {
 extern Win32Cursors WIN32_CURSORS;

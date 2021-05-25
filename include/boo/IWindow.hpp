@@ -191,7 +191,18 @@ enum class EWindowStyle {
 };
 ENABLE_BITWISE_ENUM(EWindowStyle)
 
-enum class EMouseCursor { None = 0, Pointer = 1, HorizontalArrow = 2, VerticalArrow = 3, IBeam = 4, Crosshairs = 5 };
+enum class EMouseCursor {
+  None = 0,
+  Pointer = 1,
+  HorizontalArrow = 2,
+  VerticalArrow = 3,
+  IBeam = 4,
+  Crosshairs = 5,
+  BottomRightArrow = 6,
+  BottomLeftArrow = 7,
+  Hand = 8,
+  NotAllowed = 9,
+};
 
 enum class EClipboardType { None = 0, String = 1, UTF8String = 2, PNGImage = 3 };
 
