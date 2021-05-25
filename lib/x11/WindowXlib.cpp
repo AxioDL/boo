@@ -709,9 +709,9 @@ class WindowXlib final : public IWindow {
     case EMouseCursor::Crosshairs:
       return X_CURSORS.m_crosshairs;
     case EMouseCursor::BottomLeftArrow:
-      return X_CURSORS.m_nwseResize;
-    case EMouseCursor::BottomRightArrow:
       return X_CURSORS.m_neswResize;
+    case EMouseCursor::BottomRightArrow:
+      return X_CURSORS.m_nwseResize;
     case EMouseCursor::Hand:
       return X_CURSORS.m_hand;
     case EMouseCursor::NotAllowed:
