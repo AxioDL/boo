@@ -129,6 +129,7 @@ struct PulseAudioVoiceEngine : LinuxMidi {
       m_mainloop = nullptr;
       return;
     }
+    pa_proplist_free(propList);
 
     pa_operation* op;
 
