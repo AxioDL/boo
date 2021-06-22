@@ -30,17 +30,17 @@ namespace boo { class ApplicationCocoa; }
 namespace boo {
 static logvisor::Module Log("boo::ApplicationCocoa");
 
-std::shared_ptr<IWindow> _WindowCocoaNew(SystemStringView title, MetalContext* metalCtx);
+std::shared_ptr<IWindow> _WindowCocoaNew(std::string_view title, MetalContext* metalCtx);
 
 class ApplicationCocoa : public IApplication {
 public:
   IApplicationCallback& m_callback;
   AppDelegate* m_appDelegate;
 private:
-  const SystemString m_uniqueName;
-  const SystemString m_friendlyName;
-  const SystemString m_pname;
-  const std::vector<SystemString> m_args;
+  const std::string m_uniqueName;
+  const std::string m_friendlyName;
+  const std::string m_pname;
+  const std::vector<std::string> m_args;
 
   NSPanel* aboutPanel;
 
@@ -58,10 +58,10 @@ private:
 
 public:
   ApplicationCocoa(IApplicationCallback& callback,
-                   SystemStringView uniqueName,
-                   SystemStringView friendlyName,
-                   SystemStringView pname,
-                   const std::vector<SystemString>& args,
+                   std::string_view uniqueName,
+                   std::string_view friendlyName,
+                   std::string_view pname,
+                   const std::vector<std::string>& args,
                    std::string_view gfxApi,
                    uint32_t samples,
                    uint32_t anisotropy,
@@ -164,19 +164,19 @@ public:
     [NSApp terminate:nil];
   }
 
-  SystemStringView getUniqueName() const override {
+  std::string_view getUniqueName() const override {
     return m_uniqueName;
   }
 
-  SystemStringView getFriendlyName() const override {
+  std::string_view getFriendlyName() const override {
     return m_friendlyName;
   }
 
-  SystemStringView getProcessName() const override {
+  std::string_view getProcessName() const override {
     return m_pname;
   }
 
-  const std::vector<SystemString>& getArgs() const override {
+  const std::vector<std::string>& getArgs() const override {
     return m_args;
   }
 
@@ -203,10 +203,10 @@ IApplication* APP = nullptr;
 
 int ApplicationRun(IApplication::EPlatformType platform,
                    IApplicationCallback& cb,
-                   SystemStringView uniqueName,
-                   SystemStringView friendlyName,
-                   SystemStringView pname,
-                   const std::vector<SystemString>& args,
+                   std::string_view uniqueName,
+                   std::string_view friendlyName,
+                   std::string_view pname,
+                   const std::vector<std::string>& args,
                    std::string_view gfxApi,
                    uint32_t samples,
                    uint32_t anisotropy,
@@ -269,17 +269,17 @@ int ApplicationRun(IApplication::EPlatformType platform,
 #endif
 
 - (BOOL)application:(NSApplication*)sender openFile:(NSString*)filename {
-  std::vector<boo::SystemString> strVec;
-  strVec.push_back(boo::SystemString([filename UTF8String]));
+  std::vector<std::string> strVec;
+  strVec.push_back(std::string([filename UTF8String]));
   m_app->m_callback.appFilesOpen(boo::APP, strVec);
   return true;
 }
 
 - (void)application:(NSApplication*)sender openFiles:(NSArray*)filenames {
-  std::vector<boo::SystemString> strVec;
+  std::vector<std::string> strVec;
   strVec.reserve([filenames count]);
   for (NSString* str in filenames)
-    strVec.push_back(boo::SystemString([str UTF8String]));
+    strVec.push_back(std::string([str UTF8String]));
   m_app->m_callback.appFilesOpen(boo::APP, strVec);
 }
 

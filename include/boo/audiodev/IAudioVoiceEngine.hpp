@@ -107,8 +107,5 @@ std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine();
 
 /** Construct WAV-rendering voice engine */
 std::unique_ptr<IAudioVoiceEngine> NewWAVAudioVoiceEngine(const char* path, double sampleRate, int numChans);
-#if _WIN32
-std::unique_ptr<IAudioVoiceEngine> NewWAVAudioVoiceEngine(const wchar_t* path, double sampleRate, int numChans);
-#endif
 
 } // namespace boo

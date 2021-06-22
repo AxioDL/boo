@@ -2,10 +2,72 @@ cmake_minimum_required(VERSION 3.10 FATAL_ERROR) # because of c++17
 project(boo)
 cmake_policy(SET CMP0074 NEW)
 
-if (NOT MSVC)
+if (MSVC)
+  # Shaddup MSVC
+  add_compile_definitions(UNICODE=1 _UNICODE=1 __SSE__=1
+      _CRT_SECURE_NO_WARNINGS=1 D_SCL_SECURE_NO_WARNINGS=1
+      _SCL_SECURE_NO_DEPRECATE=1 _CRT_NONSTDC_NO_WARNINGS=1
+      _ENABLE_EXTENDED_ALIGNED_STORAGE=1 NOMINMAX=1)
+  add_compile_options(/IGNORE:4221
+      $<$<OR:$<COMPILE_LANGUAGE:C>,$<COMPILE_LANGUAGE:CXX>>:/wd4018>
+      $<$<OR:$<COMPILE_LANGUAGE:C>,$<COMPILE_LANGUAGE:CXX>>:/wd4800>
+      $<$<OR:$<COMPILE_LANGUAGE:C>,$<COMPILE_LANGUAGE:CXX>>:/wd4005>
+      $<$<OR:$<COMPILE_LANGUAGE:C>,$<COMPILE_LANGUAGE:CXX>>:/wd4311>
+      $<$<OR:$<COMPILE_LANGUAGE:C>,$<COMPILE_LANGUAGE:CXX>>:/wd4068>
+      $<$<OR:$<COMPILE_LANGUAGE:C>,$<COMPILE_LANGUAGE:CXX>>:/wd4267>
+      $<$<OR:$<COMPILE_LANGUAGE:C>,$<COMPILE_LANGUAGE:CXX>>:/wd4244>
+      $<$<OR:$<COMPILE_LANGUAGE:C>,$<COMPILE_LANGUAGE:CXX>>:/wd4200>
+      $<$<OR:$<COMPILE_LANGUAGE:C>,$<COMPILE_LANGUAGE:CXX>>:/wd4305>
+      $<$<OR:$<COMPILE_LANGUAGE:C>,$<COMPILE_LANGUAGE:CXX>>:/wd4067>
+      $<$<OR:$<COMPILE_LANGUAGE:C>,$<COMPILE_LANGUAGE:CXX>>:/wd4146>
+      $<$<OR:$<COMPILE_LANGUAGE:C>,$<COMPILE_LANGUAGE:CXX>>:/wd4309>
+      $<$<OR:$<COMPILE_LANGUAGE:C>,$<COMPILE_LANGUAGE:CXX>>:/wd4805>
+      ${VS_OPTIONS})
+
+  string(REPLACE "/GR " "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+  string(REPLACE " /EHsc" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+  add_compile_options(
+      # Disable exceptions
+      $<$<COMPILE_LANGUAGE:CXX>:/EHsc->
+
+      # Disable RTTI
+      $<$<COMPILE_LANGUAGE:CXX>:/GR->
+
+      # Enforce various standards compliant behavior.
+      $<$<COMPILE_LANGUAGE:CXX>:/permissive->
+
+      # Enable standard volatile semantics.
+      $<$<COMPILE_LANGUAGE:CXX>:/volatile:iso>
+
+      # Reports the proper value for the __cplusplus preprocessor macro.
+      $<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>
+
+      # Use latest C++ standard.
+      $<$<COMPILE_LANGUAGE:CXX>:/std:c++latest>
+  )
+
+  if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+    # Flags for MSVC (not clang-cl)
+    add_compile_options(
+        # Allow constexpr variables to have explicit external linkage.
+        $<$<COMPILE_LANGUAGE:CXX>:/Zc:externConstexpr>
+
+        # Assume that new throws exceptions, allowing better code generation.
+        $<$<COMPILE_LANGUAGE:CXX>:/Zc:throwingNew>
+
+        # Link-time Code Generation for Release builds
+        $<$<CONFIG:Release>:/GL>
+    )
+
+    # Link-time Code Generation for Release builds
+    set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "/LTCG")
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "/RELEASE /LTCG /OPT:REF /OPT:ICF /INCREMENTAL:NO")
+    set(CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO "/DEBUG /RELEASE /OPT:REF /OPT:ICF /INCREMENTAL:NO /DEBUGTYPE:cv,fixup")
+  endif ()
+else ()
   set(CMAKE_CXX_STANDARD 20)
   set(CMAKE_CXX_STANDARD_REQUIRED ON)
-endif()
+endif ()
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
 

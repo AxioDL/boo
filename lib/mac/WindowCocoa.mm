@@ -1524,7 +1524,7 @@ public:
 
 };
 
-std::shared_ptr<IWindow> _WindowCocoaNew(SystemStringView title, MetalContext* metalCtx) {
+std::shared_ptr<IWindow> _WindowCocoaNew(std::string_view title, MetalContext* metalCtx) {
   auto ret = std::make_shared<WindowCocoa>();
   ret->setup(title, metalCtx);
   return ret;

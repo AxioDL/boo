@@ -52,7 +52,7 @@ public:
 
   public:
     Platform platform() const { return Platform::NX; }
-    const SystemChar* platformName() const { return _SYS_STR("NX"); }
+    const char* platformName() const { return "NX"; }
 
     boo::ObjToken<IGraphicsBufferS> newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count);
     boo::ObjToken<IGraphicsBufferD> newDynamicBuffer(BufferUse use, size_t stride, size_t count);

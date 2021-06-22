@@ -15,7 +15,7 @@ struct IGraphicsCommandQueue {
 
   using Platform = IGraphicsDataFactory::Platform;
   virtual Platform platform() const = 0;
-  virtual const SystemChar* platformName() const = 0;
+  virtual const char* platformName() const = 0;
 
   virtual void setShaderDataBinding(const ObjToken<IShaderDataBinding>& binding) = 0;
   virtual void setRenderTarget(const ObjToken<ITextureR>& target) = 0;

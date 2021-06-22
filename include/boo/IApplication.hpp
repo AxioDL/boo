@@ -14,7 +14,7 @@ class IApplication;
 struct IApplicationCallback {
   virtual int appMain(IApplication*) = 0;
   virtual void appQuitting(IApplication*) = 0;
-  virtual void appFilesOpen(IApplication*, const std::vector<SystemString>&) {}
+  virtual void appFilesOpen(IApplication*, const std::vector<std::string>&) {}
 };
 
 class IApplication {
@@ -44,28 +44,28 @@ public:
   virtual EPlatformType getPlatformType() const = 0;
 
   virtual int run() = 0;
-  virtual SystemStringView getUniqueName() const = 0;
-  virtual SystemStringView getFriendlyName() const = 0;
-  virtual SystemStringView getProcessName() const = 0;
-  virtual const std::vector<SystemString>& getArgs() const = 0;
+  virtual std::string_view getUniqueName() const = 0;
+  virtual std::string_view getFriendlyName() const = 0;
+  virtual std::string_view getProcessName() const = 0;
+  virtual const std::vector<std::string>& getArgs() const = 0;
 
   /* Constructors/initializers for sub-objects */
-  virtual std::shared_ptr<IWindow> newWindow(SystemStringView title) = 0;
+  virtual std::shared_ptr<IWindow> newWindow(std::string_view title) = 0;
 };
 
-int ApplicationRun(IApplication::EPlatformType platform, IApplicationCallback& cb, SystemStringView uniqueName,
-                   SystemStringView friendlyName, SystemStringView pname, const std::vector<SystemString>& args,
+int ApplicationRun(IApplication::EPlatformType platform, IApplicationCallback& cb, std::string_view uniqueName,
+                   std::string_view friendlyName, std::string_view pname, const std::vector<std::string>& args,
                    std::string_view gfxApi = {}, uint32_t samples = 1, uint32_t anisotropy = 1, bool deepColor = false,
                    bool singleInstance = true);
 extern IApplication* APP;
 
 static inline int ApplicationRun(IApplication::EPlatformType platform, IApplicationCallback& cb,
-                                 SystemStringView uniqueName, SystemStringView friendlyName, int argc,
-                                 const SystemChar** argv, std::string_view gfxApi = {}, uint32_t samples = 1,
+                                 std::string_view uniqueName, std::string_view friendlyName, int argc,
+                                 char** argv, std::string_view gfxApi = {}, uint32_t samples = 1,
                                  uint32_t anisotropy = 1, bool deepColor = false, bool singleInstance = true) {
   if (APP)
     return 1;
-  std::vector<SystemString> args;
+  std::vector<std::string> args;
   for (int i = 1; i < argc; ++i)
     args.push_back(argv[i]);
   return ApplicationRun(platform, cb, uniqueName, friendlyName, argv[0], args, gfxApi, samples, anisotropy, deepColor,

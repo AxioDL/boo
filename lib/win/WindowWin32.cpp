@@ -24,6 +24,7 @@
 #endif
 
 #include <logvisor/logvisor.hpp>
+#include <nowide/stackstring.hpp>
 
 static const int ContextAttribs[] = {WGL_CONTEXT_MAJOR_VERSION_ARB, 3, WGL_CONTEXT_MINOR_VERSION_ARB, 3,
                                      WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
@@ -863,7 +864,7 @@ class WindowWin32 : public IWindow {
   }
 
 public:
-  WindowWin32(SystemStringView title, Boo3DAppContextWin32& b3dCtx) {
+  WindowWin32(std::string_view title, Boo3DAppContextWin32& b3dCtx) {
     const POINT ptZero = {0, 0};
     HMONITOR monitor = MonitorFromPoint(ptZero, MONITOR_DEFAULTTOPRIMARY);
     MONITORINFO monInfo = {};
@@ -874,7 +875,8 @@ public:
     RECT r = {x, y, x + w, y + h};
     AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
 
-    m_hwnd = CreateWindowW(L"BooWindow", title.data(), WS_OVERLAPPEDWINDOW, r.left, r.top, r.right - r.left,
+    const nowide::wstackstring wtitle(title);
+    m_hwnd = CreateWindowW(L"BooWindow", wtitle.get(), WS_OVERLAPPEDWINDOW, r.left, r.top, r.right - r.left,
                            r.bottom - r.top, nullptr, nullptr, nullptr, nullptr);
     m_imc = ImmGetContext(m_hwnd);
 
@@ -890,12 +892,12 @@ public:
     IGraphicsContext::EGraphicsAPI api = IGraphicsContext::EGraphicsAPI::D3D11;
 #if BOO_HAS_GL
     if (b3dCtx.m_ctxOgl.m_dxFactory) {
-      m_gfxCtx.reset(new GraphicsContextWin32GL(IGraphicsContext::EGraphicsAPI::OpenGL3_3, this, m_hwnd, b3dCtx));
+      m_gfxCtx = std::make_unique<GraphicsContextWin32GL>(IGraphicsContext::EGraphicsAPI::OpenGL3_3, this, m_hwnd, b3dCtx);
       m_openGL = true;
       return;
     }
 #endif
-    m_gfxCtx.reset(new GraphicsContextWin32D3D(api, this, m_hwnd, b3dCtx));
+    m_gfxCtx = std::make_unique<GraphicsContextWin32D3D>(api, this, m_hwnd, b3dCtx);
   }
 
   void _cleanup() override { m_gfxCtx.reset(); }
@@ -911,13 +913,16 @@ public:
 
   void hideWindow() override { ShowWindow(m_hwnd, SW_HIDE); }
 
-  SystemString getTitle() override {
+  std::string getTitle() override {
     wchar_t title[256];
     int c = GetWindowTextW(m_hwnd, title, 256);
-    return SystemString(title, c);
+    return nowide::narrow(title, c);
   }
 
-  void setTitle(SystemStringView title) override { SetWindowTextW(m_hwnd, title.data()); }
+  void setTitle(std::string_view title) override {
+    const nowide::wstackstring wtitle(title);
+    SetWindowTextW(m_hwnd, wtitle.get());
+  }
 
   static void _setCursor(HCURSOR cur) { PostThreadMessageW(g_mainThreadId, WM_USER + 2, WPARAM(cur), 0); }
 
@@ -989,13 +994,14 @@ public:
 
   float getVirtualPixelFactor() const override {
 #if _WIN32_WINNT_WINBLUE
-    if (MyGetScaleFactorForMonitor) {
-      DEVICE_SCALE_FACTOR Factor;
+    if (MyGetScaleFactorForMonitor != nullptr) {
+      DEVICE_SCALE_FACTOR Factor = DEVICE_SCALE_FACTOR_INVALID;
       HMONITOR mon = MonitorFromWindow(m_hwnd, MONITOR_DEFAULTTOPRIMARY);
       MyGetScaleFactorForMonitor(mon, &Factor);
-      if (Factor == 0)
+      if (Factor == 0) {
         return 1.f;
-      return Factor / 100.f;
+      }
+      return static_cast<float>(Factor) / 100.f;
     }
 #endif
     return 1.f;
@@ -1368,7 +1374,7 @@ public:
   IGraphicsDataFactory* getLoadContextDataFactory() override { return m_gfxCtx->getLoadContextDataFactory(); }
 };
 
-std::shared_ptr<IWindow> _WindowWin32New(SystemStringView title, Boo3DAppContextWin32& d3dCtx) {
+std::shared_ptr<IWindow> _WindowWin32New(std::string_view title, Boo3DAppContextWin32& d3dCtx) {
   return std::make_shared<WindowWin32>(title, d3dCtx);
 }
 

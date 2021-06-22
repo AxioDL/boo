@@ -279,7 +279,7 @@ public:
   };
   EventReceiver ^ m_eventReceiver;
 
-  WindowUWP(SystemStringView title, Boo3DAppContextUWP& b3dCtx)
+  WindowUWP(std::string_view title, Boo3DAppContextUWP& b3dCtx)
   : m_coreWindow(CoreWindow::GetForCurrentThread()), m_eventReceiver(ref new EventReceiver(*this)) {
     IGraphicsContext::EGraphicsAPI api = IGraphicsContext::EGraphicsAPI::D3D11;
 #if _WIN32_WINNT_WIN10
@@ -317,9 +317,9 @@ public:
 
   void hideWindow() override  {}
 
-  SystemString getTitle() override { return SystemString(m_appView->Title->Data()); }
+  std::string getTitle() override { return std::string(m_appView->Title->Data()); }
 
-  void setTitle(SystemStringView title) override { m_appView->Title = ref new Platform::String(title.data()); }
+  void setTitle(std::string_view title) override { m_appView->Title = ref new Platform::String(title.data()); }
 
   void setCursor(EMouseCursor cursor) override {}
 
@@ -493,7 +493,7 @@ public:
   IGraphicsDataFactory* getLoadContextDataFactory() override { return m_gfxCtx->getLoadContextDataFactory(); }
 };
 
-std::shared_ptr<IWindow> _WindowUWPNew(SystemStringView title, Boo3DAppContextUWP& d3dCtx) {
+std::shared_ptr<IWindow> _WindowUWPNew(std::string_view title, Boo3DAppContextUWP& d3dCtx) {
   return std::make_shared<WindowUWP>(title, d3dCtx);
 }
 

@@ -130,7 +130,7 @@ public:
   GLDataFactoryImpl(IGraphicsContext* parent, GLContext* glCtx) : m_parent(parent), m_glCtx(glCtx) {}
 
   Platform platform() const override { return Platform::OpenGL; }
-  const SystemChar* platformName() const override { return _SYS_STR("OpenGL"); }
+  const char* platformName() const override { return "OpenGL"; }
   void commitTransaction(const FactoryCommitFunc& trans __BooTraceArgs) override;
   ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs) override;
 
@@ -1166,7 +1166,7 @@ constexpr std::array<GLenum, 11> SEMANTIC_TYPE_TABLE{
 
 struct GLCommandQueue final : IGraphicsCommandQueue {
   Platform platform() const override { return IGraphicsDataFactory::Platform::OpenGL; }
-  const SystemChar* platformName() const override { return _SYS_STR("OpenGL"); }
+  const char* platformName() const override { return "OpenGL"; }
   IGraphicsContext* m_parent = nullptr;
   GLContext* m_glCtx = nullptr;
 
@@ -1357,11 +1357,7 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
 
   static void RenderingWorker(GLCommandQueue* self) {
     BOO_MSAN_NO_INTERCEPT
-#if _WIN32
-    std::string thrName = WCSTMBS(APP->getFriendlyName().data()) + " Render";
-#else
     std::string thrName = std::string(APP->getFriendlyName()) + " Render";
-#endif
     logvisor::RegisterThreadName(thrName.c_str());
     GLDataFactoryImpl* dataFactory = static_cast<GLDataFactoryImpl*>(self->m_parent->getDataFactory());
     {
@@ -1497,7 +1493,7 @@ struct GLCommandQueue final : IGraphicsCommandQueue {
         case Command::Op::DrawIndexed:
           if (cmd.baseVertex > 0) {
             Log.report(logvisor::Fatal,
-                       FMT_STRING(_SYS_STR("Attempted to render with baseVertex > 0 (currently unsupported in GL)")));
+                       FMT_STRING("Attempted to render with baseVertex > 0 (currently unsupported in GL)"));
           }
           glDrawElements(currentPrim, cmd.count, GL_UNSIGNED_INT, reinterpret_cast<void*>(cmd.start * 4));
           break;

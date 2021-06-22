@@ -4,6 +4,7 @@
 
 #include "boo/audiodev/IAudioVoiceEngine.hpp"
 #include <logvisor/logvisor.hpp>
+#include <nowide/stackstring.hpp>
 #include <optick.h>
 
 namespace boo {
@@ -175,16 +176,17 @@ struct WAVOutVoiceEngine : BaseAudioVoiceEngine {
     _buildAudioRenderClient();
   }
 
+#if _WIN32
   WAVOutVoiceEngine(const char* path, double sampleRate, int numChans) {
-    m_fp = fopen(path, "wb");
+    const nowide::wstackstring wpath(path);
+    m_fp = _wfopen(wpath.get(), L"wb");
     if (!m_fp)
       return;
     prepareWAV(sampleRate, numChans);
   }
-
-#if _WIN32
-  WAVOutVoiceEngine(const wchar_t* path, double sampleRate, int numChans) {
-    m_fp = _wfopen(path, L"wb");
+#else
+  WAVOutVoiceEngine(const char* path, double sampleRate, int numChans) {
+    m_fp = fopen(path, "wb");
     if (!m_fp)
       return;
     prepareWAV(sampleRate, numChans);
@@ -242,14 +244,5 @@ std::unique_ptr<IAudioVoiceEngine> NewWAVAudioVoiceEngine(const char* path, doub
     return {};
   return ret;
 }
-
-#if _WIN32
-std::unique_ptr<IAudioVoiceEngine> NewWAVAudioVoiceEngine(const wchar_t* path, double sampleRate, int numChans) {
-  std::unique_ptr<IAudioVoiceEngine> ret = std::make_unique<WAVOutVoiceEngine>(path, sampleRate, numChans);
-  if (!static_cast<WAVOutVoiceEngine&>(*ret).m_fp)
-    return {};
-  return ret;
-}
-#endif
 
 } // namespace boo

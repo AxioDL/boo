@@ -77,14 +77,14 @@ namespace boo {
 static logvisor::Module Log("boo::ApplicationWin32");
 Win32Cursors WIN32_CURSORS;
 
-std::shared_ptr<IWindow> _WindowWin32New(SystemStringView title, Boo3DAppContextWin32& d3dCtx);
+std::shared_ptr<IWindow> _WindowWin32New(std::string_view title, Boo3DAppContextWin32& d3dCtx);
 
 class ApplicationWin32 final : public IApplication {
   IApplicationCallback& m_callback;
-  const SystemString m_uniqueName;
-  const SystemString m_friendlyName;
-  const SystemString m_pname;
-  const std::vector<SystemString> m_args;
+  const std::string m_uniqueName;
+  const std::string m_friendlyName;
+  const std::string m_pname;
+  const std::vector<std::string> m_args;
   std::unordered_map<HWND, std::weak_ptr<IWindow>> m_allWindows;
 
   Boo3DAppContextWin32 m_3dCtx;
@@ -95,8 +95,8 @@ class ApplicationWin32 final : public IApplication {
   void _deletedWindow(IWindow* window) override { m_allWindows.erase(HWND(window->getPlatformHandle())); }
 
 public:
-  ApplicationWin32(IApplicationCallback& callback, SystemStringView uniqueName, SystemStringView friendlyName,
-                   SystemStringView pname, const std::vector<SystemString>& args, std::string_view gfxApi,
+  ApplicationWin32(IApplicationCallback& callback, std::string_view uniqueName, std::string_view friendlyName,
+                   std::string_view pname, const std::vector<std::string>& args, std::string_view gfxApi,
                    uint32_t samples, uint32_t anisotropy, bool deepColor, bool singleInstance)
   : m_callback(callback), m_uniqueName(uniqueName), m_friendlyName(friendlyName), m_pname(pname), m_args(args) {
     m_3dCtx.m_ctx11.m_sampleCount = samples;
@@ -142,17 +142,17 @@ public:
         noD3d = true;
 #endif
     }
-    for (const SystemString& arg : args) {
+    for (const std::string& arg : args) {
 #if BOO_HAS_VULKAN
-      if (!arg.compare(L"--d3d11")) {
+      if (!arg.compare("--d3d11")) {
         useVulkan = false;
         noD3d = false;
       }
-      if (!arg.compare(L"--vulkan")) {
+      if (!arg.compare("--vulkan")) {
         noD3d = true;
         useVulkan = true;
       }
-      if (!arg.compare(L"--gl")) {
+      if (!arg.compare("--gl")) {
         noD3d = true;
         useVulkan = false;
       }
@@ -173,7 +173,7 @@ public:
           /* Check device support for vulkan */
           if (g_VulkanContext.m_instance == VK_NULL_HANDLE) {
             auto appName = getUniqueName();
-            if (g_VulkanContext.initVulkan(WCSTMBS(appName.data()).c_str(), m_getVkProc)) {
+            if (g_VulkanContext.initVulkan(appName.data(), m_getVkProc)) {
               if (g_VulkanContext.enumerateDevices()) {
                 /* Obtain DXGI Factory */
                 HRESULT hr = MyCreateDXGIFactory1(__uuidof(IDXGIFactory1), &m_3dCtx.m_vulkanDxFactory);
@@ -375,7 +375,7 @@ public:
     /* Spawn client thread */
     int clientReturn = 0;
     std::thread clientThread([&]() {
-      std::string thrName = WCSTMBS(getFriendlyName().data()) + " Client Thread";
+      std::string thrName = std::string(getFriendlyName()) + " Client Thread";
       logvisor::RegisterThreadName(thrName.c_str());
       CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE);
       clientReturn = m_callback.appMain(this);
@@ -391,7 +391,7 @@ public:
         case WM_USER: {
           /* New-window message (coalesced onto main thread) */
           std::lock_guard<std::mutex> lk(g_nwmt);
-          SystemStringView* title = reinterpret_cast<SystemStringView*>(msg.wParam);
+          std::string_view* title = reinterpret_cast<std::string_view*>(msg.wParam);
           m_mwret = newWindow(*title);
           g_nwcv.notify_one();
           continue;
@@ -441,16 +441,16 @@ public:
         w->_cleanup();
   }
 
-  SystemStringView getUniqueName() const override { return m_uniqueName; }
+  std::string_view getUniqueName() const override { return m_uniqueName; }
 
-  SystemStringView getFriendlyName() const override { return m_friendlyName; }
+  std::string_view getFriendlyName() const override { return m_friendlyName; }
 
-  SystemStringView getProcessName() const override { return m_pname; }
+  std::string_view getProcessName() const override { return m_pname; }
 
-  const std::vector<SystemString>& getArgs() const override { return m_args; }
+  const std::vector<std::string>& getArgs() const override { return m_args; }
 
   std::shared_ptr<IWindow> m_mwret;
-  std::shared_ptr<IWindow> newWindow(SystemStringView title) override {
+  std::shared_ptr<IWindow> newWindow(std::string_view title) override {
     if (GetCurrentThreadId() != g_mainThreadId) {
       std::unique_lock<std::mutex> lk(g_nwmt);
       if (!PostThreadMessageW(g_mainThreadId, WM_USER, WPARAM(&title), 0))
@@ -469,11 +469,11 @@ public:
 };
 
 IApplication* APP = nullptr;
-int ApplicationRun(IApplication::EPlatformType platform, IApplicationCallback& cb, SystemStringView uniqueName,
-                   SystemStringView friendlyName, SystemStringView pname, const std::vector<SystemString>& args,
+int ApplicationRun(IApplication::EPlatformType platform, IApplicationCallback& cb, std::string_view uniqueName,
+                   std::string_view friendlyName, std::string_view pname, const std::vector<std::string>& args,
                    std::string_view gfxApi, uint32_t samples, uint32_t anisotropy, bool deepColor,
                    bool singleInstance) {
-  std::string thrName = WCSTMBS(friendlyName.data()) + " Main Thread";
+  std::string thrName = std::string(friendlyName) + " Main Thread";
   logvisor::RegisterThreadName(thrName.c_str());
   if (APP)
     return 1;

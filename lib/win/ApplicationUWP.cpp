@@ -37,15 +37,15 @@ static bool FindBestD3DCompile() {
 namespace boo {
 static logvisor::Module Log("boo::ApplicationUWP");
 
-std::shared_ptr<IWindow> _WindowUWPNew(SystemStringView title, Boo3DAppContextUWP& d3dCtx);
+std::shared_ptr<IWindow> _WindowUWPNew(std::string_view title, Boo3DAppContextUWP& d3dCtx);
 
 class ApplicationUWP final : public IApplication {
   friend ref class AppView;
   IApplicationCallback& m_callback;
-  const SystemString m_uniqueName;
-  const SystemString m_friendlyName;
-  const SystemString m_pname;
-  const std::vector<SystemString> m_args;
+  const std::string m_uniqueName;
+  const std::string m_friendlyName;
+  const std::string m_pname;
+  const std::vector<std::string> m_args;
   std::shared_ptr<IWindow> m_window;
   bool m_singleInstance;
   bool m_issuedWindow = false;
@@ -55,8 +55,8 @@ class ApplicationUWP final : public IApplication {
   void _deletedWindow(IWindow* window) override {}
 
 public:
-  ApplicationUWP(IApplicationCallback& callback, SystemStringView uniqueName, SystemStringView friendlyName,
-                 SystemStringView pname, const std::vector<SystemString>& args, bool singleInstance)
+  ApplicationUWP(IApplicationCallback& callback, std::string_view uniqueName, std::string_view friendlyName,
+                 std::string_view pname, const std::vector<std::string>& args, bool singleInstance)
   : m_callback(callback)
   , m_uniqueName(uniqueName)
   , m_friendlyName(friendlyName)
@@ -67,7 +67,7 @@ public:
     CreateDXGIFactory1PROC MyCreateDXGIFactory1 = CreateDXGIFactory1;
 
     bool no12 = true;
-    for (const SystemString& arg : args)
+    for (const std::string& arg : args)
       if (!arg.compare(L"--d3d12"))
         no12 = false;
 
@@ -190,7 +190,7 @@ public:
     /* Spawn client thread */
     int clientReturn = 0;
     m_clientThread = std::thread([&]() {
-      std::string thrName = WCSTMBS(getFriendlyName().data()) + " Client Thread";
+      std::string thrName = std::string(getFriendlyName()) + " Client Thread";
       logvisor::RegisterThreadName(thrName.c_str());
       clientReturn = m_callback.appMain(this);
     });
@@ -206,15 +206,15 @@ public:
       m_clientThread.join();
   }
 
-  SystemStringView getUniqueName() const override { return m_uniqueName; }
+  std::string_view getUniqueName() const override { return m_uniqueName; }
 
-  SystemStringView getFriendlyName() const override { return m_friendlyName; }
+  std::string_view getFriendlyName() const override { return m_friendlyName; }
 
-  SystemStringView getProcessName() const override { return m_pname; }
+  std::string_view getProcessName() const override { return m_pname; }
 
-  const std::vector<SystemString>& getArgs() const override { return m_args; }
+  const std::vector<std::string>& getArgs() const override { return m_args; }
 
-  std::shared_ptr<IWindow> newWindow(SystemStringView title, uint32_t sampleCount) override {
+  std::shared_ptr<IWindow> newWindow(std::string_view title, uint32_t sampleCount) override {
     if (!m_issuedWindow) {
       m_issuedWindow = true;
       return m_window;
@@ -229,8 +229,8 @@ IApplication* APP = nullptr;
 ref class AppView sealed : public IFrameworkView {
   ApplicationUWP m_app;
 
-  internal : AppView(IApplicationCallback& callback, SystemStringView uniqueName, SystemStringView friendlyName,
-                     SystemStringView pname, const std::vector<SystemString>& args, bool singleInstance)
+  internal : AppView(IApplicationCallback& callback, std::string_view uniqueName, std::string_view friendlyName,
+                     std::string_view pname, const std::vector<std::string>& args, bool singleInstance)
   : m_app(callback, uniqueName, friendlyName, pname, args, singleInstance) {
     APP = &m_app;
   }

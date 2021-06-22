@@ -118,6 +118,7 @@ enum class ESpecialKey {
   Up = 24,
   Down = 25,
   Tab = 26,
+  MAX = 27,
 };
 
 enum class EModifierKey {
@@ -216,8 +217,8 @@ public:
   virtual void showWindow() = 0;
   virtual void hideWindow() = 0;
 
-  virtual SystemString getTitle() = 0;
-  virtual void setTitle(SystemStringView title) = 0;
+  virtual std::string getTitle() = 0;
+  virtual void setTitle(std::string_view title) = 0;
 
   virtual void setCursor(EMouseCursor cursor) = 0;
   virtual void setWaitCursor(bool wait) = 0;

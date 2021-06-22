@@ -16,6 +16,7 @@
 #include <comdef.h>
 
 #include <logvisor/logvisor.hpp>
+#include <nowide/convert.hpp>
 
 #undef min
 #undef max
@@ -76,8 +77,8 @@ static inline void ThrowIfFailed(HRESULT hr) {
 #else
     _com_error err(hr, L"D3D11 fail");
 #endif
-    LPCTSTR errMsg = err.ErrorMessage();
-    Log.report(logvisor::Fatal, FMT_STRING(_SYS_STR("{}")), errMsg);
+    std::string errMsg = nowide::narrow(err.ErrorMessage());
+    Log.report(logvisor::Fatal, FMT_STRING("{}"), errMsg);
   }
 }
 
@@ -972,7 +973,7 @@ struct D3D11ShaderDataBinding : public GraphicsDataNode<IShaderDataBinding> {
 
 struct D3D11CommandQueue final : IGraphicsCommandQueue {
   Platform platform() const override { return IGraphicsDataFactory::Platform::D3D11; }
-  const SystemChar* platformName() const override { return _SYS_STR("D3D11"); }
+  const char* platformName() const override { return "D3D11"; }
   D3D11Context* m_ctx;
   D3D11Context::Window* m_windowCtx;
   IGraphicsContext* m_parent;
@@ -1228,7 +1229,7 @@ struct D3D11CommandQueue final : IGraphicsCommandQueue {
 #ifdef BOO_GRAPHICS_DEBUG_GROUPS
   void pushDebugGroup(const char* name, const std::array<float, 4>& color) override {
     if (m_deferredAnnot)
-      m_deferredAnnot->BeginEvent(MBSTWCS(name).c_str());
+      m_deferredAnnot->BeginEvent(nowide::widen(name).c_str());
   }
 
   void popDebugGroup() override {

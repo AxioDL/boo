@@ -27,7 +27,7 @@ public:
 
   public:
     Platform platform() const override { return Platform::OpenGL; }
-    const SystemChar* platformName() const override { return _SYS_STR("OpenGL"); }
+    const char* platformName() const override { return "OpenGL"; }
 
     ObjToken<IGraphicsBufferS> newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count) override;
     ObjToken<IGraphicsBufferD> newDynamicBuffer(BufferUse use, size_t stride, size_t count) override;

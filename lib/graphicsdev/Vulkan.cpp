@@ -127,7 +127,7 @@ public:
   ~VulkanDataFactoryImpl() { assert(m_descPoolHead == nullptr && "Dangling descriptor pools detected"); }
 
   Platform platform() const { return Platform::Vulkan; }
-  const SystemChar* platformName() const { return _SYS_STR("Vulkan"); }
+  const char* platformName() const { return "Vulkan"; }
 
   boo::ObjToken<VulkanDescriptorPool> allocateDescriptorSets(VkDescriptorSet* out);
 
@@ -2860,7 +2860,7 @@ struct VulkanShaderDataBinding : GraphicsDataNode<IShaderDataBinding> {
 
 struct VulkanCommandQueue final : IGraphicsCommandQueue {
   Platform platform() const { return IGraphicsDataFactory::Platform::Vulkan; }
-  const SystemChar* platformName() const { return _SYS_STR("Vulkan"); }
+  const char* platformName() const { return "Vulkan"; }
   VulkanContext* m_ctx;
   VulkanContext::Window* m_windowCtx;
   IGraphicsContext* m_parent;

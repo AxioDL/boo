@@ -11,6 +11,7 @@
 #include <Functiondiscoverykeys_devpkey.h>
 
 #include <logvisor/logvisor.hpp>
+#include <nowide/convert.hpp>
 #include <optick.h>
 
 #ifdef TE_VIRTUAL_MIDI
@@ -121,7 +122,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
   void _buildAudioRenderClient() {
 #if !WINDOWS_STORE
     if (!m_device) {
-      if (FAILED(m_enumerator->GetDevice(MBSTWCS(m_sinkName.c_str()).c_str(), &m_device))) {
+      if (FAILED(m_enumerator->GetDevice(nowide::widen(m_sinkName).c_str(), &m_device))) {
         Log.report(logvisor::Error, FMT_STRING("unable to obtain audio device {}"), m_sinkName);
         m_device.Reset();
         return;
@@ -129,7 +130,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     }
 
     if (FAILED(m_device->Activate(IID_IAudioClient, CLSCTX_ALL, nullptr, &m_audClient))) {
-      Log.report(logvisor::Error, FMT_STRING(L"unable to create audio client from device"));
+      Log.report(logvisor::Error, FMT_STRING("unable to create audio client from device"));
       m_device.Reset();
       return;
     }
@@ -137,7 +138,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 
     WAVEFORMATEXTENSIBLE* pwfx;
     if (FAILED(m_audClient->GetMixFormat((WAVEFORMATEX**)&pwfx))) {
-      Log.report(logvisor::Error, FMT_STRING(L"unable to obtain audio mix format from device"));
+      Log.report(logvisor::Error, FMT_STRING("unable to obtain audio mix format from device"));
 #if !WINDOWS_STORE
       m_device.Reset();
 #endif
@@ -215,7 +216,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     /* Initialize audio client */
     if (FAILED(m_audClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 450000, /* 45ms */
                                        0, (WAVEFORMATEX*)pwfx, nullptr))) {
-      Log.report(logvisor::Error, FMT_STRING(L"unable to initialize audio client"));
+      Log.report(logvisor::Error, FMT_STRING("unable to initialize audio client"));
 #if !WINDOWS_STORE
       m_device.Reset();
 #endif
@@ -236,7 +237,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
         m_mixInfo.m_sampleFormat = SOXR_INT32_I;
         m_mixInfo.m_bitsPerSample = 32;
       } else {
-        Log.report(logvisor::Fatal, FMT_STRING(L"unsupported bits-per-sample {}"), pwfx->Format.wBitsPerSample);
+        Log.report(logvisor::Fatal, FMT_STRING("unsupported bits-per-sample {}"), pwfx->Format.wBitsPerSample);
 #if !WINDOWS_STORE
         m_device.Reset();
 #endif
@@ -249,7 +250,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
         m_mixInfo.m_sampleFormat = SOXR_FLOAT32_I;
         m_mixInfo.m_bitsPerSample = 32;
       } else {
-        Log.report(logvisor::Error, FMT_STRING(L"unsupported floating-point bits-per-sample {}"), pwfx->Format.wBitsPerSample);
+        Log.report(logvisor::Error, FMT_STRING("unsupported floating-point bits-per-sample {}"), pwfx->Format.wBitsPerSample);
 #if !WINDOWS_STORE
         m_device.Reset();
 #endif
@@ -261,7 +262,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 
     UINT32 bufferFrameCount;
     if (FAILED(m_audClient->GetBufferSize(&bufferFrameCount))) {
-      Log.report(logvisor::Error, FMT_STRING(L"unable to get audio buffer frame count"));
+      Log.report(logvisor::Error, FMT_STRING("unable to get audio buffer frame count"));
 #if !WINDOWS_STORE
       m_device.Reset();
 #endif
@@ -270,7 +271,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     m_mixInfo.m_periodFrames = bufferFrameCount;
 
     if (FAILED(m_audClient->GetService(IID_IAudioRenderClient, &m_renderClient))) {
-      Log.report(logvisor::Error, FMT_STRING(L"unable to create audio render client"));
+      Log.report(logvisor::Error, FMT_STRING("unable to create audio render client"));
 #if !WINDOWS_STORE
       m_device.Reset();
 #endif
@@ -347,24 +348,24 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     /* Enumerate default audio device */
     if (FAILED(
             CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL, IID_IMMDeviceEnumerator, &m_enumerator))) {
-      Log.report(logvisor::Error, FMT_STRING(L"unable to create MMDeviceEnumerator instance"));
+      Log.report(logvisor::Error, FMT_STRING("unable to create MMDeviceEnumerator instance"));
       return;
     }
 
     if (FAILED(m_enumerator->RegisterEndpointNotificationCallback(&m_notificationClient))) {
-      Log.report(logvisor::Error, FMT_STRING(L"unable to register multimedia event callback"));
+      Log.report(logvisor::Error, FMT_STRING("unable to register multimedia event callback"));
       m_device.Reset();
       return;
     }
 
     if (FAILED(m_enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &m_device))) {
-      Log.report(logvisor::Error, FMT_STRING(L"unable to obtain default audio device"));
+      Log.report(logvisor::Error, FMT_STRING("unable to obtain default audio device"));
       m_device.Reset();
       return;
     }
     LPWSTR sinkName = nullptr;
     m_device->GetId(&sinkName);
-    m_sinkName = WCSTMBS(sinkName);
+    m_sinkName = nowide::narrow(sinkName);
     CoTaskMemFree(sinkName);
 
     _buildAudioRenderClient();
@@ -386,7 +387,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     m_started = false;
 
     if (m_mixInfo.m_sampleFormat != oldFmt)
-      Log.report(logvisor::Fatal, FMT_STRING(L"audio device sample format changed, boo doesn't support this!!"));
+      Log.report(logvisor::Fatal, FMT_STRING("audio device sample format changed, boo doesn't support this!!"));
 
     _resetSampleRate();
   }
@@ -404,7 +405,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     int attempt = 0;
     while (true) {
       if (attempt >= 10)
-        Log.report(logvisor::Fatal, FMT_STRING(L"unable to setup AudioRenderClient"));
+        Log.report(logvisor::Fatal, FMT_STRING("unable to setup AudioRenderClient"));
 
       if (m_rebuild) {
         m_device.Reset();
@@ -473,7 +474,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 
   bool setCurrentAudioOutput(const char* name) override {
     ComPtr<IMMDevice> newDevice;
-    if (FAILED(m_enumerator->GetDevice(MBSTWCS(name).c_str(), &newDevice))) {
+    if (FAILED(m_enumerator->GetDevice(nowide::widen(name).c_str(), &newDevice))) {
       Log.report(logvisor::Error, FMT_STRING("unable to obtain audio device {}"), name);
       return false;
     }
@@ -488,7 +489,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 
     ComPtr<IMMDeviceCollection> collection;
     if (FAILED(m_enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &collection))) {
-      Log.report(logvisor::Error, FMT_STRING(L"unable to enumerate audio outputs"));
+      Log.report(logvisor::Error, FMT_STRING("unable to enumerate audio outputs"));
       return ret;
     }
 
@@ -505,8 +506,8 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
       props->GetValue(PKEY_Device_FriendlyName, &val);
       std::string friendlyName;
       if (val.vt == VT_LPWSTR)
-        friendlyName = WCSTMBS(val.pwszVal);
-      ret.emplace_back(WCSTMBS(devName), std::move(friendlyName));
+        friendlyName = nowide::narrow(val.pwszVal);
+      ret.emplace_back(nowide::narrow(devName), std::move(friendlyName));
     }
 
     return ret;
@@ -527,28 +528,11 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
         continue;
 
 #ifdef UNICODE
-      ret.push_back(std::make_pair(std::move(name), WCSTMBS(caps.szPname)));
+      ret.emplace_back(std::move(name), nowide::narrow(caps.szPname));
 #else
-      ret.push_back(std::make_pair(std::move(name), std::string(caps.szPname)));
+      ret.emplace_back(std::move(name), std::string(caps.szPname));
 #endif
     }
-
-#if 0
-        for (UINT i=0 ; i<numOutDevices ; ++i)
-        {
-            std::string name = fmt::format(FMT_STRING("out{}"), i);
-
-            MIDIOUTCAPS caps;
-            if (FAILED(midiOutGetDevCaps(i, &caps, sizeof(caps))))
-                continue;
-
-#ifdef UNICODE
-            ret.push_back(std::make_pair(std::move(name), WCSTMBS(caps.szPname)));
-#else
-            ret.push_back(std::make_pair(std::move(name), std::string(caps.szPname)));
-#endif
-        }
-#endif
 
     return ret;
   }
@@ -644,7 +628,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
         return {};
 
 #ifdef UNICODE
-      return WCSTMBS(caps.szPname);
+      return nowide::narrow(caps.szPname);
 #else
       return caps.szPname;
 #endif
@@ -684,7 +668,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
         return {};
 
 #ifdef UNICODE
-      return WCSTMBS(caps.szPname);
+      return nowide::narrow(caps.szPname);
 #else
       return caps.szPname;
 #endif
@@ -734,7 +718,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
         return {};
 
 #ifdef UNICODE
-      return WCSTMBS(caps.szPname);
+      return nowide::narrow(caps.szPname);
 #else
       return caps.szPname;
 #endif
@@ -757,7 +741,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     if (!ret)
       return {};
 
-    SystemString name = SystemString(APP->getFriendlyName()) + _SYS_STR(" MIDI-In");
+    std::string name = std::string(APP->getFriendlyName()) + " MIDI-In";
     auto port = virtualMIDICreatePortEx2PROC(name.c_str(), LPVM_MIDI_DATA_CB(VirtualMIDIReceiveProc),
                                              DWORD_PTR(static_cast<IMIDIReceiver*>(ret.get())), 512,
                                              TE_VM_FLAGS_PARSE_RX | TE_VM_FLAGS_INSTANTIATE_RX_ONLY);
@@ -779,7 +763,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     if (!ret)
       return {};
 
-    SystemString name = SystemString(APP->getFriendlyName()) + _SYS_STR(" MIDI-Out");
+    std::string name = std::string(APP->getFriendlyName()) + " MIDI-Out";
     auto port = virtualMIDICreatePortEx2PROC(name.c_str(), nullptr, 0, 512,
                                              TE_VM_FLAGS_PARSE_TX | TE_VM_FLAGS_INSTANTIATE_TX_ONLY);
     if (!port)
@@ -800,7 +784,7 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
     if (!ret)
       return {};
 
-    SystemString name = SystemString(APP->getFriendlyName()) + _SYS_STR(" MIDI-In/Out");
+    std::string name = std::string(APP->getFriendlyName()) + " MIDI-In/Out";
     auto port =
         virtualMIDICreatePortEx2PROC(name.c_str(), LPVM_MIDI_DATA_CB(VirtualMIDIReceiveProc),
                                      DWORD_PTR(static_cast<IMIDIReceiver*>(ret.get())), 512, TE_VM_FLAGS_SUPPORTED);

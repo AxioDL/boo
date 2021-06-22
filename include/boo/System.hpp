@@ -59,22 +59,6 @@ static inline ComPtr<T>* ReferenceComPtr(ComPtr<T>& ptr) {
 
 namespace boo {
 
-#ifdef _WIN32
-using SystemString = std::wstring;
-using SystemStringView = std::wstring_view;
-using SystemChar = wchar_t;
-#ifndef _SYS_STR
-#define _SYS_STR(val) L##val
-#endif
-#else
-using SystemString = std::string;
-using SystemStringView = std::string_view;
-using SystemChar = char;
-#ifndef _SYS_STR
-#define _SYS_STR(val) val
-#endif
-#endif
-
 #ifndef NDEBUG
 #define __BooTraceArgs , const char *file, int line
 #define __BooTraceArgsUse , file, line

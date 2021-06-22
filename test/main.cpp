@@ -391,7 +391,7 @@ struct TestApplicationCallback : IApplicationCallback {
   }
 
   int appMain(IApplication* app) override {
-    mainWindow = app->newWindow(_SYS_STR("YAY!"));
+    mainWindow = app->newWindow("YAY!");
     mainWindow->setCallback(&windowCallback);
     mainWindow->showWindow();
     windowCallback.m_lastRect = mainWindow->getWindowFrame();
@@ -457,14 +457,10 @@ struct TestApplicationCallback : IApplicationCallback {
     return 0;
   }
   void appQuitting(IApplication*) override { running = false; }
-  void appFilesOpen(IApplication*, const std::vector<SystemString>& paths) override {
+  void appFilesOpen(IApplication*, const std::vector<std::string>& paths) override {
     fprintf(stderr, "OPENING: ");
-    for (const SystemString& path : paths) {
-#if _WIN32
-      fwprintf(stderr, L"%s ", path.c_str());
-#else
+    for (const std::string& path : paths) {
       fprintf(stderr, "%s ", path.c_str());
-#endif
     }
     fprintf(stderr, "\n");
   }
@@ -473,18 +469,12 @@ struct TestApplicationCallback : IApplicationCallback {
 } // namespace boo
 
 #if !WINDOWS_STORE
-#if _WIN32
-int wmain(int argc, const boo::SystemChar** argv)
-#else
-int main(int argc, const boo::SystemChar** argv)
-#endif
-{
+int main(int argc, char** argv) {
   logvisor::RegisterStandardExceptions();
   logvisor::RegisterConsoleLogger();
   boo::TestApplicationCallback appCb;
-  int ret = ApplicationRun(boo::IApplication::EPlatformType::Auto, appCb, _SYS_STR("boo"), _SYS_STR("boo"), argc, argv,
+  int ret = ApplicationRun(boo::IApplication::EPlatformType::Auto, appCb, "boo", "boo", argc, argv,
                            {}, 1, 1, true);
-  printf("IM DYING!!\n");
   return ret;
 }
 
@@ -496,26 +486,20 @@ using namespace Windows::ApplicationModel::Core;
   logvisor::RegisterConsoleLogger();
   boo::TestApplicationCallback appCb;
   boo::ViewProvider ^ viewProvider =
-      ref new boo::ViewProvider(appCb, _SYS_STR("boo"), _SYS_STR("boo"), _SYS_STR("boo"), params, false);
+      ref new boo::ViewProvider(appCb, "boo", "boo", "boo", params, false);
   CoreApplication::Run(viewProvider);
   return 0;
 }
 #endif
 
 #if _WIN32 && !WINDOWS_STORE
-int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int) {
-  int argc = 0;
-  const boo::SystemChar** argv;
-  if (lpCmdLine[0])
-    argv = (const wchar_t**)(CommandLineToArgvW(lpCmdLine, &argc));
-  static boo::SystemChar selfPath[1024];
-  GetModuleFileNameW(nullptr, selfPath, 1024);
-  static const boo::SystemChar* booArgv[32] = {};
-  booArgv[0] = selfPath;
-  for (int i = 0; i < argc; ++i)
-    booArgv[i + 1] = argv[i];
+#include <nowide/args.hpp>
 
+int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
+  int argc = 0;
+  char** argv = nullptr;
+  nowide::args _(argc, argv);
   logvisor::CreateWin32Console();
-  return wmain(argc + 1, booArgv);
+  return main(argc, argv);
 }
 #endif

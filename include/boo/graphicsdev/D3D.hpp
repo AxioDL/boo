@@ -20,7 +20,7 @@ public:
   ~D3D11DataFactory() override = default;
 
   Platform platform() const override { return Platform::D3D11; }
-  const SystemChar* platformName() const override { return _SYS_STR("D3D11"); }
+  const char* platformName() const override { return "D3D11"; }
 
   class Context final : public IGraphicsDataFactory::Context {
     friend class D3D11DataFactoryImpl;
@@ -31,7 +31,7 @@ public:
 
   public:
     Platform platform() const override { return Platform::D3D11; }
-    const SystemChar* platformName() const override { return _SYS_STR("D3D11"); }
+    const char* platformName() const override { return "D3D11"; }
 
     ObjToken<IGraphicsBufferS> newStaticBuffer(BufferUse use, const void* data, size_t stride, size_t count) override;
     ObjToken<IGraphicsBufferD> newDynamicBuffer(BufferUse use, size_t stride, size_t count) override;

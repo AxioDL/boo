@@ -214,11 +214,11 @@ struct IGraphicsDataFactory {
 
   enum class Platform { Null, OpenGL, D3D11, Metal, Vulkan, GX, NX };
   virtual Platform platform() const = 0;
-  virtual const SystemChar* platformName() const = 0;
+  virtual const char* platformName() const = 0;
 
   struct Context {
     virtual Platform platform() const = 0;
-    virtual const SystemChar* platformName() const = 0;
+    virtual const char* platformName() const = 0;
 
     virtual ObjToken<IGraphicsBufferS> newStaticBuffer(BufferUse use, const void* data, size_t stride,
                                                        size_t count) = 0;
