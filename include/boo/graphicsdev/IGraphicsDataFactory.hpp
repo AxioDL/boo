@@ -280,6 +280,7 @@ struct IGraphicsDataFactory {
   virtual void lazyCommitTransaction(const std::function<bool(Context& ctx)>& f __BooTraceArgs) {
     commitTransaction(f __BooTraceArgsUse);
   }
+  virtual void commitPendingTransaction() {}
   virtual ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs) = 0;
   virtual void setDisplayGamma(float gamma) = 0;
   virtual bool isTessellationSupported(uint32_t& maxPatchSizeOut) = 0;

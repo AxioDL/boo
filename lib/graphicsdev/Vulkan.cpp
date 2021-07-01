@@ -136,6 +136,7 @@ public:
 
   void commitTransaction(const FactoryCommitFunc& __BooTraceArgs) override;
   void lazyCommitTransaction(const FactoryCommitFunc& __BooTraceArgs) override;
+  void commitPendingTransaction() override;
 
   boo::ObjToken<IGraphicsBufferD> newPoolBuffer(BufferUse use, size_t stride, size_t count __BooTraceArgs) override;
 
@@ -3800,10 +3801,7 @@ void VulkanDataFactoryImpl::commitTransaction(
   if (!trans(ctx)) {
     return;
   }
-  if (m_lazyContext) {
-    flushContext(*m_lazyContext);
-    m_lazyContext.reset();
-  }
+  commitPendingTransaction();
   flushContext(ctx);
 }
 
@@ -3816,7 +3814,15 @@ void VulkanDataFactoryImpl::lazyCommitTransaction(
   trans(*m_lazyContext);
 }
 
+void VulkanDataFactoryImpl::commitPendingTransaction() {
+  if (m_lazyContext) {
+    flushContext(*m_lazyContext);
+    m_lazyContext.reset();
+  }
+}
+
 void VulkanDataFactoryImpl::flushContext(Context& ctx) {
+  OPTICK_EVENT();
   VulkanData* data = ctx.m_data.cast<VulkanData>();
 
   /* Start asynchronous shader compiles */
