@@ -876,6 +876,8 @@ struct WASAPIAudioVoiceEngine : BaseAudioVoiceEngine {
 #endif
 };
 
-std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine() { return std::make_unique<WASAPIAudioVoiceEngine>(); }
+std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine(const char* uniqueName, const char* friendlyName) {
+  return std::make_unique<WASAPIAudioVoiceEngine>();
+}
 
 } // namespace boo

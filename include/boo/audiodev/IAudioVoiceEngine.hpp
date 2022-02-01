@@ -103,7 +103,7 @@ struct IAudioVoiceEngine {
 };
 
 /** Construct host platform's voice engine */
-std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine();
+std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine(const char* uniqueName, const char* friendlyName);
 
 /** Construct WAV-rendering voice engine */
 std::unique_ptr<IAudioVoiceEngine> NewWAVAudioVoiceEngine(const char* path, double sampleRate, int numChans);

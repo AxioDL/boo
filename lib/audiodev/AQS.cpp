@@ -856,7 +856,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
   }
 };
 
-std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine() {
+std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine(const char* uniqueName, const char* friendlyName) {
   std::unique_ptr<IAudioVoiceEngine> ret = std::make_unique<AQSAudioVoiceEngine>();
   if (!static_cast<AQSAudioVoiceEngine&>(*ret).m_queue)
     return {};

@@ -94,8 +94,8 @@ add_library(boo
   lib/audiodev/MIDIEncoder.cpp
   lib/audiodev/WAVOut.cpp
   lib/Common.hpp
-  lib/graphicsdev/Common.cpp
-  lib/graphicsdev/Common.hpp
+#  lib/graphicsdev/Common.cpp
+#  lib/graphicsdev/Common.hpp
   lib/inputdev/DeviceBase.cpp include/boo/inputdev/DeviceBase.hpp
   lib/inputdev/CafeProPad.cpp include/boo/inputdev/CafeProPad.hpp
   lib/inputdev/RevolutionPad.cpp include/boo/inputdev/RevolutionPad.hpp
@@ -107,7 +107,7 @@ add_library(boo
   lib/inputdev/DeviceFinder.cpp include/boo/inputdev/DeviceFinder.hpp
   lib/inputdev/HIDParser.cpp include/boo/inputdev/HIDParser.hpp
   lib/inputdev/IHIDDevice.hpp
-  include/boo/IGraphicsContext.hpp
+#  include/boo/IGraphicsContext.hpp
   include/boo/audiodev/IAudioSubmix.hpp
   include/boo/audiodev/IAudioVoice.hpp
   include/boo/audiodev/IAudioVoiceEngine.hpp
@@ -115,8 +115,8 @@ add_library(boo
   include/boo/audiodev/IMIDIReader.hpp
   include/boo/audiodev/MIDIDecoder.hpp
   include/boo/audiodev/MIDIEncoder.hpp
-  include/boo/graphicsdev/IGraphicsDataFactory.hpp
-  include/boo/graphicsdev/IGraphicsCommandQueue.hpp
+#  include/boo/graphicsdev/IGraphicsDataFactory.hpp
+#  include/boo/graphicsdev/IGraphicsCommandQueue.hpp
   include/boo/inputdev/IHIDListener.hpp
   include/boo/inputdev/XInputPad.hpp
   include/boo/boo.hpp
@@ -155,28 +155,28 @@ target_include_directories(boo PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-if(NOT GEKKO AND NOT CAFE AND NOT WINDOWS_STORE AND NOT NX)
-  add_library(glew lib/graphicsdev/glew.c)
-  # For some reason, clang takes forever if glew.c is not built with -Os
-  if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "AppleClang")
-    set_source_files_properties(lib/graphicsdev/glew.c PROPERTIES COMPILE_FLAGS -Os)
-  endif()
-  target_include_directories(glew PUBLIC include/boo/graphicsdev)
-  target_compile_definitions(glew PUBLIC -DGLEW_NO_GLU=1)
-endif()
-
-if(NOT GEKKO AND NOT CAFE AND NOT WINDOWS_STORE AND NOT NX AND NOT APPLE)
-  target_sources(boo PRIVATE lib/graphicsdev/GL.cpp)
-  target_compile_definitions(boo PUBLIC -DBOO_HAS_GL=1)
-  target_link_libraries(boo PUBLIC glew)
-
-  target_sources(boo PRIVATE
-    include/boo/graphicsdev/GL.hpp
-    include/boo/graphicsdev/GLSLMacros.hpp
-    include/boo/graphicsdev/Vulkan.hpp
-    include/boo/graphicsdev/VulkanDispatchTable.hpp
-  )
-endif()
+#if(NOT GEKKO AND NOT CAFE AND NOT WINDOWS_STORE AND NOT NX)
+#  add_library(glew lib/graphicsdev/glew.c)
+#  # For some reason, clang takes forever if glew.c is not built with -Os
+#  if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "AppleClang")
+#    set_source_files_properties(lib/graphicsdev/glew.c PROPERTIES COMPILE_FLAGS -Os)
+#  endif()
+#  target_include_directories(glew PUBLIC include/boo/graphicsdev)
+#  target_compile_definitions(glew PUBLIC -DGLEW_NO_GLU=1)
+#endif()
+#
+#if(NOT GEKKO AND NOT CAFE AND NOT WINDOWS_STORE AND NOT NX AND NOT APPLE)
+#  target_sources(boo PRIVATE lib/graphicsdev/GL.cpp)
+#  target_compile_definitions(boo PUBLIC -DBOO_HAS_GL=1)
+#  target_link_libraries(boo PUBLIC glew)
+#
+#  target_sources(boo PRIVATE
+#    include/boo/graphicsdev/GL.hpp
+#    include/boo/graphicsdev/GLSLMacros.hpp
+#    include/boo/graphicsdev/Vulkan.hpp
+#    include/boo/graphicsdev/VulkanDispatchTable.hpp
+#  )
+#endif()
 
 set(AudioMatrix_SRC lib/audiodev/AudioMatrix.cpp)
 if(CMAKE_SYSTEM_PROCESSOR STREQUAL x86_64
@@ -192,15 +192,15 @@ if(WINDOWS_STORE)
     lib/audiodev/WASAPI.cpp
     lib/inputdev/HIDDeviceUWP.cpp
     lib/inputdev/HIDListenerUWP.cpp
-    lib/graphicsdev/D3D11.cpp
-    lib/graphicsdev/D3D12.cpp
-    lib/win/ApplicationUWP.cpp
-    lib/win/UWPCommon.hpp
-    lib/win/WinCommon.hpp
-    lib/win/WindowUWP.cpp
+#    lib/graphicsdev/D3D11.cpp
+#    lib/graphicsdev/D3D12.cpp
+#    lib/win/ApplicationUWP.cpp
+#    lib/win/UWPCommon.hpp
+#    lib/win/WinCommon.hpp
+#    lib/win/WindowUWP.cpp
 
     include/boo/UWPViewProvider.hpp
-    include/boo/graphicsdev/D3D.hpp
+#    include/boo/graphicsdev/D3D.hpp
   )
 
   target_compile_definitions(boo PUBLIC
@@ -219,22 +219,22 @@ if(WINDOWS_STORE)
     Xinput
   )
 elseif(WIN32)
-  unset(VULKAN_SDK_DIRS CACHE)
-  get_filename_component(VULKAN_SDK_DIRS "[HKEY_LOCAL_MACHINE\\SOFTWARE\\LunarG\\VulkanSDK;VK_SDK_PATHs]" ABSOLUTE CACHE)
-  if (NOT "${VULKAN_SDK_DIRS}" STREQUAL "/registry")
-    message(STATUS "Enabling Vulkan support")
-    list(GET VULKAN_SDK_DIRS 0 VULKAN_SDK_DIR)
-    target_include_directories(boo PUBLIC "${VULKAN_SDK_DIR}/Include")
-    target_compile_definitions(boo PUBLIC
-      -DBOO_HAS_VULKAN=1
-      -DVK_USE_PLATFORM_WIN32_KHR=1
-    )
-    target_sources(boo PRIVATE
-      lib/graphicsdev/Vulkan.cpp
-      lib/graphicsdev/VulkanDispatchTable.cpp
-    )
-    set(BOO_ENABLE_VULKAN_IN_OPTICK TRUE)
-  endif()
+#  unset(VULKAN_SDK_DIRS CACHE)
+#  get_filename_component(VULKAN_SDK_DIRS "[HKEY_LOCAL_MACHINE\\SOFTWARE\\LunarG\\VulkanSDK;VK_SDK_PATHs]" ABSOLUTE CACHE)
+#  if (NOT "${VULKAN_SDK_DIRS}" STREQUAL "/registry")
+#    message(STATUS "Enabling Vulkan support")
+#    list(GET VULKAN_SDK_DIRS 0 VULKAN_SDK_DIR)
+#    target_include_directories(boo PUBLIC "${VULKAN_SDK_DIR}/Include")
+#    target_compile_definitions(boo PUBLIC
+#      -DBOO_HAS_VULKAN=1
+#      -DVK_USE_PLATFORM_WIN32_KHR=1
+#    )
+#    target_sources(boo PRIVATE
+#      lib/graphicsdev/Vulkan.cpp
+#      lib/graphicsdev/VulkanDispatchTable.cpp
+#    )
+#    set(BOO_ENABLE_VULKAN_IN_OPTICK TRUE)
+#  endif()
 
   find_file(TE_VIRTUAL_MIDI_H teVirtualMIDI.h PATHS
             "$ENV{PROGRAMFILES\(X86\)}/Tobias Erichsen/teVirtualMIDISDK/C-Binding")
@@ -252,7 +252,7 @@ elseif(WIN32)
   target_sources(boo PRIVATE
     ${AudioMatrix_SRC}
     lib/audiodev/WASAPI.cpp
-    lib/graphicsdev/D3D11.cpp
+#    lib/graphicsdev/D3D11.cpp
     lib/inputdev/HIDListenerWinUSB.cpp
     lib/inputdev/HIDDeviceWinUSB.cpp
     lib/win/ApplicationWin32.cpp
@@ -260,7 +260,7 @@ elseif(WIN32)
     lib/win/WinCommon.hpp
     lib/win/Win32Common.hpp
 
-    include/boo/graphicsdev/D3D.hpp
+#    include/boo/graphicsdev/D3D.hpp
   )
 
   target_compile_definitions(boo PUBLIC
@@ -283,20 +283,20 @@ elseif(APPLE)
     ${AudioMatrix_SRC}
     lib/inputdev/HIDListenerIOKit.cpp
     lib/inputdev/HIDDeviceIOKit.cpp
-    lib/mac/ApplicationCocoa.mm
-    lib/mac/WindowCocoa.mm
-    lib/mac/CocoaCommon.hpp
-    lib/graphicsdev/Metal.mm
+#    lib/mac/ApplicationCocoa.mm
+#    lib/mac/WindowCocoa.mm
+#    lib/mac/CocoaCommon.hpp
+#    lib/graphicsdev/Metal.mm
 
     lib/CFPointer.hpp
     lib/inputdev/IOKitPointer.hpp
-    include/boo/graphicsdev/Metal.hpp
+#    include/boo/graphicsdev/Metal.hpp
   )
 
   set_source_files_properties(
-    lib/mac/ApplicationCocoa.mm
-    lib/mac/WindowCocoa.mm
-    lib/graphicsdev/Metal.mm
+#    lib/mac/ApplicationCocoa.mm
+#    lib/mac/WindowCocoa.mm
+#    lib/graphicsdev/Metal.mm
     PROPERTIES COMPILE_FLAGS -fobjc-arc
   )
 
@@ -329,14 +329,14 @@ elseif(APPLE)
 else(NOT GEKKO)
   target_sources(boo PRIVATE
     lib/audiodev/LinuxMidi.hpp
-    lib/graphicsdev/GL.cpp
-    lib/graphicsdev/GLX.cpp
-    lib/x11/XlibCommon.hpp
-    lib/x11/ApplicationUnix.cpp
-    lib/x11/ApplicationWayland.hpp
-    lib/x11/ApplicationXlib.hpp
-    lib/x11/WindowWayland.cpp
-    lib/x11/WindowXlib.cpp
+#    lib/graphicsdev/GL.cpp
+#    lib/graphicsdev/GLX.cpp
+#    lib/x11/XlibCommon.hpp
+#    lib/x11/ApplicationUnix.cpp
+#    lib/x11/ApplicationWayland.hpp
+#    lib/x11/ApplicationXlib.hpp
+#    lib/x11/WindowWayland.cpp
+#    lib/x11/WindowXlib.cpp
   )
 
   find_package(PkgConfig)
@@ -420,22 +420,22 @@ else(NOT GEKKO)
   )
 
   if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
-    find_path(VULKAN_INCLUDE_DIR
-      NAMES vulkan/vulkan.h
-    )
-    if(VULKAN_INCLUDE_DIR)
-      message(STATUS "Enabling Vulkan support")
-      target_sources(boo PRIVATE
-        lib/graphicsdev/Vulkan.cpp
-        lib/graphicsdev/VulkanDispatchTable.cpp
-      )
-      target_compile_definitions(boo
-        PUBLIC
-          -DBOO_HAS_VULKAN=1
-          -DVK_USE_PLATFORM_XCB_KHR=1
-      )
-      set(BOO_ENABLE_VULKAN_IN_OPTICK TRUE)
-    endif()
+#    find_path(VULKAN_INCLUDE_DIR
+#      NAMES vulkan/vulkan.h
+#    )
+#    if(VULKAN_INCLUDE_DIR)
+#      message(STATUS "Enabling Vulkan support")
+#      target_sources(boo PRIVATE
+#        lib/graphicsdev/Vulkan.cpp
+#        lib/graphicsdev/VulkanDispatchTable.cpp
+#      )
+#      target_compile_definitions(boo
+#        PUBLIC
+#          -DBOO_HAS_VULKAN=1
+#          -DVK_USE_PLATFORM_XCB_KHR=1
+#      )
+#      set(BOO_ENABLE_VULKAN_IN_OPTICK TRUE)
+#    endif()
     target_sources(boo PRIVATE
       ${AudioMatrix_SRC}
       lib/inputdev/HIDDeviceUdev.cpp

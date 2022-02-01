@@ -113,7 +113,7 @@ struct PulseAudioVoiceEngine : LinuxMidi {
     return false;
   }
 
-  PulseAudioVoiceEngine() {
+  PulseAudioVoiceEngine(const char* uniqueName, const char* friendlyName) {
     if (!(m_mainloop = pa_mainloop_new())) {
       Log.report(logvisor::Error, FMT_STRING("Unable to pa_mainloop_new()"));
       return;
@@ -121,9 +121,9 @@ struct PulseAudioVoiceEngine : LinuxMidi {
 
     pa_mainloop_api* mlApi = pa_mainloop_get_api(m_mainloop);
     pa_proplist* propList = pa_proplist_new();
-    pa_proplist_sets(propList, PA_PROP_APPLICATION_ICON_NAME, APP->getUniqueName().data());
+    pa_proplist_sets(propList, PA_PROP_APPLICATION_ICON_NAME, uniqueName);
     pa_proplist_sets(propList, PA_PROP_APPLICATION_PROCESS_ID, fmt::format(FMT_STRING("{}"), int(getpid())).c_str());
-    if (!(m_ctx = pa_context_new_with_proplist(mlApi, APP->getFriendlyName().data(), propList))) {
+    if (!(m_ctx = pa_context_new_with_proplist(mlApi, friendlyName, propList))) {
       Log.report(logvisor::Error, FMT_STRING("Unable to pa_context_new_with_proplist()"));
       pa_mainloop_free(m_mainloop);
       m_mainloop = nullptr;
@@ -341,7 +341,8 @@ struct PulseAudioVoiceEngine : LinuxMidi {
     size_t nbytes = writablePeriods * periodSz;
     if (pa_stream_begin_write(m_stream, &data, &nbytes)) {
       pa_stream_state_t st = pa_stream_get_state(m_stream);
-      Log.report(logvisor::Error, FMT_STRING("Unable to pa_stream_begin_write(): {} {}"), pa_strerror(pa_context_errno(m_ctx)), st);
+      Log.report(logvisor::Error, FMT_STRING("Unable to pa_stream_begin_write(): {} {}"),
+                 pa_strerror(pa_context_errno(m_ctx)), st);
       _doIterate();
       return;
     }
@@ -356,6 +357,8 @@ struct PulseAudioVoiceEngine : LinuxMidi {
   }
 };
 
-std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine() { return std::make_unique<PulseAudioVoiceEngine>(); }
+std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine(const char* uniqueName, const char* friendlyName) {
+  return std::make_unique<PulseAudioVoiceEngine>(uniqueName, friendlyName);
+}
 
 } // namespace boo
