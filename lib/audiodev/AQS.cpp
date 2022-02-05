@@ -46,6 +46,8 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
 
   MIDIClientRef m_midiClient = 0;
 
+  std::string m_friendlyName;
+
   bool m_cbRunning = true;
   bool m_needsRebuild = false;
 
@@ -460,11 +462,10 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
       return {};
 
     std::string name;
-    auto appName = APP->getFriendlyName();
     if (!m_midiInCounter)
-      name = fmt::format(FMT_STRING("{} MIDI-In"), appName);
+      name = fmt::format(FMT_STRING("{} MIDI-In"), m_friendlyName);
     else
-      name = fmt::format(FMT_STRING("{} MIDI-In {}"), appName, m_midiInCounter);
+      name = fmt::format(FMT_STRING("{} MIDI-In {}"), m_friendlyName, m_midiInCounter);
     m_midiInCounter++;
     CFPointer<CFStringRef> midiName = CFPointer<CFStringRef>::adopt(
         CFStringCreateWithCStringNoCopy(nullptr, name.c_str(), kCFStringEncodingUTF8, kCFAllocatorNull));
@@ -485,11 +486,10 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
       return {};
 
     std::string name;
-    auto appName = APP->getFriendlyName();
     if (!m_midiOutCounter)
-      name = fmt::format(FMT_STRING("{} MIDI-Out"), appName);
+      name = fmt::format(FMT_STRING("{} MIDI-Out"), m_friendlyName);
     else
-      name = fmt::format(FMT_STRING("{} MIDI-Out {}"), appName, m_midiOutCounter);
+      name = fmt::format(FMT_STRING("{} MIDI-Out {}"), m_friendlyName, m_midiOutCounter);
     m_midiOutCounter++;
     CFPointer<CFStringRef> midiName = CFPointer<CFStringRef>::adopt(
         CFStringCreateWithCStringNoCopy(nullptr, name.c_str(), kCFStringEncodingUTF8, kCFAllocatorNull));
@@ -508,11 +508,10 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
       return {};
 
     std::string name;
-    auto appName = APP->getFriendlyName();
     if (!m_midiInCounter)
-      name = fmt::format(FMT_STRING("{} MIDI-In"), appName);
+      name = fmt::format(FMT_STRING("{} MIDI-In"), m_friendlyName);
     else
-      name = fmt::format(FMT_STRING("{} MIDI-In {}"), appName, m_midiInCounter);
+      name = fmt::format(FMT_STRING("{} MIDI-In {}"), m_friendlyName, m_midiInCounter);
     m_midiInCounter++;
     CFPointer<CFStringRef> midiName = CFPointer<CFStringRef>::adopt(
         CFStringCreateWithCStringNoCopy(nullptr, name.c_str(), kCFStringEncodingUTF8, kCFAllocatorNull));
@@ -524,9 +523,9 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
       return {};
 
     if (!m_midiOutCounter)
-      name = fmt::format(FMT_STRING("{} MIDI-Out"), appName);
+      name = fmt::format(FMT_STRING("{} MIDI-Out"), m_friendlyName);
     else
-      name = fmt::format(FMT_STRING("{} MIDI-Out {}"), appName, m_midiOutCounter);
+      name = fmt::format(FMT_STRING("{} MIDI-Out {}"), m_friendlyName, m_midiOutCounter);
     m_midiOutCounter++;
     midiName = CFPointer<CFStringRef>::adopt(
         CFStringCreateWithCStringNoCopy(nullptr, name.c_str(), kCFStringEncodingUTF8, kCFAllocatorNull));
@@ -809,9 +808,10 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
     return noErr;
   }
 
-  AQSAudioVoiceEngine()
+  AQSAudioVoiceEngine(const char* friendlyName)
   : m_runLoopMode(CFPointer<CFStringRef>::adopt(
-        CFStringCreateWithCStringNoCopy(nullptr, "BooAQSMode", kCFStringEncodingUTF8, kCFAllocatorNull))) {
+        CFStringCreateWithCStringNoCopy(nullptr, "BooAQSMode", kCFStringEncodingUTF8, kCFAllocatorNull)))
+  , m_friendlyName(friendlyName) {
     AudioObjectPropertyAddress propertyAddress;
     propertyAddress.mScope = kAudioObjectPropertyScopeGlobal;
     propertyAddress.mElement = kAudioObjectPropertyElementMaster;
@@ -857,7 +857,7 @@ struct AQSAudioVoiceEngine : BaseAudioVoiceEngine {
 };
 
 std::unique_ptr<IAudioVoiceEngine> NewAudioVoiceEngine(const char* uniqueName, const char* friendlyName) {
-  std::unique_ptr<IAudioVoiceEngine> ret = std::make_unique<AQSAudioVoiceEngine>();
+  std::unique_ptr<IAudioVoiceEngine> ret = std::make_unique<AQSAudioVoiceEngine>(friendlyName);
   if (!static_cast<AQSAudioVoiceEngine&>(*ret).m_queue)
     return {};
   return ret;
