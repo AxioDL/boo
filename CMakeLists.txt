@@ -75,7 +75,6 @@ if (NOT TARGET logvisor)
   add_subdirectory(logvisor)
 endif()
 add_subdirectory(soxr/src)
-add_subdirectory(xxhash)
 
 add_library(boo
   lib/audiodev/Common.hpp
@@ -495,7 +494,6 @@ if(NOT NX)
       OSDependent
       soxr
       SPIRV
-      xxhash
   )
 endif()
 
