@@ -12,7 +12,9 @@
 #if BOO_HAS_VULKAN
 #include "boo/graphicsdev/Vulkan.hpp"
 #endif
+#if BOO_HAS_GL
 #include "boo/graphicsdev/GL.hpp"
+#endif
 
 #include <condition_variable>
 #include <mutex>

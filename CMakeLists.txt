@@ -95,17 +95,17 @@ add_library(boo
   lib/Common.hpp
 #  lib/graphicsdev/Common.cpp
 #  lib/graphicsdev/Common.hpp
-  lib/inputdev/DeviceBase.cpp include/boo/inputdev/DeviceBase.hpp
-  lib/inputdev/CafeProPad.cpp include/boo/inputdev/CafeProPad.hpp
-  lib/inputdev/RevolutionPad.cpp include/boo/inputdev/RevolutionPad.hpp
-  lib/inputdev/DolphinSmashAdapter.cpp include/boo/inputdev/DolphinSmashAdapter.hpp
-  lib/inputdev/NintendoPowerA.cpp include/boo/inputdev/NintendoPowerA.hpp
-  lib/inputdev/DualshockPad.cpp include/boo/inputdev/DualshockPad.hpp
-  lib/inputdev/GenericPad.cpp include/boo/inputdev/GenericPad.hpp
-  lib/inputdev/DeviceSignature.cpp include/boo/inputdev/DeviceSignature.hpp
-  lib/inputdev/DeviceFinder.cpp include/boo/inputdev/DeviceFinder.hpp
-  lib/inputdev/HIDParser.cpp include/boo/inputdev/HIDParser.hpp
-  lib/inputdev/IHIDDevice.hpp
+#  lib/inputdev/DeviceBase.cpp include/boo/inputdev/DeviceBase.hpp
+#  lib/inputdev/CafeProPad.cpp include/boo/inputdev/CafeProPad.hpp
+#  lib/inputdev/RevolutionPad.cpp include/boo/inputdev/RevolutionPad.hpp
+#  lib/inputdev/DolphinSmashAdapter.cpp include/boo/inputdev/DolphinSmashAdapter.hpp
+#  lib/inputdev/NintendoPowerA.cpp include/boo/inputdev/NintendoPowerA.hpp
+#  lib/inputdev/DualshockPad.cpp include/boo/inputdev/DualshockPad.hpp
+#  lib/inputdev/GenericPad.cpp include/boo/inputdev/GenericPad.hpp
+#  lib/inputdev/DeviceSignature.cpp include/boo/inputdev/DeviceSignature.hpp
+#  lib/inputdev/DeviceFinder.cpp include/boo/inputdev/DeviceFinder.hpp
+#  lib/inputdev/HIDParser.cpp include/boo/inputdev/HIDParser.hpp
+#  lib/inputdev/IHIDDevice.hpp
 #  include/boo/IGraphicsContext.hpp
   include/boo/audiodev/IAudioSubmix.hpp
   include/boo/audiodev/IAudioVoice.hpp
@@ -116,8 +116,8 @@ add_library(boo
   include/boo/audiodev/MIDIEncoder.hpp
 #  include/boo/graphicsdev/IGraphicsDataFactory.hpp
 #  include/boo/graphicsdev/IGraphicsCommandQueue.hpp
-  include/boo/inputdev/IHIDListener.hpp
-  include/boo/inputdev/XInputPad.hpp
+#  include/boo/inputdev/IHIDListener.hpp
+#  include/boo/inputdev/XInputPad.hpp
   include/boo/boo.hpp
   include/boo/BooObject.hpp
   include/boo/DeferredWindowEvents.hpp
@@ -125,7 +125,7 @@ add_library(boo
   include/boo/IWindow.hpp
   include/boo/System.hpp
   include/boo/ThreadLocalPtr.hpp
-  InputDeviceClasses.cpp
+#  InputDeviceClasses.cpp
 )
 
 if (NOT MSVC)
@@ -189,8 +189,8 @@ if(WINDOWS_STORE)
   target_sources(boo PRIVATE
     ${AudioMatrix_SRC}
     lib/audiodev/WASAPI.cpp
-    lib/inputdev/HIDDeviceUWP.cpp
-    lib/inputdev/HIDListenerUWP.cpp
+#    lib/inputdev/HIDDeviceUWP.cpp
+#    lib/inputdev/HIDListenerUWP.cpp
 #    lib/graphicsdev/D3D11.cpp
 #    lib/graphicsdev/D3D12.cpp
 #    lib/win/ApplicationUWP.cpp
@@ -252,12 +252,12 @@ elseif(WIN32)
     ${AudioMatrix_SRC}
     lib/audiodev/WASAPI.cpp
 #    lib/graphicsdev/D3D11.cpp
-    lib/inputdev/HIDListenerWinUSB.cpp
-    lib/inputdev/HIDDeviceWinUSB.cpp
-    lib/win/ApplicationWin32.cpp
-    lib/win/WindowWin32.cpp
-    lib/win/WinCommon.hpp
-    lib/win/Win32Common.hpp
+#    lib/inputdev/HIDListenerWinUSB.cpp
+#    lib/inputdev/HIDDeviceWinUSB.cpp
+#    lib/win/ApplicationWin32.cpp
+#    lib/win/WindowWin32.cpp
+#    lib/win/WinCommon.hpp
+#    lib/win/Win32Common.hpp
 
 #    include/boo/graphicsdev/D3D.hpp
   )
@@ -280,15 +280,15 @@ elseif(APPLE)
   target_sources(boo PRIVATE
     lib/audiodev/AQS.cpp
     ${AudioMatrix_SRC}
-    lib/inputdev/HIDListenerIOKit.cpp
-    lib/inputdev/HIDDeviceIOKit.cpp
+#    lib/inputdev/HIDListenerIOKit.cpp
+#    lib/inputdev/HIDDeviceIOKit.cpp
 #    lib/mac/ApplicationCocoa.mm
 #    lib/mac/WindowCocoa.mm
 #    lib/mac/CocoaCommon.hpp
 #    lib/graphicsdev/Metal.mm
 
     lib/CFPointer.hpp
-    lib/inputdev/IOKitPointer.hpp
+#    lib/inputdev/IOKitPointer.hpp
 #    include/boo/graphicsdev/Metal.hpp
   )
 
@@ -437,8 +437,8 @@ else(NOT GEKKO)
 #    endif()
     target_sources(boo PRIVATE
       ${AudioMatrix_SRC}
-      lib/inputdev/HIDDeviceUdev.cpp
-      lib/inputdev/HIDListenerUdev.cpp
+#      lib/inputdev/HIDDeviceUdev.cpp
+#      lib/inputdev/HIDListenerUdev.cpp
     )
     target_link_libraries(boo
       PUBLIC
@@ -450,8 +450,8 @@ else(NOT GEKKO)
   else()
     target_sources(boo PRIVATE
       ${AudioMatrix_SRC}
-      lib/inputdev/HIDDeviceBSD.cpp
-      lib/inputdev/HIDListenerBSD.cpp
+#      lib/inputdev/HIDDeviceBSD.cpp
+#      lib/inputdev/HIDListenerBSD.cpp
     )
     target_link_libraries(boo
       PUBLIC

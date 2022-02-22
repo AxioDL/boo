@@ -1,9 +1,6 @@
-#include "lib/win/Win32Common.hpp"
+#include "lib/audiodev/AudioVoiceEngine.hpp"
 
 #include <iterator>
-
-#include "boo/IApplication.hpp"
-#include "lib/audiodev/AudioVoiceEngine.hpp"
 
 #include <Mmdeviceapi.h>
 #include <Audioclient.h>
@@ -37,6 +34,14 @@ using namespace Windows::Media::Devices;
 #endif
 const IID IID_IAudioClient = __uuidof(IAudioClient);
 const IID IID_IAudioRenderClient = __uuidof(IAudioRenderClient);
+
+#include <wrl/client.h>
+template <class T>
+using ComPtr = Microsoft::WRL::ComPtr<T>;
+template <class T>
+static inline ComPtr<T>* ReferenceComPtr(ComPtr<T>& ptr) {
+  return reinterpret_cast<ComPtr<T>*>(ptr.GetAddressOf());
+}
 
 namespace boo {
 static logvisor::Module Log("boo::WASAPI");
