@@ -1,6 +1,4 @@
 #include "lib/audiodev/AudioVoiceEngine.hpp"
-
-#include "boo/boo.hpp"
 #include "lib/audiodev/LinuxMidi.hpp"
 
 #include <logvisor/logvisor.hpp>

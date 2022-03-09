@@ -1,6 +1,5 @@
 #include "lib/audiodev/AudioVoiceEngine.hpp"
 
-#include "boo/IApplication.hpp"
 #include "lib/CFPointer.hpp"
 
 #include <AudioToolbox/AudioToolbox.h>
