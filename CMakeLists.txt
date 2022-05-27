@@ -184,6 +184,8 @@ elseif(WIN32)
 elseif(APPLE)
   target_sources(boo PRIVATE
     lib/audiodev/AQS.cpp
+    lib/audiodev/CADebugPrintf.cpp
+    lib/audiodev/CAHostTimeBase.cpp
     ${AudioMatrix_SRC}
     lib/CFPointer.hpp
   )
@@ -192,7 +194,11 @@ elseif(APPLE)
     PROPERTIES COMPILE_FLAGS -fobjc-arc
   )
 
-  find_library(APPKIT_LIBRARY AppKit)
+  if (IOS OR TVOS)
+    set(APPKIT_LIBRARY "")
+  else()
+    find_library(APPKIT_LIBRARY AppKit)
+  endif()
   unset(BOO_HAS_METAL CACHE)
   if (NOT CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET VERSION_GREATER 10.11)
     set(BOO_HAS_METAL ON CACHE BOOL "Metal is available in this OS X version" FORCE)
