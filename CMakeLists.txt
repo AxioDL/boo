@@ -107,14 +107,16 @@ if (NOT MSVC)
   target_compile_options(boo PRIVATE -Wno-narrowing)
 endif()
 
-find_package(IPP)
-if (IPP_FOUND)
-  target_compile_definitions(boo PUBLIC -DINTEL_IPP=1)
-  target_include_directories(boo PUBLIC ${IPP_INCLUDE_DIRS})
-  target_link_libraries(boo PUBLIC ${IPP_LIBRARIES})
-  message(STATUS "Building with IPP support")
-else()
-  message(WARNING "IPP not found; skipping support")
+if (NOT NINTENDO_SWITCH)
+  find_package(IPP)
+  if (IPP_FOUND)
+    target_compile_definitions(boo PUBLIC -DINTEL_IPP=1)
+    target_include_directories(boo PUBLIC ${IPP_INCLUDE_DIRS})
+    target_link_libraries(boo PUBLIC ${IPP_LIBRARIES})
+    message(STATUS "Building with IPP support")
+  else()
+    message(WARNING "IPP not found; skipping support")
+  endif ()
 endif ()
 
 set(_EXTRA_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR})
@@ -131,7 +133,16 @@ if(CMAKE_SYSTEM_PROCESSOR STREQUAL x86_64
   set(AudioMatrix_SRC lib/audiodev/AudioMatrixSSE.cpp)
 endif()
 
-if(WINDOWS_STORE)
+option(USE_SDL2_AUDIO "Use SDL2 audio backend" ON)
+if (USE_SDL2_AUDIO)
+  if (NOT TARGET SDL2::SDL2-static)
+    find_package(SDL2 REQUIRED)
+  endif ()
+  target_sources(boo PRIVATE
+      ${AudioMatrix_SRC}
+      lib/audiodev/SDL2.cpp)
+  target_link_libraries(boo PRIVATE SDL2::SDL2-static)
+elseif (WINDOWS_STORE)
   target_sources(boo PRIVATE
     ${AudioMatrix_SRC}
     lib/audiodev/WASAPI.cpp
@@ -260,12 +271,10 @@ else(NOT GEKKO)
 
 endif()
 
-if(NOT NX)
-  target_link_libraries(boo
-    PUBLIC
-      soxr
-  )
-endif()
+target_link_libraries(boo
+  PUBLIC
+    soxr
+)
 
 target_link_libraries(boo PUBLIC logvisor OptickCore)
 target_include_directories(boo

@@ -100,6 +100,18 @@ struct IAudioVoiceEngine {
 
   /** Get canonical count of frames for each 5ms output block */
   virtual size_t get5MsFrames() const = 0;
+
+  /** Stops the async audio pump */
+  virtual void stopPump() const {}
+
+  /** Starts the async audio pump */
+  virtual void startPump() const {}
+
+  /** Lock the async audio pump for updates */
+  virtual void lockPump() const {}
+
+  /** Unlock the async audio pump */
+  virtual void unlockPump() const {}
 };
 
 /** Construct host platform's voice engine */
