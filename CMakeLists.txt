@@ -107,7 +107,7 @@ if (NOT MSVC)
   target_compile_options(boo PRIVATE -Wno-narrowing)
 endif()
 
-if (NOT NINTENDO_SWITCH)
+if (NOT NINTENDO_SWITCH AND NOT IOS AND NOT TVOS)
   find_package(IPP)
   if (IPP_FOUND)
     target_compile_definitions(boo PUBLIC -DINTEL_IPP=1)
