@@ -73,7 +73,7 @@ endif ()
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
 
-add_subdirectory(soxr/src)
+add_subdirectory(soxr)
 
 add_library(boo
   lib/audiodev/Common.hpp

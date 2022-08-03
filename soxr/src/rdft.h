@@ -1,9 +1,11 @@
 /* SoX Resampler Library      Copyright (c) 2007-13 robs@users.sourceforge.net
  * Licence for this file: LGPL v2.1                  See LICENCE for details. */
 
-void ORDERED_CONVOLVE(int n, void * not_used, DFT_FLOAT * a, const DFT_FLOAT * b)
+void ORDERED_CONVOLVE(int n, void * not_used, void * A, const void * B)
 {
   int i;
+  DFT_FLOAT* a = A;
+  const DFT_FLOAT* b = B;
   a[0] *= b[0];
   a[1] *= b[1];
   for (i = 2; i < n; i += 2) {
@@ -14,9 +16,11 @@ void ORDERED_CONVOLVE(int n, void * not_used, DFT_FLOAT * a, const DFT_FLOAT * b
   (void)not_used;
 }
 
-void ORDERED_PARTIAL_CONVOLVE(int n, DFT_FLOAT * a, const DFT_FLOAT * b)
+void ORDERED_PARTIAL_CONVOLVE(int n, void * A, const void * B)
 {
   int i;
+  DFT_FLOAT* a = A;
+  const DFT_FLOAT* b = B;
   a[0] *= b[0];
   for (i = 2; i < n; i += 2) {
     DFT_FLOAT tmp = a[i];

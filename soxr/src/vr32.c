@@ -1,16 +1,10 @@
-/* SoX Resampler Library      Copyright (c) 2007-13 robs@users.sourceforge.net
+/* SoX Resampler Library      Copyright (c) 2007-16 robs@users.sourceforge.net
  * Licence for this file: LGPL v2.1                  See LICENCE for details. */
 
 /* Variable-rate resampling. */
 
 #include <assert.h>
-#include <math.h>
-#if !defined M_PI
-#define M_PI    3.14159265358979323846
-#endif
-#if !defined M_LN2
-#define M_LN2   0.69314718055994530942
-#endif
+#include "math-wrap.h"
 #include <string.h>
 #include <stdlib.h>
 #include "internal.h"
@@ -197,7 +191,7 @@ static float poly_fir1_u(float const * input, uint32_t frac)
 typedef struct {
   union {
     int64_t all;
-#if WORDS_BIGENDIAN
+#if HAVE_BIGENDIAN
     struct {int32_t integer; uint32_t frac;} part;
 #else
     struct {uint32_t frac; int32_t integer;} part;
@@ -316,7 +310,7 @@ static void vr_init(rate_t * p, double default_io_ratio, int num_stages, double 
   }
   fifo_create(&p->output_fifo, sizeof(float));
   p->default_io_ratio = default_io_ratio;
-  if (!fade_coefs[0]) {
+  if (fade_coefs[0]==0) {
     for (i = 0; i < iAL(fade_coefs); ++i)
       fade_coefs[i] = (float)(.5 * (1 + cos(M_PI * i / (AL(fade_coefs) - 1))));
     prepare_coefs(poly_fir_coefs_u, POLY_FIR_LEN_U, PHASES0_U, PHASES_U, coefs0_u, mult);
@@ -354,8 +348,9 @@ static bool set_step_step(stream_t * p, double io_ratio, int slew_len)
   return p->step_step.all != 0;
 }
 
-static void vr_set_io_ratio(rate_t * p, double io_ratio, size_t slew_len)
+static void vr_set_io_ratio(void * P, double io_ratio, size_t slew_len)
 {
+  rate_t *p = P;
   assert(io_ratio > 0);
   if (slew_len) {
     if (!set_step_step(&p->current, io_ratio, p->slew_len = (int)slew_len))
@@ -367,7 +362,7 @@ static void vr_set_io_ratio(rate_t * p, double io_ratio, size_t slew_len)
     }
   }
   else {
-    if (p->default_io_ratio) { /* Then this is the first call to this fn. */
+    if (p->default_io_ratio!=0) { /* Then this is the first call to this fn. */
       int octave = (int)floor(log(io_ratio) / M_LN2);
       p->current.stage_num = octave < 0? -1 : min(octave, p->num_stages0-1);
       enter_new_stage(p, 0);
@@ -375,7 +370,7 @@ static void vr_set_io_ratio(rate_t * p, double io_ratio, size_t slew_len)
     else if (p->fade_len)
       set_step(&p->fadeout, io_ratio);
     set_step(&p->current, io_ratio);
-    if (p->default_io_ratio) FRAC(p->current.at) = FRAC(p->current.step) >> 1;
+    if (p->default_io_ratio!=0) FRAC(p->current.at) = FRAC(p->current.step) >> 1;
     p->default_io_ratio = 0;
   }
 }
@@ -427,10 +422,11 @@ static bool do_input_stage(rate_t * p, int stage_num, int sign, int min_stage_nu
   return true;
 }
 
-static int vr_process(rate_t * p, int olen0)
+static void vr_process(void * P, size_t olen0)
 {
+  rate_t *p = P;
   assert(p->num_stages > 0);
-  if (p->default_io_ratio)
+  if (p->default_io_ratio!=0)
     vr_set_io_ratio(p, p->default_io_ratio, 0);
   {
     float * output = fifo_reserve(&p->output_fifo, olen0);
@@ -462,7 +458,7 @@ static int vr_process(rate_t * p, int olen0)
       olen = min(olen, (int)(AL(buf) >> 1));
       if (p->slew_len)
         olen = min(olen, p->slew_len);
-      else if (p->new_io_ratio) {
+      else if (p->new_io_ratio!=0) {
         set_step(&p->current, p->new_io_ratio);
         set_step(&p->fadeout, p->new_io_ratio);
         p->fadeout.step_step.all = p->current.step_step.all = 0;
@@ -568,17 +564,18 @@ static int vr_process(rate_t * p, int olen0)
         fifo_read(&p->stages[i].fifo, idone, NULL);
     }
     fifo_trim_by(&p->output_fifo, olen0 - odone0);
-    return odone0;
   }
 }
 
-static float * vr_input(rate_t * p, float const * input, size_t n)
+static void * vr_input(void * p, void * input, size_t n)
 {
-  return fifo_write(&p->stages[0].fifo, (int)n, input);
+  return fifo_write(&((rate_t *)p)->stages[0].fifo, (int)n, input);
 }
 
-static float const * vr_output(rate_t * p, float * output, size_t * n)
+static void const * vr_output(void * P, void * O, size_t * n)
 {
+  rate_t *p = P;
+  float *output = O;
   fifo_t * fifo = &p->output_fifo;
   if (1 || !p->num_stages0)
     return fifo_read(fifo, (int)(*n = min(*n, (size_t)fifo_occupancy(fifo))), output);
@@ -594,17 +591,19 @@ static float const * vr_output(rate_t * p, float * output, size_t * n)
   }
 }
 
-static void vr_flush(rate_t * p)
+static void vr_flush(void * P)
 {
+  rate_t *p = P;
   if (!p->flushing) {
     stage_preload(&p->stages[0]);
     ++p->flushing;
   }
 }
 
-static void vr_close(rate_t * p)
+static void vr_close(void * P)
 {
   int i;
+  rate_t *p = P;
 
   fifo_delete(&p->output_fifo);
   for (i = -1; i < p->num_stages; ++i) {
@@ -614,7 +613,7 @@ static void vr_close(rate_t * p)
   free(p->stages - 1);
 }
 
-static double vr_delay(rate_t * p)
+static double vr_delay(void * p)
 {
   return 100; /* TODO */
   (void)p;
@@ -639,19 +638,20 @@ static char const * vr_create(void * channel, void * shared,double max_io_ratio,
 
 static char const * vr_id(void)
 {
-  return "single-precision variable-rate";
+  return "vr32";
 }
 
-typedef void (* fn_t)(void);
-fn_t _soxr_vr32_cb[] = {
-  (fn_t)vr_input,
-  (fn_t)vr_process,
-  (fn_t)vr_output,
-  (fn_t)vr_flush,
-  (fn_t)vr_close,
-  (fn_t)vr_delay,
-  (fn_t)vr_sizes,
-  (fn_t)vr_create,
-  (fn_t)vr_set_io_ratio,
-  (fn_t)vr_id,
+#include "cb_t.h"
+
+control_block_t _soxr_vr32_cb = {
+  vr_input,
+  vr_process,
+  vr_output,
+  vr_flush,
+  vr_close,
+  vr_delay,
+  vr_sizes,
+  vr_create,
+  vr_set_io_ratio,
+  vr_id,
 };
