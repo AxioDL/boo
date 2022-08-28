@@ -197,22 +197,10 @@ soxr_io_spec_t soxr_io_spec(
         "xchg %%edi, %%ebx \n\t" \
         : "=a" (eax_), "=D" (ebx_), "=c" (ecx_), "=d" (edx_) \
         : "a" (type), "c" (0));
-  #elif defined _M_X64 && defined _MSC_VER && _MSC_VER > 1500
-     void __cpuidex(int CPUInfo[4], int info_type, int ecxvalue);
-     #pragma intrinsic(__cpuidex)
-     #define CPUID(type, eax_, ebx_, ecx_, edx_) do { \
-       int regs[4]; \
-       __cpuidex(regs, type, 0); \
-       eax_ = regs[0], ebx_ = regs[1], ecx_ = regs[2], edx_ = regs[3]; \
-     } while(0)
   #elif defined _M_X64 && defined _MSC_VER
-     void __cpuidex(int CPUInfo[4], int info_type);
-     #pragma intrinsic(__cpuidex)
-     #define CPUID(type, eax_, ebx_, ecx_, edx_) do { \
-       int regs[4]; \
-       __cpuidex(regs, type); \
-       eax_ = regs[0], ebx_ = regs[1], ecx_ = regs[2], edx_ = regs[3]; \
-     } while(0)
+    #include <intrin.h>
+    #define CPUID(type, eax_, ebx_, ecx_, edx_) \
+         __cpuid_count(type, 0, eax_, ebx_, ecx_, edx_)
   #elif defined _M_IX86 && defined _MSC_VER
     #define CPUID(type, eax_, ebx_, ecx_, edx_) \
       __asm pushad \
